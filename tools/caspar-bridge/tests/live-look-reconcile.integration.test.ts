@@ -886,13 +886,12 @@ it('🔴 a failure mid-SWITCH blacks nothing that was working — only the faili
     about the operator's wish — it is the geometry the NEXT reconcile will seat, from any
     caller, including a `swapLiveSource` that never mentioned looks.
 
-    ⭐ `B-174` — WHY `'six'` IS STILL THE ANSWER, BY A DIFFERENT ROUTE. This used to read
-    "the page was never told `'both'` (the switch died before the `CG UPDATE`)". Under the
-    page-first order it IS told: the refusal here comes from the mock's WIRE (the `src-bad`
-    fixture refuses at the `PLAY`), which can only arrive after the tell. The rollback then
-    re-tells `'six'` through the same fused writer, so the record follows the last tell that
-    landed — same answer, and now for the reason the code actually gives. Debugging a red
-    here means looking at the REVERT tell, not for a path that skips the first one.
+    ⭐ WHY `'six'` IS THE ANSWER — and the route has changed twice. It first read "the page was
+    never told `'both'` (the switch died before the `CG UPDATE`)"; under `B-174`'s page-first
+    order it WAS told, and the rollback re-told `'six'`. 🔴 `LOOK-SWITCH-01` / `B-273` put it
+    back to the first reason, now by design: `src-bad`'s `PLAY` is refused in the switch's
+    PRE-SEAT, before the page is told anything, so the page is never told `'both'` and nothing
+    on air moves. Debugging a red here means looking at `#preSeatSwitch`, not for a revert tell.
   */
   expect(r.activeLookId('item-1'), 'the rollback put the page back on "six"').toBe('six');
 });
@@ -1494,6 +1493,12 @@ it('🔴 a REFUSED switch leaves the page ON THE OLD LOOK — told back if it wa
     (`setSourceAssignments` refuses an unknown source; `createBridge` prunes one), so the
     plan sees a resolvable-looking binding and the refusal arrives from the mock's wire.
     What must hold is the END STATE, and the wire must SHOW the revert.
+
+    🔴 `LOOK-SWITCH-01` / `B-273` — AND NOW A REFUSED PLATE NEVER REACHES THE PAGE AT ALL. The
+    owner's decision (2026-09-27): a switch whose new look needs a plate CasparCG refuses is
+    all-or-nothing, so `live-2` is seated (hidden) BEFORE the page is told, its `PLAY` is refused
+    there, and the page hears nothing — not a tell and a revert, but no tell. The END STATE this
+    test is about is unchanged and stronger: the page never left the old look.
   */
   const r = await boot({
     template: sixBoxTemplate({
@@ -1516,10 +1521,13 @@ it('🔴 a REFUSED switch leaves the page ON THE OLD LOOK — told back if it wa
 
   expect((await r.setActiveLook('item-1', 'both')).ok).toBe(false);
 
-  const updates = updateLines(await since(before));
-  const lastLook = readCgControl(dataArgOf(updates[updates.length - 1] as string, 'UPDATE'))?.look;
-  expect(lastLook, 'whatever was said in between, the page ENDS on the old look').toBe('six');
-  expect(r.activeLookId('item-1'), 'and the record agrees with the page').toBe('six');
+  const lines = await since(before);
+  const updates = updateLines(lines);
+  expect(updates, 'the page is never told a look whose plate was refused').toEqual([]);
+  // The positive control for that absence: the refused `PLAY` IS on this same wire, so the window
+  // read is the switch's own.
+  expect(lines.some((l) => l.startsWith('PLAY 1-') && l.includes('bogus://'))).toBe(true);
+  expect(r.activeLookId('item-1'), 'and the record stays on the old look').toBe('six');
 });
 
 it('a switch whose PRODUCER is gone records the look and sends no UPDATE', async () => {
@@ -2673,12 +2681,18 @@ it('🔴 B-199 — a TAKE that throws mid-stage still commits what it staged', a
 
 it('🔴 B-199 — a SWITCH that throws mid-stage commits AND puts the ledger geometry back', async () => {
   /*
-    The repair half. The take is allowed to complete — the injector is armed past its eighteen
-    staged lines — so the ledger holds the outgoing look when the switch dies inside its own
-    staged window. The count is asserted rather than assumed: if the take's batch ever changes
-    size this test fails at that assertion instead of silently measuring nothing.
+    The repair half. The take is allowed to complete — the injector is armed past its staged
+    lines — so the ledger holds the outgoing look when the switch dies inside its own staged
+    window. The count is asserted rather than assumed: if the take's batch ever changes size this
+    test fails at that assertion instead of silently measuring nothing.
+
+    🔴 `LOOK-SWITCH-01` — 36, was 18. Each of the six plates now stages its HIDE before its `PLAY`
+    (`OPACITY 0`, `VOLUME 0`, `FILL`, `CLIP`) and its REVEAL after it (`OPACITY 1`, `VOLUME`):
+    six lines a plate, where it was three (`VOLUME`, `FILL`, `CLIP`). The switch below seats
+    nothing (the union pre-seat seated every look at the take), so its first staged line is still
+    the first `MIXER` of its own window.
   */
-  const STAGED_IN_TAKE = 18;
+  const STAGED_IN_TAKE = 36;
   const r = await boot({ throwAfterMixerLines: STAGED_IN_TAKE + 1 });
   const beforeTake = (await recvLines()).length;
   await onAir(r);

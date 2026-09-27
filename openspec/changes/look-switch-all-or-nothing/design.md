@@ -1,7 +1,11 @@
 # Design — look-switch-all-or-nothing (`LOOK-SWITCH-01` §0–§3)
 
-Everything below was ESTABLISHED on 2026-09-27; nothing in §0 changed any code. Anchors are to this tree unless
-a CasparCG source path (`src/…`, stock `v2.5.0-stable`) is named.
+**Where later prompts say "after `LOOK-SWITCH-01` (v2) has landed", they mean this change, landed through
+`LOOK-SWITCH-01` (v3).** v2 established §0 and pinned two absences; v3 built §1 and measured it on this machine's
+own CasparCG (§3, v3 results).
+
+§0 below was ESTABLISHED on 2026-09-27 and changed no code; §1 records what v3 BUILT. Anchors are to this tree
+unless a CasparCG source path (`src/…`, stock `v2.5.0-stable`) is named.
 
 ## §0.1 Today's AMCP order for a 1 → 2 box look switch (measured on the fake, 2026-09-27)
 
@@ -244,23 +248,104 @@ pnpm --filter @cg/skew-harness build; node tools/skew-harness/bin/cg-skew.mjs --
   `B-192`).
 - The CONTROL settled-frame count ≈ 0, as every harness run requires.
 
-## §1 The build this change will make, after the measurement (not built)
+## §3 (v3) — the measurement, run by CC on this machine's own CasparCG (2026-09-27)
 
-- **The pre-seat step** (a new, named step inside `setActiveLook`, before `beforeApply`): for each placement of
-  the entered look that is not `seatUnchanged` (§0.2): stage `MIXER <L> OPACITY 0 DEFER`, `VOLUME 0 DEFER` and
-  the target `FILL`/`CLIP … DEFER`; one `MIXER <ch> COMMIT` and wait for its reply; then `PLAY` and wait for its
-  reply. All before the page is told anything. `ROUTE-PLATES-01`'s `LOADBG` → `PLAY` pair (≥ 40 ms, ≤ 200 ms)
-  goes in that one named place.
-- **On any refusal:** undo only the plates this step seated, through `mayClearAfterRefusal`
-  (`tools/caspar-bridge/src/refusal-cleanup.ts` 46); send no page `UPDATE` and no switch `COMMIT`; the row keeps
-  its old look and shows the `FIELD-FIXES-01` A/B line. ⚠ **A premise correction:** the prompt's §2 expects
-  "plate 2's layer is cleared, because this switch seated it". Under that one rule a `PLAY` the server REFUSED
-  seated nothing and its layer is not cleared (the refusal left it as it was); a plate whose `PLAY` LANDED
-  before another plate refused IS cleared. The tests will assert the rule, not the sentence.
-- **On success:** today's sequence, unchanged, with each pre-seated plate's `OPACITY 1 DEFER` (and its volume
-  intent) in its one `MIXER <ch> COMMIT`.
-- **Hide before `PLAY` on every seating path** (take, switch, swap, restore — fact 4): `OPACITY 0` + `VOLUME 0`
-  committed before the `PLAY`, the reveal in that action's commit.
-- **`DEFER` hygiene:** after every AMCP reconnect the first `DEFER` set re-sends the full desired mixer state of
-  our own layers (50–99), never 1–49 — which also closes the hidden-but-audible gap in §0.4.
-- Already true and now pinned: no `MIXER <ch> CLEAR`; no `BEGIN…COMMIT`.
+**The station (§0.2), checked without changing anything:** `casparcg.exe` (pid 23332,
+`D:\programs\casparcg-server-v2.5.0-stable-windows`) owns `0.0.0.0:5250`; `VERSION` → `2.5.0 69e8ad5 Stable`
+(stock `v2.5.0-stable`); the connection's far end is `127.0.0.1:5250` — not `@cg/amcp-mock`, not the fake Playout,
+not a tunnel; `pnpm dev:station` is not running (no bridge or dev-station process; ports 5280, 7911, 9250 free);
+ffmpeg 8.1.2 is on `PATH`. `INFO 1` (saved): `1080p5000`, consumers `system-audio@500` and `screen@600`, no
+layers.
+
+⚠ **No DeckLink runs on this channel, and none ever has on this machine.** `casparcg.config` declares
+`<decklink><device>1</device>` on channel 1, but every start since 2026-08-24 logs `Decklink drivers not found`
+(`caspar_2026-09-27.log`: `decklink_api.h(81)`), `DeckLinkAPI64.dll` is absent and no Blackmagic package is
+installed. The repo records it: `docs/prd/bugs-runtime.md` 6917 ("This machine has no DeckLink and no genlock"),
+`tools/skew-harness/src/run.ts` 140. There is nothing for the owner to START, and every `B-174` number of record
+was measured in exactly this state, so the measurement ran; the premise is corrected here rather than obeyed as a
+stop.
+
+⚠ **The owner's workstation was LOCKED during the run** (`LogonUI` running; the only display the `WinDisc`
+placeholder). The harness's `SET 1 MODE 1080i5000` re-initialised the screen consumer, which then failed with
+`Invalid screen-index: 0`, and its own restore (`ADD 1 SCREEN`) failed the same way: channel 1 lost its local
+preview window (`screen@600`) and kept `system-audio`, its mode (`1080p5000`) and no layers. The screen consumer
+comes back with `ADD 1 SCREEN` once the session is unlocked (the harness's own restore), or with a restart.
+
+**Baseline, today's code (`a1e31a9c`/`b7f25ecd` runtime), 10 runs each, `1080i5000`:**
+
+| run                                       | `k` (channel frames)                                              | BLACK | MISPLACED | term (b), fields                           | CONTROL settled                                  |
+| ----------------------------------------- | ----------------------------------------------------------------- | ----- | --------- | ------------------------------------------ | ------------------------------------------------ |
+| `ghab` full → boxes (fresh seat)          | run 00: 0; runs 01–09 EXCLUDED (PLAY in the window), A = B in all | 0 %   | 0 %       | `[0, 4, 4, 6, 6, 6, 6, 6, 6, 6]`, median 6 | runs 01–09: **22.78 %** (the new box, 916 × 515) |
+| `ghab` boxes → full (release)             | 0 × 10                                                            | 0 %   | 0 %       | 0 × 10                                     | 0                                                |
+| `ghab3` full → boxes (pre-seated control) | 0 × 10                                                            | 0 %   | 0 %       | 0 × 10                                     | ≈ 0.01 %                                         |
+
+The 22.78 % is the fresh-seat defect itself: the new box shows no picture of its own for 4–6 fields after the
+switch (term (b)), which the classifier reads outside its narrow A = B window as a settled residue the size of
+that box. Evidence: `tools/skew-harness/evidence/2026-09-27-look-switch-01/`.
+
+## §1 What v3 BUILT (`tools/caspar-bridge/src/caspar-runtime.ts` unless named)
+
+- **THE SEAT STEP (`#seatPlates`) — every producer an action starts is started hidden.** For each seat: stage
+  `MIXER <L> OPACITY 0`, `VOLUME 0` and the target `FILL`/`CLIP`, all `DEFER`; ONE `MIXER <ch> COMMIT`, awaited
+  (landed = acked on the primary, `B-221`'s gate); THEN each `PLAY`, awaited. A hide that did not land sends no
+  `PLAY` at all. It stops at the first REQUIRED seat whose `PLAY` did not land and goes on past a refused PRESET.
+  The applier (`#applyLivePlatesUnguarded`) runs it FIRST, before its batch stages a line, for every placement
+  that is not `seatUnchanged` — so take, swap, restore and a switch's in-place replace all seat through it — and
+  each seated plate's old `PLAY` + `VOLUME` + `FILL`/`CLIP` lines became the REVEAL: `OPACITY 1` and its volume
+  as today's code computes it (a parked seat muted, every other its intent — never a fixed 1), plus the fit only
+  when the seat was not hidden. The reveal rides the action's one commit. One spelling of "already seated",
+  `isSeatUnchanged`, is shared by the applier and the pre-seat. `mixerOpacity` is new in `command-builder.ts`.
+- **`ROUTE-PLATES-01`'s named place:** `#startSeatProducer` — the one place the seat step starts a producer; its
+  `LOADBG` → `PLAY` pair (≥ 40 ms, ≤ 200 ms) goes there and nowhere else.
+- **THE SWITCH'S PRE-SEAT (`#preSeatSwitch`, called by `reconcileLivePlates` before `beforeApply`):** the seat
+  step for every entered-look placement and fresh preset the switch would otherwise `PLAY`, BEFORE the page is
+  told anything. On a refused required seat it undoes what it seated through `mayClearAfterRefusal` (a refused
+  `PLAY` seated nothing and is not cleared; one that landed is) and answers the refusal with the plate and its
+  source: no page `UPDATE`, no further `MIXER COMMIT`. `setActiveLook` records it as the row's `takeRefusal` —
+  `FIELD-FIXES-01`'s one line — and answers `refusalOnRow`, so the console raises no banner
+  (`lookSwitchBanner`); a switch that lands withdraws the line. A refusal AFTER the pre-seat (the page tell, the
+  row leaving air in the hold) takes the pre-seated plates back off (`#undoPreSeat`); a `MIXER` line refused in
+  the apply (a defensive path — real 2.5.0 does not refuse a `MIXER` on a layer it owns) clears the plates the
+  switch seated as well as putting the fills back (`B-166`).
+- **After every AMCP reconnect (`#resendLiveMixerState`)**, on the primary's first `healthy` of a NEW connection
+  and after `B-221`'s orphan flush: each row the ledger holds, under its seat lock, re-sends `FILL` + `CLIP` as
+  recorded, the volume as today's code computes it (held or parked → 0, else the recorded intent, which a landed
+  silence has already lowered) and `OPACITY 1`, all `DEFER`, then that row's one `MIXER <ch> COMMIT` — only for
+  layers in CG's bands (`isInCgBands`, 50 up), never 1–49. That closes §0.4's hidden-but-audible gap.
+- **A plate layer's `MIXER CLEAR` only once its `CLEAR` landed (`#resetPlateMixerIfCleared`)**, at the three
+  sites §0.4 found can meet a seated plate: the refusal clean-up, the end-of-apply sweep and `teardownLiveLayers`.
+  A `CLEAR` that did not land leaves the producer and its mixer exactly as they were.
+- **The harness (`tools/skew-harness/src/wire-tap.ts` `switchWindow`)**: a run's `PLAY` test reads the window
+  from the page's `CG … UPDATE` on, so a pre-seat `PLAY` (before the tell) no longer excludes the run from `k`;
+  a `PLAY` after the tell still does (`B-155`).
+- **The mock (`tools/amcp-mock`)** models `MIXER … OPACITY` (default 1, staged by `DEFER`, reset by
+  `MIXER CLEAR`), so a missing reveal is visible offline.
+
+### Choices made (v3), each the smaller and safer option
+
+1. **A layer a producer of ours is on is NEVER hidden before its `PLAY`.** The prompt asks for the hide "on every
+   plate seating", and its own hard stop says a refused `PLAY` never clears a layer that held a working
+   producer. A `PLAY` onto such a layer is a REPLACE in place (`R-048`'s swap and restore, `B-126`; a switch's
+   replace after an on-air catalog re-point, `B-155`'s lurk): the layer's transform is already that plate's box,
+   so the new producer inherits the right geometry, while hiding it first would take the working picture off
+   air before the replace is known to land — and a refused `PLAY` would leave it off air. So the hide is on
+   every seat onto a layer nothing of ours is on (take, switch, a swap or restore onto a fresh layer), and an
+   in-place replace keeps today's un-hidden `PLAY`; for the same reason the switch's pre-seat does not take an
+   in-place replace (it keeps today's in-switch path, reachable only after a catalog re-point). Pinned:
+   `look-switch-all-or-nothing.integration.test.ts` ("never hidden").
+2. **The backup's own reconnect re-send is FILED, not built.** The re-send reaches the backup through the one
+   seam (`#send` → the adapter), so in `mirror-sync` the backup receives it whenever the PRIMARY reconnects; a
+   reconnect of the BACKUP alone would need a send to one session, which the runtime does not have. The prompt:
+   "if that needs more than using the same seam, stop this item and report". The backup's ORDER needed no
+   change — the adapter journals each line at send time and replays the journal sequentially, so hide, commit,
+   `PLAY`, reveal reach the backup in the primary's order (pinned: the journal-replay test).
+3. **The re-send covers the PLATE ledger's layers, not template rows' volume.** Template rows only ever get an
+   un-deferred `VOLUME` (on take, rehearse and the per-process blanket); the `DEFER` hygiene concerns the plates.
+4. **The harness keeps its old layer map** (page on row 9, plates 30–39, rows 70–79). It is the product's
+   composition ORDER (bed < plates < templates), and CasparCG draws every layer on every tick whatever its
+   number, so the measurement is unchanged by it; the prompt says to update it only if it changes the
+   measurement.
+5. **This machine has no DeckLink** — see §3 (v3 results): the §0.2 check's "the channel has its DeckLink
+   consumer" is a premise the repo already records as false, and every `B-174` number was measured without one.
+
+Already true and pinned by v2: no channel-wide `MIXER <ch> CLEAR`; no `BEGIN…COMMIT`.

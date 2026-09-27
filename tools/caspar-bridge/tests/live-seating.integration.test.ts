@@ -205,18 +205,31 @@ it('🔴 a declared, assigned plate REACHES AIR — the PLAY, the mute and the f
 
   const lines = await recvLines();
   const layer = BAND.start;
-  // The producer, the mute and BOTH halves of the fit, in that order.
-  const play = at(lines, `PLAY 1-${String(layer)} `);
+  /*
+    🔴 `LOOK-SWITCH-01` — the layer is HIDDEN FIRST: `OPACITY 0`, the mute and BOTH halves of the
+    fit are committed BEFORE the producer exists, so 6.5's "created MUTED" is now "created on a
+    muted, hidden, fitted layer" — and the reveal follows the `PLAY`, in the take's one commit.
+    (It was PLAY → mute → fill → clip, with the producer on air at the layer's old transform until
+    the commit.)
+  */
+  const hide = at(lines, `MIXER 1-${String(layer)} OPACITY 0`);
   const mute = at(lines, `MIXER 1-${String(layer)} VOLUME 0`);
   const fill = at(lines, `MIXER 1-${String(layer)} FILL `);
   const clip = at(lines, `MIXER 1-${String(layer)} CLIP `);
+  const hideCommit = lines.findIndex((l, i) => i > clip && l === 'MIXER 1 COMMIT');
+  const play = at(lines, `PLAY 1-${String(layer)} `);
+  const reveal = at(lines, `MIXER 1-${String(layer)} OPACITY 1`);
   expect(play, 'the producer must reach the wire').toBeGreaterThanOrEqual(0);
   expect(mute, '6.5 — every bridge-created producer is created MUTED').toBeGreaterThanOrEqual(0);
+  expect(hide).toBeGreaterThanOrEqual(0);
   expect(fill).toBeGreaterThanOrEqual(0);
   expect(clip).toBeGreaterThanOrEqual(0);
-  expect(mute).toBeGreaterThan(play);
+  expect(mute).toBeGreaterThan(hide);
   expect(fill).toBeGreaterThan(mute);
   expect(clip).toBeGreaterThan(fill);
+  expect(hideCommit, 'the hide is committed before the PLAY').toBeGreaterThan(clip);
+  expect(play).toBeGreaterThan(hideCommit);
+  expect(reveal, 'and shown only after it').toBeGreaterThan(play);
   // The route address itself — the mapping resolved, not the symbolic id.
   expect(lines[play]).toContain('route://2');
 });

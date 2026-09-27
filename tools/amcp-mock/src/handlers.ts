@@ -52,7 +52,9 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
  * transparent hole it should fill, or masked away entirely — produces no error
  * and no operator signal.
  *
- * Anything OTHER than these four sub-verbs is still `400`, deliberately: an
+ * `LOOK-SWITCH-01` added `OPACITY` (a plate is seated hidden and revealed in one commit).
+ *
+ * Anything OTHER than these sub-verbs (and `COMMIT`) is still `400`, deliberately: an
  * unimplemented sub-verb that silently `202`s would let a wrong command look
  * correct, which is the one thing a mock must never do.
  *
@@ -116,6 +118,20 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     return apply({ volume });
   }
 
+  /*
+    `LOOK-SWITCH-01` — `MIXER <ch>-<layer> OPACITY <v>`, staged by a trailing `DEFER` like every
+    other sub-verb here. The bridge seats a plate HIDDEN (`OPACITY 0`, committed before its `PLAY`)
+    and reveals it in the action's one commit, so a missing reveal must be visible offline.
+    Refused the same way `VOLUME` is: a value that is not a number in `[0, 1]` is not a clamp.
+  */
+  if (sub === 'OPACITY') {
+    const opacity = Number(args[2]);
+    if (args[2] === undefined || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
+      return { kind: 'err', code: 401, verb: 'MIXER' };
+    }
+    return apply({ opacity });
+  }
+
   if (sub === 'FILL' || sub === 'CLIP') {
     const rect = parseMixerRect(args.slice(2));
     // Same doctrine as VOLUME's refusal: four numbers or nothing. A rect with a
@@ -135,10 +151,11 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
       This used to reset the two geometry terms and leave volume alone, "so the R-022 restore
       path keeps being tested on its own terms" — a modelling choice nobody had measured, and it
       made a teardown's volume residue invisible offline. A mock that agrees with the code only
-      proves the code agrees with itself (`B-189`). The three terms this mock carries go back
-      to a fresh layer's values.
+      proves the code agrees with itself (`B-189`). The four terms this mock carries go back
+      to a fresh layer's values — opacity too (`LOOK-SWITCH-01`), which is why a `MIXER CLEAR` on
+      a layer holding a seated, hidden plate would REVEAL it.
     */
-    ctx.setLayer(slot, { fill: FULL_FRAME, clip: FULL_FRAME, volume: 1 });
+    ctx.setLayer(slot, { fill: FULL_FRAME, clip: FULL_FRAME, volume: 1, opacity: 1 });
     return { kind: 'ok', code: 202, verb: 'MIXER' };
   }
 

@@ -127,6 +127,17 @@ export interface LayerState {
    */
   volume: number;
   /**
+   * `LOOK-SWITCH-01` — the layer's `MIXER <ch>-<layer> OPACITY <v>`. `1` is a fresh layer's value
+   * and `0` draws nothing (the real kernel draws nothing below 0.001).
+   *
+   * MODELLED BECAUSE A PLATE IS NOW SEATED HIDDEN: `OPACITY 0` is committed before its `PLAY` and
+   * `OPACITY 1` rides the action's one commit. A seat that forgot the reveal leaves a working
+   * producer invisible, and nothing else the mock carries would show it. Like `volume`, it
+   * SURVIVES `CLEAR` and `CG REMOVE` (it is the layer's, not the producer's), and `MIXER CLEAR`
+   * puts it back to `1`.
+   */
+  opacity: number;
+  /**
    * D-137 / C-015 — the layer's `MIXER … FILL` rect, channel-normalized.
    *
    * MODELLED BECAUSE `design.md` §6's ARITHMETIC IS OTHERWISE UNCHECKABLE

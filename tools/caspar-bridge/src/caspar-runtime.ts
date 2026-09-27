@@ -112,7 +112,7 @@ import {
   type StationStray,
 } from '@cg/shared-ipc';
 import { randomBytes } from 'node:crypto';
-import { ledgerChannels, templateAdmitsPassTiming } from '@cg/shared-ipc';
+import { isInCgBands, ledgerChannels, templateAdmitsPassTiming } from '@cg/shared-ipc';
 import { operatorActor, operatorSub, runAsTemplate } from './actor-context.js';
 import {
   ChannelSettingsStore,
@@ -318,6 +318,65 @@ interface LivePlatePlacement {
    * Its {@link fit} is the parked one (`B-154`), so it renders nothing.
    */
   readonly held: boolean;
+}
+
+/**
+ * 🔴 `LOOK-SWITCH-01` — ONE seat the SEAT STEP starts ({@link CasparRuntime}'s `#seatPlates`).
+ */
+interface SeatRequest {
+  readonly placement: LivePlatePlacement;
+  /**
+   * Hide it before its `PLAY`: `OPACITY 0` + `VOLUME 0` + its fit, committed first. TRUE only on
+   * a layer no producer of ours is on — see `#seatPlates` for why a layer carrying ours is never
+   * hidden.
+   */
+  readonly hide: boolean;
+  /** A PARKED preset: a refusal DROPS it and the action goes on (session BM). */
+  readonly optional: boolean;
+}
+
+/** What the seat step did for one seat — the facts its action's failure path reads. */
+interface SeatResult {
+  readonly placement: LivePlatePlacement;
+  /** Its `PLAY`, read from the reply (`refusal-cleanup.ts`); `refused` when no `PLAY` was sent. */
+  readonly outcome: SeatOutcome;
+  /** A `PLAY` left this process for it — so a producer of this action may be on the layer. */
+  readonly sent: boolean;
+  /** `OPACITY 0` + `VOLUME 0` + the fit were committed before the `PLAY`. */
+  readonly hidden: boolean;
+  readonly errorCode?: string;
+  /** The refused line as `#send` summarised it (`B-209`). */
+  readonly command?: string;
+}
+
+/** One `MIXER <ch> COMMIT`: did it land on the primary (`B-221`), and if not, what came back. */
+interface MixerCommitOutcome {
+  readonly landed: boolean;
+  readonly errorCode?: string;
+  readonly command?: string;
+}
+
+/**
+ * 🔴 `LOOK-SWITCH-01` — **THE DELTA'S ONE QUESTION, ASKED BY THE APPLIER AND THE PRE-SEAT ALIKE:**
+ * is this seat already sitting where it needs to be, showing what it needs to show? Layer AND
+ * producer, both; and never under a `'take'`, which re-asserts from nothing. ONE spelling, because
+ * the switch's pre-seat must seat exactly the plates the applier would otherwise `PLAY` (golden
+ * rule 6: a second copy is how the two sets would come to differ).
+ */
+function isSeatUnchanged(
+  mode: 'take' | 'live' | 'switch',
+  prior: LiveLayerRecord | undefined,
+  placement: LivePlatePlacement,
+): prior is LiveLayerRecord {
+  // `!== 'take'` and never `=== 'live'`: the question is "is this a re-assert from nothing", and a
+  // SWITCH is as much a delta as a swap is (`B-166`). An allow-list of one is how the third action
+  // silently became a re-seat.
+  return (
+    mode !== 'take' &&
+    prior !== undefined &&
+    adoptionKey(prior.slot) === adoptionKey(placement.slot) &&
+    prior.producer === placement.producerArg
+  );
 }
 
 /** What one live-plate apply answered — and, when refused, the seat it stopped on. */
@@ -1894,7 +1953,10 @@ export class CasparRuntime {
           // whose commit died with the previous link is committed here and the ledger's
           // geometry put back, so the orphan cannot ride on the next take instead. A no-op
           // unless a commit is on record as undelivered (`#sendMixerCommit`).
-          void this.#flushOrphanedStaging();
+          // 🔴 `LOOK-SWITCH-01` — and on a NEW connection (never `degraded → healthy`, which is
+          // the same socket with OSC back), our full mixer state follows it: see
+          // {@link #resendLiveMixerState}.
+          void this.#mixerStateOnHealthy(from !== 'degraded');
           // R-021 stage 4 — sampled ONCE, with the producer KIND, and the key set
           // derived from it. `reconcileOnReconnect` only asks "occupied?"; the
           // restore decision additionally asks "ours?" on a declared row.
@@ -6637,7 +6699,7 @@ export class CasparRuntime {
   async setActiveLook(
     itemId: string,
     lookId: string,
-  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+  ): Promise<{ ok: boolean; reason?: string; message?: string; refusalOnRow?: true }> {
     const templateId = this.#reconciler.get(itemId)?.templateId;
     const slot = this.#slots.get(itemId);
     if (templateId === undefined || slot === undefined) {
@@ -6901,14 +6963,36 @@ export class CasparRuntime {
       });
       if (reconciled.ok) {
         if (!pageLoaded) this.#recordActiveLook(itemId, lookId);
+        // `LOOK-SWITCH-01` — a switch that LANDED withdraws the line a refused one left.
+        this.#retireTakeRefusal(itemId);
         return { ok: true };
       }
+      /*
+        🔴 `LOOK-SWITCH-01` / `B-273` — A REFUSED PLATE IS SAID ON THE ROW, in `FIELD-FIXES-01`'s
+        one line (`takeRefusalLine`: the row, the source, what the refusal means), in that
+        channel's view only — the same record a refused take writes, so the row and its
+        Inspector say it and no banner repeats it (`refusalOnRow`). Only a refusal that NAMES a
+        plate is recorded: one about the page, the look or the link keeps its own surface.
+      */
+      const onRow = (): { refusalOnRow?: true } => {
+        if (reconciled.refused === undefined) return {};
+        this.#recordTakeRefusal(itemId, {
+          code: reconciled.errorCode ?? 'amcp-error',
+          ...(reconciled.command !== undefined && { command: reconciled.command }),
+          plateId: reconciled.refused.plateId,
+          sourceId: reconciled.refused.source.id,
+          sourceName: reconciled.refused.source.name,
+        });
+        return { refusalOnRow: true };
+      };
       if (!pageTold) {
-        // Plan-time refusal, or the tell itself was refused: nothing anywhere moved.
+        // Plan-time refusal, the switch's pre-seat refused a plate, or the tell itself was
+        // refused: nothing anywhere moved.
         return {
           ok: false,
           ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
           ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+          ...onRow(),
         };
       }
       /*
@@ -6943,6 +7027,7 @@ export class CasparRuntime {
       return {
         ok: false,
         ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
+        ...onRow(),
         message: reverted.ok
           ? 'CasparCG refused the switch part-way; everything was put back — the row is ' +
             'still on its previous look. Re-issue the switch.'
@@ -7123,7 +7208,17 @@ export class CasparRuntime {
        */
       beforeApply?: () => Promise<{ ok: boolean; errorCode?: string; message?: string }>;
     },
-  ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
+  ): Promise<{
+    ok: boolean;
+    errorCode?: string;
+    message?: string;
+    /** `B-209` — the refused line; and `LOOK-SWITCH-01` — the plate and source it named. */
+    command?: string;
+    refused?: {
+      readonly plateId: string;
+      readonly source: { readonly id: string; readonly name: string };
+    };
+  }> {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { ok: false, errorCode: 'unknown-item' };
     const plan = this.#planLiveSeating(
@@ -7135,9 +7230,23 @@ export class CasparRuntime {
       opts.mode === 'take' ? 'fresh' : 'pinned',
     );
     if (!plan.ok) return { ok: false, errorCode: plan.errorCode, message: plan.message };
+    /*
+      🔴 `LOOK-SWITCH-01` / `B-273` — A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE `beforeApply` TELLS
+      THE PAGE ANYTHING ({@link #preSeatSwitch}). A refused plate refuses the switch HERE, with the
+      page untouched and nothing on air changed; accepted, the seats ride into the apply, which
+      reveals them in the switch's one commit instead of `PLAY`ing inside it.
+    */
+    let preSeated: ReadonlyMap<string, SeatResult> | undefined;
+    if (opts.mode === 'switch') {
+      const pre = await this.#preSeatSwitch(itemId, plan);
+      if (!pre.ok) return pre.refusal;
+      preSeated = pre.seats;
+    }
     if (opts.beforeApply !== undefined) {
       const gate = await opts.beforeApply();
       if (!gate.ok) {
+        // Nothing of the switch reaches air: what its pre-seat started comes back off.
+        await this.#undoPreSeat(preSeated);
         return {
           ok: false,
           ...(gate.errorCode === undefined ? {} : { errorCode: gate.errorCode }),
@@ -7145,7 +7254,7 @@ export class CasparRuntime {
         };
       }
     }
-    const applied = await this.#applyLivePlates(itemId, plan, opts.mode);
+    const applied = await this.#applyLivePlates(itemId, plan, opts.mode, preSeated);
     return applied;
   }
 
@@ -7244,9 +7353,10 @@ export class CasparRuntime {
     itemId: string,
     plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
+    preSeated?: ReadonlyMap<string, SeatResult>,
   ): Promise<LivePlateApplyResult> {
     try {
-      return await this.#applyLivePlatesUnguarded(itemId, plan, mode);
+      return await this.#applyLivePlatesUnguarded(itemId, plan, mode, preSeated);
     } finally {
       // Staged at this point ⇒ the batch did NOT reach either of its own commit points, i.e.
       // it threw. `#commitStagedMixer` is idempotent, so the ordinary paths cost nothing here.
@@ -7263,11 +7373,11 @@ export class CasparRuntime {
    * splitting the batch the first one just closed. A commit is channel-wide and applies
    * whatever ANY connection has staged, so it is issued only when we have staged something.
    */
-  async #commitStagedMixer(): Promise<void> {
-    if (this.#stagedMixerChannel === null) return;
+  async #commitStagedMixer(): Promise<MixerCommitOutcome> {
+    if (this.#stagedMixerChannel === null) return { landed: true };
     const channel = this.#stagedMixerChannel;
     this.#stagedMixerChannel = null;
-    await this.#sendMixerCommit(channel);
+    return this.#sendMixerCommit(channel);
   }
 
   /**
@@ -7282,11 +7392,17 @@ export class CasparRuntime {
    * finish it on. Conservative on purpose, like arming the accumulator BEFORE the send: a
    * commit we cannot prove arrived is a commit we assume did not.
    */
-  async #sendMixerCommit(channel: number): Promise<boolean> {
+  async #sendMixerCommit(channel: number): Promise<MixerCommitOutcome> {
     const sent = await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
     const landed = sent.ok && sent.onPrimary;
     if (!landed) this.#orphanedMixerChannel = channel;
-    return landed;
+    // `LOOK-SWITCH-01` — the seat step reads this: a hide whose commit did not land is not a
+    // hide, and no `PLAY` may follow it. The code and the line ride along for its refusal.
+    return {
+      landed,
+      ...(sent.errorCode !== undefined && { errorCode: sent.errorCode }),
+      ...(sent.command !== undefined && { command: sent.command }),
+    };
   }
 
   /**
@@ -7330,13 +7446,72 @@ export class CasparRuntime {
     const channel = this.#orphanedMixerChannel;
     if (channel === null) return;
     this.#orphanedMixerChannel = null;
-    if (!(await this.#sendMixerCommit(channel))) return;
+    if (!(await this.#sendMixerCommit(channel)).landed) return;
     for (const [itemId, records] of this.#liveLayers) {
       if (!records.some((record) => record.slot.channel === channel)) continue;
       // Under the row's seat lock so the repair cannot interleave with a switch or swap
       // that arrived with the link; a take is unlocked by design and re-asserts every seat
       // it owns anyway.
       await this.#withLiveSeatLock(itemId, () => this.#reassertLedgerGeometry(itemId));
+    }
+  }
+
+  /**
+   * `B-221` then `LOOK-SWITCH-01`, in that order, when the primary comes (back) to `healthy`: the
+   * orphan flush first, exactly as before; then, on a NEW connection, our full mixer state.
+   */
+  async #mixerStateOnHealthy(newConnection: boolean): Promise<void> {
+    await this.#flushOrphanedStaging();
+    if (newConnection) await this.#resendLiveMixerState();
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` — **AFTER EVERY AMCP RECONNECT, THE FIRST `DEFER` SET CARRIES OUR FULL
+   * DESIRED MIXER STATE — of our own plate layers, never one below the floor.**
+   *
+   * The Playout's core team (`PLAYOUT-CG-RESPONSE-V13-STATE` §3.2, fact 3): the deferred list is
+   * ONE per channel, shared by every connection, and it outlives a dropped one; a core restart
+   * resets every layer's transform. Nothing re-sent our mixer state after a reconnect (`design.md`
+   * §0.4), so a plate could come back hidden-but-audible — a batch that died after staging a
+   * returning plate's `VOLUME` left the volume applied by the orphan flush and the picture parked by
+   * its repair — until a take re-muted it.
+   *
+   * So each row the ledger holds is re-sent whole, under its own seat lock (a switch or a swap that
+   * arrived with the link runs after it): `FILL` + `CLIP` as recorded, the volume AS TODAY'S CODE
+   * COMPUTES IT (a held or parked plate muted, every other its recorded intent, which a landed
+   * silence has already lowered), and `OPACITY 1` — every settled plate is revealed; hidden is only
+   * ever a moment inside one action. All `DEFER`, then that row's one `MIXER <ch> COMMIT`, back to
+   * back. ONLY layers in CG's bands ({@link isInCgBands}, 50 and up): 1–49 is the playout server's,
+   * and nothing is ever sent there. An empty ledger sends nothing at all.
+   *
+   * ⚠ It reaches the primary through the one seam (`#send`): in `mirror-sync` the backup receives
+   * the same lines. A reconnect of the BACKUP alone re-sends nothing — that needs a send to one
+   * session, which this seam does not have, and is filed rather than built (`design.md` §1).
+   */
+  async #resendLiveMixerState(): Promise<void> {
+    for (const itemId of [...this.#liveLayers.keys()]) {
+      await this.#withLiveSeatLock(itemId, async () => {
+        const records = (this.#liveLayers.get(itemId) ?? []).filter((r) =>
+          isInCgBands(r.slot.layer),
+        );
+        for (const channel of new Set(records.map((r) => r.slot.channel))) {
+          for (const record of records.filter((r) => r.slot.channel === channel)) {
+            const parked = record.held === true || isParkedFit(record.fill);
+            for (const line of [
+              ...this.#builder.mixerFit(record.slot, { fill: record.fill, clip: record.clip }),
+              this.#builder.mixerVolume(
+                record.slot,
+                parked ? CREATED_MUTED_VOLUME : record.intendedVolume,
+              ),
+              this.#builder.mixerOpacity(record.slot, 1),
+            ]) {
+              this.#stagedMixerChannel = channel;
+              await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+            }
+          }
+          await this.#commitStagedMixer();
+        }
+      });
     }
   }
 
@@ -7382,7 +7557,7 @@ export class CasparRuntime {
     if (!mayClearAfterRefusal(seat)) return false;
     const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
     if (what === 'plate') {
-      await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent');
+      await this.#resetPlateMixerIfCleared(slot, cleared);
     } else {
       if (cleared.ok && cleared.onPrimary) this.#markAdoptedOnPrimary(slot);
       await this.#resetEmptiedLayerMixer(slot, cleared);
@@ -7390,10 +7565,210 @@ export class CasparRuntime {
     return cleared.ok;
   }
 
+  /**
+   * 🔴 `LOOK-SWITCH-01` — **THE SEAT STEP: EVERY PRODUCER AN ACTION STARTS IS STARTED HIDDEN, AND
+   * SHOWN ONLY IN THAT ACTION'S ONE COMMIT.**
+   *
+   * ── WHY ────────────────────────────────────────────────────────────────────
+   *
+   * Mixer state is the LAYER's, not the producer's (2.5.0 `stage.cpp` keeps `tweens_` apart from
+   * `layers_`), so a producer `PLAY`ed on a layer is drawn at whatever transform the layer holds,
+   * from its first frame. On a fresh layer — or one a teardown's `MIXER CLEAR` put back — that is
+   * full frame, opaque and at full volume until the action's commit lands its fit (`design.md`
+   * §0.1 case B). The Playout's core team gave the pattern (`PLAYOUT-CG-RESPONSE-V13-STATE` §3.2):
+   * hide and mute first — `OPACITY 0`, `VOLUME 0` and the fit, as `DEFER` — then ONE
+   * `MIXER <ch> COMMIT`, waiting for its `202`; THEN the `PLAY`; the reveal (`OPACITY 1` and the
+   * plate's volume) rides the action's one commit. Showing is `OPACITY`, not `PLAY`.
+   *
+   * ── WHAT IS NEVER HIDDEN ───────────────────────────────────────────────────
+   *
+   * 🔴 **A LAYER A PRODUCER OF OURS IS ON.** A `PLAY` there is a REPLACE in place (`R-048`'s swap,
+   * `B-126`) and the layer's transform is already that plate's box, so the new producer inherits
+   * the right geometry. Hiding it first would take the working picture OFF AIR before the replace
+   * is known to land, and a refused `PLAY` would leave it off air — `B-126`'s destructive-before-
+   * constructive window, and `FIELD-FIXES-01-A`'s rule (a refused `PLAY` never clears a layer that
+   * held a working producer) under another name. So `hide` is decided per seat by the caller, from
+   * the ledger it read once (`oursBefore`).
+   *
+   * ── WHAT IT ANSWERS ────────────────────────────────────────────────────────
+   *
+   * Per seat, what its `PLAY`'s reply said. It stops at the first REQUIRED seat that did not land —
+   * the seats after it are never tried, exactly as the applier's loop never tried them — and goes
+   * on past a refused PRESET, which its action drops (session BM). A hide that did not land (a line
+   * refused, or the commit not acked on the primary) sends NO `PLAY` at all: every seat answers
+   * `refused` with `sent: false`, so its action is refused having seated nothing.
+   */
+  async #seatPlates(requests: readonly SeatRequest[]): Promise<Map<string, SeatResult>> {
+    const results = new Map<string, SeatResult>();
+    if (requests.length === 0) return results;
+    if (requests.some((r) => r.hide)) {
+      let hideFailure: { errorCode: string; command?: string } | undefined;
+      hide: for (const { placement, hide } of requests) {
+        if (!hide) continue;
+        for (const line of [
+          this.#builder.mixerOpacity(placement.slot, 0),
+          this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME),
+          ...this.#builder.mixerFit(placement.slot, placement.fit),
+        ]) {
+          this.#stagedMixerChannel = placement.slot.channel;
+          const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
+          if (sent.ok) continue;
+          hideFailure = {
+            errorCode: sent.errorCode ?? 'amcp-error',
+            ...(sent.command !== undefined && { command: sent.command }),
+          };
+          break hide;
+        }
+      }
+      /*
+        ONE commit, sent whatever happened above: a staged change nobody commits is applied by
+        whoever commits next (`B-198`). Our `DEFER`s and their `COMMIT` go out back to back, outside
+        any `BEGIN` (fact 3), and the reply is awaited — it arrives after the transforms are
+        installed (`AMCPCommandsImpl.cpp` 865–869), so every `PLAY` below starts hidden.
+      */
+      const committed = await this.#commitStagedMixer();
+      if (hideFailure === undefined && !committed.landed) {
+        hideFailure = {
+          errorCode: committed.errorCode ?? 'amcp-error',
+          ...(committed.command !== undefined && { command: committed.command }),
+        };
+      }
+      if (hideFailure !== undefined) {
+        for (const r of requests) {
+          results.set(r.placement.producerArg, {
+            placement: r.placement,
+            outcome: 'refused',
+            sent: false,
+            hidden: false,
+            ...hideFailure,
+          });
+        }
+        return results;
+      }
+    }
+    for (const r of requests) {
+      const sent = await this.#startSeatProducer(r.placement);
+      const outcome = outcomeOf(sent);
+      results.set(r.placement.producerArg, {
+        placement: r.placement,
+        outcome,
+        sent: true,
+        hidden: r.hide,
+        ...(sent.errorCode !== undefined && { errorCode: sent.errorCode }),
+        ...(sent.command !== undefined && { command: sent.command }),
+      });
+      if (outcome !== 'landed' && !r.optional) break;
+    }
+    return results;
+  }
+
+  /**
+   * `LOOK-SWITCH-01` — start ONE seat's producer: the one place the seat step does.
+   *
+   * ⭐ **`ROUTE-PLATES-01`: a `route` plate's `LOADBG` → `PLAY` pair (≥ 40 ms, ≤ 200 ms apart) goes
+   * HERE and nowhere else.** It is inside the seat step, so the plate is already hidden, and a
+   * refusal of either half is answered exactly like a refused `PLAY`.
+   */
+  async #startSeatProducer(
+    placement: LivePlatePlacement,
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
+    return this.#send(
+      this.#builder.playSource(placement.slot, placement.producer),
+      this.#nextSeq(),
+      'urgent',
+    );
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` / `B-273` — **A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE THE PAGE IS TOLD.**
+   *
+   * The owner's decision (2026-09-27): a look switch is all-or-nothing. If a plate the new look
+   * needs is refused, the page never moves and nothing on air changes; so the plate has to be
+   * seated — and its refusal known — BEFORE the page's `CG UPDATE`, and seated hidden, or it would
+   * be on air at full frame before the switch (`design.md` §0.1 case B, §3).
+   *
+   * What it seats is exactly what the applier would otherwise `PLAY` inside the switch
+   * ({@link isSeatUnchanged}, the one spelling): a preset dropped at the take, a `media` plate
+   * released when it left a look — every entered-look placement, and every fresh PRESET, whose
+   * producer the ledger does not hold on that layer. ⚠ **Except a layer a producer of ours is on**:
+   * a `PLAY` there REPLACES a picture that may be on air in the look being left (after a catalog
+   * re-point, `B-155`'s lurk), and it cannot be hidden without taking that picture off air first
+   * ({@link #seatPlates}). That one keeps today's in-switch path.
+   *
+   * On a refused REQUIRED seat it undoes only what it seated, through the one rule
+   * (`mayClearAfterRefusal`), and answers the refusal naming the plate and its source: no page
+   * `UPDATE` and no further `MIXER COMMIT` follow. A refused PRESET is left for the applier's
+   * drop, as ever.
+   */
+  async #preSeatSwitch(
+    itemId: string,
+    plan: LivePlateApplyPlan,
+  ): Promise<
+    | { readonly ok: true; readonly seats: ReadonlyMap<string, SeatResult> }
+    | { readonly ok: false; readonly refusal: LivePlateApplyResult }
+  > {
+    const previous = this.#liveLayers.get(itemId) ?? [];
+    const priorByProducer = new Map(previous.map((r) => [r.producer, r] as const));
+    const oursBefore = this.#liveLayerKeys();
+    const requests: SeatRequest[] = [];
+    for (const placement of [
+      ...plan.placements,
+      ...plan.parked.filter((p) => !priorByProducer.has(p.producerArg)),
+    ]) {
+      if (isSeatUnchanged('switch', priorByProducer.get(placement.producerArg), placement))
+        continue;
+      if (oursBefore.has(adoptionKey(placement.slot))) continue;
+      requests.push({ placement, hide: true, optional: placement.held });
+    }
+    let seats: Map<string, SeatResult>;
+    try {
+      seats = await this.#seatPlates(requests);
+    } finally {
+      // `B-199`'s rule for this step too: a throw inside the hide leaves nothing staged.
+      await this.#commitStagedMixer();
+    }
+    const failed = requests.find((r) => {
+      const seat = seats.get(r.placement.producerArg);
+      return !r.optional && seat !== undefined && seat.outcome !== 'landed';
+    });
+    if (failed === undefined) return { ok: true, seats };
+    await this.#undoPreSeat(seats);
+    const seat = seats.get(failed.placement.producerArg);
+    return {
+      ok: false,
+      refusal: {
+        ok: false,
+        errorCode: seat?.errorCode ?? 'amcp-error',
+        message:
+          `the look was NOT changed — CasparCG refused the source "${failed.placement.source.name}" ` +
+          `for a box the new look shows, before anything moved. Nothing on air changed.`,
+        ...(seat?.command !== undefined && { command: seat.command }),
+        refused: { plateId: failed.placement.plateId, source: failed.placement.source },
+      },
+    };
+  }
+
+  /**
+   * `LOOK-SWITCH-01` — take back off what a pre-seat started, through the one rule: a seat whose
+   * `PLAY` was refused put nothing there; one that landed (or went unanswered) is cleared. Never
+   * a layer one of ours held before — the pre-seat seats no such layer.
+   */
+  async #undoPreSeat(seats: ReadonlyMap<string, SeatResult> | undefined): Promise<void> {
+    for (const seat of seats?.values() ?? []) {
+      if (!seat.sent) continue;
+      await this.#clearAfterRefusal(
+        seat.placement.slot,
+        { outcome: seat.outcome, heldBefore: false },
+        'plate',
+      );
+    }
+  }
+
   async #applyLivePlatesUnguarded(
     itemId: string,
     plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
+    preSeated?: ReadonlyMap<string, SeatResult>,
   ): Promise<LivePlateApplyResult> {
     const { placements, parked, resolved, offFrame, declared, unresolved } = plan;
     const previous = this.#liveLayers.get(itemId) ?? [];
@@ -7500,6 +7875,40 @@ export class CasparRuntime {
     */
     const freshParked = parked.filter((p) => !priorByProducer.has(p.producerArg));
 
+    /*
+      🔴 `LOOK-SWITCH-01` — **THE SEAT STEP RUNS FIRST, before this batch stages a single line.**
+
+      Every plate this action must `PLAY` is started HIDDEN ({@link #seatPlates}): its hide commit
+      therefore cannot split the batch below, and its reveal rides the batch's one commit with every
+      other plate's move. A switch has already run the step BEFORE the page was told (`preSeated`,
+      from `reconcileLivePlates`); only what that did not seat — a replace in place — is seated here.
+      The order of `toSeat` is the loop's own order, so "the seats after a refused one were never
+      tried" means the same thing in both.
+    */
+    const toSeat: SeatRequest[] = [];
+    for (const placement of [...placements, ...freshParked]) {
+      if (isSeatUnchanged(mode, priorByProducer.get(placement.producerArg), placement)) continue;
+      if (preSeated?.has(placement.producerArg) === true) continue;
+      toSeat.push({ placement, hide: !oursBefore.has(key(placement)), optional: placement.held });
+    }
+    const seats = new Map<string, SeatResult>(preSeated ?? []);
+    for (const [producerArg, seat] of await this.#seatPlates(toSeat)) seats.set(producerArg, seat);
+    /*
+      🔴 A TAKE STAGES NOTHING ONCE ONE OF ITS REQUIRED SEATS IS REFUSED. Its reveals would ride the
+      failure path's commit below (`B-198`: a failed batch is committed, never left staged) and put
+      the plates that DID land on air — on a channel whose graphic is never played — until the
+      rollback cleared them: `B-161`'s videos with no template above them, for a frame or two. So a
+      refused take only builds its records, and the rollback clears what it seated, still hidden.
+      (`'live'` keeps its partial apply, and a switch's required seats were refused before the page
+      was told, in `#preSeatSwitch`.)
+    */
+    const takeRefused =
+      mode === 'take' &&
+      toSeat.some((r) => {
+        const seat = seats.get(r.placement.producerArg);
+        return !r.optional && seat !== undefined && seat.outcome !== 'landed';
+      });
+
     /**
      * `B-198` — has this batch staged anything? The `COMMIT` after the loop is sent ONLY if it
      * has, and that condition is not tidiness: a commit is channel-wide and applies whatever is
@@ -7527,15 +7936,11 @@ export class CasparRuntime {
         ⚠ Asked ONLY under `'live'`. A take re-asserts unconditionally — see the mode note
         on {@link reconcileLivePlates}: the ledger cannot tell a healthy producer from one
         the server has destroyed, so the repair verb must send rather than reason.
+
+        `LOOK-SWITCH-01` — ONE spelling ({@link isSeatUnchanged}), shared with the switch's
+        pre-seat, which must seat exactly the plates this loop would otherwise `PLAY`.
       */
-      const seatUnchanged =
-        // `!== 'take'` and never `=== 'live'`: the question is "is this a re-assert from
-        // nothing", and a SWITCH is as much a delta as a swap is (`B-166`). Spelling it as an
-        // allow-list of one is how the third action silently became a re-seat.
-        mode !== 'take' &&
-        prior !== undefined &&
-        key(prior) === key(placement) &&
-        prior.producer === producer;
+      const seatUnchanged = isSeatUnchanged(mode, prior, placement);
 
       const record: LiveLayerRecord = {
         slot: placement.slot,
@@ -7597,42 +8002,66 @@ export class CasparRuntime {
         if (prior.held === true) {
           lines.push(this.#builder.mixerVolume(placement.slot, record.intendedVolume));
         }
-      } else {
-        lines.push(
-          this.#builder.playSource(placement.slot, placement.producer),
+      }
+      /*
+        🔴 WHETHER THE `PLAY` LANDED IS A FACT THE FAILURE PATH CANNOT RECONSTRUCT LATER, so it
+        is carried from the ONLY moment it was knowable — the seat step's reply (`LOOK-SWITCH-01`:
+        every `PLAY` now goes out there, hidden, before this batch stages anything).
+
+        If the `PLAY` was acked and a `MIXER` after it was not, the layer carries the NEW producer
+        while the reveal did not land — and a failure path that assumed "a failed re-seat left the
+        previous producer alone" would write the PREVIOUS producer into the ledger and pin the
+        wrong feed on air with nothing anywhere disagreeing. A re-fit sends no producer at all, so
+        there is nothing to have landed.
+      */
+      const reseat = !seatUnchanged;
+      const seat = reseat ? seats.get(producer) : undefined;
+      const playLanded = seat?.outcome === 'landed';
+      if (reseat) {
+        // A `PLAY` that left this process may have made a producer: the take's rollback set.
+        if (seat?.sent === true) touched.push(record);
+        if (playLanded) {
           /*
-            🔴 A PARKED SEAT IS MUTED ON THE WIRE WHATEVER THE PLATE'S INTENT SAYS. The
-            record keeps the intent so the plate comes back at the volume the operator chose,
-            but a producer nobody can see must not be audible in the meantime — and a plate
-            the operator had deliberately raised in an earlier look is exactly the case where
-            seating it at its recorded intent would put a live voice on air from an empty box.
+            🔴 `LOOK-SWITCH-01` — THE REVEAL, in this action's one commit: `OPACITY 1` and the
+            plate's volume AS TODAY'S CODE COMPUTES IT — never a fixed 1. A seat that was not
+            hidden (a replace in place) was not given its fit by the seat step either, so the fit
+            rides here as it always did. `lines[1]` is the volume, as it always was.
+
+            🔴 A PARKED SEAT IS MUTED ON THE WIRE WHATEVER THE PLATE'S INTENT SAYS. The record
+            keeps the intent so the plate comes back at the volume the operator chose, but a
+            producer nobody can see must not be audible in the meantime — and a plate the
+            operator had deliberately raised in an earlier look is exactly the case where seating
+            it at its recorded intent would put a live voice on air from an empty box.
           */
-          this.#builder.mixerVolume(
-            placement.slot,
-            placement.held ? CREATED_MUTED_VOLUME : record.intendedVolume,
-          ),
-          ...this.#builder.mixerFit(placement.slot, placement.fit),
-        );
-        touched.push(record);
+          lines.push(
+            this.#builder.mixerOpacity(placement.slot, 1),
+            this.#builder.mixerVolume(
+              placement.slot,
+              placement.held ? CREATED_MUTED_VOLUME : record.intendedVolume,
+            ),
+            ...(seat?.hidden === true ? [] : this.#builder.mixerFit(placement.slot, placement.fit)),
+          );
+        }
       }
 
       next.push(record);
-      /*
-        🔴 WHETHER THE `PLAY` LANDED IS A FACT THE FAILURE PATH CANNOT RECONSTRUCT LATER,
-        so it is captured HERE, at the only moment it is knowable.
-
-        A re-seat sends three things and any of them can be refused. If the `PLAY` was
-        acked and the `MIXER` after it was not, the layer carries the NEW producer while
-        the geometry is still the old one — and a failure path that assumed "a failed
-        re-seat left the previous producer alone" would write the PREVIOUS producer into
-        the ledger and pin the wrong feed on air with nothing anywhere disagreeing.
-        `lines[0]` is the `playSource` whenever this is a re-seat; a re-fit sends no
-        producer at all, so there is nothing to have landed.
-      */
-      const reseat = !seatUnchanged;
-      let playLanded = false;
       let landed = 0;
-      for (const [i, line] of lines.entries()) {
+      if (reseat && !playLanded) {
+        // The seat step's `PLAY` for this plate did not land — refused, unanswered, or never
+        // sent because its hide did not land. What the reply said is the Rule's input.
+        failure = seat?.errorCode ?? 'amcp-error';
+        failedPlate = {
+          record,
+          prior,
+          priorOnSlot: priorSlotRecord,
+          reseat,
+          playLanded,
+          outcome: seat?.outcome ?? 'refused',
+          placement,
+          command: seat?.command,
+        };
+      }
+      for (const line of failure === undefined && !takeRefused ? lines : []) {
         /*
           🔴 `B-198` — **EVERY `MIXER` LINE OF THIS BATCH IS STAGED, NOT APPLIED.**
 
@@ -7651,7 +8080,6 @@ export class CasparRuntime {
         if (line.startsWith('MIXER ')) this.#stagedMixerChannel = placement.slot.channel;
         const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
         if (sent.ok) {
-          if (reseat && i === 0) playLanded = true;
           landed += 1;
           continue;
         }
@@ -7662,9 +8090,9 @@ export class CasparRuntime {
           priorOnSlot: priorSlotRecord,
           reseat,
           playLanded,
-          // A re-seat's `PLAY` is `lines[0]`: refused there, the reply is about the producer
-          // itself; refused on a later line, the `PLAY` before it had landed.
-          outcome: reseat && i === 0 ? outcomeOf(sent) : 'landed',
+          // Every line here is a `MIXER` after the seat step: a re-seat's `PLAY` had landed, and a
+          // re-fit never changed the producer — so what is on the layer is ours either way.
+          outcome: 'landed',
           placement,
           command: sent.command,
         };
@@ -7794,11 +8222,13 @@ export class CasparRuntime {
           It is a geometry restore, and `B-126`'s rule — never `CLEAR` before a repair — is not
           engaged at all.
 
-          ⚠ A plate this action genuinely `PLAY`ed (a preset that was not seated) is NOT rolled
-          back: destroying a producer we created would be exactly the destructive step B-126
-          forbids, and it is handled by the honest-ledger path below. It is also rare by
-          construction — a `PLAY` inside a switch is `B-155` case 3, which the union pre-seat
-          exists to prevent.
+          ⚠ A plate this action genuinely `PLAY`ed is NOT re-fitted: 🔴 `LOOK-SWITCH-01` — one
+          seated on a layer nothing of ours was on (the switch's pre-seat, hidden) comes back OFF,
+          through the one rule, just below; one that REPLACED a producer of ours in place keeps
+          its producer (`B-126` forbids the destructive step) and is settled by the honest-ledger
+          path. Both are rare by construction — a `PLAY` inside a switch is `B-155` case 3, which
+          the union pre-seat exists to prevent, and a refusal after the pre-seat is a `MIXER`
+          line refused, which real 2.5.0 does not do on a layer it owns.
 
           ── AND THIS IS WHAT CLOSES `B-167` ────────────────────────────────────────
 
@@ -7857,6 +8287,30 @@ export class CasparRuntime {
             clip: was.clip,
             ...(was.held === true ? { held: true } : {}),
           };
+        }
+        /*
+          🔴 `LOOK-SWITCH-01` — **ALL OR NOTHING REACHES THE PLATES THIS SWITCH SEATED, TOO.**
+
+          They were seated hidden, but the failure path's commit above applied whatever reveal had
+          already been staged for them, so a box of the NEW look would stand over the OLD one the
+          page is being put back to. Each comes back off through the one rule: cleared because this
+          switch put it there on a layer nothing of ours was on — never a layer one of ours held
+          before (a replace in place keeps its producer: `B-126`, and the honest-ledger rules below
+          settle it). The failed plate itself is left to those rules too.
+        */
+        const createdCleared = new Set<string>();
+        for (const rec of touched) {
+          if (rec === failedPlate?.record) continue;
+          const cleared = await this.#clearAfterRefusal(
+            rec.slot,
+            { outcome: 'landed', heldBefore: oursBefore.has(key(rec)) },
+            'plate',
+          );
+          if (cleared) createdCleared.add(key(rec));
+        }
+        for (let i = next.length - 1; i >= 0; i -= 1) {
+          const rec = next[i];
+          if (rec !== undefined && createdCleared.has(key(rec))) next.splice(i, 1);
         }
       }
       /*
@@ -8201,8 +8655,10 @@ export class CasparRuntime {
     const kept = new Set(next.map(key));
     for (const record of previous) {
       if (kept.has(key(record))) continue;
-      await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
-      await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+      const cleared = await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+      // `LOOK-SWITCH-01` — the mixer is reset only once the layer holds nothing: see
+      // {@link #resetPlateMixerIfCleared}.
+      await this.#resetPlateMixerIfCleared(record.slot, cleared);
     }
     // Announced AFTER the wire and the ledger agree, so a subscriber that reads the ledger
     // on this event sees the state the sentence describes.
@@ -9057,10 +9513,32 @@ export class CasparRuntime {
       return;
     }
     for (const record of records) {
-      await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
-      await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+      const cleared = await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
+      // `LOOK-SWITCH-01` — and the mixer only once the producer is gone (the method below).
+      await this.#resetPlateMixerIfCleared(record.slot, cleared);
     }
     this.releaseLiveLayers(itemId);
+  }
+
+  /**
+   * 🔴 `LOOK-SWITCH-01` — **A PLATE LAYER'S MIXER IS RESET ONLY ONCE ITS `CLEAR` HAS LANDED.**
+   *
+   * `MIXER <ch>-<layer> CLEAR` resets the WHOLE transform — opacity 1, volume 1, full frame
+   * (`AMCPCommandsImpl.cpp` 1371–1381; `stage.cpp` 271, 276). On a layer that still holds a plate —
+   * seated hidden, held (muted, parked off-raster), or anything a `CLEAR` did not remove — it
+   * REVEALS and UN-MUTES it at full frame: the Playout core team's fact 5 ("never `MIXER <ch>-<L>
+   * CLEAR` on a layer holding a seated, hidden plate"). The three sites that can meet one
+   * (`design.md` §0.4: the refusal clean-up, the end-of-apply sweep and this teardown) send their
+   * `CLEAR` first; each resets the mixer HERE, and only when that `CLEAR` was acked on the primary.
+   * A `CLEAR` that did not land leaves the producer AND its mixer exactly as they were: a stale
+   * transform on a layer the next seat hides again anyway, never a plate revealed at full frame.
+   */
+  async #resetPlateMixerIfCleared(
+    slot: CommandSlot,
+    cleared: { readonly ok: boolean; readonly onPrimary: boolean },
+  ): Promise<void> {
+    if (!cleared.ok || !cleared.onPrimary) return;
+    await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent');
   }
 
   /**

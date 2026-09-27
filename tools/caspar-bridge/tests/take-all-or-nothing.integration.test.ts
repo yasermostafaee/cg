@@ -265,26 +265,38 @@ const row = (r: CasparRuntime, itemId = 'bed-59') =>
   r.stackSnapshot(2).find((i) => i.itemId === itemId);
 
 describe('Decision 1 — a fresh take airs everything or nothing', () => {
-  it('🔴 HARD STOP — a take whose plates are all accepted sends the wire it sent before this change, byte for byte', async () => {
+  it('🔴 HARD STOP — a take whose plates are all accepted sends exactly this wire, byte for byte', async () => {
     /*
-      RECORDED, not derived: these thirteen lines are what the code at `459c3f64` (before any of
-      this) put on the mock's wire for exactly this take — captured by running it, then pasted.
-      They agree with the fragments `live-seating.integration.test.ts` pins (PLAY, the created-muted
-      VOLUME 0, FILL, CLIP, in that order, before the graphic's CG PLAY) and with `B-198`'s single
-      COMMIT. Only the failure path may change; if this list moves, the success path moved.
+      RECORDED, not derived: captured by running this take, then pasted. Only a decision may move
+      it; if this list moves otherwise, the success path moved.
+
+      🔴 `LOOK-SWITCH-01` MOVED IT, BY THE OWNER'S DECISION (2026-09-27): every plate is seated
+      HIDDEN — `OPACITY 0`, the created-muted `VOLUME 0` and both halves of the fit, staged and
+      committed BEFORE its `PLAY` — and revealed (`OPACITY 1` + its volume) in the take's one
+      commit, before the graphic's `CG PLAY`. The thirteen lines `459c3f64` put here were PLAY,
+      VOLUME, FILL, CLIP per plate and one COMMIT, which left each producer drawn at its layer's
+      previous transform — full frame, on a fresh layer — until that commit. The page's own lines
+      (the mute, the ADD, the unmute, the CG PLAY last) are unchanged: the control.
     */
     const RECORDED = [
       'MIXER 2-59 VOLUME 0',
       'CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/two-box?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"',
       'MIXER 2-59 VOLUME 1',
-      'PLAY 2-60 DECKLINK DEVICE 1',
+      'MIXER 2-60 OPACITY 0 DEFER',
       'MIXER 2-60 VOLUME 0 DEFER',
       'MIXER 2-60 FILL 0 0.238542 0.522917 0.522917 DEFER',
       'MIXER 2-60 CLIP 0 0.238542 0.522917 0.522917 DEFER',
-      'PLAY 2-61 DECKLINK DEVICE 2',
+      'MIXER 2-61 OPACITY 0 DEFER',
       'MIXER 2-61 VOLUME 0 DEFER',
       'MIXER 2-61 FILL 0.522917 0.261458 0.477083 0.477083 DEFER',
       'MIXER 2-61 CLIP 0.522917 0.261458 0.477083 0.477083 DEFER',
+      'MIXER 2 COMMIT',
+      'PLAY 2-60 DECKLINK DEVICE 1',
+      'PLAY 2-61 DECKLINK DEVICE 2',
+      'MIXER 2-60 OPACITY 1 DEFER',
+      'MIXER 2-60 VOLUME 0 DEFER',
+      'MIXER 2-61 OPACITY 1 DEFER',
+      'MIXER 2-61 VOLUME 0 DEFER',
       'MIXER 2 COMMIT',
       'CG 2-59 PLAY 0',
     ];
@@ -317,7 +329,18 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
       'MIXER 2-59 VOLUME 0',
       'CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/two-box?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"',
       'MIXER 2-59 VOLUME 1',
+      // `LOOK-SWITCH-01` — both layers are hidden first, in one commit; only then the PLAYs.
+      'MIXER 2-60 OPACITY 0 DEFER',
+      'MIXER 2-60 VOLUME 0 DEFER',
+      'MIXER 2-60 FILL 0 0.238542 0.522917 0.522917 DEFER',
+      'MIXER 2-60 CLIP 0 0.238542 0.522917 0.522917 DEFER',
+      'MIXER 2-61 OPACITY 0 DEFER',
+      'MIXER 2-61 VOLUME 0 DEFER',
+      'MIXER 2-61 FILL 0.522917 0.261458 0.477083 0.477083 DEFER',
+      'MIXER 2-61 CLIP 0.522917 0.261458 0.477083 0.477083 DEFER',
+      'MIXER 2 COMMIT',
       'PLAY 2-60 DECKLINK DEVICE 1',
+      // No reveal and no second COMMIT: a refused take stages nothing after its refusal.
       // The graphic this take ADDED comes off its layer, the way `out()` takes it.
       'CLEAR 2-59',
       'MIXER 2-59 CLEAR',
@@ -329,8 +352,9 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
     ).toBe(false);
     expect(
       lines.some((l) => l.startsWith('PLAY 2-61')),
-      'plate 2 is not tried',
+      'plate 2 is never PLAYed — its layer was only hidden, with nothing on it',
     ).toBe(false);
+    expect(layerOf(61).producer ?? 'empty').toBe('empty');
     expect(lines).not.toContain('CLEAR 2-60'); // the refused PLAY put nothing there to clear
     // Nothing of ours is left on either layer.
     expect(layerOf(59).producer ?? 'empty').toBe('empty');
@@ -498,8 +522,10 @@ describe('THE RULE — a refused PLAY never clears a working picture', () => {
     expect(await r.take('bed-59')).toEqual({ accepted: true });
 
     // Point l1 at studio3 in look-2 ONLY: look-1 still binds studio1, so studio1 keeps its layer
-    // and studio3 is seated on a FRESH one — whose mute is then refused.
-    refusals = [{ match: /^MIXER 2-62 VOLUME/, code: 403 }];
+    // and studio3 is seated on a FRESH one — whose REVEAL is then refused. (`LOOK-SWITCH-01` — the
+    // mute now precedes the `PLAY`, inside the hide, so refusing it would seat nothing at all; the
+    // reveal is the first line after a `PLAY` that landed, which is what this control needs.)
+    refusals = [{ match: /^MIXER 2-62 OPACITY 1/, code: 403 }];
     const from = await mark();
     const res = await r.swapLiveSource('bed-59', 'l1', 'src-3', 'look-2');
 

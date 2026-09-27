@@ -301,6 +301,24 @@ export class CommandBuilder {
   }
 
   /**
+   * 🔴 `LOOK-SWITCH-01` — **`MIXER <ch>-<layer> OPACITY <v>`: HOW A PLATE IS SEATED HIDDEN AND
+   * SHOWN.**
+   *
+   * Mixer state is the LAYER's, and a producer newly `PLAY`ed on a layer inherits whatever
+   * transform the layer holds (2.5.0 `stage.cpp` keeps `tweens_` apart from `layers_`). A fresh
+   * layer is full frame, opaque and at full volume, so a `PLAY` there is on air at full frame
+   * until its geometry lands. The Playout's core team's pattern (`PLAYOUT-CG-RESPONSE-V13-STATE`
+   * §3.2): `OPACITY 0` + `VOLUME 0` + the fit, as `DEFER`, and one `MIXER <ch> COMMIT` BEFORE the
+   * `PLAY`; the reveal (`OPACITY 1`) rides the action's one commit. **Showing is `OPACITY`, not
+   * `PLAY`.** Below 0.001 the kernel draws nothing (`image_kernel.cpp`).
+   *
+   * One value, like {@link mixerVolume}: the seat sends `0` and the reveal `1`, never a tween.
+   */
+  mixerOpacity(slot: CommandSlot, opacity: number): string {
+    return `MIXER ${target(slot)} OPACITY ${String(opacity)}`;
+  }
+
+  /**
    * C-015 phase 6 (6.1) — **seat a LIVE SOURCE producer on a layer.**
    *
    * The eighth verb, and the first thing this builder has ever emitted that is not

@@ -25,6 +25,8 @@ export class LayerRegistry {
       // R-022 — a fresh layer is at FULL volume, as on real CasparCG. Defaulting
       // to 0 would have made a missing restore look correct in every test.
       volume: 1,
+      // `LOOK-SWITCH-01` — a fresh layer is fully opaque, as on real CasparCG.
+      opacity: 1,
       // D-137 — an untouched layer fills the whole frame and masks nothing, which
       // is the identity for both terms. Defaulting to anything smaller would have
       // made a MISSING `MIXER FILL` look like a placed box.

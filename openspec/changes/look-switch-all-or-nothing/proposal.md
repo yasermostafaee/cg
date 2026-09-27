@@ -1,7 +1,21 @@
 # look-switch-all-or-nothing — a look switch airs all of its new look or none of it (`B-273`)
 
-Prompt: `LOOK-SWITCH-01` (v2). Run overnight on 2026-09-27 **up to its §3 only**, by the owner's
-instruction: establish, build nothing that waits for his measurement, hand him the measurement command.
+Prompt: `LOOK-SWITCH-01` (v2) ran overnight on 2026-09-27 **up to its §3 only**: it established §0 and pinned
+two absences. `LOOK-SWITCH-01` (v3) built §1, and CC measured it on this machine's own CasparCG (the owner's
+decision, 2026-09-27); it ships only if that measurement passes (`design.md` §3 v3).
+
+## What v3 changes
+
+- **A switch seats what its new look needs BEFORE the page is told** — hidden (`OPACITY 0` + `VOLUME 0` + the fit,
+  committed), then `PLAY` — and is refused, with the page untouched, when a plate is refused; the row keeps its
+  old look and says which source failed, in `FIELD-FIXES-01`'s line, with no banner.
+- **Every plate is seated hidden and revealed in its action's one commit** — take, switch, swap and restore onto a
+  layer nothing of ours is on; an in-place replace is never hidden.
+- **After every AMCP reconnect the first `DEFER` set carries our full plate mixer state**, layers 50 and up only.
+- **A plate layer's `MIXER CLEAR` only once its `CLEAR` landed.**
+- **The harness's switch window starts at the page `UPDATE`**, so the freshly seated runs count toward `k`.
+
+The rest of this file is v2's, kept as written.
 
 ## Why
 

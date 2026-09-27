@@ -234,7 +234,27 @@ describe('MIXER FILL and CLIP', () => {
 
   it('still refuses an unimplemented MIXER sub-verb', async () => {
     const m = await boot();
-    expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY 0.5')).toBe('400 ERROR\r\n');
+    // (This was `OPACITY` until `LOOK-SWITCH-01` modelled it — below.)
+    expect(await send(m.amcpPort, 'MIXER 1-38 ROTATION 45')).toBe('400 ERROR\r\n');
+  });
+
+  it('`LOOK-SWITCH-01` — OPACITY applies, stages under DEFER until COMMIT, refuses outside [0, 1], and MIXER CLEAR puts it back to 1', async () => {
+    const m = await boot();
+    expect(m.layerState(L(38))?.opacity ?? 1, 'a fresh layer is opaque').toBe(1);
+    expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY 0')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(38))?.opacity).toBe(0);
+    // Staged, not applied, until the channel's commit.
+    expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY 1 DEFER')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(38))?.opacity).toBe(0);
+    expect(await send(m.amcpPort, 'MIXER 1 COMMIT')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(38))?.opacity).toBe(1);
+    // A value that is not an opacity is a refusal, not a clamp.
+    expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY 2')).toBe('401 ERROR\r\n');
+    expect(await send(m.amcpPort, 'MIXER 1-38 OPACITY')).toBe('401 ERROR\r\n');
+    // MIXER CLEAR resets the whole transform, opacity included.
+    await send(m.amcpPort, 'MIXER 1-38 OPACITY 0');
+    expect(await send(m.amcpPort, 'MIXER 1-38 CLEAR')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(38))?.opacity).toBe(1);
   });
 
   it('does NOT clamp a FILL to the frame — an off-raster box is the bridge’s bug to show', async () => {

@@ -1,8 +1,8 @@
-# Tasks — look-switch-all-or-nothing (`LOOK-SWITCH-01` v2)
+# Tasks — look-switch-all-or-nothing (`LOOK-SWITCH-01` v2 §0–§3, v3 §1–§4)
 
-Lane: FULL (the path to air, the wire). Run overnight 2026-09-27 up to §3 only.
+Lane: FULL (the path to air, the wire). v2 ran overnight 2026-09-27 up to §3; v3 built §1 and measured it.
 
-## §0 Establish (no code changed)
+## §0 Establish (no code changed — v2)
 
 - [x] 0.1 Today's AMCP order for a 1 → 2 switch, measured on the fake; where `B-273`'s frames come from
       (`design.md` §0.1).
@@ -12,40 +12,61 @@ Lane: FULL (the path to air, the wire). Run overnight 2026-09-27 up to §3 only.
 - [x] 0.4 Every `DEFER`, `MIXER <ch> COMMIT` and `MIXER CLEAR` site; what a reconnect sends (§0.4).
 - [x] 0.5 What the fake proves, what needs real CasparCG; the command (§0.5, §3).
 
-## Pinned now (zero wire change)
+## Pinned (zero wire change — v2)
 
 - [x] P.1 No channel-wide `MIXER <ch> CLEAR` anywhere, and no AMCP `BEGIN` batch —
       `tools/caspar-bridge/tests/mixer-scope-pins.test.ts`, each with its control, red first under a planted
       builder for each.
 
-## §1 Build — HELD for the owner's measurement (`design.md` §3: not independent)
+## §1 Build (v3, `design.md` §1)
 
-- [ ] 1.1 The pre-seat step in `setActiveLook` (hide + mute + fill as `DEFER`, one `COMMIT`, wait; `PLAY`,
-      wait), before the page is told; one named place for `ROUTE-PLATES-01`'s `LOADBG` → `PLAY`.
-- [ ] 1.2 On a refusal: undo only what the step seated, through `mayClearAfterRefusal`; no page `UPDATE`, no
-      switch `COMMIT`; the row keeps its old look with the A/B line.
-- [ ] 1.3 On success: the reveal (`OPACITY 1 DEFER`, volume intent) inside the switch's one `COMMIT`.
-- [ ] 1.4 Hide before `PLAY` on every seating path: take, switch, swap, restore.
-- [ ] 1.5 After an AMCP reconnect, the first `DEFER` set carries the full mixer state of layers 50–99 only.
-- [ ] 1.6 `tools/skew-harness`: the switch window starts at the page `CG UPDATE`, so a pre-seat `PLAY` does not
-      exclude the run.
+- [x] 1.1 The pre-seat step (`#preSeatSwitch` → the seat step `#seatPlates`: hide + mute + fit as `DEFER`, one
+      `COMMIT`, awaited; `PLAY`, awaited), before the page is told; `ROUTE-PLATES-01`'s one named place is
+      `#startSeatProducer`.
+- [x] 1.2 On a refusal: undo only what the step seated, through `mayClearAfterRefusal`; no page `UPDATE`, no
+      further `COMMIT`; the row keeps its old look and carries the line (`takeRefusal`, `refusalOnRow`).
+- [x] 1.3 On success: the reveal (`OPACITY 1`, the volume as today's code computes it) inside the switch's one
+      `COMMIT`; a switch that lands withdraws the line.
+- [x] 1.4 Hide before `PLAY` on every seating path onto a layer nothing of ours is on — take, switch, swap,
+      restore (an in-place replace is never hidden: `design.md` §1 choice 1).
+- [x] 1.5 After an AMCP reconnect, the first `DEFER` set carries the full plate mixer state of layers 50 and up
+      only (`#resendLiveMixerState`); the backup-alone re-send is filed (choice 2).
+- [x] 1.6 `tools/skew-harness`: the switch window starts at the page `CG UPDATE` (`switchWindow`).
+- [x] 1.7 A plate layer's `MIXER CLEAR` only once its `CLEAR` landed, at the three sites §0.4 found
+      (`#resetPlateMixerIfCleared`).
+- [x] 1.8 The console: no banner for a refusal the row carries (`lookSwitchBanner`); the IPC reply's
+      `refusalOnRow` (`StackSetActiveLookChannel`); the offline mock's one-shot seam
+      (`CG_E2E_REFUSE_NEXT_SWITCH`).
 
-## §2 Tests for §1 (with §1)
+## §2 Tests (v3) — each absence with its positive control
 
-- [ ] 2.1 Refused 1 → 2: no page `UPDATE`, no switch `COMMIT`, plate 1 untouched, the rule applied to plate 2,
-      the row on its old look with the line; control: every plate accepted completes.
-- [ ] 2.2 Held plates: no new `PLAY`. 2.3 The old look's plates receive nothing on a refusal.
-- [ ] 2.4 Every pre-seat `PLAY` reply before the page `UPDATE`. 2.5 `OPACITY 0` + `VOLUME 0` committed before
-      every `PLAY`; control: the page layer's take order unchanged.
-- [ ] 2.6 Reconnect: the first `COMMIT` carries our full layer state and nothing for 1–49; control: a normal
-      switch sends only its deltas.
+- [x] 2.1 `tools/caspar-bridge/tests/look-switch-all-or-nothing.integration.test.ts` (15): refused 1 → 2,
+      variant 1 → 3, the accepted control, the line withdrawn; held plates; order; hidden before `PLAY` on take,
+      switch and swap, and an in-place replace never hidden; the reveal volume; the reconnect re-send and
+      nothing below 50; the backup's journal replay; the `MIXER CLEAR` gate. Red first: 11 of 15 fail on the
+      `HEAD` runtime; the 4 that pass are the controls and pins of properties that already held.
+- [x] 2.2 Updated for the new wire, each with its reason: `take-all-or-nothing` (the recorded success wire,
+      plate 1 refused, the "IS cleared" control now refuses the reveal), `live-seating` (the order),
+      `live-look-reconcile` (a refused switch never tells the page; `B-199`'s staged count 18 → 36).
+- [x] 2.3 `tools/amcp-mock/tests/live-producers.test.ts` — `OPACITY` applied, staged, refused out of range,
+      reset by `MIXER CLEAR`; the "unimplemented sub-verb" guard moved to `ROTATION`.
+- [x] 2.4 `tools/skew-harness/tests/wire-tap.test.ts` — the switch window, with its controls.
+- [x] 2.5 `apps/runtime/tests/lookPicker.dom.test.ts` (`lookSwitchBanner`) and
+      `apps/runtime/tests/e2e/look-switch-refusal-line.spec.ts` (red first: fails on `[data-refusal]` under the
+      old row handler).
+- [x] 2.6 v2's pins (`mixer-scope-pins.test.ts`) stay green.
 
-## §3 Measurement (the owner)
+## §3 Measurement (v3 — CC, on this machine's CasparCG at `127.0.0.1:5250`)
 
-- [ ] 3.1 The owner runs `design.md` §3's command on his dev station; `k` = 0 in every run including the fresh
-      seats, BLACK and MISPLACED 0 %, term (b) 0. Then ship §1, then close `B-273`.
+- [x] 3.0 Station check and baseline (`design.md` §3 v3).
+- [ ] 3.1 After §1: `ghab` full → boxes and boxes → full, `ghab3` control — `k` = 0 in every run including the
+      fresh seats, BLACK and MISPLACED 0 %, term (b) 0, CONTROL ≈ 0.
+- [ ] 3.2 The refusal run, if a fixture alone can drive it.
+- [ ] 3.3 `INFO 1` against §0.2's; the channel put back the way the harness does.
 
 ## Gate and discharge
 
-- [x] Z.1 `pnpm gate` green; `pnpm openspec validate --all --strict` (the pre-push gate at `89302de8`).
-- [x] Z.2 CI run URL, jobs confirmed RAN — `89302de8`: https://github.com/yasermostafaee/cg/actions/runs/36286015793 (Lint • Typecheck • Test • Build and E2E, both run, success); installers https://github.com/yasermostafaee/cg/actions/runs/36286015857 (success).
+- [x] Z.1 v2: `pnpm gate` green; `pnpm openspec validate --all --strict` (the pre-push gate at `89302de8`).
+- [x] Z.2 v2 CI run URL, jobs confirmed RAN — `89302de8`: https://github.com/yasermostafaee/cg/actions/runs/36286015793 (Lint • Typecheck • Test • Build and E2E, both run, success); installers https://github.com/yasermostafaee/cg/actions/runs/36286015857 (success).
+- [ ] Z.3 v3: `pnpm gate` green; `pnpm openspec validate --all --strict`.
+- [ ] Z.4 v3 CI: the `e2e` run and the installer run, COMPLETED and GREEN, jobs confirmed RAN.
