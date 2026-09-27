@@ -76,5 +76,5 @@ Lane: FULL (the path to air, the wire). v2 ran overnight 2026-09-27 up to §3; v
 
 - [x] Z.1 v2: `pnpm gate` green; `pnpm openspec validate --all --strict` (the pre-push gate at `89302de8`).
 - [x] Z.2 v2 CI run URL, jobs confirmed RAN — `89302de8`: https://github.com/yasermostafaee/cg/actions/runs/36286015793 (Lint • Typecheck • Test • Build and E2E, both run, success); installers https://github.com/yasermostafaee/cg/actions/runs/36286015857 (success).
-- [ ] Z.3 v3: `pnpm gate` green; `pnpm openspec validate --all --strict`.
-- [ ] Z.4 v3 CI: the `e2e` run and the installer run, COMPLETED and GREEN, jobs confirmed RAN.
+- [x] Z.3 v3: `pnpm gate` green; `pnpm openspec validate --all --strict` (before the measurement, and the pre-push gate at `b1fc75ee`: 96/96 tasks, 0 cached, 88/88 valid).
+- [x] Z.4 v3 CI at `b1fc75ee`, jobs confirmed RAN: https://github.com/yasermostafaee/cg/actions/runs/36308540770 (Lint • Typecheck • Test • Build success; E2E (Playwright) success with its `E2E` step run); installers https://github.com/yasermostafaee/cg/actions/runs/36308540747 (Installers (Windows) and Installer smoke (clean Windows), both success).
