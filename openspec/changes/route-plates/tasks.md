@@ -47,5 +47,12 @@
 
 ## 4. Gate and CI
 
-- [ ] 4.1 Prettier; `pnpm gate`; `pnpm openspec validate --all --strict`
-- [ ] 4.2 Pushed; `e2e` and the installer run green with their jobs confirmed to have RUN (URLs below)
+- [x] 4.1 Prettier and `pnpm gate` (the push's pre-push gate: 96/96 tasks, 0 cached)
+- [x] 4.1b `pnpm openspec validate --all --strict` — 90/90
+- [x] 4.2 Pushed `cdc3c03b` (code `0221eafc`); both runs COMPLETED green with their jobs RUN:
+  - PR — https://github.com/yasermostafaee/cg/actions/runs/36356560683 — `ci` success; `E2E (Playwright)`
+    success, its `E2E` step ran: runtime 295 passed, designer 291 passed / 12 skipped
+  - Desktop — https://github.com/yasermostafaee/cg/actions/runs/36356560698 — `Installers (Windows)` and
+    `Installer smoke (clean Windows)` success
+- [x] 4.3 Follow-up `829b7b42` — a reconnect keeps a held route hidden (the re-send's `OPACITY 0`), a test
+      only; carried by the push after `cdc3c03b`
