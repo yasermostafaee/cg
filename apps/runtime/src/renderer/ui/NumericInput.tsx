@@ -1,5 +1,12 @@
 import type { InputHTMLAttributes } from 'react';
-import { formatNumberLike, latinDigits, parseLocalizedNumber } from '@cg/text-shaping';
+import {
+  formatNumberLike,
+  latinDigits,
+  parseLocalizedNumber,
+  writeFieldDigits,
+  type FieldDigits,
+} from '@cg/text-shaping';
+import { writeDigitsAsTyped } from './fieldDigitsInput.js';
 import { arrowStep, runScrubGesture } from './scrubGesture.js';
 
 /**
@@ -10,8 +17,9 @@ import { arrowStep, runScrubGesture } from './scrubGesture.js';
  * `latinDigits` (from @cg/text-shaping, same helper the render path uses) maps
  * Persian ۰–۹ and Arabic-Indic ٠–٩ to Latin and preserves everything else, so
  * the value a caller receives — and therefore everything stored or put on the
- * wire — is always canonical Latin digits. The one exception is a TEMPLATE VALUE
- * (`digits="as-typed"`, `PERSIAN-DIGITS-01`): the operator's own text, kept as typed.
+ * wire — is always canonical Latin digits. The one exception is a TEMPLATE VALUE: the
+ * operator's own text, kept as typed (`digits="as-typed"`, `PERSIAN-DIGITS-01`) or written in
+ * its field's digit set (`FIELD-DIGITS-01`).
  *
  * Deliberately `type="text"` + `inputMode`: a browser `type="number"` input
  * SILENTLY DROPS non-Latin digits before `onChange` ever fires, so a
@@ -87,8 +95,14 @@ interface NumericInputProps extends Omit<
    *
    * ⚠ `allow="digits"` is a console-number filter and is not applied in `as-typed`: filtering
    * after NOT normalising would delete every Persian digit the operator typed.
+   *
+   * `FIELD-DIGITS-01` — `persian` and `arabic-indic` are a template field's own choice: every
+   * digit is written in that set as it is typed, whatever key produced it, and a `decimal`
+   * value's mark with it (`٫`), through `@cg/text-shaping`'s one writer; the caret stays where it
+   * was. The scrub writes its new number in the same set. The reading is the caller's, as in
+   * `as-typed`.
    */
-  digits?: 'latin' | 'as-typed';
+  digits?: FieldDigits;
 }
 
 export function NumericInput({
@@ -101,15 +115,28 @@ export function NumericInput({
   ...rest
 }: NumericInputProps): JSX.Element {
   const asTyped = digits === 'as-typed';
+  /** A template field's digit set (`FIELD-DIGITS-01`) — Latin stays the console's own path. */
+  const fieldSet = digits === 'persian' || digits === 'arabic-indic';
+  const kind = decimal ? 'number' : 'text';
   // The gestures operate on a NUMBER while the input is controlled by a STRING (so
   // "-", "1." and "" survive typing). A value that is not yet a number simply has
   // no magnitude to adjust, so both gestures no-op rather than guessing at 0.
   const numeric =
-    scrub === undefined ? null : asTyped ? (parseLocalizedNumber(value) ?? NaN) : Number(value);
+    scrub === undefined
+      ? null
+      : asTyped || fieldSet
+        ? (parseLocalizedNumber(value) ?? NaN)
+        : Number(value);
   const current =
     numeric !== null && value.trim() !== '' && Number.isFinite(numeric) ? numeric : null;
   const emit = (next: number): void =>
-    onValueChange(asTyped ? formatNumberLike(next, value) : String(next));
+    onValueChange(
+      fieldSet
+        ? writeFieldDigits(formatNumberLike(next, value), digits, kind)
+        : asTyped
+          ? formatNumberLike(next, value)
+          : String(next),
+    );
   /*
    * 🔴🔴 **DISABLED IS A BEHAVIOUR, NOT A RENDERING** — `INSPECTOR-DELTA` §1, measured.
    *
@@ -190,6 +217,11 @@ export function NumericInput({
         // A template value is the operator's text, verbatim — see `digits`.
         if (asTyped) {
           onValueChange(raw);
+          return;
+        }
+        // …or written in its field's digit set as it is typed (`FIELD-DIGITS-01`).
+        if (fieldSet) {
+          onValueChange(writeDigitsAsTyped(el, digits, kind));
           return;
         }
         const normalized = normalizeDigits(raw, { decimal });

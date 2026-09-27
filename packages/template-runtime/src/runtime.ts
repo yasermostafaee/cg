@@ -9,6 +9,7 @@ import {
   sequenceItemInstanceId,
   sequenceItemTextFieldIds,
   type ClockTarget,
+  type DynamicField,
   type FollowAnchors,
   type FrameRange,
   type ListItem,
@@ -27,7 +28,12 @@ import {
   entranceSettleFrame,
   type AnimatedElement,
 } from './animation-applier.js';
-import { applyScopedFieldValues, isNamespace, type FieldDocLite } from './bindings.js';
+import {
+  applyScopedFieldValues,
+  fieldValueText,
+  isNamespace,
+  type FieldDocLite,
+} from './bindings.js';
 import { applyArrangementToNodes } from './arrangement-view.js';
 import { LookMediaPark } from './look-media.js';
 
@@ -641,8 +647,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   // when present here; unbound items stay static. Element ids are globally unique, so one
   // merged map serves every scope (each sequence reads its own entry by element id).
   const seqItemTextFields = sequenceItemTextFieldIds(scene);
+  // FIELD-DIGITS-01 — and the fields of the doc that owns each such sequence, so a bound item
+  // is written in its field's digits exactly as a bound text element is.
+  const seqItemDocFields = new Map<string, readonly DynamicField[]>();
+  for (const elId of seqItemTextFields.keys()) seqItemDocFields.set(elId, scene.fields);
   for (const c of scene.compositions ?? []) {
-    for (const [elId, m] of sequenceItemTextFieldIds(c)) seqItemTextFields.set(elId, m);
+    for (const [elId, m] of sequenceItemTextFieldIds(c)) {
+      seqItemTextFields.set(elId, m);
+      seqItemDocFields.set(elId, c.fields ?? []);
+    }
   }
 
   // B-029 — per-element lifespan visibility, evaluated at a given frame, for EVERY scope
@@ -1034,11 +1047,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
             if (listBoundSeqIds.has(s.element.id)) return undefined;
             const itemFieldIds = seqItemTextFields.get(s.element.id);
             if (itemFieldIds === undefined || itemFieldIds.size === 0) return undefined;
+            const docFields = seqItemDocFields.get(s.element.id) ?? [];
             return (itemId: string): string | undefined => {
               const fieldId = itemFieldIds.get(itemId);
               if (fieldId === undefined) return undefined;
               const v = resolveScopeValues(currentValues, path)[fieldId];
-              return typeof v === 'string' ? v : undefined;
+              if (typeof v !== 'string') return undefined;
+              return fieldValueText(
+                v,
+                docFields.find((f) => f.id === fieldId),
+              );
             };
           })(),
           clock: options.clock,

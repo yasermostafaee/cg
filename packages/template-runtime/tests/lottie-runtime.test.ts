@@ -213,12 +213,19 @@ describe('createRuntime — Lottie element wiring (D-125 Phase 1)', () => {
 
 describe('createRuntime — lottie-override field bindings (D-125 Phase 3c)', () => {
   /** The lottie scene plus one text field bound to a lottie-override target. */
-  function boundScene(): Scene {
+  function boundScene(digits?: 'persian'): Scene {
     const scene = lottieScene();
     return {
       ...scene,
       fields: [
-        { id: 'headline', label: 'Headline', required: false, type: 'text', default: 'AUTH' },
+        {
+          id: 'headline',
+          label: 'Headline',
+          required: false,
+          type: 'text',
+          default: 'AUTH',
+          ...(digits === undefined ? {} : { digits }),
+        },
       ],
       bindings: [
         {
@@ -243,6 +250,30 @@ describe('createRuntime — lottie-override field bindings (D-125 Phase 3c)', ()
     await r.update({ headline: 'SECOND' });
     expect(handles[0]?.overrides.at(-1)).toEqual(['title', 'text', 'SECOND']);
     expect(handles[0]?.overrides.length ?? 0).toBeGreaterThan(afterPlay);
+    r.remove();
+  });
+
+  it('FIELD-DIGITS-01 — the override text is written in its field digits', async () => {
+    const r = createRuntime(boundScene('persian'), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+      clock: makeClock() as never,
+    });
+    await r.play({ headline: 'ساعت 12:30' });
+    expect(handles[0]?.overrides.at(-1)).toEqual(['title', 'text', 'ساعت ۱۲:۳۰']);
+    r.remove();
+  });
+
+  it('FIELD-DIGITS-01 — a field with no setting writes the override as typed (the control)', async () => {
+    const r = createRuntime(boundScene(), {
+      skipFontLoad: true,
+      installGlobals: false,
+      lottieAssets,
+      clock: makeClock() as never,
+    });
+    await r.play({ headline: 'ساعت 12:30' });
+    expect(handles[0]?.overrides.at(-1)).toEqual(['title', 'text', 'ساعت 12:30']);
     r.remove();
   });
 

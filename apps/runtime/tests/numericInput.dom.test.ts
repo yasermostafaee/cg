@@ -104,11 +104,14 @@ function Harness({
   onValue,
   decimal,
   asTyped,
+  persian,
   scrub,
 }: {
   onValue: (v: string) => void;
   decimal?: boolean;
   asTyped?: boolean;
+  /** `FIELD-DIGITS-01` — a template field set to Persian. */
+  persian?: boolean;
   scrub?: boolean;
 }): JSX.Element {
   const [value, setValue] = useState('');
@@ -116,6 +119,7 @@ function Harness({
     value,
     ...(decimal === true ? { decimal } : {}),
     ...(asTyped === true ? { digits: 'as-typed' as const } : {}),
+    ...(persian === true ? { digits: 'persian' as const } : {}),
     ...(scrub === true ? { scrub: { step: 1 } } : {}),
     onValueChange: (next: string) => {
       setValue(next);
@@ -193,6 +197,37 @@ describe('NumericInput — R-020', () => {
     expect(seen.at(-1)).toBe('13.5');
   });
 
+  it('`digits="persian"` writes every digit and the decimal mark in Persian as they land', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, { onValue: (v) => seen.push(v), decimal: true, persian: true }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '12.5');
+    expect(input.value).toBe('۱۲٫۵');
+    expect(seen.at(-1)).toBe('۱۲٫۵');
+    await setInput(input, '١٢٫٥');
+    expect(seen.at(-1)).toBe('۱۲٫۵');
+  });
+
+  it('`persian` arrows step the NUMBER and write it back in Persian', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, {
+        onValue: (v) => seen.push(v),
+        decimal: true,
+        persian: true,
+        scrub: true,
+      }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '12.5');
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    });
+    expect(seen.at(-1)).toBe('۱۳٫۵');
+  });
+
   it('decimal mode: ۱۲٫۵ commits as 12.5', async () => {
     const seen: string[] = [];
     const el = await render(
@@ -225,8 +260,26 @@ describe('Inspector fields — R-020', () => {
             name: 'Lower third',
             templateType: 'lower-third',
             fields: [
-              { id: 'fontSize', type: 'number', label: 'Font size', default: 5, step: 1 },
+              // FIELD-DIGITS-01 — `fontSize` is set to Persian, which is what keeps PERSIAN-DIGITS-01's
+              // on-screen assertions below exactly as they were; `count` carries no setting (Latin).
+              {
+                id: 'fontSize',
+                type: 'number',
+                label: 'Font size',
+                default: 5,
+                step: 1,
+                digits: 'persian',
+              },
               { id: 'title', type: 'text', label: 'Headline', default: '' },
+              { id: 'count', type: 'number', label: 'Count', default: 1 },
+              { id: 'clock', type: 'text', label: 'Clock', default: '', digits: 'persian' },
+              {
+                id: 'notes',
+                type: 'multiline',
+                label: 'Notes',
+                default: '',
+                digits: 'arabic-indic',
+              },
             ],
           }),
         ),
@@ -248,7 +301,7 @@ describe('Inspector fields — R-020', () => {
     return {
       itemId: 'item-1',
       templateId: 'tpl-1',
-      fields: { fontSize: 5, title: '' },
+      fields: { fontSize: 5, title: '', count: 1, clock: '', notes: '' },
       status: 'loaded',
       pending: false,
     };
@@ -331,6 +384,68 @@ describe('Inspector fields — R-020', () => {
     await setInput(inputByLabel(el, 'title'), 'کانال ۳');
     expect(effectiveValue('item-1', ['title'], undefined)).toBe('کانال ۳');
     expect(inputByLabel(el, 'title').value).toBe('کانال ۳');
+  });
+
+  /*
+    `FIELD-DIGITS-01` — the field, not the keyboard, decides the digits. A Windows keyboard types
+    Latin digits on the numpad whatever its layout, so each digit is written in the field's choice
+    as it lands, with the caret where it was. `title` carries no setting: the control, as typed.
+  */
+  it('a Persian TEXT field writes `12:30` as `۱۲:۳۰` in the box and in the staged value', async () => {
+    const el = await renderInspector();
+    const clock = inputByLabel(el, 'clock');
+    await setInput(clock, '12:30');
+    expect(clock.value).toBe('۱۲:۳۰');
+    expect(effectiveValue('item-1', ['clock'], undefined)).toBe('۱۲:۳۰');
+    // The control: a field with no setting keeps Latin digits as typed.
+    await setInput(inputByLabel(el, 'title'), '12:30');
+    expect(inputByLabel(el, 'title').value).toBe('12:30');
+    expect(effectiveValue('item-1', ['title'], undefined)).toBe('12:30');
+  });
+
+  it('a digit typed MID-TEXT is written in place and the caret stays after it', async () => {
+    const el = await renderInspector();
+    const clock = inputByLabel(el, 'clock');
+    await setInput(clock, '۱۲:۳۰');
+    // The browser inserts a Latin `5` after `۱۲` and puts the caret after it (index 3).
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(clock, '۱۲5:۳۰');
+      clock.setSelectionRange(3, 3);
+      clock.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(clock.value).toBe('۱۲۵:۳۰');
+    expect([clock.selectionStart, clock.selectionEnd]).toEqual([3, 3]);
+  });
+
+  it('an Arabic-Indic MULTILINE field writes its digits the same way', async () => {
+    const el = await renderInspector();
+    const notes = el.querySelector<HTMLTextAreaElement>('textarea[aria-label="notes"]');
+    if (notes === null) throw new Error('notes not rendered');
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(notes, 'line 1\nline 2');
+      notes.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(notes.value).toBe('line ١\nline ٢');
+    expect(effectiveValue('item-1', ['notes'], undefined)).toBe('line ١\nline ٢');
+  });
+
+  it('a NUMBER field with no setting shows Latin — what the page draws for it — and stages the number', async () => {
+    const el = await renderInspector();
+    const count = inputByLabel(el, 'count');
+    await setInput(count, '۱۲٫۵');
+    expect(count.value).toBe('12.5');
+    expect(effectiveValue('item-1', ['count'], 1)).toBe(12.5);
+  });
+
+  it('a Persian NUMBER field writes `12.5` as `۱۲٫۵` and still stages the NUMBER', async () => {
+    const el = await renderInspector();
+    const fontSize = inputByLabel(el, 'fontSize');
+    await setInput(fontSize, '12.5');
+    expect(fontSize.value).toBe('۱۲٫۵');
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(12.5);
+    expect(typeof effectiveValue('item-1', ['fontSize'], 5)).toBe('number');
   });
 });
 

@@ -3,6 +3,7 @@ import {
   type DynamicField,
   type Element,
   type FieldBinding,
+  type FieldDigits,
   type ListItem,
 } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
@@ -40,7 +41,20 @@ export interface ElementFieldMetaPatch {
    * carries it on those three and DROPS it when the author switches to `number`.
    */
   allowFileSource?: boolean;
+  /**
+   * `FIELD-DIGITS-01` — the digits the value is written in. `rebuildField` carries it across
+   * text ↔ multiline ↔ number; `as-typed` has no number form, so a number built from it carries
+   * none (absent: Latin, what a number always drew).
+   */
+  digits?: FieldDigits;
 }
+
+/**
+ * `FIELD-DIGITS-01` — the digits a field made through a Data key starts on: Persian, the owner's
+ * decision for every new text and number field. A field authored before the setting existed
+ * carries none and keeps drawing as it did (`fieldDigitsOf`).
+ */
+const NEW_FIELD_DIGITS = 'persian' satisfies FieldDigits;
 
 /**
  * Default `maxLength` for a field created via the Data-key convenience layer —
@@ -77,6 +91,17 @@ function currentFileSourceGrant(field: DynamicField): boolean | undefined {
 }
 
 /**
+ * `FIELD-DIGITS-01` — the field's AUTHORED digits, or `undefined` when it carries none. Absence
+ * stays absence (never normalised to the effective choice), so an old field round-trips without
+ * gaining a key.
+ */
+function currentDigits(field: DynamicField): FieldDigits | undefined {
+  return field.type === 'text' || field.type === 'multiline' || field.type === 'number'
+    ? field.digits
+    : undefined;
+}
+
+/**
  * Rebuild the dynamic field backing a Data key from a high-level meta patch,
  * producing a valid variant for the selected `fieldType`/`multiline` and
  * coercing `default` to that variant. Length/pattern constraints carry forward
@@ -106,6 +131,12 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
   const rawGrant = patch.allowFileSource ?? currentFileSourceGrant(field);
   const grant = rawGrant === undefined ? {} : { allowFileSource: rawGrant };
 
+  // FIELD-DIGITS-01 — carried like the grant: resolved once, absent stays absent.
+  const rawDigits = patch.digits ?? currentDigits(field);
+  const textDigits = rawDigits === undefined ? {} : { digits: rawDigits };
+  const numberDigits =
+    rawDigits === undefined || rawDigits === 'as-typed' ? {} : { digits: rawDigits };
+
   // D-028 — a list field (the ticker's Data key) has no text/number variant
   // switching; only the base meta applies. Its default (the items) is edited
   // through the items editor (`setTickerItems`), not this meta patch.
@@ -132,6 +163,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
       ...(field.type === 'number' && field.max !== undefined ? { max: field.max } : {}),
       ...(field.type === 'number' && field.step !== undefined ? { step: field.step } : {}),
       ...(field.type === 'number' && field.unit !== undefined ? { unit: field.unit } : {}),
+      ...numberDigits,
     };
   }
 
@@ -157,6 +189,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
         : {}),
       ...(minLength !== undefined ? { minLength } : {}),
       ...(pattern !== undefined ? { pattern } : {}),
+      ...textDigits,
       ...grant,
     };
   }
@@ -170,6 +203,7 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
     ...(field.type === 'text' && field.direction !== undefined
       ? { direction: field.direction }
       : {}),
+    ...textDigits,
     ...grant,
   };
 }
@@ -394,6 +428,7 @@ export const fieldsSlice = {
             required: false,
             default: el !== undefined && el.type === 'text' ? el.text : '',
             maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
+            digits: NEW_FIELD_DIGITS,
           };
       set({
         scene: withActiveFieldData(current.scene, {
@@ -528,6 +563,9 @@ export const fieldsSlice = {
         required: false,
         default: seedText,
         maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
+        // FIELD-DIGITS-01 — deliberately NO `digits`: a sequence item's field has no meta
+        // surface in the Designer to change it, and a Persian start nobody can undo is a
+        // setting nobody owns. Absent draws as typed, exactly as before.
       };
       set({
         scene: withActiveFieldData(current.scene, {

@@ -73,10 +73,12 @@ test('a number field keeps Persian digits in its default and in the preview; an 
   await value.press('Enter');
   await expect(value).toHaveValue('۱۲');
   // Stored as the NUMBER 12 (measured before: `0`). A number field reaches a template as a JSON
-  // number, which renders through `String(n)` — `design.md` records that as the owner's decision.
+  // number. `FIELD-DIGITS-01`: the page draws it in its FIELD's digits, and a field made through a
+  // Data key starts on Persian — so the canvas draws `۱۲`, where it drew `12` before that change.
+  // Either way it is twelve, never the `0` this spec exists to refuse.
   await expect(
     page.frameLocator('iframe[title="cgpreview"]').locator(`[data-cg-element-id="${textId}"]`),
-  ).toHaveText('12');
+  ).toHaveText('۱۲');
 
   // The PREVIEW form's number field.
   await app.openPreviewModal();
@@ -85,7 +87,7 @@ test('a number field keeps Persian digits in its default and in the preview; an 
   await typeInto(page, field, '۱۲٫۵');
   await expect(field).toHaveValue('۱۲٫۵');
   await app.updatePreviewField('score');
-  await expect(app.previewElement(textId)).toHaveText('12.5');
+  await expect(app.previewElement(textId)).toHaveText('۱۲٫۵');
 
   // The control: an impossible entry is refused in ONE line and changes nothing on the stage.
   await typeInto(page, field, '۱۲a');
@@ -93,7 +95,7 @@ test('a number field keeps Persian digits in its default and in the preview; an 
     app.previewDialog.getByRole('alert').filter({ hasText: 'Not a number' }),
   ).toHaveCount(1);
   await expect(field).toHaveValue('۱۲a');
-  await expect(app.previewElement(textId)).toHaveText('12.5');
+  await expect(app.previewElement(textId)).toHaveText('۱۲٫۵');
 });
 
 test('the Time (HH:MM) preset accepts a time typed in Persian or Arabic-Indic digits', async ({
@@ -126,6 +128,11 @@ test('on the on-air page a text value keeps its digits, draws them in ONE face, 
   await app.addTextElement({ x: 300, y: 200 });
   await app.setDataKey('headline');
   const textId = (await app.timelineRowIds())[0]!;
+  // `FIELD-DIGITS-01` — a new field starts on Persian; this spec is about a value kept AS TYPED,
+  // so the field says so. (`field-digits.spec.ts` measures the Persian and Latin choices.)
+  await app.inspector
+    .getByRole('combobox', { name: 'digits', exact: true })
+    .selectOption('as-typed');
   const { html } = await app.exportHtml();
 
   const air = await page.context().newPage();

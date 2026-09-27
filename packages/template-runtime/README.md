@@ -252,7 +252,10 @@ GDD namespaces; the repeater's single bound `list` field is the data surface.
 
 `applyFieldValues` (flat) and `applyScopedFieldValues` (nested) walk the scene's
 declared `bindings`, look up each `fieldId` in the supplied values (falling back to
-the field's `default`), run the optional `transform` (`transforms.ts`, e.g.
+the field's `default`), write a value that lands as TEXT in its field's digits
+(`fieldValueText` → `@cg/text-shaping`'s `writeFieldDigits` with
+`@cg/shared-schema`'s `fieldDigitsOf`, `FIELD-DIGITS-01`; a field with no setting is
+drawn as before), run the optional `transform` (`transforms.ts`, e.g.
 `persian-digits`, `date-fa`), and write to the DOM by `target.kind`
 (`text` / `image` / `color` / `visible` / `transform` / `scene-background` /
 `lottie-override` / `ticker-items` / `sequence-items` / `repeater-items` —
@@ -273,6 +276,10 @@ its opacity boundary live in `@cg/lottie-bridge`'s `applyOverride`.
 - **One-way** — field → DOM only; the renderer never writes values back.
 - Text caps to the field's `maxLength` **by code point** (a surrogate pair / ZWNJ
   counts as one and is never split).
+- A field's digits are written in every place its text lands — the `text` target,
+  a `lottie-override` text layer and a bound sequence item (`textValueFor` in
+  `runtime.ts`, through the same `fieldValueText`) — and BEFORE the binding's own
+  transform, so a per-binding `latin-digits` still wins.
 - Nested values route by namespace: `values[instanceName]` descends into that
   child scope (D-025).
 

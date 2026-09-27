@@ -639,6 +639,46 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     expect(visibleItems()).toEqual(['Operator text']);
   });
 
+  /** FIELD-DIGITS-01 — one bound text item, its field set to `digits`; the item's text after an update. */
+  async function boundItemDraws(digits: 'persian' | 'latin', value: string): Promise<string[]> {
+    const runtime = createRuntime(
+      compScene(
+        { advance: 'manual', repeat: 'infinite', items: [{ id: 'a', text: 'authored' }] },
+        [],
+        {
+          fields: [
+            {
+              id: 'headline',
+              type: 'text',
+              label: 'Headline',
+              required: false,
+              default: 'authored',
+              digits,
+            },
+          ],
+          bindings: [
+            {
+              fieldId: 'headline',
+              target: { kind: 'sequence-item-text', elementId: 'seq', itemId: 'a' },
+            },
+          ],
+        },
+      ),
+      { skipFontLoad: true, clock: makeClock() },
+    );
+    await runtime.play({});
+    await runtime.update({ headline: value });
+    return visibleItems();
+  }
+
+  it('(FIELD-DIGITS-01) a bound text item draws in its field digits', async () => {
+    expect(await boundItemDraws('persian', 'ساعت 12:30')).toEqual(['ساعت ۱۲:۳۰']);
+  });
+
+  it('(FIELD-DIGITS-01) a bound text item in a Latin field draws Latin (the control)', async () => {
+    expect(await boundItemDraws('latin', 'ساعت ۱۲:۳۰')).toEqual(['ساعت 12:30']);
+  });
+
   it('a LIST-BOUND sequence ignores per-item text keys (the bound list owns the items)', async () => {
     const clock = makeClock();
     const runtime = createRuntime(

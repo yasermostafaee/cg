@@ -54,6 +54,23 @@ const RegexSourceSchema = z.string().refine(
  */
 const FileSourceGrant = { allowFileSource: z.boolean().optional() } as const;
 
+/**
+ * `FIELD-DIGITS-01` — the digits a field's value is written in, as the operator types it in CG
+ * Control and as the page draws it. The AUTHOR's choice: a Windows keyboard types Latin digits
+ * whatever its layout (the numpad always does), so no keyboard setting can decide it.
+ *
+ * `as-typed` exists only on a text field. A `number` field sends a JSON number, which has no
+ * typed spelling left by the time the page draws it, so it names a set.
+ *
+ * ABSENT is what every field authored before this existed carries, and it keeps what air drew
+ * then: a text value as typed, a number through `String(n)` — Latin. Read it through
+ * {@link fieldDigitsOf}, never off the field.
+ */
+export const FieldDigitsSchema = z.enum(['as-typed', 'persian', 'latin', 'arabic-indic']);
+export type FieldDigits = z.infer<typeof FieldDigitsSchema>;
+/** A number field's choices: {@link FieldDigitsSchema} without `as-typed`. */
+export const NumberFieldDigitsSchema = FieldDigitsSchema.exclude(['as-typed']);
+
 const TextFieldSchema = DynamicFieldBaseSchema.extend({
   type: z.literal('text'),
   default: z.string(),
@@ -61,6 +78,7 @@ const TextFieldSchema = DynamicFieldBaseSchema.extend({
   maxLength: z.number().int().positive().optional(),
   pattern: RegexSourceSchema.optional(),
   direction: z.enum(['auto', 'ltr', 'rtl']).optional(),
+  digits: FieldDigitsSchema.optional(),
   ...FileSourceGrant,
 });
 
@@ -70,6 +88,7 @@ const MultilineFieldSchema = DynamicFieldBaseSchema.extend({
   minLength: z.number().int().nonnegative().optional(),
   pattern: RegexSourceSchema.optional(),
   maxLines: z.number().int().positive().optional(),
+  digits: FieldDigitsSchema.optional(),
   ...FileSourceGrant,
 });
 
@@ -96,6 +115,7 @@ const NumberFieldSchema = DynamicFieldBaseSchema.extend({
   max: z.number().optional(),
   step: z.number().positive().optional(),
   unit: z.string().optional(),
+  digits: NumberFieldDigitsSchema.optional(),
 });
 
 const SelectFieldSchema = DynamicFieldBaseSchema.extend({
@@ -193,6 +213,28 @@ export function fieldTakesFileSource(field: DynamicField): field is FileSourceCa
 export function fieldAllowsFileSource(field: DynamicField | null | undefined): boolean {
   if (field === null || field === undefined) return false;
   return fieldTakesFileSource(field) && field.allowFileSource === true;
+}
+
+/**
+ * `FIELD-DIGITS-01` — THE ANSWER to "which digits is this field's value written in", read by the
+ * page, CG Control's Inspector and the Designer alike (golden rule 6).
+ *
+ * Absent is `as-typed` on a text or multiline field and `latin` on a number field — what air drew
+ * before the setting existed, so an old template renders unchanged with nothing migrated. With
+ * NO field — the Inspector before its template schema resolves, or a kind that carries no
+ * setting — nothing is rewritten: not knowing the author's choice is not a choice.
+ */
+export function fieldDigitsOf(field: DynamicField | null | undefined): FieldDigits {
+  if (field === null || field === undefined) return 'as-typed';
+  switch (field.type) {
+    case 'text':
+    case 'multiline':
+      return field.digits ?? 'as-typed';
+    case 'number':
+      return field.digits ?? 'latin';
+    default:
+      return 'as-typed';
+  }
 }
 
 /** Runtime field-value payload. Image fields ship as { assetId }. */

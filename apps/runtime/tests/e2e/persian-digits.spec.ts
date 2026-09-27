@@ -1,6 +1,8 @@
 import * as dgram from 'node:dgram';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
+import type { DynamicField, Scene } from '@cg/shared-schema';
+import { ExporterSingleFile, cgCss, cgJsIife } from '@cg/single-file-export';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures/runtime.js';
 
@@ -19,11 +21,24 @@ import { expect, test } from './fixtures/runtime.js';
  * Typing is `keyboard.type`, which delivers each character through `insertText` — what an input
  * method (a Persian keyboard layout) hands the page — rather than `fill`, which writes the value
  * in one go.
+ *
+ * `FIELD-DIGITS-01` — the field, not the keyboard, now decides a value's digits: the last two
+ * specs type into fields set to Persian and to Latin, press the numpad and top-row keys a Windows
+ * keyboard sends, and hand the bytes CasparCG received to the page it plays.
  */
 
-const FIELDS = [
+/*
+  `FIELD-DIGITS-01` — each field says which digits its value is written in. `headline` carries no
+  setting (as typed: PERSIAN-DIGITS-01's §2 A and §2 D, unchanged); `score` is set to Persian, which
+  is what keeps §2 B's `۱۲٫۵` on screen now that a number with no setting shows Latin; `clock` is a
+  Persian text field and `stamp` a Latin one (the control); `count` is a number with no setting.
+*/
+const FIELDS: DynamicField[] = [
   { id: 'headline', label: 'headline', required: false, type: 'text', default: 'x' },
-  { id: 'score', label: 'score', required: false, type: 'number', default: 5 },
+  { id: 'score', label: 'score', required: false, type: 'number', default: 5, digits: 'persian' },
+  { id: 'clock', label: 'clock', required: false, type: 'text', default: '', digits: 'persian' },
+  { id: 'stamp', label: 'stamp', required: false, type: 'text', default: '', digits: 'latin' },
+  { id: 'count', label: 'count', required: false, type: 'number', default: 1 },
 ];
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>t</body></html>';
 const LAYER = 70;
@@ -93,7 +108,7 @@ async function bootOnAir(page: Page): Promise<Locator> {
         layer,
         itemId: 'row-digits',
         templateId: 'digits',
-        fields: { headline: 'x', score: 5 },
+        fields: { headline: 'x', score: 5, clock: '', stamp: '', count: 1 },
       });
       await w.cg.stack.take({ itemId: 'row-digits' });
     },
@@ -248,4 +263,201 @@ test('§2 D — `ساعت ۱۲:۳۰` reads in order in the Inspector field, with
   const latin = await inputRunsLeftToRight(page, 'Studio 12:30', box);
   expect(latin.length, 'the instrument read the Latin value').toBeGreaterThan(0);
   expect(latin[0]?.startsWith('Studio')).toBe(true);
+});
+
+/** A text element for {@link airPage} — the lower-third fixture's shape. */
+function textElement(id: string, y: number): Record<string, unknown> {
+  return {
+    id,
+    name: id,
+    type: 'text',
+    transform: {
+      position: { x: 100, y },
+      size: { w: 800, h: 80 },
+      scale: { x: 1, y: 1 },
+      rotation: 0,
+      anchor: { x: 0, y: 0 },
+    },
+    opacity: 1,
+    visible: true,
+    locked: false,
+    zIndex: 0,
+    text: '',
+    font: {
+      family: 'Vazirmatn',
+      weight: 400,
+      style: 'normal',
+      size: 48,
+      lineHeight: 1.4,
+      letterSpacing: 0,
+    },
+    color: '#FFFFFF',
+    align: 'start',
+    direction: 'rtl',
+    fitMode: 'autosize',
+    overflow: 'ellipsis',
+  };
+}
+
+/**
+ * `FIELD-DIGITS-01` — the page CasparCG plays for {@link FIELDS}, each field bound to its own text
+ * element, exported by the SAME `@cg/single-file-export` path CG Control delivers a template through.
+ */
+async function airPage(page: Page): Promise<Page> {
+  const scene = {
+    schemaVersion: 1,
+    id: 'scene-digits',
+    name: 'digits',
+    templateType: 'lower-third',
+    resolution: { width: 1920, height: 1080 },
+    frameRate: 50,
+    safeAreas: { title: 10, action: 5 },
+    frameRange: { in: 0, out: 50 },
+    editorBackdrop: 'transparent',
+    layers: [
+      {
+        id: 'layer-1',
+        name: 'Text',
+        visible: true,
+        locked: false,
+        blendMode: 'normal',
+        children: FIELDS.map((f, i) => textElement(`el-${f.id}`, 100 + i * 120)),
+      },
+    ],
+    fields: FIELDS,
+    bindings: FIELDS.map((f) => ({
+      fieldId: f.id,
+      target: { kind: 'text', elementId: `el-${f.id}` },
+    })),
+    fonts: [],
+    metadata: { createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z' },
+  } as unknown as Scene;
+  const exporter = new ExporterSingleFile({
+    cgJsIife,
+    cgCss,
+    fontsCss: '',
+    assets: { get: () => Promise.resolve(null), bytes: () => Promise.resolve(null) },
+  });
+  const { html } = await exporter.produce(scene);
+  const air = await page.context().newPage();
+  await air.setContent(html);
+  await air.waitForFunction(
+    () => typeof (window as unknown as { update?: unknown }).update === 'function',
+  );
+  return air;
+}
+
+test('FIELD-DIGITS-01 — a Persian text field and a Persian number field: the box, the wire and the page agree; a Latin field is the control', async ({
+  page,
+}) => {
+  const inspector = await bootOnAir(page);
+  const apply = inspector.getByRole('button', { name: 'Apply staged edits' });
+  const clock = inspector.getByRole('textbox', { name: 'clock' });
+  const stamp = inspector.getByRole('textbox', { name: 'stamp' });
+  const score = inspector.getByRole('textbox', { name: 'score' });
+  const count = inspector.getByRole('textbox', { name: 'count' });
+
+  // The box: each digit is written in its field's set as it is typed.
+  await typeInto(page, clock, '12:30');
+  await expect(clock).toHaveValue('۱۲:۳۰');
+  await typeInto(page, score, '12.5');
+  await expect(score).toHaveValue('۱۲٫۵');
+  // The controls: a Latin text field writes Latin whatever was typed; a number with no setting
+  // shows Latin, which is what the page draws for it.
+  await typeInto(page, stamp, '۱۲:۳۰');
+  await expect(stamp).toHaveValue('12:30');
+  await typeInto(page, count, '۱۲٫۵');
+  await expect(count).toHaveValue('12.5');
+  await apply.click();
+
+  // The wire: the text as shown; a number is still a NUMBER.
+  await expect
+    .poll(() => codePoints(String(wireFields()?.['clock'] ?? '')))
+    .toEqual(codePoints('۱۲:۳۰'));
+  await expect.poll(() => wireFields()?.['score']).toBe(12.5);
+  expect(typeof wireFields()?.['score']).toBe('number');
+  await expect
+    .poll(() => codePoints(String(wireFields()?.['stamp'] ?? '')))
+    .toEqual(codePoints('12:30'));
+  await expect.poll(() => wireFields()?.['count']).toBe(12.5);
+
+  // The page: handed the EXACT data CasparCG received, the way CasparCG hands it over.
+  const data = mock?.lastCgUpdate({ channel: 1, layer: LAYER })?.data;
+  if (data === undefined || data === null) throw new Error('no CG UPDATE reached the fake');
+  const air = await airPage(page);
+  await air.evaluate((json) => {
+    const w = window as unknown as { update: (s: string) => void; play: () => void };
+    w.update(json);
+    w.play();
+  }, data);
+  await expect(air.locator('[data-cg-element-id="el-clock"]')).toHaveText('۱۲:۳۰');
+  await expect(air.locator('[data-cg-element-id="el-score"]')).toHaveText('۱۲٫۵');
+  await expect(air.locator('[data-cg-element-id="el-stamp"]')).toHaveText('12:30');
+  await expect(air.locator('[data-cg-element-id="el-count"]')).toHaveText('12.5');
+  await air.close();
+});
+
+/**
+ * The `1` a Windows keyboard sends, as the browser receives it: from the top row (`VK_1`) or from
+ * the numpad with NumLock ON (`VK_NUMPAD1`, `location` 3) — `field-digits` `design.md` §0.1 measured
+ * both typing U+0031 on the owner's layout. Dispatched through CDP exactly as Playwright dispatches
+ * its own keys, because Playwright's `Numpad1` models NumLock OFF: it sends `End` and types nothing.
+ */
+async function pressOne(page: Page, from: 'Digit1' | 'Numpad1'): Promise<void> {
+  const numpad = from === 'Numpad1';
+  const key = {
+    key: '1',
+    code: from,
+    windowsVirtualKeyCode: numpad ? 97 : 49,
+    location: numpad ? 3 : 0,
+    isKeypad: numpad,
+  };
+  const client = await page.context().newCDPSession(page);
+  await client.send('Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    ...key,
+    text: '1',
+    unmodifiedText: '1',
+  });
+  await client.send('Input.dispatchKeyEvent', { type: 'keyUp', ...key });
+  await client.detach();
+}
+
+test('FIELD-DIGITS-01 — the keys a Windows keyboard sends for 1, top row and numpad, type ۱ into a Persian field; an as-typed field keeps 1', async ({
+  page,
+}) => {
+  const inspector = await bootOnAir(page);
+  const clock = inspector.getByRole('textbox', { name: 'clock' });
+  const headline = inspector.getByRole('textbox', { name: 'headline' });
+  // The instrument: every keydown the page receives, as `key|code|location`.
+  await page.evaluate(() => {
+    const w = window as unknown as { __keys: string[] };
+    w.__keys = [];
+    document.addEventListener(
+      'keydown',
+      (e) => w.__keys.push(`${e.key}|${e.code}|${String(e.location)}`),
+      true,
+    );
+  });
+
+  for (const [box, expected] of [
+    [clock, '۱۱'],
+    // The control: a field with no setting keeps what the keyboard typed.
+    [headline, '11'],
+  ] as const) {
+    await box.click();
+    await box.press('Control+a');
+    await page.keyboard.press('Delete');
+    await pressOne(page, 'Numpad1');
+    await pressOne(page, 'Digit1');
+    await expect(box).toHaveValue(expected);
+  }
+  // Both keys really were `1` — one from the numpad, one from the top row.
+  const keys = await page.evaluate(() => (window as unknown as { __keys: string[] }).__keys);
+  expect(keys.filter((k) => k.startsWith('1|'))).toEqual([
+    '1|Numpad1|3',
+    '1|Digit1|0',
+    '1|Numpad1|3',
+    '1|Digit1|0',
+  ]);
 });

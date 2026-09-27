@@ -7,6 +7,7 @@ import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
   fieldAllowsFileSource,
+  fieldDigitsOf,
   fieldTypeTakesFileSource,
   isFieldNamespace,
   isOnAirStatus,
@@ -26,6 +27,7 @@ import { NumericInput } from '../../ui/NumericInput.js';
 import { Panel } from '../../ui/Panel.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
+import { writeDigitsAsTyped } from '../../ui/fieldDigitsInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import { takeRefusalLine, TakeRefusalText } from '../layers/takeRefusalLine.js';
@@ -56,7 +58,12 @@ import {
   valueAt,
   type FieldPath,
 } from './draftStore.js';
-import { formatNumberLike, parseLocalizedNumber, readLocalizedNumber } from '@cg/text-shaping';
+import {
+  formatNumberLike,
+  parseLocalizedNumber,
+  readLocalizedNumber,
+  writeFieldDigits,
+} from '@cg/text-shaping';
 
 /** The shared field class, plus the dirty accent (border only — no layout shift). */
 function fieldClass(dirty: boolean): string {
@@ -1099,6 +1106,7 @@ function FieldControl({
   if (kind === 'number') {
     return (
       <NumberField
+        field={field}
         value={value}
         applied={applied}
         fieldId={fieldId}
@@ -1159,6 +1167,9 @@ function FieldControl({
       />
     );
   }
+  // `FIELD-DIGITS-01` — a text or multiline field shows and stages its value in the field's
+  // digits, written as each key lands (`as-typed`, and an unresolved schema, write nothing).
+  const digits = fieldDigitsOf(field);
   if (kind === 'multiline') {
     const v = typeof value === 'string' ? value : '';
     // Grows with its CONTENT (wrapped height, not newline count) — see
@@ -1167,8 +1178,8 @@ function FieldControl({
     return (
       <AutoGrowTextarea
         className={dirty ? 'is-dirty' : undefined}
-        value={v}
-        onChange={(e) => onStage(e.target.value)}
+        value={writeFieldDigits(v, digits)}
+        onChange={(e) => onStage(writeDigitsAsTyped(e.currentTarget, digits))}
         aria-label={fieldId}
       />
     );
@@ -1187,8 +1198,8 @@ function FieldControl({
       className={fieldClass(dirty)}
       type="text"
       dir={EDITOR_DIR}
-      value={v}
-      onChange={(e) => onStage(e.target.value)}
+      value={writeFieldDigits(v, digits)}
+      onChange={(e) => onStage(writeDigitsAsTyped(e.currentTarget, digits))}
       aria-label={fieldId}
     />
   );
@@ -1213,8 +1224,14 @@ function FieldControl({
  *   screen saying so. Now Update leaves this field exactly as it is on air.
  * - Only an IMPOSSIBLE text is refused aloud, in one line. A half-typed one (empty, `-`, `۱٬`)
  *   stages nothing and says nothing — refuse the impossible, never the incomplete.
+ *
+ * `FIELD-DIGITS-01` — the box is written in the FIELD's digits (`fieldDigitsOf`): the author's set,
+ * `latin` for a field that carries none (what air draws for it), and as typed only while the
+ * template schema is unresolved. So what the operator sees is what the page draws. The reading,
+ * the refusal and the staging above are unchanged; the value sent is still the number.
  */
 function NumberField({
+  field,
   value,
   applied,
   fieldId,
@@ -1222,6 +1239,7 @@ function NumberField({
   onStage,
   onUnstage,
 }: {
+  field: DynamicField | null;
   value: FieldValue | undefined;
   applied: FieldValue | undefined;
   fieldId: string;
@@ -1230,6 +1248,7 @@ function NumberField({
   onUnstage: () => void;
 }): JSX.Element {
   const refusalId = useId();
+  const digits = fieldDigitsOf(field);
   const [text, setText] = useState(typeof value === 'number' ? String(value) : '');
   const [seen, setSeen] = useState(value);
   if (value !== seen) {
@@ -1240,7 +1259,10 @@ function NumberField({
     const represents = typeof value === 'number' && parseLocalizedNumber(text) === value;
     if (!represents) setText(typeof value === 'number' ? formatNumberLike(value, text) : '');
   }
-  const refused = readLocalizedNumber(text).kind === 'invalid';
+  // Shown in the field's digits whatever wrote `text` — a keystroke, a reseed, or a schema that
+  // resolved after the box first rendered. The writer is idempotent and one-for-one.
+  const shown = writeFieldDigits(text, digits, 'number');
+  const refused = readLocalizedNumber(shown).kind === 'invalid';
   // R-020 — the shared NumericInput (type="text" under the hood: a `type="number"` box drops
   // Persian digits before script sees them). `step`/`min`/`max` are not rendered: on the old
   // `type="number"` they only drove the spinner and the :invalid style — the staged value was
@@ -1252,9 +1274,9 @@ function NumberField({
       <NumericInput
         className={fieldClass(dirty)}
         decimal
-        digits="as-typed"
+        digits={digits}
         scrub={{ step: 1 }}
-        value={text}
+        value={shown}
         {...(refused ? { 'aria-invalid': true, 'aria-describedby': refusalId } : {})}
         onValueChange={(raw) => {
           setText(raw);

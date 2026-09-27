@@ -1,9 +1,10 @@
-import type {
-  DynamicField,
-  FieldBinding,
-  FieldValues,
-  NestedFieldValues,
-  Scene,
+import {
+  fieldDigitsOf,
+  type DynamicField,
+  type FieldBinding,
+  type FieldValues,
+  type NestedFieldValues,
+  type Scene,
 } from '@cg/shared-schema';
 import type { FieldScope } from './types.js';
 import { coerceRepeaterItems, repeaterDriverFor } from './repeater-driver.js';
@@ -12,7 +13,45 @@ import { textRenderNode } from './text-render-node.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { lottiePlayerFor } from './lottie-registry.js';
 import { applyTransform, stringifyValue } from './transforms.js';
-import { parseLocalizedNumber } from '@cg/text-shaping';
+import { parseLocalizedNumber, writeFieldDigits } from '@cg/text-shaping';
+
+/**
+ * How a field's value is written wherever the page writes it as TEXT: its digits
+ * (`FIELD-DIGITS-01`) and, for a `text` field, its code-point cap.
+ */
+interface FieldTextRule {
+  readonly field: DynamicField;
+  readonly maxLength?: number | undefined;
+}
+
+/** Each field's default, and its text rule, keyed by field id. */
+function fieldLookups(fields: readonly DynamicField[]): {
+  defaults: Map<string, unknown>;
+  rules: Map<string, FieldTextRule>;
+} {
+  const defaults = new Map<string, unknown>();
+  const rules = new Map<string, FieldTextRule>();
+  for (const field of fields) {
+    defaults.set(field.id, 'default' in field ? field.default : undefined);
+    rules.set(field.id, { field, maxLength: field.type === 'text' ? field.maxLength : undefined });
+  }
+  return { defaults, rules };
+}
+
+/**
+ * `FIELD-DIGITS-01` — a bound value as the text the page draws: in its field's digits, BEFORE the
+ * binding's own transform (so an explicit per-binding `latin-digits` still wins). Whatever sent
+ * the value — CG Control, a GDD client, a retained value — draws the same, because the one writer
+ * is idempotent. Exported for the sequence driver's `textValueFor` seam (`runtime.ts`), which
+ * writes a bound item's text outside this walk.
+ */
+export function fieldValueText(raw: unknown, field: DynamicField | undefined): string {
+  return writeFieldDigits(
+    stringifyValue(raw),
+    fieldDigitsOf(field),
+    field?.type === 'number' ? 'number' : 'text',
+  );
+}
 
 /**
  * A `transform` target's value as a number.
@@ -42,20 +81,13 @@ export function applyFieldValues(
   container: HTMLElement,
 ): void {
   // Build a quick field-defaults lookup so missing values fall back cleanly,
-  // plus per-field `maxLength` caps for text fields.
-  const defaults = new Map<string, unknown>();
-  const maxLengths = new Map<string, number>();
-  for (const field of scene.fields) {
-    defaults.set(field.id, 'default' in field ? field.default : undefined);
-    if (field.type === 'text' && field.maxLength !== undefined) {
-      maxLengths.set(field.id, field.maxLength);
-    }
-  }
+  // plus each field's text rule (its digits, and a text field's `maxLength` cap).
+  const { defaults, rules } = fieldLookups(scene.fields);
 
   for (const binding of scene.bindings) {
     const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
     if (raw === undefined) continue;
-    applyOne(binding, raw, elementMap, textOriginals, container, maxLengths.get(binding.fieldId));
+    applyOne(binding, raw, elementMap, textOriginals, container, rules.get(binding.fieldId));
   }
 }
 
@@ -88,14 +120,7 @@ function applyDocScope(
   values: NestedFieldValues,
   scope: FieldScope,
 ): void {
-  const defaults = new Map<string, unknown>();
-  const maxLengths = new Map<string, number>();
-  for (const field of doc.fields ?? []) {
-    defaults.set(field.id, 'default' in field ? field.default : undefined);
-    if (field.type === 'text' && field.maxLength !== undefined) {
-      maxLengths.set(field.id, field.maxLength);
-    }
-  }
+  const { defaults, rules } = fieldLookups(doc.fields ?? []);
   for (const binding of doc.bindings ?? []) {
     const raw = binding.fieldId in values ? values[binding.fieldId] : defaults.get(binding.fieldId);
     if (raw === undefined) continue;
@@ -105,7 +130,7 @@ function applyDocScope(
       scope.elementMap,
       scope.textOriginals,
       scope.container,
-      maxLengths.get(binding.fieldId),
+      rules.get(binding.fieldId),
     );
   }
   for (const child of scope.children) {
@@ -133,14 +158,15 @@ function applyOne(
   elementMap: ReadonlyMap<string, HTMLElement>,
   textOriginals: ReadonlyMap<string, string>,
   container: HTMLElement,
-  maxLength?: number,
+  rule?: FieldTextRule,
 ): void {
   const target = binding.target;
+  const maxLength = rule?.maxLength;
   switch (target.kind) {
     case 'text': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
-      let stringValue = applyTransform(stringifyValue(raw), binding.transform);
+      let stringValue = applyTransform(fieldValueText(raw, rule?.field), binding.transform);
       // Cap to the field's maxLength by code point (so a surrogate pair or a
       // ZWNJ counts as one and isn't split); the element's own auto-size /
       // auto-squeeze then handles fit.
@@ -247,7 +273,7 @@ function applyOne(
       const player = lottiePlayerFor(el);
       if (player === undefined) return;
       if (target.prop === 'text') {
-        let text = applyTransform(stringifyValue(raw), binding.transform);
+        let text = applyTransform(fieldValueText(raw, rule?.field), binding.transform);
         // Same code-point cap as the `text` target — the SAME field must behave the
         // same whether it lands on a native text element or a Lottie text layer.
         if (maxLength !== undefined && [...text].length > maxLength) {

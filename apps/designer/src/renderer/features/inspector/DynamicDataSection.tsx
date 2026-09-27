@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import {
   fieldAllowsFileSource,
+  fieldDigitsOf,
+  FieldDigitsSchema,
+  NumberFieldDigitsSchema,
   type DynamicField,
   type FieldBinding,
   type RepeaterElement,
@@ -245,6 +248,16 @@ function FieldMeta({
         value={fieldType}
         options={['text', 'number'] as const}
         onCommit={(v) => patch({ fieldType: v })}
+      />
+      {/* FIELD-DIGITS-01 — the clock's own control and words; `as-typed` only for text, since a
+          number reaches the page as a number. Absent reads as-typed / latin (`fieldDigitsOf`). */}
+      <SelectField
+        label="digits"
+        value={fieldDigitsOf(field)}
+        options={
+          fieldType === 'number' ? NumberFieldDigitsSchema.options : FieldDigitsSchema.options
+        }
+        onCommit={(v) => patch({ digits: v })}
       />
       {fieldType === 'text' && (
         <>

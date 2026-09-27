@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { DynamicField, FieldDigits } from '@cg/shared-schema';
 import { applyFieldValues } from '../src/bindings.js';
 import { buildScene } from '../src/scene-builder.js';
 import { lowerThirdScene } from './fixtures.js';
@@ -182,6 +183,73 @@ describe('applyFieldValues', () => {
       applyFieldValues(sceneCopy, { anchor: v }, elementMap, textOriginals, container);
       expect(elementMap.get('name')?.textContent).toBe(v);
     }
+  });
+
+  /*
+    `FIELD-DIGITS-01` — the page draws a value in its FIELD's digits. A text field keeps its
+    punctuation; a number field's JSON number gets its set's decimal mark and no grouping. A field
+    with no setting — every template made before it existed — draws exactly as before.
+  */
+  describe('a value draws in its field digits (FIELD-DIGITS-01)', () => {
+    const base = { id: 'anchor', label: 'x', required: false } as const;
+    const text = (digits?: FieldDigits): DynamicField => ({
+      ...base,
+      type: 'text',
+      default: '',
+      ...(digits === undefined ? {} : { digits }),
+    });
+    const number = (digits?: Exclude<FieldDigits, 'as-typed'>): DynamicField => ({
+      ...base,
+      type: 'number',
+      default: 0,
+      ...(digits === undefined ? {} : { digits }),
+    });
+    const drawn = (
+      field: DynamicField,
+      value: string | number,
+      transform?: 'latin-digits',
+    ): string => {
+      const sceneCopy = structuredClone(lowerThirdScene);
+      sceneCopy.fields[0] = field;
+      sceneCopy.bindings[0]!.target = { kind: 'text', elementId: 'name' };
+      if (transform !== undefined) sceneCopy.bindings[0]!.transform = transform;
+      const { container, elementMap, textOriginals } = buildScene(sceneCopy);
+      applyFieldValues(sceneCopy, { anchor: value }, elementMap, textOriginals, container);
+      return elementMap.get('name')?.textContent ?? '';
+    };
+
+    it('a Persian text field draws 12:30 as ۱۲:۳۰; a Latin one draws 12:30 (the control)', () => {
+      expect(drawn(text('persian'), '12:30')).toBe('۱۲:۳۰');
+      expect(drawn(text('persian'), 'F-16')).toBe('F-۱۶');
+      expect(drawn(text('arabic-indic'), 'ساعت 12:30')).toBe('ساعت ١٢:٣٠');
+      expect(drawn(text('latin'), '۱۲:۳۰')).toBe('12:30');
+      expect(drawn(text('latin'), '12:30')).toBe('12:30');
+    });
+
+    it('a Persian number field draws the number 12.5 as ۱۲٫۵, with no grouping', () => {
+      expect(drawn(number('persian'), 12.5)).toBe('۱۲٫۵');
+      expect(drawn(number('persian'), 1234567)).toBe('۱۲۳۴۵۶۷');
+      expect(drawn(number('persian'), -3)).toBe('-۳');
+      expect(drawn(number('arabic-indic'), 12.5)).toBe('١٢٫٥');
+      expect(drawn(number('latin'), 12.5)).toBe('12.5');
+    });
+
+    it('an old template renders unchanged: text as typed, a number through String(n)', () => {
+      for (const v of ['۱۲۳', '١٢٣', '123', 'ساعت ۱۲:۳۰', '12:30']) {
+        expect(drawn(text(), v)).toBe(v);
+      }
+      expect(drawn(number(), 12.5)).toBe('12.5');
+      expect(drawn(number(), 1234567)).toBe('1234567');
+    });
+
+    it('the binding transform still applies after the field digits', () => {
+      expect(drawn(text('persian'), '12:30', 'latin-digits')).toBe('12:30');
+    });
+
+    it('a value already written in the field digits draws the same (idempotent)', () => {
+      expect(drawn(text('persian'), '۱۲:۳۰')).toBe('۱۲:۳۰');
+      expect(drawn(number('persian'), '۱۲٫۵')).toBe('۱۲٫۵');
+    });
   });
 
   it('ignores bindings targeting unknown elements', () => {

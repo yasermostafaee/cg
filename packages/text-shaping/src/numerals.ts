@@ -9,9 +9,9 @@ import { arabicIndicDigits, latinDigits, persianDigits } from './digits.js';
  * (golden rule 6): a second copy is how one app comes to accept what the other refuses.
  *
  * ⚠ READING IS NOT REWRITING. These functions answer "what number did the operator mean"; they
- * never produce the text a field shows or a text value sends, which keep their digits exactly as
- * typed. `formatNumberLike` is the one writer, and it writes a NEW number the way the operator's
- * own text was written.
+ * never produce the text a field shows or a text value sends. `formatNumberLike` writes a NEW
+ * number the way the operator's own text was written; a field's own `digits` choice is written by
+ * `writeFieldDigits` (`field-digits.ts`, `FIELD-DIGITS-01`) and by nothing here.
  */
 
 const DIGIT = '0-9\\u06F0-\\u06F9\\u0660-\\u0669';
