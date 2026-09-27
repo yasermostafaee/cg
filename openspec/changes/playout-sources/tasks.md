@@ -49,7 +49,7 @@ Lane: FULL (the path to air, the wire, an IPC schema, persisted keys, a refusal 
 - [x] 4.2 Normalisation, separation and paging end to end through the fake.
 - [x] 4.3 Console dom (`sourcePicker`, `sourceLabel`, `mockPlayoutSources`, `sourcesSection`, the call sites) and
       e2e (`playout-sources.spec.ts`; the seeded Playout in every spec that binds a plate).
-      Local Windows run: 289 passed (non-authoritative).
+      Local Windows run: 289 passed (non-authoritative); Linux: the CI run in Z.2.
 
 ## §5 Docs
 
@@ -61,5 +61,8 @@ Lane: FULL (the path to air, the wire, an IPC schema, persisted keys, a refusal 
 
 ## §6 Gate and discharge
 
-- [ ] Z.1 Prettier; `pnpm gate`; `pnpm openspec validate --all --strict`.
-- [ ] Z.2 CI: `e2e` and installer runs COMPLETED and GREEN, jobs confirmed RAN — URLs here.
+- [x] Z.1 Prettier; `pnpm gate` — 96/96 tasks, 0 cached, OpenSpec 90/90 — locally and again as the pre-push gate
+      of `b9ff7f4c`; `pnpm openspec validate --all --strict`.
+- [x] Z.2 CI at `b9ff7f4c` (the code commit; the contract letters `056c7d8e` and the docs `dcdfb431` are under it):
+  - PR https://github.com/yasermostafaee/cg/actions/runs/36328287703 — **success**: the `Lint • Typecheck • Test • Build` job success, and the `E2E (Playwright)` job success with its `E2E` step RAN — runtime 289 passed, Designer 288 passed (12 skipped), no failure and no flake.
+  - Installers https://github.com/yasermostafaee/cg/actions/runs/36328287702 — **success**: the `Installers (Windows)` and `Installer smoke (clean Windows)` jobs.
