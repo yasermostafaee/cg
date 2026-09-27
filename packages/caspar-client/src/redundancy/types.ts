@@ -16,6 +16,13 @@ export type SendTarget = 'primary' | 'backup' | 'both';
 export interface SendOptions extends EnqueueOptions {
   /** Override target (default `'both'` for mirror strategies, `'primary'` for journal-replay). */
   target?: SendTarget;
+  /**
+   * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — `false`: this line reaches the PRIMARY ONLY, under
+   * every strategy, and is NEVER journaled — so neither a failover replay nor a corrective resend can
+   * ever carry it to the backup. For a Playout route (`route://H-L`): one server's holder map is
+   * never valid on another, and the backup carries the graphic without that plate.
+   */
+  mirror?: false;
 }
 
 export interface PairedSessions {

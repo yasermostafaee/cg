@@ -161,6 +161,10 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    *   journal-replay : send to primary only; journal
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
+    // `ROUTE-PLATES-01` — a line that must never reach the backup: primary only, not journaled.
+    if (options.mirror === false) {
+      return this.sendPrimaryUnjournaled(line, options);
+    }
     // B-046 — no declared backup: every strategy degenerates to primary-only.
     if (this.backupSession === null) {
       return this.sendJournalReplay(line, options);
@@ -301,6 +305,25 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       return { ...result, winner: this.primary };
     } catch (err) {
       this.journal.resolve(seq, 'err');
+      this.recordPrimaryFailure();
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  /**
+   * `ROUTE-PLATES-01` — {@link SendOptions.mirror} `false`: the primary alone, and no journal entry,
+   * because every path that reaches the backup other than the live fan-out — the failover catch-up
+   * and the corrective resend — reads the journal. Health is recorded exactly as for any send.
+   */
+  private async sendPrimaryUnjournaled(
+    line: string,
+    options: SendOptions,
+  ): Promise<RedundancySendResult> {
+    try {
+      const result = await this.primarySession.queue.enqueue(line, options);
+      this.recordPrimaryResult(result);
+      return { ...result, winner: this.primary };
+    } catch (err) {
       this.recordPrimaryFailure();
       throw err instanceof Error ? err : new Error(String(err));
     }

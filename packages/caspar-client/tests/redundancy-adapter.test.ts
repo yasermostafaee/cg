@@ -644,3 +644,49 @@ describe('RedundancyAdapter — M9.1 persistent divergence + corrective resend',
     expect(resends).toHaveLength(0);
   });
 });
+
+describe('RedundancyAdapter — ROUTE-PLATES-01 a line with `mirror: false`', () => {
+  const route = 'PLAY 1-60 "route://9-12"';
+
+  it.each(['mirror-sync', 'mirror-async', 'journal-replay'] as const)(
+    '%s: reaches the primary only, is never journaled, and no failover replays it',
+    async (strategy) => {
+      const { adapter, mocks } = await setup(strategy);
+      const seenA: string[] = [];
+      const seenB: string[] = [];
+      mocks[0].setHandler('PLAY', (req) => {
+        seenA.push(req.args[1] ?? '?');
+        return { kind: 'ok', code: 202, verb: 'PLAY' };
+      });
+      mocks[1].setHandler('PLAY', (req) => {
+        seenB.push(req.args[1] ?? '?');
+        return { kind: 'ok', code: 202, verb: 'PLAY' };
+      });
+      const result = await adapter.send(route, { mirror: false });
+      expect(result.winner).toBe('A');
+      expect(result.response.code).toBe(202);
+      // Let a fire-and-forget backup send (mirror-async) land if one had been made.
+      await new Promise((r) => setTimeout(r, 50));
+      expect(seenA).toEqual(['route://9-12']);
+      expect(seenB).toEqual([]);
+      expect(adapter.journal.all()).toEqual([]);
+
+      await adapter.failover('manual');
+      expect(adapter.currentPrimary).toBe('B');
+      expect(seenB, 'nothing replayed the route to the backup').toEqual([]);
+    },
+  );
+
+  it('the same line without the option is mirrored (the control)', async () => {
+    const { adapter, mocks } = await setup('mirror-sync');
+    const seenB: string[] = [];
+    mocks[0].setHandler('PLAY', () => ({ kind: 'ok', code: 202, verb: 'PLAY' }));
+    mocks[1].setHandler('PLAY', (req) => {
+      seenB.push(req.args[1] ?? '?');
+      return { kind: 'ok', code: 202, verb: 'PLAY' };
+    });
+    await adapter.send(route);
+    expect(seenB).toEqual(['route://9-12']);
+    expect(adapter.journal.all()).toHaveLength(1);
+  });
+});
