@@ -16,8 +16,9 @@ rejects Persian-typed digits. Text-type fields SHALL be untouched — their cont
 never digit-normalized.
 
 A TEMPLATE VALUE is not a console number. The Inspector's `number` field SHALL render the same
-primitive in its AS-TYPED mode, which displays the operator's text unchanged and reads it through
-`template-value-digits`' one reader; its staged and transmitted value is still the canonical
+primitive in its field's `digits` mode (`field-digits`, amended in place 2026-09-27): the operator's
+text written in the field's digits — AS TYPED when the template schema is not resolved — and read
+through `template-value-digits`' one reader; its staged and transmitted value is still the canonical
 number.
 
 #### Scenario: Persian-typed digits commit as canonical
@@ -29,8 +30,8 @@ number.
 
 #### Scenario: The Inspector's number field keeps the operator's digits on screen
 
-- **WHEN** the operator types `۱۲۸` into a template's `number` field in the Inspector **THEN** the
-  field shows `۱۲۸` and the staged value is the number 128
+- **WHEN** the operator types `۱۲۸` into a template's `number` field set to `persian` in the
+  Inspector **THEN** the field shows `۱۲۸` and the staged value is the number 128
 
 #### Scenario: A pasted non-Latin numeric value normalizes the same way
 

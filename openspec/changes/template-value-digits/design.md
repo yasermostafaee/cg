@@ -1,5 +1,11 @@
 # Design — template-value-digits
 
+> **Amended 2026-09-27 by `field-digits` (`FIELD-DIGITS-01`):** a template field now carries a `digits`
+> setting, and a real Windows keyboard types Latin digits whatever its layout (`field-digits` `design.md` §0.1).
+> Where this design says a text value is never re-digited, or that a number field renders in Latin or keeps the
+> operator's digits on screen, read "unless its field's `digits` says otherwise"; the pending requirements are
+> amended in place. The reader, the refusal line and the staging below are unchanged.
+
 ## §0 — Today, measured (2026-09-27, `dev` at `9116c89d`, before any change)
 
 Measured in Chromium through throwaway Playwright specs against the built apps: the Designer

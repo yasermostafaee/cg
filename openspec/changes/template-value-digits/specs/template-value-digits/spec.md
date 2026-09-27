@@ -4,9 +4,11 @@
 
 A text-type template value SHALL keep every digit exactly as typed — Persian (U+06F0–U+06F9),
 Arabic-Indic (U+0660–U+0669) or Latin, mixed if so typed — in the field, in stored state, in the
-`CG ADD` / `CG UPDATE` data and in what the template renders. No surface SHALL normalise a text
-value's digits in either direction. This covers `text`, `multiline` and list-item text, in the
-Designer (a field's default, the preview form) and in CG Control (the Inspector, `Update on air`).
+`CG ADD` / `CG UPDATE` data and in what the template renders, unless its field's `digits` setting
+chooses a set (`field-digits`, amended in place 2026-09-27 by `FIELD-DIGITS-01`): a field set to
+`as-typed`, or carrying no setting, keeps its digits as typed, and no surface SHALL normalise them.
+This covers `text`, `multiline` and list-item text, in the Designer (a field's default, the preview
+form) and in CG Control (the Inspector, `Update on air`).
 
 #### Scenario: A Persian, an Arabic-Indic and a Latin number reach CasparCG as typed
 
@@ -26,10 +28,11 @@ Every number-typed template input SHALL read its text through ONE function in `@
 (`readLocalizedNumber`) that accepts Latin, Persian and Arabic-Indic digits, the decimal separator
 `.` or `٫` (U+066B), the thousands separator `٬` (U+066C) between digit groups, and an optional
 sign. The inputs are CG Control's Inspector number field, and the Designer's number-field default,
-preview-form number field and repeater number columns. The input SHALL display its text as typed;
-the value it stages, stores and sends is the parsed NUMBER, so a `number` field still reaches the
-template as a JSON number and renders there through `String(n)`, in Latin digits. No surface SHALL
-keep a second copy of the digit ranges.
+preview-form number field and repeater number columns. The input SHALL display its text as typed —
+in CG Control's Inspector, in its field's `digits` (`field-digits`, amended in place 2026-09-27) —
+and the value it stages, stores and sends is the parsed NUMBER, so a `number` field still reaches
+the template as a JSON number and renders there in its field's digits: Latin, through `String(n)`,
+when the field carries no setting. No surface SHALL keep a second copy of the digit ranges.
 
 #### Scenario: Three spellings of twelve and a half
 
@@ -38,7 +41,7 @@ keep a second copy of the digit ranges.
 
 #### Scenario: The operator's text stays on screen; the number goes to the wire
 
-- **WHEN** the operator types `۱۲٫۵` into the Inspector's number field and presses Update
+- **WHEN** the operator types `۱۲٫۵` into the Inspector's number field set to `persian` and presses Update
 - **THEN** the field still shows `۱۲٫۵`, and the `CG UPDATE` data carries the number `12.5`
 
 #### Scenario: The Designer's number inputs no longer lose Persian digits
