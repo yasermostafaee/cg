@@ -911,7 +911,7 @@ text-verbatim, the B-077 interaction); implement the input half ONCE, under this
 R-014's input-side acceptance reads as satisfied by this item, and R-014 keeps the DISPLAY
 half and its open questions.
 
-⭐ **AMENDED 2026-09-27 by `openspec/changes/template-value-digits/` (`PERSIAN-DIGITS-01`) — for
+⭐ **AMENDED 2026-09-27 by `openspec/changes/archive/2026-09-27-template-value-digits/` (`PERSIAN-DIGITS-01`) — for
 TEMPLATE VALUES only.** The owner's rule: a template value takes digits exactly as the keyboard
 types them. So the Inspector's template `number` field no longer DISPLAYS Latin: it keeps `۱۲٫۵`
 on screen and reads it through `@cg/text-shaping`'s one reader, while the staged and transmitted
@@ -922,7 +922,7 @@ left open: the number field staged the last PREFIX that parsed, so `۱٬۲۳۴` 
 `۱۲a` as 12; a text that is not a number now withdraws the draft, and an impossible one is refused
 in one line.
 
-⭐ **AMENDED AGAIN 2026-09-27 by `openspec/changes/field-digits/` (`FIELD-DIGITS-01`).** A Windows
+⭐ **AMENDED AGAIN 2026-09-27 by `openspec/changes/archive/2026-09-27-field-digits/` (`FIELD-DIGITS-01`).** A Windows
 keyboard types Latin digits whatever its layout, so a template FIELD now says which digits its value
 is written in, and the Inspector writes each digit in that choice as it is typed. The number field's
 box is in the field's digits — Latin for a number field that carries no setting (what air draws for

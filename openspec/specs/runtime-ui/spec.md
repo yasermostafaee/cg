@@ -807,28 +807,40 @@ This is an indicator only. It SHALL NOT change any decision, gate, or command th
 
 ### Requirement: Persian/Arabic-Indic digits are accepted in numeric inputs and normalized to canonical digits
 
-Every Runtime numeric input SHALL accept Persian digits (۰–۹) and Arabic-Indic digits
-(٠–٩), normalizing them to canonical Latin digits (0–9) on input — typing and paste alike
-— via ONE shared numeric-input primitive that reuses `@cg/text-shaping`'s `latinDigits`
-(never a locally re-derived digit map). The primitive SHALL NOT be a browser
-`type="number"` input (which drops non-Latin digits before script observes them). Stored
-and transmitted values SHALL be canonical Latin digits. Numeric inputs that accept a
-decimal value SHALL also normalize the Persian decimal separator ٫ (U+066B) to ".";
-integer-only inputs SHALL leave ٫ for their validation to reject. Any pattern-shaped
-numeric validation SHALL validate the normalized value, so a numeric pattern never
-rejects Persian-typed digits. Text-type fields SHALL be untouched — their content is kept
-verbatim, never digit-normalized.
+Every Runtime CONSOLE numeric input SHALL accept Persian digits (۰–۹) and Arabic-Indic digits
+(٠–٩), normalizing them to canonical Latin digits (0–9) on input — typing and paste alike — via
+ONE shared numeric-input primitive that reuses `@cg/text-shaping`'s `latinDigits` (never a
+locally re-derived digit map). A console numeric input is a number the console itself owns: a
+server port, a device index, a route channel or layer, a position offset, a timing override, the
+lock PIN. The primitive SHALL NOT be a browser `type="number"` input (which drops non-Latin digits
+before script observes them). Stored and transmitted values SHALL be canonical Latin digits.
+Numeric inputs that accept a decimal value SHALL also normalize the Persian decimal separator ٫
+(U+066B) to "."; integer-only inputs SHALL leave ٫ for their validation to reject. Any
+pattern-shaped numeric validation SHALL validate the normalized value, so a numeric pattern never
+rejects Persian-typed digits. Text-type fields SHALL be untouched — their content is kept verbatim,
+never digit-normalized.
+
+A TEMPLATE VALUE is not a console number. The Inspector's `number` field SHALL render the same
+primitive in its field's `digits` mode (`field-digits`, amended in place 2026-09-27): the operator's
+text written in the field's digits — AS TYPED when the template schema is not resolved — and read
+through `template-value-digits`' one reader; its staged and transmitted value is still the canonical
+number.
 
 #### Scenario: Persian-typed digits commit as canonical
 
-- **WHEN** the operator types Persian digits (۰–۹) or Arabic-Indic digits (٠–٩) into any
-  Runtime numeric input — the Inspector number field, the position offsets, a server
-  port — **THEN** the digits are accepted and normalize on input, the control displays
-  Latin digits, and the stored/transmitted value is canonical Latin digits
+- **WHEN** the operator types Persian digits (۰–۹) or Arabic-Indic digits (٠–٩) into a console
+  numeric input — a position offset, a server port — **THEN** the digits are accepted and
+  normalize on input, the control displays Latin digits, and the stored/transmitted value is
+  canonical Latin digits
+
+#### Scenario: The Inspector's number field keeps the operator's digits on screen
+
+- **WHEN** the operator types `۱۲۸` into a template's `number` field set to `persian` in the
+  Inspector **THEN** the field shows `۱۲۸` and the staged value is the number 128
 
 #### Scenario: A pasted non-Latin numeric value normalizes the same way
 
-- **WHEN** a value containing Persian or Arabic-Indic digits is pasted into a Runtime
+- **WHEN** a value containing Persian or Arabic-Indic digits is pasted into a Runtime console
   numeric input **THEN** it normalizes exactly as typed input does
 
 #### Scenario: Numeric validation sees canonical digits
@@ -839,7 +851,7 @@ verbatim, never digit-normalized.
 
 #### Scenario: Decimal inputs accept the Persian decimal separator
 
-- **WHEN** the operator types ٫ (U+066B) into a numeric input that accepts a decimal
+- **WHEN** the operator types ٫ (U+066B) into a console numeric input that accepts a decimal
   value **THEN** it normalizes to "." and the value commits as the decimal it denotes
 
 #### Scenario: Text fields stay verbatim
@@ -1791,3 +1803,23 @@ return-feed words stay as they are.
 - **WHEN** a channel's `playlist` is `unlicensed`
 - **THEN** its tab carries the amber strip mark and the channel's view shows the one line; the
   other channel's view shows only the mark
+
+### Requirement: A look switch refused for a plate is said on the row, with no banner
+
+The console SHALL say a look switch that CasparCG refused for a plate in `FIELD-FIXES-01`'s one line — the row,
+the refused source and what the refusal means — on that row and in its Inspector, in that channel's view only,
+and SHALL raise no banner for it: the bridge records the refusal as the row's `takeRefusal` and its reply says
+`refusalOnRow`. The row SHALL stay on its old look, and a switch that lands SHALL withdraw the line. Every other
+refusal of a switch (the look, the link, the page) SHALL keep its banner.
+
+#### Scenario: The refused switch
+
+- **WHEN** the operator switches a row's look and CasparCG refuses a plate the new look needs
+- **THEN** the row shows the line naming the refused source, the look picker still marks the old look, and no
+  banner appears
+- **AND** the next switch that lands clears the line (the control)
+
+#### Scenario: A refusal that names no plate keeps its banner
+
+- **WHEN** a switch is refused for a reason that names no plate
+- **THEN** the console raises its banner, in the bridge's words, exactly as before

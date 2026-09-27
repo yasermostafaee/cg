@@ -12658,7 +12658,7 @@ rule, `refusal-cleanup.ts` — cleared only if the refused operation put a produ
 of ours was there before — called by all of them through `#clearAfterRefusal`. The re-take itself is
 now refused by the bridge (`B-274`). Test: `take-all-or-nothing.integration.test.ts` ("THE RULE").
 
-## [~] B-273 — A look switch whose new look needs a refused plate shows a hole on air until the page is put back ⟨priority: medium⟩ — FILED 2026-09-26 by `FIELD-FIXES-01-A` · CLOSED IN CODE AND MEASURED 2026-09-27 by `LOOK-SWITCH-01` (v3)
+## [x] B-273 — A look switch whose new look needs a refused plate shows a hole on air until the page is put back ⟨priority: medium⟩ — FILED 2026-09-26 by `FIELD-FIXES-01-A` · CLOSED IN CODE AND MEASURED 2026-09-27 by `LOOK-SWITCH-01` (v3) · archived 2026-09-27 (`openspec/changes/archive/2026-09-27-look-switch-all-or-nothing`)
 
 Established from `setActiveLook`: the page is told the NEW look before the fills move; a plate the new
 look needs that is refused (a preset dropped at the take) commits the fills that landed, puts every
@@ -12668,7 +12668,7 @@ page stays on the new look over the old geometry. What a switch should do is the
 (`openspec/changes/archive/2026-09-26-field-fixes/design.md` §3).
 
 **Owner's decision (2026-09-27):** a look switch is all-or-nothing, like a take. **Status (2026-09-27,
-`LOOK-SWITCH-01` v3, `openspec/changes/look-switch-all-or-nothing`): CLOSED IN CODE AND MEASURED.** A switch now
+`LOOK-SWITCH-01` v3, `openspec/changes/archive/2026-09-27-look-switch-all-or-nothing`): CLOSED IN CODE AND MEASURED.** A switch now
 seats the plates its new look needs hidden (`OPACITY 0` + `VOLUME 0` + the fit, committed before the `PLAY`)
 BEFORE the page is told; a refused plate refuses the switch with no page `UPDATE` and nothing on air changed, and
 the row says which source failed in `FIELD-FIXES-01`'s line, with no banner; accepted, the plates run hidden for
@@ -12808,5 +12808,5 @@ have — on the failover, which is the moment the backup exists for.
 Found while establishing `PLAYOUT-SOURCES-01` §0.8, which makes a Playout's media (D11) bindable
 to a plate and so makes the case reachable. **Not fixed there**: a per-server path needs the
 Playout to say where each install keeps an item, which the contract does not carry yet. Anchors:
-`CasparRuntime`'s `#send` → `RedundancyAdapter.send`; `openspec/changes/playout-sources/design.md`
-§0.8.
+`CasparRuntime`'s `#send` → `RedundancyAdapter.send`;
+`openspec/changes/archive/2026-09-27-playout-sources/design.md` §0.8.

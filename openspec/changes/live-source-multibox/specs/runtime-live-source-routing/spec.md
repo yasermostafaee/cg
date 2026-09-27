@@ -23,7 +23,7 @@ or delete an entry.
 > generated id, a name the operator chose, a producer typed by hand, a fill/key device pair on the
 > entry, a product-writable IPC channel. All of that is RETIRED. Contract v1.2 gives the Playout's
 > own lists (D10 inputs, D11 media), and the Playout is now the one place a source is defined —
-> `openspec/changes/playout-sources` specifies the reads, the builder and the read-only list. What
+> `openspec/changes/archive/2026-09-27-playout-sources` specifies the reads, the builder and the read-only list. What
 > still holds is stated below.
 
 Each entry SHALL carry a stable id (`in-<id>` for an input, `md-<id>` for a media item), the NAME

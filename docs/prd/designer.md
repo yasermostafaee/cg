@@ -3494,7 +3494,7 @@ fields produces ۰–۹ / ٠–٩ and ٫, which the fields reject.
 **Notes:** one shared normalization helper at the numeric-input primitive level, not per-field
 patches; respect the design-system input primitives (`apps/designer/src/renderer/ui/`).
 
-⭐ **SPLIT 2026-09-27 by `openspec/changes/template-value-digits/` (`PERSIAN-DIGITS-01`).** The
+⭐ **SPLIT 2026-09-27 by `openspec/changes/archive/2026-09-27-template-value-digits/` (`PERSIAN-DIGITS-01`).** The
 owner's rule for TEMPLATE VALUES supersedes this item's "DISPLAYS Latin digits" for them: a number
 field's default ("Value"), the preview form's number field, a repeater's number columns and a list
 item's dwell now keep the author's digits AS TYPED and read them through `@cg/text-shaping`'s one

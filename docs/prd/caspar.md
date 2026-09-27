@@ -2766,7 +2766,7 @@ and every later one waits for the administrator's approval in the Playout's app.
 **Acceptance (sketch):** WHEN any of these bites THEN CG Control's own check says which, in the
 operator's words, and names the in-app approval.
 
-## [~] C-044 — Sources from the Playout (D10/D11, v1.2) ⟨priority: high⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` (v5) · openspec change `playout-sources`
+## [x] C-044 — Sources from the Playout (D10/D11, v1.2) ⟨priority: high⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` (v5) · openspec change `playout-sources` · archived 2026-09-27 (`openspec/changes/archive/2026-09-27-playout-sources`)
 
 **What.** The station's live sources come from the Playout, not from a hand-made catalogue. D10
 (`GET /api/cg/inputs`) gives the Playout's inputs (NDI, stream, and from v1.3 `route`s to its
