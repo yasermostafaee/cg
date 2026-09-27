@@ -89,6 +89,19 @@ export interface FakeCatalogueRow {
   readonly name: string;
   readonly casparHost: string;
   readonly casparChannel: number;
+  /**
+   * `UI-POLISH-01` G — the Playout `2.8.58` fields (V13 §1). STRINGS, not the three and the ten
+   * values the contract names, so a spec can send a value the console does not know — which is a
+   * case the console must handle, not one the fixture may rule out. Omitted: a pre-`2.8.58` row.
+   */
+  readonly output?: string;
+  readonly playlist?: string;
+}
+
+/** `UI-POLISH-01` G — one channel's air state for {@link FakePlayout.setChannelState}; `null` removes the field. */
+export interface FakeChannelState {
+  readonly output?: string | null;
+  readonly playlist?: string | null;
 }
 
 /**
@@ -102,10 +115,28 @@ export interface FakeCatalogueRow {
  *
  * ⚠ The names are Persian, as the Playout's are, so the strip's bidi isolation is exercised by
  * every spec that reads a label, not only by one that remembers to.
+ *
+ * ⭐ `UI-POLISH-01` G — and the air state the real ones carry from `2.8.58`: the programme channel is
+ * ON AIR and playing; the CG test channel is OFF (the Playout marks `cg-test2` "not to air") with its
+ * playlist stopped. {@link FakePlayout.setChannelState} sets any other combination.
  */
 export const FAKE_CATALOGUE: readonly FakeCatalogueRow[] = [
-  { id: 'fake-programme', name: 'آپاسای', casparHost: '127.0.0.1', casparChannel: 1 },
-  { id: 'fake-cg', name: 'کانال دوم (تست CG)', casparHost: '127.0.0.1', casparChannel: 2 },
+  {
+    id: 'fake-programme',
+    name: 'آپاسای',
+    casparHost: '127.0.0.1',
+    casparChannel: 1,
+    output: 'on-air',
+    playlist: 'playing',
+  },
+  {
+    id: 'fake-cg',
+    name: 'کانال دوم (تست CG)',
+    casparHost: '127.0.0.1',
+    casparChannel: 2,
+    output: 'off',
+    playlist: 'stopped',
+  },
 ];
 
 /** The `aud` the contract fixes (§3.2, Playout Q5 accepted). A literal, for the reason above. */
@@ -462,6 +493,11 @@ export interface FakePlayout {
   /** Replace the catalogue (and change its `ETag`, so a polling bridge sees the change). */
   setChannels(rows: readonly FakeCatalogueRow[]): void;
   /**
+   * `UI-POLISH-01` G — set one channel's `output` and/or `playlist` (a key left out is kept, `null`
+   * removes it), and change the `ETag`, so the bridge sees it at its NEXT read and not before.
+   */
+  setChannelState(casparChannel: number, state: FakeChannelState): void;
+  /**
    * The `kid` new tokens are currently signed with.
    *
    * ⚠ Exposed because the FIRST key's id is otherwise unobtainable — only `rotateKey()`
@@ -783,6 +819,25 @@ class FakePlayoutServer implements FakePlayout {
   setChannels(rows: readonly FakeCatalogueRow[]): void {
     this.#catalogue = rows;
     this.#catalogueRevision += 1;
+  }
+
+  setChannelState(casparChannel: number, state: FakeChannelState): void {
+    const apply = (
+      row: FakeCatalogueRow,
+      key: 'output' | 'playlist',
+      value: string | null | undefined,
+    ): FakeCatalogueRow => {
+      if (value === undefined) return row;
+      const { [key]: _dropped, ...rest } = row;
+      return value === null ? rest : { ...rest, [key]: value };
+    };
+    this.setChannels(
+      this.#catalogue.map((row) =>
+        row.casparChannel === casparChannel
+          ? apply(apply(row, 'output', state.output), 'playlist', state.playlist)
+          : row,
+      ),
+    );
   }
 
   get activeKid(): string {

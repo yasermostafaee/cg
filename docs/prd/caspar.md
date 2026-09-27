@@ -2549,7 +2549,7 @@ D4 is live on the test Playout today.
 - WHEN the Playout does not answer THEN the list is the two existing sources and no alarm is
   raised
 - WHEN the catalogue changes THEN the list updates without a bridge restart (polled at most every
-  30 s, with `ETag`)
+  30 s, with `ETag` — 5 s since `UI-POLISH-01` G, 2026-09-27)
 - WHEN a channel index is not in the catalogue — a preview channel `N+1..2N` — THEN the bridge
   never addresses or probes it
 
@@ -2567,7 +2567,7 @@ Playout degrades to ABSENT and never gates a verb (ADR 0010 rule 8). — Depends
 **Status 2026-09-23 — implemented by `CHANNEL-AUTHORITY-01` commit 2**, behind that change's
 commit 1 (`9d114657`), which made the declared bank the ONLY thing that decides what the bridge
 writes to — so a catalogue row names a channel and can never make one writable. The bridge reads
-D4 at most every 30 s with `ETag`, with a bearer checked AT USE (never expired, never revoked,
+D4 at most every 30 s (5 s since `UI-POLISH-01` G) with `ETag`, with a bearer checked AT USE (never expired, never revoked,
 released on sign-out), and fails to ABSENT; `channels.list` returns each channel's `named` /
 `declared` / `permitted` kept apart; the strip lists the DECLARED channels under the catalogue's
 name. **`[x]` 2026-09-23** — the Linux `e2e` discharged on every commit (the run URLs are in the

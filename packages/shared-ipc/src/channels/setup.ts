@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ChannelOutputSchema, ChannelPlaylistSchema } from './stationChannels.js';
 import { defineChannel } from '../channel.js';
 
 /**
@@ -260,6 +261,10 @@ export const CatalogueChannelSchema = z.object({
    */
   casparHost: z.string(),
   casparChannel: z.number().int().positive(),
+  /** `UI-POLISH-01` G — the row's `output`, when the Playout sent one we know (`stationChannels.ts`). */
+  output: ChannelOutputSchema.optional(),
+  /** `UI-POLISH-01` G — the row's `playlist`, in the Playout's word. Information only. */
+  playlist: ChannelPlaylistSchema.optional(),
 });
 export type CatalogueChannel = z.infer<typeof CatalogueChannelSchema>;
 
@@ -269,7 +274,7 @@ export type CatalogueChannel = z.infer<typeof CatalogueChannelSchema>;
  * `channels.list` joins a row to this station only when its `casparHost` is one the bridge
  * already drives — so on a fresh station, whose only server is the default `127.0.0.1`, it names
  * nothing, and first-run could never pick. This answers the raw rows, read through the SAME
- * guarded D4 reader (`usableBearer`, 30 s, `ETag`), filtered by `grantsChannel` for the asking
+ * guarded D4 reader (`usableBearer`, the 5 s floor, `ETag`), filtered by `grantsChannel` for the asking
  * principal against each row's own host.
  *
  * `station-admin` only. It writes nothing: the choice goes through the declaration door

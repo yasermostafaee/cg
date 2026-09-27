@@ -50,6 +50,27 @@ export function channelNotDeclaredRefusal(channel: number): string {
   );
 }
 
+/**
+ * 🔴 `UI-POLISH-01` G — **THE PLAYOUT'S TWO FACTS ABOUT A CHANNEL'S AIR** (D4, Playout `2.8.58`,
+ * `docs/integration/playout/PLAYOUT-CG-RESPONSE-V13-STATE-v1.md` §1). Only the Playout says either;
+ * nothing here is inferred from CasparCG's layers.
+ *
+ * - `output` — is the channel's output live to air. `unknown` is the Playout's own third value (its
+ *   engine has no fresh word from the core). ONLY THIS decides a colour. Absent — a Playout that does
+ *   not send it, a value we do not know, a failed read — reads exactly as `unknown`.
+ * - `playlist` — what the Playout's playlist is doing, in the Playout's word (ten known values; an
+ *   unknown one is passed through as it came, to be shown as its own word). INFORMATION: it never
+ *   changes a colour, with one exception the console owns (`unlicensed`).
+ *
+ * The bridge's D4 reader parses both LENIENTLY — a value it does not know is dropped, never a reason
+ * to void the row — so a Playout that adds an eleventh value cannot blank every label.
+ */
+export const CHANNEL_OUTPUTS = ['on-air', 'off', 'unknown'] as const;
+export const ChannelOutputSchema = z.enum(CHANNEL_OUTPUTS);
+export type ChannelOutput = z.infer<typeof ChannelOutputSchema>;
+/** The playlist state, in the Playout's word. A string, not an enum — see above. */
+export const ChannelPlaylistSchema = z.string().min(1);
+
 /** Where a discovered channel came from, in the order the sources are consulted. */
 export const STATION_CHANNEL_SOURCES = ['catalogue', 'bank', 'channel-settings'] as const;
 export type StationChannelSource = (typeof STATION_CHANNEL_SOURCES)[number];
@@ -72,6 +93,13 @@ export const StationChannelSchema = z.object({
    * answered without a row for it. A LABEL and a join key, never an authority.
    */
   named: z.object({ id: z.string().min(1), name: z.string().min(1) }).nullable(),
+  /**
+   * `UI-POLISH-01` G — the joined catalogue row's `output`, when it sent one we know. ABSENT reads as
+   * `unknown`. A LABEL like `named`: it colours a dot and a head, and decides nothing.
+   */
+  output: ChannelOutputSchema.optional(),
+  /** `UI-POLISH-01` G — the joined catalogue row's `playlist`, in the Playout's word. Information. */
+  playlist: ChannelPlaylistSchema.optional(),
   /**
    * THIS STATION OPERATES IT — `#declaredChannels()`. The one fact that decides what the bridge
    * writes to (the station fence reads the same predicate).

@@ -30,7 +30,7 @@ import {
  * `cg-op-both`, granted both — the test Playout's real `cg-op2` shape.
  *
  * ⚠ **THE CLOCK IS THE BRIDGE'S, INJECTED.** One `now` drives the token verifier and the catalogue
- * reader together, so "30 s later" and "past `exp`" are single facts rather than two clocks that
+ * reader together, so "a floor later" and "past `exp`" are single facts rather than two clocks that
  * could disagree, and nothing here sleeps for half a minute. The catalogue's own tick is set out of
  * reach so every read is one the spec asked for.
  *
@@ -119,6 +119,9 @@ describe('the answer — three facts, kept apart, catalogue first', () => {
       {
         channel: 1,
         named: { id: PROGRAMME?.id, name: PROGRAMME?.name },
+        // `UI-POLISH-01` G — the row's air state rides the join (the fake: on air, playing).
+        output: 'on-air',
+        playlist: 'playing',
         declared: false,
         permitted: true,
         sources: ['catalogue'],
@@ -127,6 +130,8 @@ describe('the answer — three facts, kept apart, catalogue first', () => {
       {
         channel: 2,
         named: { id: OURS?.id, name: OURS?.name },
+        output: 'off',
+        playlist: 'stopped',
         declared: true,
         permitted: true,
         sources: ['catalogue', 'bank', 'channel-settings'],
@@ -172,8 +177,8 @@ describe('the answer — three facts, kept apart, catalogue first', () => {
   }, 20_000);
 });
 
-describe('D4 is read at most every 30 s, with ETag, and fails to ABSENT', () => {
-  it('a second read inside 30 s is not made; after it, the ETag comes back as a 304', async () => {
+describe('D4 is read at most every 5 s, with ETag, and fails to ABSENT', () => {
+  it('a second read inside 5 s is not made; after it, the ETag comes back as a 304', async () => {
     const s = await station();
     const catalogue = s.handle.playoutCatalogue;
     if (catalogue === null) throw new Error('no catalogue');
@@ -186,7 +191,7 @@ describe('D4 is read at most every 30 s, with ETag, and fails to ABSENT', () => 
     // Inside the floor: asked again, not read.
     s.advance(CATALOGUE_POLL_MS - 1000);
     await catalogue.refresh();
-    expect(s.playout.requestCounts.channels, 'read again inside 30 s').toBe(1);
+    expect(s.playout.requestCounts.channels, 'read again inside 5 s').toBe(1);
 
     // Past the floor: read, answered 304 — and the names are still held.
     s.advance(1000);
@@ -212,6 +217,10 @@ describe('D4 is read at most every 30 s, with ETag, and fails to ABSENT', () => 
     expect(catalogue.rows(), 'a stale catalogue was kept').toBeNull();
     const absent = await s.list(client);
     expect(absent.channels.map((c) => [c.channel, c.named, c.declared])).toEqual([[2, null, true]]);
+    // `UI-POLISH-01` G — an unreachable Playout says nothing about air: no `output`, so NO dot —
+    // never an `off` ring. (Control: the same channel carried `off` before the outage, above.)
+    expect(absent.channels[0]).not.toHaveProperty('output');
+    expect(absent.channels[0]).not.toHaveProperty('playlist');
     // Never a gate on a verb: the same console's clear on its own channel meets exactly what it met
     // before — the handler's own answer (nothing is heard on a dead connection), not a refusal.
     const clear = await client.ask(id(), 'layers.clear', { channel: 2, layer: 20 });
@@ -433,4 +442,91 @@ describe('nothing past the list is probed', () => {
     expect(addressing(3), 'a preview channel was addressed').toEqual([]);
     expect(addressing(4), 'a preview channel was addressed').toEqual([]);
   }, 40_000);
+});
+
+/*
+  🔴 `UI-POLISH-01` G — **D4's `output` AND `playlist`, PUBLISHED WITH THE LABELS.** Only the Playout
+  says either; the bridge passes on what the one D4 reader holds, at the reader's own 5 s floor.
+*/
+describe('UI-POLISH-01 G — output and playlist ride the labels', () => {
+  it('an output change reaches the answer at the NEXT read and not before — control: a playlist-only change moves only the playlist', async () => {
+    const s = await station();
+    const catalogue = s.handle.playoutCatalogue;
+    if (catalogue === null) throw new Error('no catalogue');
+    const { client } = await s.signIn('bothChannels');
+    const ours = async (): Promise<StationChannels['channels'][number] | undefined> =>
+      (await s.list(client)).channels.find((c) => c.channel === 2);
+    expect(await ours()).toMatchObject({ output: 'off', playlist: 'stopped' });
+
+    // The owner's multi-box case: the output goes ON AIR while the playlist stays stopped.
+    s.playout.setChannelState(2, { output: 'on-air' });
+    s.advance(CATALOGUE_POLL_MS - 1000);
+    await catalogue.refresh();
+    expect((await ours())?.output, 'read inside the floor').toBe('off');
+    s.advance(1000);
+    await catalogue.refresh();
+    expect(await ours()).toMatchObject({ output: 'on-air', playlist: 'stopped' });
+
+    // Only the playlist moves: the output does not.
+    s.playout.setChannelState(2, { playlist: 'live' });
+    s.advance(CATALOGUE_POLL_MS);
+    await catalogue.refresh();
+    expect(await ours()).toMatchObject({ output: 'on-air', playlist: 'live' });
+  }, 20_000);
+
+  it('output: unknown is passed on; a value the bridge does not know, or none, is ABSENT — the name stays', async () => {
+    const s = await station();
+    const catalogue = s.handle.playoutCatalogue;
+    if (catalogue === null) throw new Error('no catalogue');
+    const { client } = await s.signIn('bothChannels');
+    const ours = async (): Promise<StationChannels['channels'][number] | undefined> =>
+      (await s.list(client)).channels.find((c) => c.channel === 2);
+
+    s.playout.setChannelState(2, { output: 'unknown', playlist: 'unlicensed' });
+    s.advance(CATALOGUE_POLL_MS);
+    await catalogue.refresh();
+    expect(await ours()).toMatchObject({ output: 'unknown', playlist: 'unlicensed' });
+
+    s.playout.setChannelState(2, { output: 'standby', playlist: 'rehearsal' });
+    s.advance(CATALOGUE_POLL_MS);
+    await catalogue.refresh();
+    const odd = await ours();
+    expect(odd?.named?.name, 'CONTROL — the row survived its odd field').toBe(OURS?.name);
+    expect(odd).not.toHaveProperty('output');
+    expect(odd?.playlist, 'an unknown playlist word is passed on as it came').toBe('rehearsal');
+
+    s.playout.setChannelState(2, { output: null, playlist: null });
+    s.advance(CATALOGUE_POLL_MS);
+    await catalogue.refresh();
+    const bare = await ours();
+    expect(bare?.named?.name).toBe(OURS?.name);
+    expect(bare).not.toHaveProperty('output');
+    expect(bare).not.toHaveProperty('playlist');
+  }, 20_000);
+
+  it('channels.catalogue carries both, and reads D4 on demand — never closer than 5 s to the last read', async () => {
+    const s = await station();
+    const { client } = await s.signIn('admin');
+    const ask = async (): Promise<{ rows: Record<string, unknown>[] | null }> => {
+      const res = await client.ask(id(), 'channels.catalogue');
+      if (res.error !== undefined) throw new Error(`channels.catalogue refused: ${res.error}`);
+      return res.payload as { rows: Record<string, unknown>[] | null };
+    };
+    // The sign-in read is the counter's first move (the control), and the list opened just after
+    // it is answered from what is held — inside the floor there is no second read.
+    expect(s.playout.requestCounts.channels).toBe(1);
+    const first = await ask();
+    expect(s.playout.requestCounts.channels, 'read again inside 5 s').toBe(1);
+    expect(first.rows?.find((r) => r.casparChannel === 1)).toMatchObject({
+      output: 'on-air',
+      playlist: 'playing',
+    });
+
+    // Past the floor, opening the list READS — and so shows a change the tick has not fetched yet.
+    s.playout.setChannelState(1, { output: 'off' });
+    s.advance(CATALOGUE_POLL_MS);
+    const second = await ask();
+    expect(s.playout.requestCounts.channels).toBe(2);
+    expect(second.rows?.find((r) => r.casparChannel === 1)).toMatchObject({ output: 'off' });
+  }, 20_000);
 });

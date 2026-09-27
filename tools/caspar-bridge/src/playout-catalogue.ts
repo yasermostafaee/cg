@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CHANNEL_OUTPUTS } from '@cg/shared-ipc';
 import { playoutFetch } from './playout-http.js';
 
 /**
@@ -18,8 +19,9 @@ import { playoutFetch } from './playout-http.js';
  *    never a verdict (ADR 0010 rule 8). Unlike D9 there is nothing to protect by keeping a stale
  *    copy: a label that has gone stale is a label saying something the Playout no longer says, and
  *    the strip's own fallback (`CHANNEL <n>`) is always true.
- * 2. **AT MOST ONE READ PER 30 s, with `If-None-Match`.** A `304` keeps what is held and is a
- *    success, not a failure.
+ * 2. **AT MOST ONE READ PER 5 s, with `If-None-Match`.** A `304` keeps what is held and is a
+ *    success, not a failure. (It was 30 s; `UI-POLISH-01` G moved it to the 5 s the Playout agreed —
+ *    `CATALOGUE_POLL_MS`.)
  * 3. **THE BEARER IS CHECKED AT USE** (`PlayoutAuth.usableBearer`): never a token past `exp`, never
  *    one on the revocation list, and none at all once the principal who supplied it has signed out
  *    or closed the tab. No bearer means no read, and no read means ABSENT.
@@ -27,16 +29,23 @@ import { playoutFetch } from './playout-http.js';
  *    not read this file at all.
  */
 
-/** `C-039` — the contract's own floor: polled at most every 30 s. */
-export const CATALOGUE_POLL_MS = 30_000;
+/**
+ * 🔴 `UI-POLISH-01` G — **THE FLOOR: AT MOST ONE D4 READ EVERY 5 s, AND NEVER LESS.** The ONE place
+ * the period is written. D4 now carries each channel's `output` and `playlist`, which an operator
+ * reads as live state, so the contract's original 30 s (`C-039`) was too slow to show a channel
+ * going off air; the Playout agreed to 5 s and asked for no less (V13 §1.4: a `304` costs them the
+ * same work as a `200`, and 5 s is 12 of their 600 requests a minute per IP). A read on demand —
+ * a sign-in, first-run or Change channel… opening — goes through the same floor.
+ */
+export const CATALOGUE_POLL_MS = 5_000;
 
 /**
  * How often the reader LOOKS for a due read — not how often it reads (that is the floor above).
  *
  * ⚠ **Deliberately much shorter than the floor, and this is a measured fix.** With the two equal,
- * a sign-in's immediate read shifted the phase: the first tick after it landed just under 30 s
+ * a sign-in's immediate read shifted the phase: the first tick after it landed just under a period
  * later, was refused by the floor, and the next read was a whole period after that — so an outage
- * or a rename took up to a minute to reach the strip while "at most every 30 s" still held. Found
+ * or a rename took up to two periods to reach the strip while "at most every period" still held. Found
  * by driving the §7 demo; `playout-catalogue.test.ts` pins it. A check that finds nothing due costs
  * a clock read and makes no request.
  */
@@ -51,19 +60,41 @@ export const CatalogueRowSchema = z.object({
   name: z.string().trim().min(1),
   casparHost: z.string().min(1),
   casparChannel: z.number().int().positive(),
+  /*
+    🔴 `UI-POLISH-01` G — the Playout's `output` and `playlist` (`2.8.58`, V13 §1), both OPTIONAL
+    and both LENIENT: a value this bridge does not know, or the wrong type, is DROPPED (`.catch`),
+    never a failed row — one bad field must not void the catalogue and blank every channel's name.
+    A dropped `output` reads as `unknown`; `playlist` keeps any word the Playout sends, because
+    an unknown playlist state is shown as its own word.
+  */
+  output: z.enum(CHANNEL_OUTPUTS).optional().catch(undefined),
+  playlist: z.string().trim().min(1).optional().catch(undefined),
 });
 export type CatalogueRow = z.infer<typeof CatalogueRowSchema>;
 
 const CatalogueBodySchema = z.object({ channels: z.array(CatalogueRowSchema) });
 
+/**
+ * `UI-POLISH-01` G — a row's `output` and `playlist`, each present only when the Playout sent one
+ * this reader kept, so a published answer never carries a key whose value is `undefined`.
+ */
+export function airOf(
+  row: Pick<CatalogueRow, 'output' | 'playlist'>,
+): Pick<CatalogueRow, 'output' | 'playlist'> {
+  return {
+    ...(row.output !== undefined ? { output: row.output } : {}),
+    ...(row.playlist !== undefined ? { playlist: row.playlist } : {}),
+  };
+}
+
 export interface PlayoutCatalogueOptions {
   /** TEST-ONLY — {@link playoutFetch} by default: server-side, no `Origin`, no proxy (B1.4). */
   readonly fetchImpl?: typeof fetch;
-  /** TEST-ONLY — `Date.now` by default; drives the 30 s floor without sleeping. */
+  /** TEST-ONLY — `Date.now` by default; drives the 5 s floor without sleeping. */
   readonly now?: () => number;
   /**
    * TEST-ONLY — the background tick's period; {@link CATALOGUE_TICK_MS} by default. It sets how
-   * often a due read is LOOKED FOR; the 30 s floor between reads is the contract's and is not an
+   * often a due read is LOOKED FOR; the 5 s floor between reads is the contract's and is not an
    * option.
    */
   readonly tickMs?: number;
@@ -157,8 +188,9 @@ export class PlayoutCatalogue {
   }
 
   /**
-   * Read D4 now if the floor allows — called by the tick, and on a sign-in so a console's names
-   * arrive with its principal rather than up to 30 s later. Resolves when this read (or the one
+   * Read D4 now if the floor allows — called by the tick, on a sign-in so a console's names arrive
+   * with its principal rather than a period later, and when first-run or Change channel… asks for
+   * the list (`channels.catalogue`). Resolves when this read (or the one
    * already in flight) has settled; never rejects.
    *
    * ⚠ No bearer is not a reason to WAIT: it is ABSENT at once. A catalogue read on behalf of

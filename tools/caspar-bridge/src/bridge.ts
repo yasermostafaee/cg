@@ -193,6 +193,7 @@ import { pinnedIPv4 } from './playout-http.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import {
+  airOf,
   PlayoutCatalogue,
   type CatalogueRow,
   type PlayoutCatalogueOptions,
@@ -429,7 +430,7 @@ export interface BridgeOptions {
   connectionCheckOptions?: Pick<CheckOptions, 'amcpTrustWindowMs' | 'lineMs' | 'connectMs'>;
   /**
    * TEST-ONLY seam — clock, `fetch` and tick period for the D4 catalogue read, so a suite can
-   * drive the 30 s floor and a Playout outage without sleeping.
+   * drive the 5 s floor and a Playout outage without sleeping.
    */
   playoutCatalogueOptions?: PlayoutCatalogueOptions;
   /**
@@ -453,7 +454,7 @@ export interface BridgeHandle {
   readonly playoutAuth: PlayoutAuth | null;
   /**
    * `C-039` — the Playout's channel catalogue (D4) reader, or `null` when auth is off. Exposed for
-   * the cadence test's positive control (`readCount`) and to drive a read without a 30 s wait.
+   * the cadence test's positive control (`readCount`) and to drive a read without waiting a floor.
    */
   readonly playoutCatalogue: PlayoutCatalogue | null;
   /**
@@ -1068,16 +1069,21 @@ export function stationChannelsFor(
   const principal = session?.token?.principal ?? null;
   const entries = new Map<
     number,
-    { named: { id: string; name: string } | null; sources: StationChannelSource[] }
+    {
+      named: { id: string; name: string } | null;
+      air: Pick<CatalogueRow, 'output' | 'playlist'>;
+      sources: StationChannelSource[];
+    }
   >();
   const note = (
     channel: number,
     source: StationChannelSource,
     named: { id: string; name: string } | null = null,
+    air: Pick<CatalogueRow, 'output' | 'playlist'> = {},
   ): void => {
     const entry = entries.get(channel);
     if (entry === undefined) {
-      entries.set(channel, { named, sources: [source] });
+      entries.set(channel, { named, air, sources: [source] });
       return;
     }
     if (!entry.sources.includes(source)) entry.sources.push(source);
@@ -1086,7 +1092,8 @@ export function stationChannelsFor(
   for (const row of catalogue ?? []) {
     // The join: this station's host, or nothing. The first row naming a channel wins.
     if (!hosts.includes(row.casparHost)) continue;
-    note(row.casparChannel, 'catalogue', { id: row.id, name: row.name });
+    // `UI-POLISH-01` G — the row's `output` and `playlist` ride the join with its name: labels.
+    note(row.casparChannel, 'catalogue', { id: row.id, name: row.name }, airOf(row));
   }
   // `MULTI-CHANNEL-01` — every declared bank's channel, in channel order.
   for (const bank of runtime.fixedLayerBanks()) note(bank.channel, 'bank');
@@ -1096,6 +1103,7 @@ export function stationChannelsFor(
     channels: [...entries.entries()].map(([channel, entry]) => ({
       channel,
       named: entry.named,
+      ...airOf(entry.air),
       declared: runtime.isDeclaredChannel(channel),
       ...(mode === 'off'
         ? {}
@@ -1840,6 +1848,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const routes = buildRoutes(runtime, {
     setupPhase,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
+    refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
     pgmReturnStatus: () => pgmReturn.status(),
     connectionCheck,
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
@@ -2733,6 +2742,11 @@ export function buildRoutes(
     setupPhase?: () => SetupPhase | null;
     /** `DESKTOP-APPS-01` — the one D4 reader's rows as held (A4 applied); `null` when absent. */
     catalogueRows?: () => readonly CatalogueRow[] | null;
+    /**
+     * `UI-POLISH-01` G — read D4 now if its 5 s floor allows (`PlayoutCatalogue.refresh`); resolves
+     * when that read has settled and never rejects. Defaults to nothing to read.
+     */
+    refreshCatalogue?: () => Promise<void>;
     /** `DESKTOP-APPS-01` §2F — the connection check, bound to this station's own ports. */
     connectionCheck?: (req: ConnectionCheckRequest) => Promise<ConnectionCheckResult>;
     /** `DESKTOP-APPS-01` §2E — this machine's address on the route to a host. */
@@ -2759,6 +2773,7 @@ export function buildRoutes(
   // B3 — the sign-in failure notes this bridge will write, bridge-wide: a flood cannot fill the log.
   const signInNotes = rateWindow(SIGN_IN_NOTES_PER_MINUTE, 60_000);
   const catalogueRows = paths.catalogueRows ?? ((): readonly CatalogueRow[] | null => null);
+  const refreshCatalogue = paths.refreshCatalogue ?? ((): Promise<void> => Promise.resolve());
   const connectionCheck =
     paths.connectionCheck ??
     ((req: ConnectionCheckRequest): Promise<ConnectionCheckResult> =>
@@ -3232,12 +3247,18 @@ export function buildRoutes(
 
     /*
       🔴 `DESKTOP-APPS-01` §2E step 3 — THE PLAYOUT'S CHANNELS, UNJOINED, IN THE ASKER'S GRANT. The
-      same rows the one D4 reader holds — `usableBearer`, the 30 s floor, `ETag`, and A4's loopback
+      same rows the one D4 reader holds — `usableBearer`, the 5 s floor, `ETag`, and A4's loopback
       rule all already applied there — filtered by `grantsChannel` against each row's OWN host.
       `station-admin`, because only first-run and the station's own setup need a channel this
       station does not yet drive. A read: the choice itself goes through `fixedLayers.set-config`.
+
+      ⭐ `UI-POLISH-01` G — THE ON-DEMAND READ. First-run and Change channel… ask for this list as
+      they open, and each row now carries its `output` and `playlist`; so the ask reads D4 first,
+      through the reader's own 5 s floor — a list opened 2 s after the last read is answered from
+      what is held, never with a second read.
     */
-    route(ChannelsCatalogueChannel, 'read', 'station-admin', () => {
+    route(ChannelsCatalogueChannel, 'read', 'station-admin', async () => {
+      await refreshCatalogue();
       const rows = catalogueRows();
       if (rows === null) return { rows: null };
       const principal = currentAuthSession()?.token?.principal ?? null;
@@ -3248,11 +3269,12 @@ export function buildRoutes(
               principal !== null &&
               grantsChannel(principal.channels, [r.casparHost], r.casparChannel),
           )
-          .map(({ id, name, casparHost, casparChannel }) => ({
-            id,
-            name,
-            casparHost,
-            casparChannel,
+          .map((row) => ({
+            id: row.id,
+            name: row.name,
+            casparHost: row.casparHost,
+            casparChannel: row.casparChannel,
+            ...airOf(row),
           })),
       };
     }),

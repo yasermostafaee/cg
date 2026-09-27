@@ -193,9 +193,14 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
       playout-layer clear each put a `CLEAR 1-<layer>` on channel 1, and our console OFFERED both
       (`B-261`). A grant says who may operate a channel; it never made channel 1 ours, and nothing
       but our bank does now.
-    - **What we read from D4.** `GET /api/cg/channels`, **at most once per 30 s**, with
-      `If-None-Match` (a `304` keeps what we hold), and immediately when a console signs in so its
-      names arrive with it. The bearer is the signed-in operator's own token — the same credential
+    - **What we read from D4.** `GET /api/cg/channels`, **at most once per 5 s** (it was 30 s; you
+      agreed to 5 s and asked for no less, `PLAYOUT-CG-RESPONSE-V13-STATE-v1.md` §1.4), with
+      `If-None-Match` (a `304` keeps what we hold), immediately when a console signs in so its
+      names arrive with it, and when first-run or Change channel… opens — each of those through the
+      same 5 s floor. From `2.8.58` each row's `output` and `playlist` (V13 §1) are read with the
+      name: `output` colours a dot before the channel's name and the PROGRAM head; `playlist` is a
+      neutral tag, except `unlicensed`, which also marks the channel amber. A value we do not know
+      is dropped, never a reason to discard the row. The bearer is the signed-in operator's own token — the same credential
       D9 uses, because the bridge has none of its own — **checked at the moment of use**: never a
       token past `exp`, never one on your revocation list, and none at all once that operator has
       signed out or closed the tab. No bearer means no read. Any failure — no answer, a `401`, a
