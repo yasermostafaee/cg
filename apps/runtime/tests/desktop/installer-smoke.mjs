@@ -326,6 +326,21 @@ async function designerProbe() {
   };
 }
 
+/** `TEXT-DIGITS-01` — every answer the shells' `keyboard_language` may give. */
+const KEYBOARD_LANGUAGES = ['persian', 'arabic', 'latin', 'unknown'];
+
+/**
+ * `TEXT-DIGITS-01` — ask the shell which keyboard language its window types in, through its one
+ * read-only command, exactly as the page's detector asks it. Both apps; the answer is kept.
+ */
+async function keyboardProbe() {
+  try {
+    return { ok: true, said: String(await window.__TAURI_INTERNALS__.invoke('keyboard_language')) };
+  } catch (err) {
+    return { ok: false, said: String(err) };
+  }
+}
+
 /**
  * ffmpeg under the installed Designer's own CSP: load the app's OWN lazy chunk and probe a file
  * that is not a video. `no-stream` with ffmpeg's log lines means ffmpeg loaded and ran; a load
@@ -415,6 +430,13 @@ async function designer() {
       title,
     );
   }
+  const keyboard = await page.evaluate(keyboardProbe);
+  fs.writeFileSync(path.join(out, 'designer-keyboard.json'), JSON.stringify(keyboard, null, 2));
+  check(
+    'CG Designer reports its keyboard language through its one read-only command',
+    keyboard.ok && KEYBOARD_LANGUAGES.includes(keyboard.said),
+    keyboard.said,
+  );
   const ffmpeg = await page.evaluate(ffmpegProbe);
   fs.writeFileSync(path.join(out, 'designer-ffmpeg.json'), JSON.stringify(ffmpeg, null, 2));
   check(
@@ -508,6 +530,16 @@ async function controlDrive() {
     {
       const title = windowTitle('cg-control.exe');
       check("CG Control's title bar reads APASAI CG CONTROL", title === 'APASAI CG CONTROL', title);
+    }
+    {
+      // TEXT-DIGITS-01 — granted to this console page (`capabilities/console.json`), read-only.
+      const keyboard = await page.evaluate(keyboardProbe);
+      fs.writeFileSync(path.join(out, 'control-keyboard.json'), JSON.stringify(keyboard, null, 2));
+      check(
+        'the console reads its keyboard language through the app’s one read-only command',
+        keyboard.ok && KEYBOARD_LANGUAGES.includes(keyboard.said),
+        keyboard.said,
+      );
     }
 
     // DESKTOP-APPS-01-A — the one door that writes the Playout target: the app's own command,
