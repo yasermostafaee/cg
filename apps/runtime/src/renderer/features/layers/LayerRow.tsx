@@ -25,7 +25,7 @@ import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
 import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
 import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
 import { LookPicker, lookOptionsOf } from './LookPicker.js';
-import { lookSwitchRefusal } from './lookSwitch.js';
+import { lookSwitchBanner, lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
@@ -383,7 +383,10 @@ export function LayerRow({
     */
     try {
       const res = await window.cg.stack.setActiveLook({ itemId, lookId });
-      if (!res.ok) reportCommandError(lookSwitchRefusal(res.reason, res.message));
+      // `LOOK-SWITCH-01` — a refused PLATE is said on this row (`takeRefusalLine`, below), in this
+      // channel's view only, so no banner repeats it (`lookSwitchBanner`).
+      const banner = lookSwitchBanner(res);
+      if (banner !== null) reportCommandError(banner);
     } catch (err) {
       reportCommandError(
         lookSwitchRefusal(undefined, err instanceof Error ? err.message : undefined),

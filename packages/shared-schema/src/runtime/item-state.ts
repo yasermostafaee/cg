@@ -69,6 +69,13 @@ export type StackItemTimingOverride = z.infer<typeof StackItemTimingOverrideSche
  * in its Inspector — and no console needs a banner to say it. It stands until the row is next
  * taken successfully, or cleared, or removed.
  *
+ * 🔴 `LOOK-SWITCH-01` / `B-273` — **AND A LOOK SWITCH REFUSED FOR A PLATE WRITES THE SAME RECORD.**
+ * The owner's decision (2026-09-27): a switch whose new look needs a plate CasparCG refuses leaves
+ * the old look untouched and the row says which source failed, in `FIELD-FIXES-01`'s line. One
+ * record, one line, one withdrawal rule — plus: a switch that LANDS withdraws it. The name stays
+ * `takeRefusal` because it is a published field; what it carries is the row's last refused
+ * air action, and its line names the source, never the verb.
+ *
  * Facts only; the WORDS are the console's (golden rule 11): the row's name is composed there, and
  * the sentence for the server's refusal comes from the one mapping that reads {@link code} and
  * {@link command} (`amcpRefusal.ts`). The raw reply stays in the bridge's AMCP log.

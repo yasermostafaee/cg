@@ -16,6 +16,9 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
  * Only the plate that was refused is ever named: the take stops there, and plates it never tried
  * are not said to have failed (`FIELD-FIXES-01-A` Decision 1). A refusal of the graphic's own
  * command names no source.
+ *
+ * `LOOK-SWITCH-01` / `B-273` — a LOOK SWITCH refused for a plate writes the same record, so it is
+ * said by this same line (the row keeps its old look; a switch that lands withdraws it).
  */
 export interface TakeRefusalLine {
   /** The row, in the operator's words (`operatorRowName`). */

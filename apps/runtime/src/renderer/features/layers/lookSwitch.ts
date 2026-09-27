@@ -28,6 +28,27 @@ export function lookSwitchRefusal(reason: string | undefined, message: string | 
 }
 
 /**
+ * 🔴 `LOOK-SWITCH-01` / `B-273` — **WHAT A SWITCH'S REPLY PUTS IN A BANNER: nothing, when the ROW
+ * already says it.**
+ *
+ * A switch refused because CasparCG refused a plate its new look needs comes back with
+ * `refusalOnRow`: the bridge recorded it as the row's `takeRefusal`, and `FIELD-FIXES-01`'s one line
+ * says it on the row and in its Inspector, in that channel's view only. A banner would repeat it —
+ * and on every channel's view — so none is raised, the same rule a refused take keeps
+ * (`asyncButtonController`). Every other refusal keeps its banner, worded by
+ * {@link lookSwitchRefusal}.
+ */
+export function lookSwitchBanner(res: {
+  readonly ok: boolean;
+  readonly reason?: string | undefined;
+  readonly message?: string | undefined;
+  readonly refusalOnRow?: true | undefined;
+}): string | null {
+  if (res.ok || res.refusalOnRow === true) return null;
+  return lookSwitchRefusal(res.reason, res.message);
+}
+
+/**
  * ⚠ **THE PICKER’S DISABLED REASON IS `casparRefusalReason`, NOT A HELPER OF ITS OWN.**
  *
  * There was one here for a moment and it reduced, on inspection, to exactly what

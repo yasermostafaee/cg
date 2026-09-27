@@ -840,7 +840,7 @@ export class MockRuntime {
   setActiveLook(
     itemId: string,
     lookId: string,
-  ): { ok: boolean; reason?: string; message?: string } {
+  ): { ok: boolean; reason?: string; message?: string; refusalOnRow?: true } {
     const item = this.#find(itemId);
     if (item === null) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
@@ -854,15 +854,36 @@ export class MockRuntime {
       };
     }
     /*
+      `LOOK-SWITCH-01` / `B-273` parity — a switch REFUSED AT THE WIRE because CasparCG refused a
+      plate its new look needs. The mock's sends always land, so — exactly like the take's
+      `FIELD-FIXES-01` B seam — this is e2e-seeded and one-shot ({@link switchNextWireRefusal}),
+      and it is modelled as the bridge does it: the look is NOT recorded (nothing moved), the row
+      carries the refusal's one line, and `refusalOnRow` so no banner repeats it. The status is
+      left alone: a refused switch is not a refused take.
+    */
+    const wireRefusal = switchNextWireRefusal();
+    if (wireRefusal !== null) {
+      this.#patch(itemId, { takeRefusal: wireRefusal });
+      return {
+        ok: false,
+        reason: wireRefusal.code,
+        message: 'The look was not changed — CasparCG refused a source the new look needs.',
+        refusalOnRow: true,
+      };
+    }
+    /*
       `tasks.md` 7.9 — the bridge records the look only once the PAGE has been told, so that a
       refused switch leaves nothing for a later `swapLiveSource` to act on. This is the same
       rule, arriving at the same place from the other end: the offline mock has no wire and no
       served page, so there is nothing that can disagree and recording IS the whole action.
-      ⚠ Do NOT "restore parity" by adding refusal handling here — there is no refusal to
-      handle, and inventing one would make the mock model a failure the offline path cannot
-      have.
+      ⚠ Do NOT "restore parity" by adding refusal handling here BEYOND the e2e seam above —
+      there is no refusal to handle, and inventing one would make the mock model a failure the
+      offline path cannot have.
     */
     this.#activeLooks.set(itemId, lookId);
+    // `LOOK-SWITCH-01` parity — a switch that lands on a row that owns live seats withdraws the
+    // line a refused one left (the bridge's success path; an off-air row only records the look).
+    if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) this.#retireTakeRefusal(itemId);
     this.#emitStack();
     return { ok: true };
   }
@@ -2278,6 +2299,19 @@ function takeNextWireRefusal(): TakeRefusal | null {
   const armed = w.CG_E2E_REFUSE_NEXT_TAKE;
   if (armed === undefined) return null;
   delete w.CG_E2E_REFUSE_NEXT_TAKE;
+  return armed;
+}
+
+/**
+ * `LOOK-SWITCH-01` — the same one-shot seam for a LOOK SWITCH refused at the wire (`B-273`): a spec
+ * sets `window.CG_E2E_REFUSE_NEXT_SWITCH` to the refusal the bridge would record for the plate it
+ * refused, and the next `setActiveLook` consumes it. Unset, the mock switches as it always has.
+ */
+function switchNextWireRefusal(): TakeRefusal | null {
+  const w = globalThis as { CG_E2E_REFUSE_NEXT_SWITCH?: TakeRefusal };
+  const armed = w.CG_E2E_REFUSE_NEXT_SWITCH;
+  if (armed === undefined) return null;
+  delete w.CG_E2E_REFUSE_NEXT_SWITCH;
   return armed;
 }
 

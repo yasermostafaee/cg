@@ -333,6 +333,15 @@ export const StackSetActiveLookChannel = defineChannel(
     ok: z.boolean(),
     reason: z.string().optional(),
     message: z.string().optional(),
+    /**
+     * 🔴 `LOOK-SWITCH-01` / `B-273` — the switch was refused because CasparCG refused a PLATE its
+     * look needs, and the bridge recorded it as the item's `takeRefusal` — `FIELD-FIXES-01`'s one
+     * line, which the row and its Inspector say, in that channel's view only. So no other surface
+     * repeats it: no banner. The same field, and the same rule, as `stack.take`'s. ABSENT for
+     * every refusal that names no plate (the look, the link, the page), which keeps its own
+     * surface.
+     */
+    refusalOnRow: z.literal(true).optional(),
   }),
 );
 

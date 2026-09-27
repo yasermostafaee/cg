@@ -9,7 +9,7 @@ import {
   frameCountLabel,
   lookOptionsOf,
 } from '../src/renderer/features/layers/LookPicker.js';
-import { lookSwitchRefusal } from '../src/renderer/features/layers/lookSwitch.js';
+import { lookSwitchBanner, lookSwitchRefusal } from '../src/renderer/features/layers/lookSwitch.js';
 import {
   gridTemplateColumns,
   minWidthFor,
@@ -507,6 +507,32 @@ describe('lookSwitchRefusal — the bridge’s sentence first', () => {
 
   it('and a refusal with neither still says something', () => {
     expect(lookSwitchRefusal(undefined, undefined)).toBe('The look switch was not accepted.');
+  });
+});
+
+describe('`LOOK-SWITCH-01` — a refused PLATE is said on the row, so no banner repeats it', () => {
+  it('🔴 a reply the row already carries (`refusalOnRow`) raises NO banner', () => {
+    expect(
+      lookSwitchBanner({
+        ok: false,
+        reason: 'amcp-404',
+        message: 'the look was NOT changed — CasparCG refused the source "studio2"',
+        refusalOnRow: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('CONTROL — every other refusal keeps its banner, in the bridge’s words', () => {
+    expect(lookSwitchBanner({ ok: false, reason: 'disconnected' })).toContain(
+      'Not connected to CasparCG',
+    );
+    expect(lookSwitchBanner({ ok: false, reason: 'x', message: 'said by the bridge' })).toBe(
+      'said by the bridge',
+    );
+  });
+
+  it('an accepted switch raises nothing', () => {
+    expect(lookSwitchBanner({ ok: true })).toBeNull();
   });
 });
 
