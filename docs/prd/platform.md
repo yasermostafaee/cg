@@ -2136,6 +2136,15 @@ four named tests, and every one of them is an animate-within-N-milliseconds asse
   fourth lands on `:291` as well, that is enough to stop treating it as ambient and go and
   measure the decode.
 
+- 🔴 **2026-09-27 — `:291` failed BOTH tries of one job, so the job went red** (`TIMING-TESTS-01`, run
+  <https://github.com/yasermostafaee/cg/actions/runs/36338340420> attempt 1, commit `d6b106df`). It
+  was the same assertion, `:368` `px.left[0] > 200`, which received `0` on the first try and on the
+  retry. The commit touches only `tools/caspar-bridge/tests/**` and one PRD file: no designer,
+  `@cg/vcg-format`, `@cg/template-runtime` or video code. The one rerun (attempt 2) was green with
+  `:291` passing. ADR 0009 and [[P-048]] already name `:291` among the known CI flakes, so this is
+  well past the fourth occurrence the paragraph above sets as the point to go and measure the decode.
+  That is still not done: recorded here, not fixed.
+
 - whether the local concurrency finding and the CI flakes share anything at all — **no evidence
   either way**, which is a different state from "consistent with a single cause" and must not be
   written back as one.
@@ -3488,3 +3497,15 @@ code, not with time, and are listed there, not fixed. A timing failure found lat
 
 **Acceptance:** WHEN `pnpm gate` runs three times in a row on one host THEN neither test fails;
 WHEN the defect each guards is planted THEN that test is red.
+
+**Evidence (2026-09-27):**
+
+- **Local.** Three `pnpm gate` runs in a row, all green, with both files run in full each time:
+  `gate-20260927T172018Z-25740.log`, `gate-20260927T172737Z-22956.log`,
+  `gate-20260927T173439Z-20712.log`. The pre-push gate was a fourth, also green
+  (`gate-20260927T174203Z-15948.log`).
+- **Linux CI** on `d6b106df`: <https://github.com/yasermostafaee/cg/actions/runs/36338340420>.
+  - Attempt 1 was red on the Designer's known `video-import.spec.ts:291` flake (see [[P-034]]).
+  - Attempt 2, the one rerun, **completed with `success`, and its `E2E` step RAN**: runtime 289 passed;
+    Designer 287 passed + 1 flaky (`live-source.spec.ts:610`, green on its retry).
+- **Installers:** <https://github.com/yasermostafaee/cg/actions/runs/36338340442> — `success`.
