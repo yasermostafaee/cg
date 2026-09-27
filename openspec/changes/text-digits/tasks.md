@@ -62,11 +62,22 @@
       field follows the signal — run locally green on Windows (non-authoritative; the discharge is 7.2)
 - [x] 6.5 Old template draws exactly as before
 - [x] 6.6 Tests that pinned the superseded behaviour re-expressed (raw option words, verbatim Designer inputs, the
-      exported `digits` count)
-- [x] 6.7 The installer smoke asks both installed apps for `keyboard_language` (proven by 7.3)
+      exported `digits` count) — and `ticker.spec.ts`, whose item `E2E` a new (Persian) ticker now draws `E۲E`
+      (found by the first Linux run, 36346670594; the wording sweep could not see a digit in test data)
+- [x] 6.7 The installer smoke asks both installed apps for `keyboard_language` (proven by 7.3). Its "nothing the
+      console loaded came from another origin" check sets aside exactly `http://ipc.localhost/keyboard_language` —
+      Tauri's IPC to the app's own shell, not a load — by name; any other origin or command still fails
 
 ## 7. Gate and CI
 
-- [ ] 7.1 Prettier; `pnpm gate`; `pnpm openspec validate --all --strict`
-- [ ] 7.2 Linux `e2e` COMPLETED and GREEN with its E2E step run — URL
-- [ ] 7.3 Installers COMPLETED and GREEN, both jobs run — URL
+- [x] 7.1 Prettier; `pnpm gate` (the pre-push gate: 96/96 tasks, 0 cached, on `572c3eef` and again on `97b731dd`);
+      `pnpm openspec validate --all --strict` (89 passed)
+- [x] 7.2 Linux `e2e` COMPLETED and GREEN with its E2E step run, on `97b731dd` (the dev head carrying the change):
+      https://github.com/yasermostafaee/cg/actions/runs/36348235964 — Designer 291 passed / 12 skipped, CG Control
+      292 passed. (The first run, https://github.com/yasermostafaee/cg/actions/runs/36346670594 on `572c3eef`, was
+      red on `ticker.spec.ts:12` — fixed in `97b731dd`.)
+- [x] 7.3 Installers COMPLETED and GREEN, both jobs run, on `97b731dd`:
+      https://github.com/yasermostafaee/cg/actions/runs/36348236019 — smoke 39/39; both installed apps answered
+      `keyboard_language` = `latin` on the English runner. (The first run,
+      https://github.com/yasermostafaee/cg/actions/runs/36346670579 on `572c3eef`, compiled both shells and went
+      38/39 on the off-origin check — fixed in `112679eb`.)

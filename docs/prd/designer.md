@@ -3504,6 +3504,13 @@ rotation, keyframe values, the timeline's fields — which still drop Persian di
 the owner has not asked for as-typed display (`PERSIAN-DIGITS-01` §1 E: chrome numbers stay as
 they are). Build it on the same reader, not a second digit map.
 
+⭐ **AMENDED 2026-09-27 by `openspec/changes/text-digits/` (`TEXT-DIGITS-01`, pending archive) — template
+values only.** What is edited now looks like what goes on air: a field's Value box, the preview form,
+list and sequence items, the ticker separator and the canvas's double-click edit write each digit in
+the element's or field's Digits choice as it is typed, the caret kept; "as typed" is now Keyboard,
+which follows the keyboard language. This item's "a text field stores them verbatim" holds only for
+Keyboard with a paste or an unknown language. The chrome numbers above are still unchanged.
+
 ## [ ] D-131 — sequence transitions: easing + inter-item delay ⟨priority: medium⟩
 
 **What:** Add transition easing (at least linear / ease-in / ease-out / ease-in-out) and a
