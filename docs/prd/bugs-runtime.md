@@ -12660,6 +12660,13 @@ look's boxes with nothing in the refused plate's box — a few frames. If the re
 page stays on the new look over the old geometry. What a switch should do is the owner's decision
 (`openspec/changes/archive/2026-09-26-field-fixes/design.md` §3).
 
+**Owner's decision (2026-09-27):** a look switch is all-or-nothing, like a take. **Status (2026-09-27,
+`LOOK-SWITCH-01` §0–§3, `openspec/changes/look-switch-all-or-nothing`):** established, not fixed. The fix seats
+the new look's unseated plates hidden (`OPACITY 0` + `VOLUME 0` committed before the `PLAY`) BEFORE the page is
+told, and reveals them in the switch's one `MIXER COMMIT`; the refusal half cannot ship without that success path
+(`design.md` §3). It waits for the owner's skew-harness measurement (`design.md` §3's command); this stays open
+until it has passed. `B-192` is the same hole reached through a torn-down `media` plate.
+
 ## [x] B-274 — The bridge took a row that was already on air: only the console's PLAY greyed it ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 A second console on a stale snapshot, or a take whose reply was slow, reached `take()` with the
