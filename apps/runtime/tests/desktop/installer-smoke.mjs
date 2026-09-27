@@ -278,17 +278,33 @@ async function consoleProbe() {
     (f) => f.family.replace(/["']/g, '') === 'Vazirmatn' && /U\+600/i.test(f.unicodeRange),
   );
   probe.remove();
+  /*
+    `TEXT-DIGITS-01` — the console asks its own shell which keyboard language the window types in,
+    through Tauri's IPC, which WebView2 carries as `http://ipc.localhost/<command>` (measured on this
+    job: one entry per ask). That is the app talking to its own shell, not a load from another
+    machine, so exactly that ONE read-only command is set aside, by name. Any other origin — and any
+    other command — still counts. (Inline: this function runs inside the page.)
+  */
+  const shellAsk = (u) =>
+    u.origin === 'http://ipc.localhost' && u.pathname === '/keyboard_language';
   const offOrigin = performance
     .getEntriesByType('resource')
     .map((e) => e.name)
     .filter((n) => {
       try {
         const u = new URL(n);
-        return u.protocol.startsWith('http') && u.origin !== location.origin;
+        return u.protocol.startsWith('http') && u.origin !== location.origin && !shellAsk(u);
       } catch {
         return false;
       }
     });
+  const keyboardAsks = performance.getEntriesByType('resource').filter((e) => {
+    try {
+      return shellAsk(new URL(e.name));
+    } catch {
+      return false;
+    }
+  }).length;
   const fonts = performance
     .getEntriesByType('resource')
     .map((e) => e.name)
@@ -301,6 +317,7 @@ async function consoleProbe() {
     vazirmatn: face?.status ?? 'missing',
     fonts,
     offOrigin,
+    keyboardAsks,
   };
 }
 
