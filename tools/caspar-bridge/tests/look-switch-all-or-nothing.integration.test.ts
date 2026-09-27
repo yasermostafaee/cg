@@ -2,8 +2,8 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createMock, defaultHandlers, type AmcpHandler, type MockHandle } from '@cg/amcp-mock';
 import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import {
   fixedBankSlots,
@@ -141,14 +141,99 @@ function threeBox(): TemplateInfo {
  */
 let refusals: { match: RegExp; code: number }[] = [];
 
-function refusing(m: MockHandle, verb: string): void {
+function refusingHandler(verb: string): AmcpHandler {
   const fallback = defaultHandlers().get(verb);
   if (fallback === undefined) throw new Error(`no default ${verb}`);
-  m.setHandler(verb, (req, ctx) => {
+  return (req, ctx) => {
     const hit = refusals.find((r) => r.match.test(req.raw));
     if (hit !== undefined) return { kind: 'ok', code: hit.code as 202, verb: `${verb} FAILED` };
     return fallback(req, ctx);
+  };
+}
+
+const REFUSABLE = ['PLAY', 'MIXER', 'CG', 'CLEAR'];
+
+function refusing(m: MockHandle, verb: string): void {
+  m.setHandler(verb, refusingHandler(verb));
+}
+
+/** What `newMock` answers `verb` with: the refusing stand-in, or the mock's own handler. */
+function standIn(verb: string): AmcpHandler {
+  if (REFUSABLE.includes(verb)) return refusingHandler(verb);
+  const handler = defaultHandlers().get(verb);
+  if (handler === undefined) throw new Error(`no default ${verb}`);
+  return handler;
+}
+
+/**
+ * 🔴 `TIMING-TESTS-01` — **THE MOCK ANSWERS ONE CONNECTION IN ORDER, AS CASPARCG DOES.** Each
+ * command is handled only once the command before it has been answered, so a reply held on a
+ * promise holds every reply behind it. Left to itself the mock dispatches every line at once, and a
+ * reply held in one handler is overtaken by the next command's — which the bridge's queue, pairing
+ * replies by position, hands to the HELD command. Measured: `out`'s `202 CLEAR` settled the
+ * switch's held `PLAY`, so the preroll began before `out` had finished and the test's margin was
+ * about 10 ms, not the 120 ms its comment described.
+ *
+ * `arrived` hears each line as it LANDS on the mock's wire, before it waits its turn.
+ */
+function answerInOrder(
+  m: MockHandle,
+  handlerFor: (verb: string) => AmcpHandler,
+  arrived: (raw: string) => void,
+): void {
+  let turn: Promise<unknown> = Promise.resolve();
+  for (const verb of defaultHandlers().keys()) {
+    const handler = handlerFor(verb);
+    m.setHandler(verb, (req, ctx) => {
+      arrived(req.raw);
+      const answer = turn.then(() => handler(req, ctx));
+      turn = answer.catch(() => undefined);
+      return answer;
+    });
+  }
+}
+
+/**
+ * 🔴 `TIMING-TESTS-01` — **HOLD THE NEXT TIMER OF EXACTLY `ms` UNTIL THE TEST FIRES IT.** Every
+ * other timer runs as scheduled, and the intercept removes itself once it has caught one.
+ * `scheduled` resolves when that timer is set; `restore` undoes an intercept that caught nothing.
+ */
+function holdNextTimer(ms: number): {
+  scheduled: Promise<void>;
+  fire: () => void;
+  restore: () => void;
+} {
+  const real = globalThis.setTimeout;
+  let held: (() => void) | undefined;
+  let heard: () => void = () => undefined;
+  const scheduled = new Promise<void>((resolve) => {
+    heard = resolve;
   });
+  const spy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+    callback: (...args: unknown[]) => void,
+    delay?: number,
+    ...args: unknown[]
+  ) => {
+    if (held === undefined && delay === ms) {
+      held = () => {
+        callback(...args);
+      };
+      spy.mockRestore();
+      heard();
+      return real(() => undefined, 0);
+    }
+    return real(callback, delay, ...args);
+  }) as unknown as typeof setTimeout);
+  return {
+    scheduled,
+    fire: () => {
+      if (held === undefined) throw new Error(`no ${String(ms)} ms timer was held`);
+      held();
+    },
+    restore: () => {
+      spy.mockRestore();
+    },
+  };
 }
 
 async function newMock(): Promise<{ mock: MockHandle; oscPort: number; trace: string }> {
@@ -165,7 +250,7 @@ async function newMock(): Promise<{ mock: MockHandle; oscPort: number; trace: st
     channels: 2,
     tracePath: trace,
   });
-  for (const verb of ['PLAY', 'MIXER', 'CG', 'CLEAR']) refusing(mock, verb);
+  for (const verb of REFUSABLE) refusing(mock, verb);
   mocks.push(mock);
   traces.push(trace);
   return { mock, oscPort, trace };
@@ -523,25 +608,67 @@ describe('the pre-seat’s window — the preroll, and a row that leaves the air
       so `out`'s own commands run behind the PLAY and complete inside the preroll — the window this
       guards. (With no preroll there is no such window: nothing interleaves between the answer and
       the re-ask.)
+
+      🔴 `TIMING-TESTS-01` — EVERY STEP IS ORDERED BY THE TEST, NONE BY A SLEEP. It was a 150 ms
+      delay on the PLAY and a 50 ms sleep before `out`, and under the gate's load `out` did not
+      finish inside the preroll. Now:
+        1. the mock answers in order (`answerInOrder`), so each reply settles its own command;
+        2. plate 2's PLAY is held, and `out` is pressed once that PLAY has LANDED;
+        3. the PLAY is released once `out`'s first command has landed behind it — the only one that
+           can while the PLAY is unanswered, because the teardown awaits each reply in turn;
+        4. the preroll is held open until `out` has COMPLETED, so the re-ask after it is asked of a
+           row that has left the air. That is the precondition, asserted rather than hoped.
     */
-    const { r, mock, mark, sentSince } = await boot({ holdMs: 40 });
+    const HOLD = 40;
+    const { r, mock, mark, sentSince } = await boot({ holdMs: HOLD });
     refusals = [{ match: /^PLAY 2-\d+ DECKLINK DEVICE 2$/, code: 404 }];
     await takeOnLookOne(r);
     refusals = [];
-    // Slow plate 2's PLAY, so the emergency verb is pressed INSIDE the pre-seat.
-    const play = defaultHandlers().get('PLAY');
-    if (play === undefined) throw new Error('no default PLAY');
-    mock.setHandler('PLAY', async (req, ctx) => {
-      if (/DECKLINK DEVICE 2$/.test(req.raw)) await new Promise((res) => setTimeout(res, 150));
-      return play(req, ctx);
+
+    let letPlayAnswer: () => void = () => undefined;
+    const playMayAnswer = new Promise<void>((resolve) => {
+      letPlayAnswer = resolve;
     });
+    let playLanded: () => void = () => undefined;
+    const playOnWire = new Promise<void>((resolve) => {
+      playLanded = resolve;
+    });
+    let outLanded: () => void = () => undefined;
+    const outOnWire = new Promise<void>((resolve) => {
+      outLanded = resolve;
+    });
+    answerInOrder(
+      mock,
+      (verb) => {
+        const answer = standIn(verb);
+        if (verb !== 'PLAY') return answer;
+        return async (req, ctx) => {
+          if (/DECKLINK DEVICE 2$/.test(req.raw)) await playMayAnswer;
+          return answer(req, ctx);
+        };
+      },
+      (raw) => {
+        if (raw === 'PLAY 2-61 DECKLINK DEVICE 2') playLanded();
+        if (raw === 'CLEAR 2-60') outLanded();
+      },
+    );
 
     const from = await mark();
     const switching = r.setActiveLook('bed-59', 'look-2');
-    await new Promise((res) => setTimeout(res, 50));
+    await playOnWire;
     const out = r.out('bed-59');
-    const verdict = await switching;
-    expect((await out).accepted).toBe(true);
+    await outOnWire;
+    const preroll = holdNextTimer(3 * HOLD);
+    let verdict: Awaited<typeof switching>;
+    try {
+      letPlayAnswer();
+      await preroll.scheduled;
+      expect((await out).accepted, '`out` completed inside the preroll').toBe(true);
+      preroll.fire();
+      verdict = await switching;
+    } finally {
+      preroll.restore();
+    }
 
     expect(verdict).toMatchObject({ ok: false, reason: 'not-live' });
     const lines = await sentSince(from);

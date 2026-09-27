@@ -244,9 +244,25 @@ describe('the relay — a well-behaved client', () => {
     const exact = 'GET / HTTP/1.1\r\nHost: playout.test\r\n\r\n';
     expect(f.connections[0]?.received.toString('latin1')).toBe(exact);
 
-    // …and nothing more was written, however long the connection stays up.
-    await new Promise((r) => setTimeout(r, 600));
-    expect(viewer.frames.length).toBeGreaterThan(20);
+    /*
+      …and nothing more was written, however long the connection stays up. `TIMING-TESTS-01`: the
+      window is counted in the frames the fake itself sent — fifteen more — never in milliseconds,
+      and its positive control is that the relay forwarded EVERY frame the fake sent, in order: the
+      connection was live the whole window, so a write after the request had time to arrive. (It was
+      "more than 20 frames in 600 ms" from a feed sending every 40 ms, which Windows' 15.6 ms timer
+      makes about 47 ms — a margin of two frames, which the gate's load took.)
+    */
+    const sentOn = (): number => f.connections[0]?.framesSent ?? 0;
+    const from = sentOn();
+    await waitFor(() => sentOn() >= from + 15, 5000, 'fifteen more frames from the fake');
+    f.pause();
+    const sent = sentOn();
+    await waitFor(() => viewer.frames.length >= sent, 3000, 'every frame the fake sent');
+    const order = (frames: readonly Buffer[]): string =>
+      frames.map((fr) => (fr.equals(FRAME_A) ? 'A' : fr.equals(FRAME_B) ? 'B' : '?')).join('');
+    expect(order(viewer.frames), 'the relay forwarded every frame the fake sent').toBe(
+      'AB'.repeat(sent).slice(0, sent),
+    );
     expect(f.connections).toHaveLength(1);
     expect(f.connections[0]?.received.toString('latin1')).toBe(exact);
   });

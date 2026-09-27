@@ -13,7 +13,8 @@ import net from 'node:net';
  *   - the stream ends only when the connection closes.
  *
  * And what it RECORDS, because the tests are about the client's behaviour: every byte each
- * connection sent, when it opened, when its request completed and when it closed.
+ * connection sent, when it opened, when its request completed and when it closed — and how many
+ * frames the fake itself wrote on it.
  */
 
 /** The response head, exactly as measured on the Playout's loopback (their §1). */
@@ -84,6 +85,11 @@ export interface FakeFeedConnection {
   /** When `\r\n\r\n` arrived (the request completed), or `null`. */
   requestAt: number | null;
   closedAt: number | null;
+  /**
+   * `TIMING-TESTS-01` — how many frames the fake has written on this connection, so a test counts
+   * its window in the fake's own frames and never in milliseconds.
+   */
+  framesSent: number;
 }
 
 export interface FakePgmFeed {
@@ -125,6 +131,7 @@ export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promis
         received: Buffer.alloc(0),
         requestAt: null,
         closedAt: Date.now(),
+        framesSent: 0,
       });
       socket.destroy();
       return;
@@ -135,6 +142,7 @@ export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promis
       received: Buffer.alloc(0),
       requestAt: null,
       closedAt: null,
+      framesSent: 0,
     };
     connections.push(record);
     let timer: NodeJS.Timeout | null = null;
@@ -149,6 +157,7 @@ export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promis
         const frame = frames[next % frames.length] as Buffer;
         next++;
         socket.write(pgmFeedPart(frame));
+        record.framesSent += 1;
       }, interval);
     });
     socket.on('error', () => undefined);

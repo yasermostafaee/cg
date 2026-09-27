@@ -3450,3 +3450,41 @@ itself (`bridge.host` is `127.0.0.1`), so it cannot simply be pointed elsewhere.
 Check-rerun e2e had the same reach and was moved off it (`eac4e7c0`). **Why.** The gate runs these on
 every push, and a developer's dev station is not a test's to reach. **Acceptance:** WHEN the gate
 runs beside a running dev station THEN no test bridge opens a connection to `127.0.0.1:5250`.
+
+## [~] P-057 — Wall-clock tests turned the local gate red: a test's precondition must be an assertion, not a hope ⟨priority: medium⟩ — FILED 2026-09-27 by `TIMING-TESTS-01` · the two below CLOSED IN CODE
+
+**What.** A test that waits on the wall clock for its PRECONDITION fails under the gate's load while
+the code is right (`B-098`'s signature: the victim moves between runs). Each such test is made
+deterministic: its precondition is ordered or counted by the test, never slept for, and no margin is
+widened, no retry added and nothing skipped. **Why.** On 2026-09-27 the local gate went red twice in a
+row on two different tests while Linux CI was green (`DAY-RUN-01`; logs
+`gate-20260927T153719Z-22320.log` and `gate-20260927T154734Z-9380.log`).
+
+**Closed in code (2026-09-27):**
+
+- `tools/caspar-bridge/tests/pgm-return.test.ts` ("sends exactly the one request, and nothing after
+  it") asked for more than 20 frames in 600 ms from a feed sending every 40 ms — about 47 ms on
+  Windows' 15.6 ms timer, a margin of two frames. The window is now fifteen frames the fake itself
+  counts (`framesSent`), and the positive control is that the relay forwarded every frame the fake
+  sent, in order.
+- `tools/caspar-bridge/tests/look-switch-all-or-nothing.integration.test.ts` ("a row taken OUT while
+  its pre-seat is in flight") delayed the pre-seat's `PLAY` 150 ms and pressed `out` after a 50 ms
+  sleep. Measured: the mock answers every line at once, so `out`'s `202 CLEAR` overtook the held
+  `PLAY`'s reply and the bridge's queue, which pairs replies by position, settled the `PLAY` with it.
+  The preroll therefore started about 10 ms before `out` finished, not 120 ms. Now the mock answers
+  in order, as CasparCG answers one connection; the `PLAY` is held until `out`'s first command has
+  landed behind it; and the preroll's timer is held open until `out` has completed.
+
+Each was shown red under the defect it guards, planted and removed: an extra write after the request
+and a duplicated frame (the relay), and the missing post-preroll re-ask (the switch).
+
+**Open:** the rest of `TIMING-TESTS-01` §0.2's table. In the 43 gate logs retained since 2026-09-13, no
+other wall-clock assertion failed on timing. Every other failure there came from three runs on
+2026-09-14 against the layer re-band in progress (`bd3e7455`): 11–62 failures a run, the same set
+each time, green from the next gate. The wall-clock-shaped ones among them — `soak-runner`'s
+`harness.test.ts` soaks, `live-add-mute`'s wait for a layer-10 `VOLUME 0`, `stack-retention.test.ts`'s
+restart waits, `pending-update-completion` and `look-picker-operator`'s publish beat — failed with that
+code, not with time, and are listed there, not fixed. A timing failure found later goes on this item.
+
+**Acceptance:** WHEN `pnpm gate` runs three times in a row on one host THEN neither test fails;
+WHEN the defect each guards is planted THEN that test is red.
