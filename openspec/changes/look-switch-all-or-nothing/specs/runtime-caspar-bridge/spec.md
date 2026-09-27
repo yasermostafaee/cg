@@ -30,7 +30,10 @@ refused seated nothing and is not — and SHALL send no page `UPDATE` and no fur
 keep its old look and carry the refusal as its `takeRefusal`, `FIELD-FIXES-01`'s one line naming the plate's
 source, and the reply SHALL say `refusalOnRow`. On success the switch SHALL run as before, with each pre-seated
 plate revealed in the switch's one `MIXER <ch> COMMIT`, and SHALL withdraw the row's line. A plate whose layer
-already carries a producer of ours (an in-place replace) SHALL keep the in-switch path.
+already carries a producer of ours (an in-place replace) SHALL keep the in-switch path. A switch that seated a
+plate SHALL let it run hidden for three holds before telling the page, so its producer has its own picture by the
+reveal; and a row taken off air while the pre-seat or its preroll was in flight SHALL NOT reach the apply — the
+pre-seat is undone and the switch answers `not-live`.
 
 #### Scenario: Refused 1 → 2
 
@@ -54,7 +57,19 @@ already carries a producer of ours (an in-place replace) SHALL keep the in-switc
 #### Scenario: Held plates
 
 - **WHEN** every plate the new look shows is already seated and held
-- **THEN** the switch sends no `PLAY` and no `OPACITY`
+- **THEN** the switch sends no `PLAY` and no `OPACITY`, and its first line is the page tell
+
+#### Scenario: The preroll
+
+- **GIVEN** the production hold
+- **WHEN** a switch seats a plate
+- **THEN** at least three holds pass between that plate's answered `PLAY` and the page tell
+
+#### Scenario: The row leaves the air mid-pre-seat
+
+- **WHEN** a row is taken out while its switch's pre-seat is in flight
+- **THEN** the page is never told, nothing is revealed, the pre-seated plate is cleared, no ledger is left for the
+  row, and the switch answers `not-live`
 
 ### Requirement: Every plate is seated hidden and revealed in its action's one commit
 

@@ -8063,6 +8063,13 @@ that was already broken. This session's change is the first touch that path has 
 
 ## [ ] B-192 — a plate PARKED by a look switch does not survive on the plant: re-entering the look that shows it emits a `PLAY`, and the box is EMPTY for that producer's first frame ⟨priority: high — it is `B-155` case 3 arriving through the park, on the owner's own template, and it is why term (b) is reachable at all⟩ — OPEN, filed 2026-08-31 from `SKEW-INTERSECT-01`'s §2 measurement
 
+**Status (2026-09-27, `LOOK-SWITCH-01` v3 — `B-273`):** candidate remedy 1 below is BUILT for the look switch.
+A switch now seats the incoming producer hidden BEFORE the page is told and lets it run three holds before the
+reveal, so the `PLAY` no longer lands inside the switch: on the owner's CasparCG, `ghab` 1 → 2, term (b) measured
+**0 fields in 10 of 10** (it was 0, 4, 4 and six 6s the same hour). Still OPEN for what it records beyond the
+switch: the live-input half below is still an owed hardware run, and the park a `media` clip cannot survive is by
+design (`canHoldLivePlate`).
+
 **Measured, not reasoned about.** `tools/skew-harness --fixture ghab` reproduces the owner's
 membership exactly: `look-1` holds ONE plate (`guest-1`) and `guest-2` exists only in `look-2`. Ten
 switches `look-1 → look-2`, `1080i5000`, the transition mask in force:
@@ -12651,7 +12658,7 @@ rule, `refusal-cleanup.ts` — cleared only if the refused operation put a produ
 of ours was there before — called by all of them through `#clearAfterRefusal`. The re-take itself is
 now refused by the bridge (`B-274`). Test: `take-all-or-nothing.integration.test.ts` ("THE RULE").
 
-## [ ] B-273 — A look switch whose new look needs a refused plate shows a hole on air until the page is put back ⟨priority: medium⟩ — FILED 2026-09-26 by `FIELD-FIXES-01-A` (reported, not fixed)
+## [~] B-273 — A look switch whose new look needs a refused plate shows a hole on air until the page is put back ⟨priority: medium⟩ — FILED 2026-09-26 by `FIELD-FIXES-01-A` · CLOSED IN CODE AND MEASURED 2026-09-27 by `LOOK-SWITCH-01` (v3)
 
 Established from `setActiveLook`: the page is told the NEW look before the fills move; a plate the new
 look needs that is refused (a preset dropped at the take) commits the fills that landed, puts every
@@ -12661,11 +12668,17 @@ page stays on the new look over the old geometry. What a switch should do is the
 (`openspec/changes/archive/2026-09-26-field-fixes/design.md` §3).
 
 **Owner's decision (2026-09-27):** a look switch is all-or-nothing, like a take. **Status (2026-09-27,
-`LOOK-SWITCH-01` §0–§3, `openspec/changes/look-switch-all-or-nothing`):** established, not fixed. The fix seats
-the new look's unseated plates hidden (`OPACITY 0` + `VOLUME 0` committed before the `PLAY`) BEFORE the page is
-told, and reveals them in the switch's one `MIXER COMMIT`; the refusal half cannot ship without that success path
-(`design.md` §3). It waits for the owner's skew-harness measurement (`design.md` §3's command); this stays open
-until it has passed. `B-192` is the same hole reached through a torn-down `media` plate.
+`LOOK-SWITCH-01` v3, `openspec/changes/look-switch-all-or-nothing`): CLOSED IN CODE AND MEASURED.** A switch now
+seats the plates its new look needs hidden (`OPACITY 0` + `VOLUME 0` + the fit, committed before the `PLAY`)
+BEFORE the page is told; a refused plate refuses the switch with no page `UPDATE` and nothing on air changed, and
+the row says which source failed in `FIELD-FIXES-01`'s line, with no banner; accepted, the plates run hidden for
+three holds and are revealed in the switch's one `MIXER COMMIT`. Every seat onto a fresh layer (take, swap,
+restore) is hidden the same way. Measured by CC on the owner's own CasparCG 2.5.0 (`127.0.0.1:5250`, no DeckLink
+on that machine — `design.md` §3 v3): `ghab` 1 → 2 with a freshly seated plate, 10 runs — `k` = 0 in 10 of 10
+(9 were excluded before), BLACK and MISPLACED 0 %, term (b) 0 fields in 10 of 10 (baseline median 6), CONTROL
+≈ 0.01 % (baseline 22.78 % in 9); the reverse direction and the `ghab3` control likewise clean. The first
+measurement failed on term (b) in 3 runs of 10; the one fix cycle added the preroll. `B-192` is the same hole
+reached through a torn-down `media` plate, and this closes its switch path (see its status).
 
 ## [x] B-274 — The bridge took a row that was already on air: only the console's PLAY greyed it ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 

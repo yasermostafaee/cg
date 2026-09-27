@@ -40,7 +40,8 @@ Lane: FULL (the path to air, the wire). v2 ran overnight 2026-09-27 up to §3; v
 
 ## §2 Tests (v3) — each absence with its positive control
 
-- [x] 2.1 `tools/caspar-bridge/tests/look-switch-all-or-nothing.integration.test.ts` (15): refused 1 → 2,
+- [x] 2.1 `tools/caspar-bridge/tests/look-switch-all-or-nothing.integration.test.ts` (17; 15 before the fix
+      cycle added 3.4's two): refused 1 → 2,
       variant 1 → 3, the accepted control, the line withdrawn; held plates; order; hidden before `PLAY` on take,
       switch and swap, and an in-place replace never hidden; the reveal volume; the reconnect re-send and
       nothing below 50; the backup's journal replay; the `MIXER CLEAR` gate. Red first: 11 of 15 fail on the
@@ -59,10 +60,17 @@ Lane: FULL (the path to air, the wire). v2 ran overnight 2026-09-27 up to §3; v
 ## §3 Measurement (v3 — CC, on this machine's CasparCG at `127.0.0.1:5250`)
 
 - [x] 3.0 Station check and baseline (`design.md` §3 v3).
-- [ ] 3.1 After §1: `ghab` full → boxes and boxes → full, `ghab3` control — `k` = 0 in every run including the
-      fresh seats, BLACK and MISPLACED 0 %, term (b) 0, CONTROL ≈ 0.
-- [ ] 3.2 The refusal run, if a fixture alone can drive it.
-- [ ] 3.3 `INFO 1` against §0.2's; the channel put back the way the harness does.
+- [x] 3.1 After §1: the first measurement FAILED on term (b) (3 runs of 10: 2, 2, 4 fields). The one
+      fix-and-measure cycle: the preroll (`PRE_SEAT_PREROLL_HOLDS`) and the mid-pre-seat re-ask. After it, PASSED:
+      `ghab` full → boxes and boxes → full, `ghab3` control — `k` = 0 in 30 of 30 runs (the fresh seats
+      included), BLACK and MISPLACED 0 %, term (b) 0 in 30 of 30, CONTROL ≈ 0.
+- [x] 3.2 The refusal run: SKIPPED — the harness needs a code change to name a missing clip (its sources are a
+      catalog built in `run.ts`, not a fixture); the refusal is proven on the fake.
+- [x] 3.3 `INFO 1` byte-identical to §0.2's, after `ADD 1 SCREEN` (the harness's own restore) put back the screen
+      consumer the first baseline's `SET MODE` lost while the workstation was locked.
+- [x] 3.4 The fix cycle's tests: the preroll (three holds between the answered `PLAY` and the page tell; control:
+      a held-plate switch tells the page first) and the row taken out mid-pre-seat (red first without the
+      re-ask).
 
 ## Gate and discharge
 

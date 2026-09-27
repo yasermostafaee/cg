@@ -1,8 +1,8 @@
 # Design — look-switch-all-or-nothing (`LOOK-SWITCH-01` §0–§3)
 
 **Where later prompts say "after `LOOK-SWITCH-01` (v2) has landed", they mean this change, landed through
-`LOOK-SWITCH-01` (v3).** v2 established §0 and pinned two absences; v3 built §1 and measured it on this machine's
-own CasparCG (§3, v3 results).
+`LOOK-SWITCH-01` (v3).** v2 established §0 and pinned two absences; v3 built §1, measured it on this machine's
+own CasparCG and, after its one fix cycle, passed (§3 v3) — then shipped.
 
 §0 below was ESTABLISHED on 2026-09-27 and changed no code; §1 records what v3 BUILT. Anchors are to this tree
 unless a CasparCG source path (`src/…`, stock `v2.5.0-stable`) is named.
@@ -283,6 +283,44 @@ The 22.78 % is the fresh-seat defect itself: the new box shows no picture of its
 switch (term (b)), which the classifier reads outside its narrow A = B window as a settled residue the size of
 that box. Evidence: `tools/skew-harness/evidence/2026-09-27-look-switch-01/`.
 
+**After §1 (`bbda71c4`…`326297a0`), first measurement — FAILED on term (b):**
+
+| run                 | `k`                            | BLACK | MISPLACED | term (b), fields                 | CONTROL settled                     |
+| ------------------- | ------------------------------ | ----- | --------- | -------------------------------- | ----------------------------------- |
+| `ghab` full → boxes | **0 × 10** (every run counted) | 0 %   | 0 %       | `[0, 0, 0, 0, 0, 0, 0, 2, 2, 4]` | 7 runs ≈ 0.01 %, **3 runs 22.78 %** |
+| `ghab` boxes → full | 0 × 10                         | 0 %   | 0 %       | 0 × 10                           | ≈ 0                                 |
+| `ghab3` control     | 0 × 10                         | 0 %   | 0 %       | 0 × 10                           | ≈ 0.01 %                            |
+
+In 3 runs of 10 the new box was revealed before its media clip's first decoded frame: only one hold separated
+the `PLAY`'s reply from the reveal. **The one fix-and-measure cycle:** a plate the switch seated runs hidden for
+three holds before the page is told (`PRE_SEAT_PREROLL_HOLDS`, in the hold's own unit; a switch that seated
+nothing waits for nothing). Reading the code for it found a race the pre-seat itself opened: its awaits sit
+between the plan and the page tell, where an un-gated `out` could take the row off air and the apply would then
+reveal the plates and register a ledger for a row with no page (`B-161`'s shape). The same BEFORE → AFTER
+re-ask `beforeApply` makes after its hold is now made after the pre-seat and its preroll, and undoes the
+pre-seat (`look-switch-all-or-nothing.integration.test.ts`, red first without it).
+
+**After the fix — PASSED:**
+
+| run                 | `k`        | BLACK | MISPLACED | term (b), fields | CONTROL settled |
+| ------------------- | ---------- | ----- | --------- | ---------------- | --------------- |
+| `ghab` full → boxes | **0 × 10** | 0 %   | 0 %       | **0 × 10**       | **≈ 0.01 %**    |
+| `ghab` boxes → full | 0 × 10     | 0 %   | 0 %       | 0 × 10           | ≈ 0             |
+| `ghab3` control     | 0 × 10     | 0 %   | 0 %       | 0 × 10           | ≈ 0.01 %        |
+
+Against the baseline: `k` counted in every run (9 were excluded before), term (b) from a median of 6 fields to 0,
+the fresh box's 22.78 % residue gone. The switch now lands the preroll and the pre-seat's round trips later than
+before when it has a plate to seat; a switch of held plates sends no `PLAY` and is unchanged.
+
+**The refusal run (§3.3) — SKIPPED:** the harness cannot drive it with a fixture alone. Its fixtures carry
+geometry and probes only; its sources are a catalog built in `src/run.ts` from the clips it generates, so a
+plate naming a missing clip needs a code change. The refusal path is proven on the fake
+(`look-switch-all-or-nothing.integration.test.ts`: the page is never told, nothing moves).
+
+**The channel afterwards (§3.4):** `INFO 1` BYTE-IDENTICAL to §0.2's snapshot — after putting back the screen
+consumer the first baseline run's `SET MODE` had lost while the workstation was locked, the way the harness
+itself does: `ADD 1 SCREEN` → `202 ADD OK`, once the session was unlocked.
+
 ## §1 What v3 BUILT (`tools/caspar-bridge/src/caspar-runtime.ts` unless named)
 
 - **THE SEAT STEP (`#seatPlates`) — every producer an action starts is started hidden.** For each seat: stage
@@ -299,7 +337,9 @@ that box. Evidence: `tools/skew-harness/evidence/2026-09-27-look-switch-01/`.
   `LOADBG` → `PLAY` pair (≥ 40 ms, ≤ 200 ms) goes there and nowhere else.
 - **THE SWITCH'S PRE-SEAT (`#preSeatSwitch`, called by `reconcileLivePlates` before `beforeApply`):** the seat
   step for every entered-look placement and fresh preset the switch would otherwise `PLAY`, BEFORE the page is
-  told anything. On a refused required seat it undoes what it seated through `mayClearAfterRefusal` (a refused
+  told anything; then, when it seated something, a PREROLL of three holds (`PRE_SEAT_PREROLL_HOLDS`, measured —
+  §3 v3) so the producer has its own picture by the reveal; then the BEFORE → AFTER re-ask for a row that left
+  the air meanwhile (the pre-seat is undone, `not-live`). On a refused required seat it undoes what it seated through `mayClearAfterRefusal` (a refused
   `PLAY` seated nothing and is not cleared; one that landed is) and answers the refusal with the plate and its
   source: no page `UPDATE`, no further `MIXER COMMIT`. `setActiveLook` records it as the row's `takeRefusal` —
   `FIELD-FIXES-01`'s one line — and answers `refusalOnRow`, so the console raises no banner
