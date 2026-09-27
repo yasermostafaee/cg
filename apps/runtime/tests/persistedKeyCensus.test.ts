@@ -130,6 +130,13 @@ const BEFORE_AND_AFTER = {
   ],
   realSessionStorage: ['CG_RUNTIME_SESSION', 'cg.runtime.testMode'],
   mockLocalStorage: [
+    /*
+      `PLAYOUT-SOURCES-01` — NEW, and mock-only (the offline console): the media items this console
+      bound, as the bridge keeps `bridge-bound-media.json`. No migration is owed: nothing held it
+      before, and ABSENT means nothing is bound. `source-catalog` keeps its name and now carries the
+      plate band only (P-031: a hand-made entry still in it is ignored, never deleted).
+    */
+    'cg-runtime:bound-media',
     'cg-runtime:channel-settings',
     'cg-runtime:delimiters',
     'cg-runtime:source-assignments',

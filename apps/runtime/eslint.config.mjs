@@ -106,7 +106,8 @@ export default [
             'src/renderer/features/layers/PlateAudioStrip.tsx': 1,
             'src/renderer/features/lock/EngageLockDialog.tsx': 2,
             'src/renderer/features/lock/LockOverlay.tsx': 2,
-            'src/renderer/features/sources/LiveSourceDialog.tsx': 5,
+            // `PLAYOUT-SOURCES-01` §1.F — `LiveSourceDialog.tsx` (5) went with the catalogue editor:
+            // the sources are the Playout's. The debt left with the file; the entry leaves with it.
             'src/renderer/features/stationSetup/BackupServerDialog.tsx': 1,
             'src/renderer/features/stationSetup/StationSetupDialog.tsx': 3,
             'src/renderer/features/connections/FailoverBanner.tsx': 3,

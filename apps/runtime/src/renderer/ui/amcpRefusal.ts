@@ -54,13 +54,24 @@ export interface AmcpCommandFacts {
   readonly channel: number | null;
   /** The DeckLink device a `DECKLINK` play named (`DECKLINK DEVICE 1` → 1). */
   readonly decklink: number | null;
-  /** The clip or URL a media or stream play named. */
+  /** The clip a media play named. */
   readonly file: string | null;
+  /**
+   * `PLAYOUT-SOURCES-01` §1.E — the play named a STREAM (a `scheme://` address). Its address is
+   * never carried out of here: an operator's sentence never shows one.
+   */
+  readonly stream: boolean;
   /** A `CG … ADD`: the graphic's own page. */
   readonly cgAdd: boolean;
 }
 
-const NONE: AmcpCommandFacts = { channel: null, decklink: null, file: null, cgAdd: false };
+const NONE: AmcpCommandFacts = {
+  channel: null,
+  decklink: null,
+  file: null,
+  stream: false,
+  cgAdd: false,
+};
 
 /**
  * Read what the refused command was for. Pure and total: a line it cannot read answers
@@ -83,13 +94,17 @@ export function amcpCommandFacts(command: string | undefined): AmcpCommandFacts 
     const device = /^\d+$/.test(index ?? '') ? Number(index) : null;
     return { ...NONE, channel, decklink: device };
   }
+  // `PLAYOUT-SOURCES-01` §1.D — an NDI play is `[NDI] "<source>"`: a source, never a file.
+  if (/^\[?NDI\]?$/i.test(rest[0] ?? '')) return { ...NONE, channel };
   // A media or stream play names its clip or URL as the first argument, quoted by the builder.
   const quoted = /^\S+\s+\S+\s+"((?:[^"\\]|\\.)*)"/.exec(command.trim());
   const first = quoted?.[1] ?? rest[0];
   if (first === undefined || first === '' || /^route:\/\//i.test(first)) {
     return { ...NONE, channel };
   }
-  if (/^(NDI|COLOR|COLOUR|EMPTY)$/i.test(first)) return { ...NONE, channel };
+  if (/^(COLOR|COLOUR|EMPTY)$/i.test(first)) return { ...NONE, channel };
+  // A stream's address stays here: the fact that it is a stream is all a sentence may carry.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(first)) return { ...NONE, channel, stream: true };
   return { ...NONE, channel, file: first };
 }
 
@@ -115,6 +130,9 @@ export function amcpRefusalWords(
   if (code === 404 && facts.file !== null) {
     return same(`the server cannot find the file ${facts.file}.`);
   }
+  // `PLAYOUT-SOURCES-01` §1.E — a refused stream is named by its SOURCE on the row's line, never by
+  // its address here.
+  if (code === 404 && facts.stream) return same('the server could not open the stream.');
   if (code === 404 && facts.cgAdd) return same('the server could not load the graphic.');
   if (code === 400) {
     return facts.channel === null

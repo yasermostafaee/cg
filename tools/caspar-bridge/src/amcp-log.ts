@@ -1,6 +1,7 @@
 import { appendFile, mkdir, rename, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { AmcpExchange } from '@cg/caspar-client';
+import { redactUrlCredentials } from '@cg/shared-ipc';
 
 /**
  * 🔴 `FIELD-FIXES-01-A` — **THE AMCP LOG: every command the bridge sends CasparCG, its reply line,
@@ -52,9 +53,15 @@ export const AMCP_LOG_MAX_BYTES = 5 * 1024 * 1024;
  */
 const TAKE_TOKEN = /(\\?"take\\?"\s*:\s*\\?")[^"\\]+/g;
 
-/** Redact every token an AMCP line can carry. Pure and total. */
+/**
+ * Redact every token an AMCP line can carry. Pure and total.
+ *
+ * `PLAYOUT-SOURCES-01` §1.E — and a stream URL's credentials: `scheme://user:pass@` is written
+ * `scheme://***@` (the ONE redaction, `@cg/shared-ipc`'s), because the Playout's D10 URLs can carry
+ * them and this log is read by people.
+ */
 export function redactAmcpLine(line: string): string {
-  return line.replace(TAKE_TOKEN, '$1<redacted>');
+  return redactUrlCredentials(line.replace(TAKE_TOKEN, '$1<redacted>'));
 }
 
 /** One log line for one exchange (no trailing newline). */

@@ -49,8 +49,10 @@ const CONFIG_MESSAGES = {
 const ASSIGNMENT_MESSAGES = {
   'duplicate-plate':
     'That plate already has a source in this template — reload this page and set it again.',
-  'unknown-source':
-    'That source is no longer defined on this station — pick another, or define it again under Live sources.',
+  // `PLAYOUT-SOURCES-01` — the sources are the Playout's: nothing is "defined" on this station now.
+  'unknown-source': 'That source is not one the Playout offers — choose another.',
+  'source-unusable':
+    'That source cannot be bound — the Playout no longer offers it, or this station cannot play it. Choose another.',
 } satisfies Record<SourcesSetAssignmentsReason, string>;
 
 const MESSAGES: Readonly<Record<string, string>> = { ...CONFIG_MESSAGES, ...ASSIGNMENT_MESSAGES };

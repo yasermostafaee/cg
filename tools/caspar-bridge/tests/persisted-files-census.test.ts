@@ -46,13 +46,22 @@ function inventory(): { inTemplatesDir: string[]; inCgRuntime: string[] } {
   };
 }
 
-/** THE INVENTORY AT `576a72eb`, before Station setup — and after it. */
+/**
+ * THE INVENTORY AT `576a72eb`, before Station setup — and after it; plus the two files
+ * `PLAYOUT-SOURCES-01` adds DELIBERATELY (its persisted Playout lists), so a later rename of either
+ * still fails here.
+ */
 const BEFORE_AND_AFTER = {
   // `B-116`: both still live beside the templates. Not moved — that is a data migration —
   // and no longer mistaken for templates, because the registry reads only its own records.
   inTemplatesDir: ['channel-settings.json', 'delimiters.json'],
   inCgRuntime: [
     'bridge-audit.ndjson',
+    /*
+      `PLAYOUT-SOURCES-01` — the media items this station BOUND, as the Playout last described them
+      (the bridge's own cache of D11 `ids=` reads; a binding resolves through an outage from it).
+    */
+    'bridge-bound-media.json',
     'bridge-connection.json',
     'bridge-fixed-layers.json',
     'bridge-live-layers.json',
@@ -62,6 +71,12 @@ const BEFORE_AND_AFTER = {
       the `connections.set-config` REQUEST body — auth configuration living there would be
       rewritable over the very socket the gate exists to protect. See `playout-config.ts`.
     */
+    /*
+      `PLAYOUT-SOURCES-01` — the Playout's LAST GOOD input list (D10), with the inputs that left it,
+      never deleted: it keeps a binding in force across an outage and a restart (ADR 0010 rule 14).
+      (Sorted by code unit, so `-` sorts before the `.` of the file below.)
+    */
+    'bridge-playout-inputs.json',
     'bridge-playout.json',
     'bridge-reserved-layers.json',
     'bridge-source-assignments.json',
@@ -71,7 +86,7 @@ const BEFORE_AND_AFTER = {
 };
 
 describe('§4 — the bridge’s persisted files, before and after Station setup', () => {
-  it('the inventory derived from src/ and bin/ is IDENTICAL to the one recorded at 576a72eb', () => {
+  it('the inventory derived from src/ and bin/ is IDENTICAL to the one recorded (576a72eb, plus PLAYOUT-SOURCES-01’s two)', () => {
     expect(inventory()).toEqual(BEFORE_AND_AFTER);
   });
 

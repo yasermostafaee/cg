@@ -210,8 +210,17 @@ export const SourceProducerSchema = z.discriminatedUnion('kind', [
      * Optional because the measured grammar makes it optional
      * (`route://<channel>` with an optional `-<layer>` tail): a channel-only
      * route means that channel's whole output.
+     *
+     * ⚠ `PLAYOUT-SOURCES-01` — contract v1.3 rule 3 makes it REQUIRED for a `route` the Playout lists:
+     * a route with no layer stacks every held input. That is enforced where D10 is read
+     * (`buildPlayoutSourceCatalog`), not here, because this arm also parses today's hand-made files.
      */
     layer: z.number().int().nonnegative().optional(),
+    /**
+     * `PLAYOUT-SOURCES-01` — the holder channel's video mode, as D10 v1.3 gives it; `null` when the
+     * running core does not have that mode yet. Carried for the operator's list; not acted on.
+     */
+    videoMode: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal('decklink'),
@@ -303,6 +312,45 @@ export const SourceDefinitionSchema = z.object({
    */
   aspect: z.number().positive().optional(),
   producer: SourceProducerSchema,
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` — **WHERE THIS ENTRY CAME FROM.** `input` = the Playout's D10 list,
+   * `media` = its D11 library; absent on a hand-made entry. It decides two things and nothing
+   * else: which tab of the picker lists it, and whether a plate showing it is a D10 plate that
+   * starts silent and only ramps (contract v1.3 rule 2).
+   */
+  origin: z.enum(['input', 'media']).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — absent = usable. `unusable`: listed with its {@link reason} and never
+   * bound (it failed the catalogue's rules, or the route gate holds it). `unavailable`: the Playout
+   * stopped offering it — the binding is KEPT and shown tagged, and a take of it is refused before
+   * any AMCP. Never a reason to delete anything.
+   */
+  status: z.enum(['unusable', 'unavailable']).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — the Playout no longer OFFERS it: an input a successful D10 read stopped
+   * listing, or a bound media item a successful `ids=` read left out. Always with `status:
+   * 'unavailable'`. Kept so a binding to it keeps its name; it can no longer be newly bound. (An
+   * input the Playout still lists with `available: false` is unavailable WITHOUT this flag.)
+   */
+  departed: z.literal(true).optional(),
+  /** Why it is unusable or unavailable, in the operator's words (a `title`, never an id). */
+  reason: z.string().min(1).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` / v1.3 rule 1 — the channels OF THIS STATION this input may be bound on,
+   * joined from D10's `compatibleChannels` by the same rule as D4. Absent = any channel.
+   */
+  channels: z.array(z.number().int().positive()).optional(),
+  /** `PLAYOUT-SOURCES-01` — a media item's facts, for the picker's second line. Media only. */
+  media: z
+    .object({
+      durationMs: z.number().nonnegative().optional(),
+      width: z.number().int().positive().optional(),
+      height: z.number().int().positive().optional(),
+      folder: z.string().optional(),
+      /** When this station last bound it — the picker's `Recent` group. */
+      lastBoundAt: z.string().optional(),
+    })
+    .optional(),
 });
 export type SourceDefinition = z.infer<typeof SourceDefinitionSchema>;
 
@@ -368,8 +416,23 @@ export const SourceCatalogSchema = z.object({
   sources: z.array(SourceDefinitionSchema),
   /** Absent ⇒ no band is declared, and phase 5 has nowhere to place a producer. */
   layerRange: LiveSourceLayerRangeSchema.optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — when the Playout's input list (D10) was last read successfully (ISO), for
+   * Station setup's read-only list. Absent = never read.
+   */
+  inputsReadAt: z.string().optional(),
 });
 export type SourceCatalog = z.infer<typeof SourceCatalogSchema>;
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.F — **WHAT `sources.set-config` STILL CARRIES: THE PLATE BAND, AND ONLY
+ * IT.** The Playout defines the sources now; CG Control keeps the one fact that is its own — which of
+ * its layers a plate is placed on. An older console that still sends `sources` has them ignored.
+ */
+export const SourceBandConfigSchema = z.object({
+  layerRange: LiveSourceLayerRangeSchema.optional(),
+});
+export type SourceBandConfig = z.infer<typeof SourceBandConfigSchema>;
 
 /** The empty catalog — what an ABSENT file means, and what a fresh station has. */
 export const EMPTY_SOURCE_CATALOG: SourceCatalog = { sources: [] };
@@ -519,13 +582,20 @@ export type SourcesSetConfigReason = (typeof SOURCES_SET_CONFIG_REASONS)[number]
  *
  * - `duplicate-plate` — one template's plate assigned twice, so which source it
  *   used would depend on array order.
- * - `unknown-source` — an assignment naming a catalog entry that does not exist.
- *   Refused AT CHANGE, because the product's own UI cannot produce one and a
- *   caller that does is stale or hand-written. At LOAD the same shape is PRUNED
- *   instead — see {@link pruneAssignmentsForCatalog}, which records why the two
- *   doors answer differently.
+ * - `unknown-source` — a NEW or CHANGED assignment naming a catalog entry that does not
+ *   exist. Refused AT CHANGE, because the product's own UI cannot produce one and a
+ *   caller that does is stale or hand-written. ⚠ `PLAYOUT-SOURCES-01` — at LOAD nothing is
+ *   pruned any more: a binding whose entry is gone is kept (ADR 0010 rule 14), and only an
+ *   operator removes one.
+ * - `source-unusable` — `PLAYOUT-SOURCES-01`: a NEW or CHANGED assignment naming an entry
+ *   that exists but cannot be bound — one the Playout marks unusable (a route today), or
+ *   one it no longer offers. Refused at change for the same reason as `unknown-source`.
  */
-export const SOURCES_SET_ASSIGNMENTS_REASONS = ['duplicate-plate', 'unknown-source'] as const;
+export const SOURCES_SET_ASSIGNMENTS_REASONS = [
+  'duplicate-plate',
+  'unknown-source',
+  'source-unusable',
+] as const;
 export type SourcesSetAssignmentsReason = (typeof SOURCES_SET_ASSIGNMENTS_REASONS)[number];
 
 /** A refused catalog (or catalog change). `code` is stable; the message names specifics. */
@@ -770,9 +840,14 @@ export function checkSourceCatalogAgainstBanks(
  */
 export function validateSourceAssignments(
   value: SourceAssignments,
-  options: { catalog: SourceCatalog },
+  /**
+   * `PLAYOUT-SOURCES-01` — `catalog: null` checks the SHAPE only (no plate twice) and not
+   * membership: the boot path, where the catalogue is the Playout's and may not have been read yet.
+   * A binding whose entry is gone is never a reason to refuse or drop it (ADR 0010 rule 14).
+   */
+  options: { catalog: SourceCatalog | null },
 ): void {
-  const known = new Set(options.catalog.sources.map((s) => s.id));
+  const known = options.catalog === null ? null : new Set(options.catalog.sources.map((s) => s.id));
   const seen = new Set<string>();
   for (const assignment of value.assignments) {
     /*
@@ -795,7 +870,7 @@ export function validateSourceAssignments(
       );
     }
     seen.add(key);
-    if (!known.has(assignment.sourceId)) {
+    if (known !== null && !known.has(assignment.sourceId)) {
       throw new SourceAssignmentsConfigError(
         'unknown-source',
         `plate "${assignment.plateId}" of template "${assignment.templateId}" is assigned to ` +
@@ -809,7 +884,7 @@ export function validateSourceAssignments(
 /** The assignment validation as a RESULT — the bridge's and the mock's answer shape. */
 export function checkSourceAssignments(
   value: SourceAssignments,
-  options: { catalog: SourceCatalog },
+  options: { catalog: SourceCatalog | null },
 ): { ok: true } | { ok: false; reason: SourcesSetAssignmentsReason; message: string } {
   try {
     validateSourceAssignments(value, options);
@@ -890,25 +965,81 @@ export function unassignedPlateIds(
 export const SourcesConfigChannel = defineChannel('sources.config', z.void(), SourceCatalogSchema);
 
 /**
- * Replace the catalog in force: validate → apply → CASCADE → persist → publish.
+ * Replace the PLATE BAND in force: validate → apply → persist → publish.
  *
- * The BRIDGE is authoritative for the refusal and supplies the wording, so a
- * second browser, a stale client or a hand-written call cannot create a state
- * the UI is careful to prevent.
+ * `PLAYOUT-SOURCES-01` §1.F — the band ONLY ({@link SourceBandConfigSchema}). It cascades nothing:
+ * the sources are the Playout's, and no set-config can delete a binding.
  *
- * `droppedAssignments` is how a DELETION reports itself: the plates this change
- * orphaned, so the surface can name them at the moment of deletion instead of
- * leaving the operator to meet them at a take.
+ * The BRIDGE is authoritative for the refusal and supplies the wording, so a second browser, a stale
+ * client or a hand-written call cannot create a state the UI is careful to prevent.
  */
 export const SourcesSetConfigChannel = defineChannel(
   'sources.set-config',
-  SourceCatalogSchema,
+  SourceBandConfigSchema,
   z.object({
     ok: z.boolean(),
     reason: z.enum(SOURCES_SET_CONFIG_REASONS).optional(),
     message: z.string().optional(),
-    droppedAssignments: z.array(TemplateSourceAssignmentSchema).optional(),
   }),
+);
+
+/**
+ * `PLAYOUT-SOURCES-01` — ONE media item as the console sees it: the catalogue id it binds by
+ * (`md-<playout id>`), its name and the facts the picker's second line shows. Never the `clip`: what
+ * is played is the bridge's own read, never anything a console sends back.
+ */
+export const ConsoleMediaItemSchema = z.object({
+  id: SourceDefinitionIdSchema,
+  name: z.string().min(1),
+  durationMs: z.number().nonnegative().optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  folder: z.string().optional(),
+});
+export type ConsoleMediaItem = z.infer<typeof ConsoleMediaItemSchema>;
+
+/** The two named failures of a media search (the prompt's §1.A). */
+export const MEDIA_SEARCH_FAILURES = ['playout-unreachable', 'playout-refused'] as const;
+export type MediaSearchFailure = (typeof MEDIA_SEARCH_FAILURES)[number];
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.A — **SEARCH THE PLAYOUT'S MEDIA ON THE PLAYOUT'S SIDE.** One page per
+ * call; the bridge asks D11 with `type=video,still`, `limit` 50 by default and a 5 s bound, and
+ * answers what it received. A `cursor` is only ever valid with the query that produced it — the
+ * console never sends one with a different `q` or `sort`. A read-class route: a `viewer` may search.
+ */
+export const SourcesMediaSearchChannel = defineChannel(
+  'sources.media-search',
+  z.object({
+    q: z.string().max(200),
+    sort: z.enum(['name', 'recent']).optional(),
+    cursor: z.string().min(1).max(4096).optional(),
+    limit: z.number().int().positive().max(200).optional(),
+  }),
+  z.union([
+    z.object({
+      ok: z.literal(true),
+      items: z.array(ConsoleMediaItemSchema),
+      total: z.number().int().nonnegative(),
+      nextCursor: z.string().nullable(),
+    }),
+    z.object({
+      ok: z.literal(false),
+      reason: z.enum(MEDIA_SEARCH_FAILURES),
+      message: z.string(),
+    }),
+  ]),
+);
+
+/**
+ * `PLAYOUT-SOURCES-01` §1.A — **A PICKER OPENED.** Asks the bridge to read D10 and the bound media
+ * now if its last read is older than 5 s. Answers at once and never waits on the Playout: whatever
+ * changes arrives on `sources.config-changed`. A read-class route.
+ */
+export const SourcesRefreshChannel = defineChannel(
+  'sources.refresh',
+  z.void(),
+  z.object({ ok: z.literal(true) }),
 );
 
 /** Read the per-template, per-plate assignments in force. */

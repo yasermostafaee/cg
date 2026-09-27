@@ -1,4 +1,10 @@
-import type { SourceAssignments, SourceCatalog, SourceDefinition } from '@cg/shared-ipc';
+import {
+  sourceSeatable,
+  unseatableClause,
+  type SourceAssignments,
+  type SourceCatalog,
+  type SourceDefinition,
+} from '@cg/shared-ipc';
 import type { LiveSourceDeclaration } from '@cg/shared-schema';
 
 /**
@@ -35,12 +41,29 @@ import type { LiveSourceDeclaration } from '@cg/shared-schema';
 /** The distinct code C-015's acceptance asks for. */
 export const LIVE_PLATE_UNASSIGNED = 'live-source-unassigned';
 
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.C — **THE PLAYOUT STOPPED OFFERING IT.** A plate is assigned, and its
+ * entry is still in the catalogue — kept, with its name, never deleted — but the Playout no longer
+ * lists it (or marks it unavailable). The take is refused before any AMCP; the binding stays.
+ */
+export const LIVE_PLATE_SOURCE_UNAVAILABLE = 'source-unavailable';
+/** `PLAYOUT-SOURCES-01` — an assigned entry that became unusable (its rules, or the route gate). */
+export const LIVE_PLATE_SOURCE_UNUSABLE = 'source-unusable';
+
 export interface PlateAssignmentRefusal {
-  readonly errorCode: typeof LIVE_PLATE_UNASSIGNED;
+  readonly errorCode:
+    | typeof LIVE_PLATE_UNASSIGNED
+    | typeof LIVE_PLATE_SOURCE_UNAVAILABLE
+    | typeof LIVE_PLATE_SOURCE_UNUSABLE;
   /** NAMES the plate — see the note on {@link resolvePlateAssignments}. */
   readonly message: string;
   /** The plates that could not be resolved, in declaration order. */
   readonly plateIds: readonly string[];
+  /**
+   * `PLAYOUT-SOURCES-01` — for an unavailable or unusable entry, the FIRST such plate and the entry
+   * it is bound to, so the row can say which (only that plate is named: the take stops there).
+   */
+  readonly refused?: { readonly plateId: string; readonly source: SourceDefinition };
 }
 
 export interface ResolvedPlate {
@@ -115,6 +138,7 @@ export function resolvePlateAssignments(input: {
   const plates: ResolvedPlate[] = [];
   const unassigned: string[] = [];
   const stale: string[] = [];
+  const unseatable: { plateId: string; source: SourceDefinition }[] = [];
 
   for (const declaration of input.declarations) {
     // The plate's operator-facing handle is its `sourceId` — the SCENE's vocabulary
@@ -134,10 +158,30 @@ export function resolvePlateAssignments(input: {
       stale.push(plateId);
       continue;
     }
+    // `PLAYOUT-SOURCES-01` — the fourth: the entry is KEPT, and may not be seated now.
+    if (!sourceSeatable(source)) {
+      unseatable.push({ plateId, source });
+      continue;
+    }
     plates.push({ declaration, source });
   }
 
-  if (unassigned.length === 0 && stale.length === 0) return { ok: true, plates };
+  if (unassigned.length === 0 && stale.length === 0 && unseatable.length === 0) {
+    return { ok: true, plates };
+  }
+
+  if (unassigned.length === 0 && stale.length === 0) {
+    // Only the first is named: the take stops there (`FIELD-FIXES-01-A` Decision 1).
+    const first = unseatable[0] as { plateId: string; source: SourceDefinition };
+    const unavailable = first.source.status === 'unavailable';
+    return {
+      ok: false,
+      errorCode: unavailable ? LIVE_PLATE_SOURCE_UNAVAILABLE : LIVE_PLATE_SOURCE_UNUSABLE,
+      plateIds: unseatable.map((u) => u.plateId),
+      refused: first,
+      message: `Plate "${first.plateId}": ${unseatableClause(first.source)}`,
+    };
+  }
 
   const plateIds = [...unassigned, ...stale];
   return {

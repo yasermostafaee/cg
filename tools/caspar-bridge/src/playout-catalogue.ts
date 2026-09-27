@@ -69,6 +69,13 @@ export const CatalogueRowSchema = z.object({
   */
   output: z.enum(CHANNEL_OUTPUTS).optional().catch(undefined),
   playlist: z.string().trim().min(1).optional().catch(undefined),
+  /*
+    🔴 `PLAYOUT-SOURCES-01` / v1.3 (V13-INSTALL: `2.9.0` on `.111`) — the RUNNING core's video mode,
+    `null` for a channel it does not have yet, beside `pendingRestart: true`. Both LENIENT, the
+    `output`/`playlist` rule: a `null`, a missing or an unknown value never voids the row or its name.
+  */
+  videoMode: z.string().trim().min(1).nullable().optional().catch(undefined),
+  pendingRestart: z.boolean().optional().catch(undefined),
 });
 export type CatalogueRow = z.infer<typeof CatalogueRowSchema>;
 
@@ -79,11 +86,14 @@ const CatalogueBodySchema = z.object({ channels: z.array(CatalogueRowSchema) });
  * this reader kept, so a published answer never carries a key whose value is `undefined`.
  */
 export function airOf(
-  row: Pick<CatalogueRow, 'output' | 'playlist'>,
-): Pick<CatalogueRow, 'output' | 'playlist'> {
+  row: Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'>,
+): Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'> {
   return {
     ...(row.output !== undefined ? { output: row.output } : {}),
     ...(row.playlist !== undefined ? { playlist: row.playlist } : {}),
+    // `PLAYOUT-SOURCES-01` — v1.3's two, published beside them; `null` is a value and rides.
+    ...(row.videoMode !== undefined ? { videoMode: row.videoMode } : {}),
+    ...(row.pendingRestart !== undefined ? { pendingRestart: row.pendingRestart } : {}),
   };
 }
 
@@ -116,16 +126,35 @@ export function isLoopbackCasparHost(host: string): boolean {
 }
 
 /**
- * A4 — a row as a CONSUMER must see it: a loopback `casparHost` becomes the Playout's host; any
- * other passes through byte for byte. With no Playout host, or a Playout that is itself on
- * loopback, nothing is rewritten — loopback already names that one machine.
+ * A4 — a `casparHost` as a CONSUMER must see it: a loopback one becomes the Playout's host; any other
+ * passes through byte for byte. With no Playout host, or a Playout that is itself on loopback,
+ * nothing is rewritten — loopback already names that one machine.
+ *
+ * 🔴 `PLAYOUT-SOURCES-01` §0.9 — THE ONE HOST RULE, generalised off D4's row so D10's inputs and
+ * v1.3's `compatibleChannels` are rewritten by exactly the rule D4's rows are.
  */
+export function resolveCasparHost(host: string, playoutHost: string | undefined): string {
+  if (playoutHost === undefined || isLoopbackCasparHost(playoutHost)) return host;
+  return isLoopbackCasparHost(host) ? playoutHost : host;
+}
+
+/** A4 — a D4 row as a consumer must see it (see {@link resolveCasparHost}). */
 export function resolveCatalogueHost(
   row: CatalogueRow,
   playoutHost: string | undefined,
 ): CatalogueRow {
-  if (playoutHost === undefined || isLoopbackCasparHost(playoutHost)) return row;
-  return isLoopbackCasparHost(row.casparHost) ? { ...row, casparHost: playoutHost } : row;
+  const casparHost = resolveCasparHost(row.casparHost, playoutHost);
+  return casparHost === row.casparHost ? row : { ...row, casparHost };
+}
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §0.9 — **THE ONE JOIN: does a Playout row's (already rewritten) `casparHost`
+ * name a server this station drives?** It was an inline `hosts.includes(row.casparHost)` in
+ * `stationChannelsFor`; D10's inputs and `compatibleChannels` now ask the same question, so it lives
+ * once, here, and a second spelling cannot drift from it.
+ */
+export function hostJoinsStation(casparHost: string, configuredHosts: readonly string[]): boolean {
+  return configuredHosts.includes(casparHost);
 }
 
 export class PlayoutCatalogue {

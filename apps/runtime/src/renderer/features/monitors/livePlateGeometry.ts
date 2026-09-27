@@ -81,6 +81,12 @@ export interface PlatePlacement {
    * it as bound would defeat the one question this overlay exists to answer.
    */
   sourceName: string | null;
+  /**
+   * `PLAYOUT-SOURCES-01` §2.B — the catalogue id behind {@link sourceName}, from the SAME resolution,
+   * so the overlay can name it through `SourceLabel` (icon, name, `Unavailable`). `null` exactly when
+   * `sourceName` is. Never shown.
+   */
+  sourceId: string | null;
   /** The plate's box in RASTER pixels — the rehearsal iframe's own space. */
   x: number;
   y: number;
@@ -233,14 +239,15 @@ export function platePlacements(
     const rect = rects[plate.sourceId];
     if (rect === undefined) return [];
     const catalogId = resolvedIds.get(plate.sourceId) ?? null;
+    // A binding whose catalog entry has gone reads as UNASSIGNED — the safe direction, since that
+    // plate will refuse its take.
+    const sourceName = catalogId === null ? null : sources.nameOf(catalogId);
     return [
       {
         elementId: plate.elementId,
         plateId: plate.sourceId,
-        // A binding whose catalog entry has gone reads as UNASSIGNED — the same reading
-        // `pruneAssignmentsForCatalog` gives a dangling reference, and the safe direction
-        // anyway, since that plate will refuse its take.
-        sourceName: catalogId === null ? null : sources.nameOf(catalogId),
+        sourceName,
+        sourceId: sourceName === null ? null : catalogId,
         // `undefined` when the caller supplied no lookup, and `undefined` again when it has
         // one but cannot answer for this plate. Both mean "not stated", and the overlay draws
         // no glyph rather than an honest-looking wrong one.

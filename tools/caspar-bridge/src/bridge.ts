@@ -114,6 +114,8 @@ import {
   SourcesAssignmentsChannel,
   SourcesConfigChangedChannel,
   SourcesConfigChannel,
+  SourcesMediaSearchChannel,
+  SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
   TemplatesChangedChannel,
@@ -131,6 +133,7 @@ import {
   firstBank,
   reservedLayerNumbers,
   sortBanks,
+  redactCatalogForConsole,
   validateSourceCatalogAgainstBanks,
   type AnyChannel,
   type AnyPublishChannel,
@@ -139,8 +142,10 @@ import {
   type FixedLayerBank,
   type LockState,
   type PlayoutPrincipal,
+  type LiveSourceLayerRange,
   type ReservedLayers,
   type SourceAssignments,
+  type SourceBandConfig,
   type SourceCatalog,
   type TemplateInfo,
   type WsPublishFrame,
@@ -162,11 +167,10 @@ import { loadPersistedLiveLayers, savePersistedLiveLayers } from './live-layers-
 import { resolveCreateMissingConsumers } from './output-check.js';
 import {
   resolveSourceCatalog,
-  saveSourceCatalog,
+  saveSourceBand,
   type SourceCatalogSource,
 } from './source-catalog-store.js';
 import {
-  pruneAssignmentsForCatalog,
   resolveSourceAssignments,
   saveSourceAssignments,
   validateSourceAssignments,
@@ -194,10 +198,19 @@ import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import {
   airOf,
+  hostJoinsStation,
   PlayoutCatalogue,
+  resolveCasparHost,
   type CatalogueRow,
   type PlayoutCatalogueOptions,
 } from './playout-catalogue.js';
+import {
+  HttpPlayoutSources,
+  PICKER_FRESH_MS,
+  PlayoutSources,
+  type MediaQuery,
+  type PlayoutSourcesProvider,
+} from './playout-sources.js';
 import {
   AUTH_OFF,
   loadPlayoutFile,
@@ -292,10 +305,25 @@ export interface BridgeOptions {
    */
   templatesDir?: string;
   /**
-   * D-137 / C-015 — the installation's SOURCE CATALOG, explicit. Highest
-   * precedence (tests, embedders); see {@link resolveSourceCatalog}.
+   * D-137 / C-015 — a PRE-RESOLVED source catalogue, explicit (tests, embedders). When given it is
+   * the catalogue in force as-is, and the Playout's lists are not read.
+   *
+   * `PLAYOUT-SOURCES-01` — a station never passes it: its catalogue is built from the Playout's D10
+   * and D11 reads ({@link playoutSources}).
    */
   sourceCatalog?: SourceCatalog;
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.G — **TEST-ONLY: the local provider for a bridge with auth off**
+   * (`tests/support/local-playout-sources.ts`). A station reads the Playout over HTTP with the
+   * signed-in operator's bearer; with auth off and nothing injected there are no lists.
+   */
+  playoutSources?: PlayoutSourcesProvider;
+  /** `PLAYOUT-SOURCES-01` — where the last good D10 list persists (JSON). Absent = memory only. */
+  playoutInputsPath?: string;
+  /** `PLAYOUT-SOURCES-01` — where the BOUND media items persist (JSON). Absent = memory only. */
+  boundMediaPath?: string;
+  /** TEST-ONLY — the Playout sources' tick and clock. */
+  playoutSourcesOptions?: { readonly tickMs?: number; readonly now?: () => number };
   /**
    * D-137 / C-015 — where the source catalog persists (JSON).
    *
@@ -520,20 +548,27 @@ export interface BridgeHandle {
    * change?". Here it also answers a question with no other surface — a station
    * where NOTHING reaches air because the file was never written looks, from
    * every screen, like a station whose sources are simply not configured yet.
+   *
+   * `PLAYOUT-SOURCES-01` — `value` is the catalogue IN FORCE at boot (the Playout's persisted list
+   * and bound media, with the band); `source` says where the BAND came from, the one catalogue fact
+   * the file still carries.
    */
   readonly sourceCatalog: { value: SourceCatalog; source: SourceCatalogSource };
   /**
-   * D-137 / C-015 — the assignments in force, where they came from, and what
-   * the boot PRUNED because the catalog no longer defines its source.
+   * `PLAYOUT-SOURCES-01` — the Playout's D10/D11 reader, or `null` when this bridge was given a
+   * pre-resolved catalogue (tests, embedders).
+   */
+  readonly playoutSources: PlayoutSources | null;
+  /**
+   * D-137 / C-015 — the assignments in force, and where they came from.
    *
-   * `pruned` is not diagnostics: each entry is a plate that was bound and now is
-   * not, so the boot line names them. Silence there would be a station starting
-   * with a plate the operator believes is assigned.
+   * `PLAYOUT-SOURCES-01` §1.C — the boot no longer PRUNES them, so there is nothing to name: a
+   * binding whose entry the Playout stopped offering is KEPT (shown unavailable, its take refused),
+   * and only an operator action removes one (ADR 0010 rule 14).
    */
   readonly sourceAssignments: {
     value: SourceAssignments;
     source: SourceAssignmentsSource;
-    pruned: readonly { templateId: string; plateId: string; sourceId: string }[];
   };
   /**
    * B-145 — the LIVE-LAYER LEDGER's provenance, so the CLI can SAY it at boot.
@@ -1071,7 +1106,7 @@ export function stationChannelsFor(
     number,
     {
       named: { id: string; name: string } | null;
-      air: Pick<CatalogueRow, 'output' | 'playlist'>;
+      air: Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'>;
       sources: StationChannelSource[];
     }
   >();
@@ -1079,7 +1114,7 @@ export function stationChannelsFor(
     channel: number,
     source: StationChannelSource,
     named: { id: string; name: string } | null = null,
-    air: Pick<CatalogueRow, 'output' | 'playlist'> = {},
+    air: Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'> = {},
   ): void => {
     const entry = entries.get(channel);
     if (entry === undefined) {
@@ -1091,7 +1126,7 @@ export function stationChannelsFor(
 
   for (const row of catalogue ?? []) {
     // The join: this station's host, or nothing. The first row naming a channel wins.
-    if (!hosts.includes(row.casparHost)) continue;
+    if (!hostJoinsStation(row.casparHost, hosts)) continue;
     // `UI-POLISH-01` G — the row's `output` and `playlist` ride the join with its name: labels.
     note(row.casparChannel, 'catalogue', { id: row.id, name: row.name }, airOf(row));
   }
@@ -1600,22 +1635,25 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // resolves three of its four ids, and a band overlapping a bank or the
   // reservation must resolve loudly at startup rather than at a take.
   const sourceCatalog = resolveSourceCatalog(options);
-  validateSourceCatalogAgainstBanks(sourceCatalog.value, fixedBanks, reservedLayers);
-  // The ASSIGNMENTS half, loaded against the catalog just resolved. A dangling
-  // reference is PRUNED rather than fatal — see `source-assignments-store.ts`'s
-  // header — but a duplicated plate is still a refusal, because two answers for
-  // one hole is not a state anything downstream can read.
+  /*
+    🔴 `PLAYOUT-SOURCES-01` — THE PLAYOUT DEFINES THE SOURCES NOW. The hand-made file's `sources` are
+    no longer read (P-031: not migrated, and not deleted either — a band save keeps them byte for
+    byte); its `layerRange` still is, because the plate band is the one fact CG Control owns. An
+    explicit in-process catalogue (tests, embedders) is pre-resolved and stays in force as-is.
+  */
+  const explicitCatalog = options.sourceCatalog;
+  const bandInForce = sourceCatalog.value.layerRange;
+  const bootCatalog: SourceCatalog = explicitCatalog ?? {
+    sources: [],
+    ...(bandInForce !== undefined ? { layerRange: bandInForce } : {}),
+  };
+  validateSourceCatalogAgainstBanks(bootCatalog, fixedBanks, reservedLayers);
+  // The ASSIGNMENTS half. `PLAYOUT-SOURCES-01` §1.C — NEVER PRUNED on load any more: the catalogue is
+  // rebuilt from Playout reads, and a binding is never deleted because its entry is gone (ADR 0010
+  // rule 14). A duplicated plate is still a refusal: two answers for one hole is not a state anything
+  // downstream can read.
   const resolvedAssignments = resolveSourceAssignments(options);
-  // PRUNE FIRST, then validate. The order is the doctrine: a dangling reference
-  // is dropped (it has a clear reading — that plate is unassigned) while a
-  // DUPLICATED plate is still fatal, because two answers for one hole is not a
-  // state anything downstream can read. Validating first would make the ordinary
-  // restored-file case a boot failure.
-  const prunedAssignments = pruneAssignmentsForCatalog(
-    resolvedAssignments.value,
-    sourceCatalog.value,
-  );
-  validateSourceAssignments(prunedAssignments.value, { catalog: sourceCatalog.value });
+  validateSourceAssignments(resolvedAssignments.value, { catalog: null });
   /*
     🔴 `DESKTOP-APPS-01-C` C6 — **ONE IPv4 FOR THE PLAYOUT'S READS AND FOR AMCP.** The Playout lets
     in the ADDRESS the introducing D9 read came from, so AMCP must leave from the same one: the
@@ -1657,14 +1695,62 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     reservedLayers,
     fixedBanks,
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
-    sourceCatalog: sourceCatalog.value,
-    sourceAssignments: prunedAssignments.value,
+    sourceCatalog: bootCatalog,
+    sourceAssignments: resolvedAssignments.value,
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
     ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
     // C-029 — resolved through the ONE default-owning function, never `?? false` here.
     createMissingConsumers: resolveCreateMissingConsumers(options.createMissingConsumers),
     ...(options.runtimeTuning ?? {}),
   });
+  /*
+    🔴 `PLAYOUT-SOURCES-01` — THE STATION'S SOURCES, FROM THE PLAYOUT. D10 and the bound media are
+    read with the signed-in operator's bearer, checked at use (D4's rule 3); with auth off a test
+    injects a local provider behind the same interface, and with neither there are no lists. The
+    catalogue in force is rebuilt from what was read — by the ONE builder — and nothing a read does
+    can delete a binding. An explicit in-process catalogue (tests) is pre-resolved: no reader.
+  */
+  const sourcesPlayoutHost = auth.playout === null ? undefined : playoutHostOf(auth.playout);
+  const hostIsOurs = (host: string): boolean =>
+    hostJoinsStation(
+      resolveCasparHost(host, sourcesPlayoutHost),
+      configuredCasparHosts(runtime.config()),
+    );
+  const sourcesProvider: PlayoutSourcesProvider | null =
+    options.playoutSources ??
+    (playoutAuth !== null && auth.playout !== null
+      ? new HttpPlayoutSources(
+          { inputsUrl: auth.playout.inputsUrl, mediaUrl: auth.playout.mediaUrl },
+          () => playoutAuth.usableBearer(),
+        )
+      : null);
+  const playoutSources =
+    explicitCatalog !== undefined
+      ? null
+      : new PlayoutSources({
+          provider: sourcesProvider,
+          // The local test provider answers with nobody signed in; the Playout never does.
+          signedIn:
+            options.playoutSources !== undefined
+              ? (): boolean => true
+              : (): boolean => playoutAuth !== null && playoutAuth.usableBearer() !== null,
+          hostIsOurs,
+          channelFor: (host, channel) =>
+            hostIsOurs(host) && runtime.isDeclaredChannel(channel) ? channel : null,
+          inputsPath: options.playoutInputsPath,
+          boundMediaPath: options.boundMediaPath,
+          layerRange: bandInForce,
+          ...(options.playoutSourcesOptions ?? {}),
+        });
+  if (playoutSources !== null) {
+    runtime.setResolvedSourceCatalog(playoutSources.catalog());
+    playoutSources.onCatalogChanged((catalog) => runtime.setResolvedSourceCatalog(catalog));
+    // §1.C — the one retry's read, the only Playout read a verb may make (on its failure path).
+    runtime.setMediaFreshener((sourceId, played) => playoutSources.freshClipFor(sourceId, played));
+    playoutSources.start();
+    // A local provider can answer before anybody signs in; the Playout's first read is at sign-in.
+    if (options.playoutSources !== undefined) void playoutSources.refresh(0);
+  }
   // B-145 — adopt the persisted ledger, then keep it written.
   //
   // 🔴 ADOPT BEFORE SUBSCRIBING TO THE CHANGES, and the order is load-bearing: subscribing
@@ -1847,6 +1933,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
 
   const routes = buildRoutes(runtime, {
     setupPhase,
+    playoutSources,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
     pgmReturnStatus: () => pgmReturn.status(),
@@ -2006,6 +2093,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           // D9 at once with that admin's own token (C4) — the read that introduces this machine.
           pushStationChannels();
           void playoutCatalogue?.refresh();
+          // `PLAYOUT-SOURCES-01` — D10 and the bound media are read at sign-in too.
+          void playoutSources?.refresh(PICKER_FRESH_MS);
           introduceOnSignIn(signIn);
         },
       );
@@ -2087,12 +2176,12 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     fixedBankSource: { bank: firstBank(fixedBanks), source: fixedBankSource },
     templates: runtime.templateProvenance,
     amcpLog,
-    sourceCatalog,
+    sourceCatalog: { value: runtime.sourceCatalog(), source: sourceCatalog.source },
     sourceAssignments: {
-      value: prunedAssignments.value,
+      value: resolvedAssignments.value,
       source: resolvedAssignments.source,
-      pruned: prunedAssignments.dropped,
     },
+    playoutSources,
     liveLayers: liveLayersProvenance,
     dropConnections() {
       for (const client of wss.clients) client.terminate();
@@ -2104,6 +2193,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutAuth?.dispose();
       // `C-039` — and the D4 tick, for the same reason.
       playoutCatalogue?.dispose();
+      // `PLAYOUT-SOURCES-01` — and the D10 / bound-media tick.
+      playoutSources?.dispose();
       // `C-016` — every upstream feed socket and every relayed viewer.
       pgmReturn.dispose();
       await runtime.stop();
@@ -2669,7 +2760,10 @@ export function wirePublishes(
     backing.channelSettingsChanged.subscribe((s) => push(ChannelSettingsChangedChannel, s)),
     // D-137 / C-015 — the installation's Live Source mapping, so a second
     // console sees the binding an operator just made without reloading.
-    backing.sourceCatalogChanged.subscribe((c) => push(SourcesConfigChangedChannel, c)),
+    // `PLAYOUT-SOURCES-01` §1.E — a console never holds a stream URL's credentials.
+    backing.sourceCatalogChanged.subscribe((c) =>
+      push(SourcesConfigChangedChannel, redactCatalogForConsole(c)),
+    ),
     // …and the assignments, which a catalog DELETION changes without any
     // browser asking. A console still showing the old binding is a console
     // showing a plate as bound that is not.
@@ -2756,6 +2850,11 @@ export function buildRoutes(
      * nothing watched — what a bridge with no relay is.
      */
     pgmReturnStatus?: () => PgmReturnStatus[];
+    /**
+     * `PLAYOUT-SOURCES-01` — the Playout's D10/D11 reader; `null` / absent for a bridge with none (an
+     * explicit in-process catalogue, or auth off with nothing injected).
+     */
+    playoutSources?: PlayoutSources | null;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
@@ -2844,13 +2943,39 @@ export function buildRoutes(
         `but will not survive a bridge restart\n`,
     );
   };
-  const persistCatalog = (filePath: string | undefined, value: SourceCatalog): void => {
+  /**
+   * `PLAYOUT-SOURCES-01` §1.F — persist the PLATE BAND, and only it: the file's hand-made `sources`
+   * are kept byte for byte (not migrated, not deleted — P-031).
+   */
+  const persistBand = (
+    filePath: string | undefined,
+    range: LiveSourceLayerRange | undefined,
+  ): void => {
     if (filePath === undefined) return;
     try {
-      saveSourceCatalog(filePath, value);
+      saveSourceBand(filePath, range);
     } catch (err) {
-      persistFailed('the source catalog', filePath, err);
+      persistFailed('the plate band', filePath, err);
     }
+  };
+  const playoutSources = paths.playoutSources ?? null;
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.B — every media id a request names that is not yet in the catalogue in
+   * force is bound from the BRIDGE'S OWN reads (its recent search answers, or an `ids=` read) before
+   * the request is applied; nothing a console sends about the item is ever used. Which of the new
+   * bindings are bindable at all is the runtime's check, against the catalogue that results.
+   */
+  const bindMedia = async (
+    ids: readonly string[],
+  ): Promise<{ ok: true } | { ok: false; message: string }> => {
+    if (playoutSources === null) return { ok: true };
+    const known = new Set(b.sourceCatalog().sources.map((s) => s.id));
+    for (const id of new Set(ids)) {
+      if (known.has(id)) continue;
+      const bound = await playoutSources.ensureBound(id);
+      if (!bound.ok) return bound;
+    }
+    return { ok: true };
   };
   const persistAssignments = (filePath: string | undefined, value: SourceAssignments): void => {
     if (filePath === undefined) return;
@@ -2955,12 +3080,24 @@ export function buildRoutes(
       StackUpdateChannel,
       'operator',
       'operator',
-      (r: {
+      async (r: {
         itemId: string;
         fields: never;
         mergeMode: 'merge' | 'replace';
         lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>;
-      }) => b.update(r.itemId, r.fields, r.mergeMode, r.lookBindings),
+      }) => {
+        // `PLAYOUT-SOURCES-01` §1.B — a media id the row newly binds is bound from the bridge's own
+        // reads first; a refusal refuses the whole update, BM-2's atomic rule.
+        if (r.lookBindings !== undefined) {
+          const bound = await bindMedia(
+            Object.values(r.lookBindings).flatMap((plates) => Object.values(plates)),
+          );
+          if (!bound.ok) {
+            return { accepted: false, errorCode: 'source-unusable', message: bound.message };
+          }
+        }
+        return b.update(r.itemId, r.fields, r.mergeMode, r.lookBindings);
+      },
     ),
     // C-012 — the graceful stop (outro runs, producer stays resident).
     route(StackStopChannel, 'operator', 'operator', (r: { itemId: string }) =>
@@ -2989,8 +3126,14 @@ export function buildRoutes(
       StackSwapLiveSourceChannel,
       'operator',
       'operator',
-      (r: { itemId: string; plateId: string; sourceId: string | null; lookId?: string }) =>
-        b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId),
+      async (r: { itemId: string; plateId: string; sourceId: string | null; lookId?: string }) => {
+        // `PLAYOUT-SOURCES-01` §1.B — a media item is bound from the bridge's own reads first.
+        if (r.sourceId !== null) {
+          const bound = await bindMedia([r.sourceId]);
+          if (!bound.ok) return { ok: false, reason: 'source-unusable', message: bound.message };
+        }
+        return b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId);
+      },
     ),
     // §14 (LOOKS) Stage E — the operator picks a look on the row. ONE seam: the bridge
     // validates the plan, tells the page on the CG UPDATE payload so it moves the HOLES,
@@ -3324,26 +3467,47 @@ export function buildRoutes(
     // change is the fixed-bank one: validate → apply → persist (non-fatal) →
     // publish (the runtime publishes from `setSourceCatalog` itself, after the
     // apply).
-    route(SourcesConfigChannel, 'read', 'read', () => b.sourceCatalog()),
-    route(SourcesSetConfigChannel, 'operator', 'station-admin', (r: SourceCatalog) => {
-      const result = b.setSourceCatalog(r);
+    // `PLAYOUT-SOURCES-01` — the catalogue in force is the PLAYOUT'S, and what a console holds of it
+    // has every stream URL's credentials redacted (§1.E): the console never shows a URL at all.
+    route(SourcesConfigChannel, 'read', 'read', () => redactCatalogForConsole(b.sourceCatalog())),
+    // §1.F — the PLATE BAND only. It cascades nothing: no set-config can delete a binding.
+    route(SourcesSetConfigChannel, 'operator', 'station-admin', (r: SourceBandConfig) => {
+      const result = b.setSourceBand(r.layerRange);
       if (result.ok) {
-        persistCatalog(sourceCatalogPath, r);
-        // A DELETION cascaded through the assignments, so the OTHER file is
-        // stale on disk too. Persisting only the catalog would resurrect the
-        // dropped bindings on the next boot — the dangle this cascade exists to
-        // prevent, arriving one restart later.
-        if (result.droppedAssignments !== undefined) {
-          persistAssignments(sourceAssignmentsPath, b.sourceAssignments());
-        }
+        persistBand(sourceCatalogPath, r.layerRange);
+        playoutSources?.setLayerRange(r.layerRange);
       }
       return result;
     }),
     route(SourcesAssignmentsChannel, 'read', 'read', () => b.sourceAssignments()),
-    route(SourcesSetAssignmentsChannel, 'operator', 'station-admin', (r: SourceAssignments) => {
-      const result = b.setSourceAssignments(r);
-      if (result.ok) persistAssignments(sourceAssignmentsPath, r);
-      return result;
+    route(
+      SourcesSetAssignmentsChannel,
+      'operator',
+      'station-admin',
+      async (r: SourceAssignments) => {
+        // §1.B — a media id is bound from the bridge's OWN reads, before the set is checked.
+        const bound = await bindMedia(r.assignments.map((a) => a.sourceId));
+        if (!bound.ok)
+          return { ok: false, reason: 'source-unusable' as const, message: bound.message };
+        const result = b.setSourceAssignments(r);
+        if (result.ok) persistAssignments(sourceAssignmentsPath, r);
+        return result;
+      },
+    ),
+    // §1.A — search the Playout's media on the Playout's side. A viewer may search.
+    route(SourcesMediaSearchChannel, 'read', 'read', (r: MediaQuery) =>
+      playoutSources === null
+        ? {
+            ok: false as const,
+            reason: 'playout-unreachable' as const,
+            message: 'The Playout did not answer.',
+          }
+        : playoutSources.searchMedia(r),
+    ),
+    // §1.A — a picker opened: read again if the last read is older than 5 s. Never waits.
+    route(SourcesRefreshChannel, 'read', 'read', () => {
+      void playoutSources?.refresh(PICKER_FRESH_MS);
+      return { ok: true as const };
     }),
 
     // R-022 — REHEARSE. Bridge-owned so several browsers agree about which rows

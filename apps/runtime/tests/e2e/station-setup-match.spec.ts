@@ -1,4 +1,4 @@
-import { chooseSourceKind, test, expect } from './fixtures/runtime.js';
+import { test, expect } from './fixtures/runtime.js';
 
 /**
  * 🔴 `SETTINGS-MATCH-02` — **THE OWNER'S FOUR DEFECTS, MEASURED IN A REAL ENGINE.**
@@ -454,7 +454,7 @@ test('§8 — every add/edit/remove is the same 480 frame, with a verb that name
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
   const setup = page.getByRole('dialog', { name: 'Station setup' });
-  await app.openStationSetupAt('Live sources');
+  await app.openStationSetupAt('Text file delimiters');
 
   /** The topmost dialog — the sub-dialog, when one is open. */
   const sub = (): ReturnType<typeof page.locator> => page.locator('[role="dialog"]').last();
@@ -478,9 +478,14 @@ test('§8 — every add/edit/remove is the same 480 frame, with a verb that name
       };
     });
 
-  await setup.getByRole('button', { name: 'Add live source' }).click();
-  await expect(page.getByRole('dialog', { name: 'Add live source' })).toBeVisible();
-  const addSource = await frame();
+  /*
+    `PLAYOUT-SOURCES-01` — measured on the delimiter Add: the source Add this was first measured on
+    went with the editor (a station's sources are the Playout's, listed read-only). The frame is
+    the primitive's, so every claim below is the claim it always was.
+  */
+  await setup.getByRole('button', { name: 'Add delimiter' }).click();
+  await expect(page.getByRole('dialog', { name: 'Add delimiter' })).toBeVisible();
+  const addRecord = await frame();
   /*
     🔴 THE GROUND AND THE FOOTER BAND, MEASURED — and this is the assertion that would have
     caught them. Both were set INLINE by the primitive, so the `[data-modal-size='record']`
@@ -488,43 +493,22 @@ test('§8 — every add/edit/remove is the same 480 frame, with a verb that name
     the drawing's `#15191f`, and the footer `rgb(20, 32, 45)` against its `#12171e`. The same
     trap the `fixed` frame's ground had already met once.
   */
-  expect(addSource.size).toBe('record');
-  expect(addSource.w, 'the reference’s `.sub-dialog` — min(480, 100vw − 32)').toBe(480);
-  expect(addSource.bg, 'the family’s own ground').toBe('rgb(21, 25, 31)');
-  expect(addSource.footBg, 'its footer band, a step under the body').toBe('rgb(18, 23, 30)');
+  expect(addRecord.size).toBe('record');
+  expect(addRecord.w, 'the reference’s `.sub-dialog` — min(480, 100vw − 32)').toBe(480);
+  expect(addRecord.bg, 'the family’s own ground').toBe('rgb(21, 25, 31)');
+  expect(addRecord.footBg, 'its footer band, a step under the body').toBe('rgb(18, 23, 30)');
   /* A SUB layer lays the lighter scrim, so the dialog it was opened from stays visible.
      `SETTINGS-POLISH-04` §7 — the reference's `.sub-dialog::backdrop{background:#0306099e}`,
      whose `9e` is 0.62: still lighter than the base scrim's 0.76, which is the role's whole
      point. `settings-polish.spec.ts` §7 asserts that RELATION rather than the two literals. */
-  expect(addSource.scrim).toBe('rgba(3, 6, 9, 0.62)');
+  expect(addRecord.scrim).toBe('rgba(3, 6, 9, 0.62)');
   /*
     🔴 §8e — FOCUS LANDS ON THE FIRST FIELD. It landed on the ✕ on all five, so an operator who
-    pressed `Add source` had to Tab or click before he could type. `B-230` is why this is a
+    pressed an Add had to Tab or click before he could type. `B-230` is why this is a
     `data-modal-autofocus` mark rather than an `autoFocus`: one thing moves focus.
   */
-  expect(addSource.focus, 'the operator can type immediately').toBe('Source name');
-
-  // …and the kind picker is a segmented control whose choice changes the FORM under it.
-  await expect(sub().getByLabel('DeckLink device index')).toBeVisible();
-  await chooseSourceKind(sub(), 'ndi');
-  await expect(sub().getByLabel('NDI source name')).toBeVisible();
-  await expect(sub().getByLabel('DeckLink device index')).toHaveCount(0);
-  await expect(sub().getByRole('button', { name: 'Add source' })).toBeVisible();
-  await page.keyboard.press('Escape');
-
-  /*
-    The three form dialogs, each with a verb that names its act — never `OK`, never bare `Save`.
-
-    ⚠ Driven by the RAIL, not by `openStationSetupAt`: Station setup is still open (only the
-    SUB-dialog was dismissed), so a second press of the console's door lands on the scrim and
-    times out after thirty seconds — which reads as a hang rather than as "already open".
-  */
-  await setup
-    .getByRole('tablist', { name: 'Station setup sections' })
-    .getByRole('tab', { name: /^Text file delimiters/ })
-    .click();
-  await setup.getByRole('button', { name: 'Add delimiter' }).click();
-  expect((await frame()).focus).toBe('New delimiter name');
+  expect(addRecord.focus, 'the operator can type immediately').toBe('New delimiter name');
+  // …and its verb names the act — never `OK`, never bare `Save`.
   await expect(sub().getByRole('button', { name: 'Add delimiter' })).toBeVisible();
   await page.keyboard.press('Escape');
 

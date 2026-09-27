@@ -35,11 +35,22 @@ describe('a refused DeckLink play', () => {
     });
   });
 
-  it('a stream play is a file line too (the owner’s clarification), and a route is not', () => {
-    expect(amcpRefusalWords('amcp-404', 'PLAY 2-60 "rtmp://feed.local/live"')?.clause).toBe(
-      'the server cannot find the file rtmp://feed.local/live.',
-    );
+  it('`PLAYOUT-SOURCES-01` §1.E — a stream play says the stream could not be opened, and never its address; a route is not a stream', () => {
+    /*
+      SUPERSEDED DELIBERATELY: `FIELD-FIXES-01-A` gave a refused stream the FILE line, which put the
+      URL in the sentence. A Playout stream's URL can carry credentials and is not an operator's
+      word for a source, so the console never shows one (§1.E); the row's line names the SOURCE.
+    */
+    const words = amcpRefusalWords('amcp-404', 'PLAY 2-60 "rtmp://feed.local/live"');
+    expect(words?.clause).toBe('the server could not open the stream.');
+    expect(JSON.stringify(words)).not.toContain('rtmp://');
     expect(amcpRefusalWords('amcp-404', 'PLAY 2-60 "route://1-2"')?.clause).toBe(
+      'the server cannot find what this command names.',
+    );
+  });
+
+  it('`PLAYOUT-SOURCES-01` §1.D — an `[NDI]` play is a source, never read as a file', () => {
+    expect(amcpRefusalWords('amcp-404', 'PLAY 2-60 [NDI] "STUDIO-PC (Cam 1)"')?.clause).toBe(
       'the server cannot find what this command names.',
     );
   });
@@ -123,15 +134,26 @@ describe('reading the command', () => {
       channel: 2,
       decklink: 1,
       file: null,
+      stream: false,
       cgAdd: false,
     });
     expect(amcpCommandFacts('PLAY 2-60 DECKLINK 3').decklink).toBe(3);
     expect(amcpCommandFacts('PLAY 2-60 NDI NAME "cam"').file).toBeNull();
+    expect(amcpCommandFacts('PLAY 2-60 [NDI] "cam"').file).toBeNull();
+    // A stream is a stream, and its address is not carried out of the reading.
+    expect(amcpCommandFacts('PLAY 2-60 "rtsp://***@10.0.0.21/live"')).toEqual({
+      channel: 2,
+      decklink: null,
+      file: null,
+      stream: true,
+      cgAdd: false,
+    });
     expect(amcpCommandFacts('CG 2-59 ADD 0 "u" 0 "…"').cgAdd).toBe(true);
     expect(amcpCommandFacts('')).toEqual({
       channel: null,
       decklink: null,
       file: null,
+      stream: false,
       cgAdd: false,
     });
   });

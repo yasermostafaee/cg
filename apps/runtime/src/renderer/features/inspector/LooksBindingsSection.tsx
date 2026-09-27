@@ -5,6 +5,8 @@ import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
+import { SourceLabel } from '../sources/SourceLabel.js';
+import { SourcePicker } from '../sources/SourcePicker.js';
 import { currentSourceCatalog, sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
 import {
   draftsVersion,
@@ -340,7 +342,7 @@ export function LooksBindingsSection({
             `would use.`
           }
         >
-          on air: {nameOf(onAir.sourceId)} (patched on this row)
+          on air: <SourceLabel sourceId={onAir.sourceId} fallback="nothing" /> (patched on this row)
         </span>
       );
     }
@@ -360,7 +362,7 @@ export function LooksBindingsSection({
             `the row again to adopt it, or set this look’s input to change it now.`
           }
         >
-          this row: {nameOf(frozen.sourceId)} (frozen at take)
+          this row: <SourceLabel sourceId={frozen.sourceId} fallback="nothing" /> (frozen at take)
         </span>
       );
     }
@@ -555,34 +557,35 @@ export function LooksBindingsSection({
                   <span style={styles.plate} title={plate.sourceId}>
                     Plate {plateIndex + 1}
                   </span>
-                  <select
-                    className={dirty ? 'cg-field is-dirty' : 'cg-field'}
-                    style={{
-                      width: '100%',
-                      // §2.1 — STRUCK THROUGH, not greyed. The control stays enabled because
-                      // §2.3 accepts the edit; what is communicated is "this value is not in
-                      // force", which is a statement about the VALUE and not about the control.
-                      ...(masked && { textDecoration: 'line-through' }),
-                    }}
+                  {/*
+                    🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER, on this row's CHANNEL, so an
+                    input the Playout routes to another channel only is listed disabled. It only
+                    returns a choice; the draft and Update/Discard are this section's, unchanged.
+
+                    §2.1 — a masked value is STRUCK THROUGH, not greyed (`is-struck`). The control
+                    stays enabled because §2.3 accepts the edit; what is communicated is "this
+                    value is not in force", which is a statement about the VALUE.
+                  */}
+                  <SourcePicker
+                    className={[dirty ? 'is-dirty' : '', masked ? 'is-struck' : '']
+                      .filter(Boolean)
+                      .join(' ')}
                     aria-label={`Input for ${plate.sourceId} in look ${look.name}`}
-                    data-look-binding={`${look.id}:${plate.sourceId}`}
-                    {...(masked && { 'data-look-binding-masked': '' })}
+                    data={{
+                      'data-look-binding': `${look.id}:${plate.sourceId}`,
+                      ...(masked ? { 'data-look-binding-masked': '' } : {}),
+                    }}
                     value={value}
-                    onChange={(e) =>
-                      stageLookBinding(item.itemId, look.id, plate.sourceId, e.target.value)
+                    onChange={(sourceId) =>
+                      stageLookBinding(item.itemId, look.id, plate.sourceId, sourceId)
                     }
-                  >
-                    <option value="">{defaultLabel}</option>
-                    {currentSourceCatalog().sources.map((source) => (
-                      <option key={source.id} value={source.id}>
-                        {source.name}
-                      </option>
-                    ))}
-                  </select>
+                    choices={[{ value: '', label: defaultLabel }]}
+                    channel={item.slot?.channel}
+                  />
                   {masked && (
                     <>
                       <span style={styles.masked} data-look-binding-patched={plate.sourceId}>
-                        not in force — patched to {sourceName(patch)}
+                        not in force — patched to <SourceLabel sourceId={patch} />
                       </span>
                       {/*
                         §2.2 — ENDING THE PATCH IS REACHABLE FROM WHERE IT IS SEEN. It applies

@@ -12,6 +12,7 @@ import {
 } from '../src/renderer/features/sources/sourceStore.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
 import { itemWith, templateWith } from './support/layerRow.js';
+import { choosePickerOption, pickerValue } from './support/sourcePicker.js';
 
 /**
  * ⭐ **SESSION BM-2 §2 / §3 — THE PER-LOOK INPUT LIST, AND THE HAZARD IT MUST NOT SHIP.**
@@ -199,8 +200,10 @@ it('🔴 §6.3 — an emergency patch is VISIBLE on every row it masks, and says
     expect(select?.hasAttribute('data-look-binding-masked'), key).toBe(true);
     // 🔴 STRUCK THROUGH, NOT DISABLED. Grey reads as "this control is broken"; the operator
     // must be able to tell "overridden" from "unavailable", and must still be able to edit.
-    expect((select as HTMLSelectElement | null)?.disabled, `${key} stays usable`).toBe(false);
-    expect((select as HTMLElement | null)?.style.textDecoration).toBe('line-through');
+    // `PLAYOUT-SOURCES-01` §2.A — the picker's field carries the strike as `is-struck` (the
+    // stylesheet's `.cg-combo-field.is-struck`), never as an inline style on a control.
+    expect((select as HTMLButtonElement | null)?.disabled, `${key} stays usable`).toBe(false);
+    expect(select?.classList.contains('is-struck'), key).toBe(true);
 
     // …and the row NAMES what is actually on air, in words — in EVERY look, not just one.
     const note = el.querySelector('[data-look-binding-patched="l-1"]');
@@ -259,17 +262,13 @@ it('🔴 §2.3 — editing a MASKED binding is ACCEPTED and staged, and says it 
 
   // `INSPECTOR-DELTA` §4 — `solo` is not the live look, so reach it the way an operator does.
   await selectLook(el, 'solo');
-  const select = el.querySelector('[data-look-binding="solo:l-1"]') as HTMLSelectElement | null;
+  const select = el.querySelector<HTMLElement>('[data-look-binding="solo:l-1"]');
   expect(select).not.toBeNull();
-  await act(async () => {
-    if (select !== null) {
-      select.value = 'studio-3';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-  });
+  // `PLAYOUT-SOURCES-01` §2.A — through the ONE picker, as an operator chooses.
+  if (select !== null) await choosePickerOption(select, 'studio-3');
 
   // It took the edit…
-  expect((el.querySelector('[data-look-binding="solo:l-1"]') as HTMLSelectElement).value).toBe(
+  expect(pickerValue(el.querySelector<HTMLElement>('[data-look-binding="solo:l-1"]'))).toBe(
     'studio-3',
   );
   // …marked it unapplied, and said WHY it will not be seen yet — VISIBLY, not as an

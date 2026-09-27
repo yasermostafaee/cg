@@ -12,6 +12,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
+import { producerForDisplay } from '../sources/producerDisplay.js';
 import {
   liveLayerEmptyView,
   releaseScopeOf,
@@ -683,17 +684,22 @@ export function LiveSourcesPanel({
                   ⚠ Its own `<bdi>`: a catalogue name can be Persian and the row around it is
                   LTR chrome.
                 */}
+                {/*
+                  🔴 `PLAYOUT-SOURCES-01` §1.E — and a stream's ADDRESS is never the fallback, nor on
+                  the hover: `producerForDisplay` prints it as `stream`. The ledger publishes what was
+                  sent with its credentials already `***`, which is redaction, not hiding.
+                */}
                 {(row.sourceName ?? row.producer) !== '' && (
                   <bdi
                     className="cg-plate-producer"
                     data-plate-unnamed={row.sourceName === null ? 'true' : undefined}
                     title={
                       row.sourceName === null
-                        ? `${row.producer} — this plate has no source assigned in Station setup, so the console can only name what the bridge sent`
-                        : `${row.sourceName} · sent as ${row.producer}`
+                        ? `${producerForDisplay(row.producer)} — this plate has no source assigned in Station setup, so the console can only name what the bridge sent`
+                        : `${row.sourceName} · sent as ${producerForDisplay(row.producer)}`
                     }
                   >
-                    {row.sourceName ?? row.producer}
+                    {row.sourceName ?? producerForDisplay(row.producer)}
                   </bdi>
                 )}
               </span>

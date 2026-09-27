@@ -30,7 +30,8 @@ import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { writeDigitsAsTyped } from '../../ui/fieldDigitsInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
-import { takeRefusalLine, TakeRefusalText } from '../layers/takeRefusalLine.js';
+import { plateLabelOf, takeRefusalLine, TakeRefusalText } from '../layers/takeRefusalLine.js';
+import { currentSourceCatalog } from '../sources/sourceStore.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
   REHEARSE_STATE_COLOR,
@@ -692,7 +693,15 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
         */}
         {item.takeRefusal !== undefined && (
           <p style={styles.refusal} data-inspector-take-refusal="" dir="ltr">
-            <TakeRefusalText line={takeRefusalLine(heading, item.takeRefusal)} />
+            <TakeRefusalText
+              line={takeRefusalLine(heading, item.takeRefusal, {
+                // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
+                plateLabel: plateLabelOf(info, item.takeRefusal.plateId),
+                entry: currentSourceCatalog().sources.find(
+                  (s) => s.id === item.takeRefusal?.sourceId,
+                ),
+              })}
+            />
           </p>
         )}
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}

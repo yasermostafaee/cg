@@ -1,5 +1,5 @@
 import { quote } from '@cg/caspar-client';
-import type { SourceProducer } from '@cg/shared-ipc';
+import { redactUrlCredentials, type SourceProducer } from '@cg/shared-ipc';
 import {
   withCgControl,
   type CgControl,
@@ -79,14 +79,18 @@ export const WIRE_LINE_SUMMARY_MAX = 200;
  * exists to prevent.
  */
 export function summarizeWireLine(line: string, max = WIRE_LINE_SUMMARY_MAX): string {
-  const open = line.indexOf('"');
-  let summary = line;
+  // `PLAYOUT-SOURCES-01` §1.E — a stream URL's credentials never reach the audit or a take refusal:
+  // every summary is written with `scheme://***@`. Redacted FIRST, so the cap can never cut a
+  // credential in half and leave the start of it.
+  const redacted = redactUrlCredentials(line);
+  const open = redacted.indexOf('"');
+  let summary = redacted;
   if (open !== -1) {
-    const close = closingQuote(line, open);
+    const close = closingQuote(redacted, open);
     if (close !== -1) {
-      const head = line.slice(0, close + 1);
+      const head = redacted.slice(0, close + 1);
       // Every further quoted argument (escaped quotes included) becomes an ellipsis.
-      const rest = line.slice(close + 1).replace(/"(?:[^"\\]|\\.)*"/g, '"…"');
+      const rest = redacted.slice(close + 1).replace(/"(?:[^"\\]|\\.)*"/g, '"…"');
       summary = head + rest;
     }
   }
@@ -296,8 +300,15 @@ export class CommandBuilder {
    * and the 2.3.2 plant is the reference, but this verb has not been exercised on
    * it by this project — recorded in `DEBT.md`.
    */
-  mixerVolume(slot: CommandSlot, volume: number): string {
-    return `MIXER ${target(slot)} VOLUME ${String(volume)}`;
+  mixerVolume(slot: CommandSlot, volume: number, frames?: number): string {
+    /*
+      `PLAYOUT-SOURCES-01` §1.I — a raise of a plate from a D10 input RAMPS (`VOLUME <v> 25`): a bare
+      `VOLUME 1` is a jump, and even `VOLUME 1 4` reaches 0.25 in its first block (their answer,
+      V13-STATE §3.1). Absent frames is today's line, byte for byte.
+    */
+    return frames === undefined
+      ? `MIXER ${target(slot)} VOLUME ${String(volume)}`
+      : `MIXER ${target(slot)} VOLUME ${String(volume)} ${String(frames)}`;
   }
 
   /**
@@ -369,9 +380,13 @@ export class CommandBuilder {
    *                physical input admits ONE producer, and a `CLEAR` answers `202`
    *                before the old producer is destroyed. See **B-177**; it bites
    *                the caller that sequences these, never this formatter.
-   *   `ndi`      — `NDI NAME "<source>"`. ⚠ **PARSE-VERIFIED ONLY** — no NDI source
-   *                exists on this plant and the NDI module is gated, so nothing here
-   *                has ever put an NDI producer on air. That debt is **C-021's**.
+   *   `ndi`      — `[NDI] "<source>"`. 🔴 **The spelling is the PLAYOUT'S CORE's, from
+   *                their answer** (`PLAYOUT-SOURCES-01`, `docs/integration/playout/
+   *                PLAYOUT-CG-RESPONSE-INPUTS-MEDIA-v1.md` §1.2, citing
+   *                `newtek_ndi_producer.cpp:289-292`): `NDI NAME "…"`, what this arm
+   *                sent until then, is the CONSUMER syntax there and plays nothing. ⚠ Still
+   *                never put on air by this project — no NDI source exists on this
+   *                plant; that debt is **C-021's**.
    *   `stream`   — the URL alone, quoted, exactly as `media` is (C-025). Its
    *                standing is stated honestly: the owner ran
    *                `PLAY 1-<layer> "<url>"` BY HAND on the plant and it PLAYED —
@@ -625,7 +640,13 @@ function producerArgument(producer: SourceProducer): string {
       // Keywords and the index are AMCP syntax, not values: unquoted.
       return `DECKLINK DEVICE ${String(producer.device)}`;
     case 'ndi':
-      return `NDI NAME ${quote(producer.source)}`;
+      /*
+        🔴 `PLAYOUT-SOURCES-01` §1.D — THE ONE SANCTIONED WIRE CHANGE. This arm sent `NDI NAME "…"`,
+        which on the Playout's core is the CONSUMER syntax and plays nothing (their answer §1.2,
+        citing `newtek_ndi_producer.cpp:289-292`). The producer is the bracketed token `[NDI]`
+        followed by the quoted source; `C-021` had recorded this arm as parse-verified only.
+      */
+      return `[NDI] ${quote(producer.source)}`;
     case 'media':
       return quote(producer.file);
     case 'stream':

@@ -51,6 +51,9 @@ const CONTRACT_PATHS = {
   refreshUrl: '/api/cg/auth/refresh',
   channelsUrl: '/api/cg/channels',
   revokedUrl: '/api/cg/revoked',
+  // `PLAYOUT-SOURCES-01` — contract v1.2's D10 and D11.
+  inputsUrl: '/api/cg/inputs',
+  mediaUrl: '/api/cg/media',
 } as const;
 
 /** The default `aud` the bridge requires a token to carry (Playout Q5: accepted). */
@@ -91,6 +94,10 @@ export interface PlayoutAuthConfig {
   readonly channelsUrl: string;
   /** D9 — the revocation list. Polled by the BRIDGE at most once per 60 s. */
   readonly revokedUrl: string;
+  /** D10 — the station's inputs (`PLAYOUT-SOURCES-01`). Read by the BRIDGE, server-side. */
+  readonly inputsUrl: string;
+  /** D11 — the media library, searched and paged on the Playout's side. Read by the BRIDGE. */
+  readonly mediaUrl: string;
   /** A token's `aud` must EQUAL or CONTAIN this. */
   readonly audience: string;
 }
@@ -120,6 +127,8 @@ export const PlayoutFileSchema = z.object({
       refreshUrl: z.string().optional(),
       channelsUrl: z.string().optional(),
       revokedUrl: z.string().optional(),
+      inputsUrl: z.string().optional(),
+      mediaUrl: z.string().optional(),
       audience: z.string().optional(),
     })
     .optional(),
@@ -136,6 +145,8 @@ export interface PlayoutFlags {
   readonly refreshUrl?: string;
   readonly channelsUrl?: string;
   readonly revokedUrl?: string;
+  readonly inputsUrl?: string;
+  readonly mediaUrl?: string;
   readonly audience?: string;
 }
 
@@ -286,6 +297,8 @@ export function resolvePlayoutSettings(
       refreshUrl: derived('refreshUrl'),
       channelsUrl: derived('channelsUrl'),
       revokedUrl: derived('revokedUrl'),
+      inputsUrl: derived('inputsUrl'),
+      mediaUrl: derived('mediaUrl'),
       /*
         ⚠ An EMPTY value falls back to the default, and `??` alone would not do it: `''` is not
         nullish, so a blank `--playout-audience` or `"audience": ""` in the file resolved to the
@@ -333,6 +346,8 @@ function resolveByAddress(
       refreshUrl: endpoint('refreshUrl'),
       channelsUrl: endpoint('channelsUrl'),
       revokedUrl: endpoint('revokedUrl'),
+      inputsUrl: endpoint('inputsUrl'),
+      mediaUrl: endpoint('mediaUrl'),
       audience: nonEmpty(pick('audience')) ?? DEFAULT_PLAYOUT_AUDIENCE,
     },
   };
@@ -346,6 +361,8 @@ export interface PlayoutEndpoints {
   readonly refreshUrl: string;
   readonly channelsUrl: string;
   readonly revokedUrl: string;
+  readonly inputsUrl: string;
+  readonly mediaUrl: string;
 }
 
 /**
@@ -368,6 +385,8 @@ export function playoutEndpointsFor(addressRaw: string): PlayoutEndpoints {
     refreshUrl: `${address}${CONTRACT_PATHS.refreshUrl}`,
     channelsUrl: `${address}${CONTRACT_PATHS.channelsUrl}`,
     revokedUrl: `${address}${CONTRACT_PATHS.revokedUrl}`,
+    inputsUrl: `${address}${CONTRACT_PATHS.inputsUrl}`,
+    mediaUrl: `${address}${CONTRACT_PATHS.mediaUrl}`,
   };
 }
 

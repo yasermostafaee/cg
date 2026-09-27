@@ -186,17 +186,19 @@ describe('the census — every section of Station setup that can speak, speaks t
     Putting it in the parent's would be §2's defect at a smaller scale: a sentence about a
     form the operator can no longer see.
   */
-  it('Live sources routes its refusal through the region — the Add dialog’s own', async () => {
+  /*
+    `PLAYOUT-SOURCES-01` §1.F — the Add dialog went with the catalogue editor; what Live sources can
+    still say is a refused BAND, and it says it through Station setup's own region.
+  */
+  it('Live sources routes its refusal through the region — a band with no numbers', async () => {
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'sources' });
-    await clickSetupButton(dialog, 'Add source');
-    // Confirm with an empty name: the form's own refusal, no bridge round-trip needed.
-    const sub = lastDialog();
-    await clickSetupButton(sub, 'Add source');
+    // Apply with no band typed and none in force: the section's own refusal, no bridge round-trip.
+    await clickSetupButton(dialog, 'Apply band');
 
-    expectMessageThroughTheRegion(sub, 'refusal');
-    const text = sub.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(text).toContain('Give the source a name');
+    expectMessageThroughTheRegion(dialog, 'refusal');
+    const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
+    expect(text).toContain('The band is two layer numbers');
   });
 
   /** `Text file delimiters`: the full drift — wrong place AND wrong colour. */

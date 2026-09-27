@@ -3,6 +3,8 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
+import { SourceLabel } from '../sources/SourceLabel.js';
+import { SourcePicker } from '../sources/SourcePicker.js';
 import {
   currentSourceAssignments,
   currentSourceCatalog,
@@ -121,27 +123,25 @@ export function LiveSourceSwapDialog({
             <label htmlFor={`swap-${item.itemId}-${plate.sourceId}`} style={styles.plate}>
               {plate.sourceId}
               <span style={styles.assigned}>
-                assigned: {nameFor(assigned)}
+                assigned: <SourceLabel sourceId={assigned} fallback="— none —" />
                 {swapped !== undefined && (
                   <span style={styles.overridden}> · swapped for this row</span>
                 )}
               </span>
             </label>
-            <select
+            {/*
+              🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER. `R-048` 6.9e is kept to the letter:
+              open the row's swap, then CHOOSE — opening the field and clicking an input is the one
+              choose, exactly as the native select was, and it commits at once. No confirm step.
+            */}
+            <SourcePicker
               id={`swap-${item.itemId}-${plate.sourceId}`}
-              className="cg-field"
+              aria-label={`Live source for ${plate.sourceId}`}
               value={swapped ?? ''}
-              onChange={(e) => {
-                change(plate.sourceId, e.target.value);
-              }}
-            >
-              <option value="">Use template assignment ({nameFor(assigned)})</option>
-              {catalog.sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                </option>
-              ))}
-            </select>
+              onChange={(sourceId) => change(plate.sourceId, sourceId)}
+              choices={[{ value: '', label: `Use template assignment (${nameFor(assigned)})` }]}
+              channel={item.slot?.channel}
+            />
           </div>
         );
       })}

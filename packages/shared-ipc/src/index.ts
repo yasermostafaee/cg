@@ -92,3 +92,6 @@ export * from './channels/rehearse.js';
 // D-137 / C-015 — the installation's symbolic-id → producer mapping, and the
 // layer band those producers are placed on. ABSENT means NO MAPPINGS.
 export * from './channels/sources.js';
+// `PLAYOUT-SOURCES-01` — the Playout's input list (D10) and media library (D11): the contract's
+// shapes, the one builder of the catalogue in force, the credential redaction and the route gate.
+export * from './playout-sources.js';

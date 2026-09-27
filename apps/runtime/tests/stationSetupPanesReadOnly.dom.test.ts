@@ -128,27 +128,40 @@ describe('Servers', () => {
 });
 
 describe('Live sources', () => {
-  it('🔴 an operator sees the catalogue and the band in force — no Add, no Edit, no Remove, no band fields', async () => {
+  it('🔴 an operator sees the Playout’s inputs and the band in force — no band fields', async () => {
     const { pane } = await open('sources', { auth: OPERATOR, catalog: CATALOG });
-    expect(pane.querySelector('[data-source-id="src-a"]')?.textContent, 'the value').toContain(
+    expect(pane.querySelector('[data-source-input]')?.textContent, 'the value').toContain(
       'استودیو ۱',
     );
-    expect(buttonNamed(pane, 'Add live source')).toBeUndefined();
-    expect(buttonNamed(pane, /^Edit /)).toBeUndefined();
-    expect(buttonNamed(pane, /^Remove /)).toBeUndefined();
     expect(pane.querySelector('input[aria-label="Live source band start layer"]')).toBeNull();
     expect(buttonNamed(pane, 'Apply band')).toBeUndefined();
     expect(pane.textContent, 'the band, as a value').toContain('Currently 60–79 · 20 layers.');
     expect(contract(pane)).toEqual(READ_ONLY);
   });
 
-  it('CONTROL — a station-admin sees Add, Edit, Remove, the band fields and Apply band', async () => {
+  it('CONTROL — a station-admin sees the band fields and Apply band', async () => {
     const { pane } = await open('sources', { auth: ADMIN, catalog: CATALOG });
-    expect(buttonNamed(pane, 'Add live source')).toBeDefined();
-    expect(buttonNamed(pane, 'Edit استودیو ۱')).toBeDefined();
-    expect(buttonNamed(pane, 'Remove استودیو ۱')).toBeDefined();
     expect(pane.querySelector('input[aria-label="Live source band start layer"]')).not.toBeNull();
     expect(buttonNamed(pane, 'Apply band')).toBeDefined();
+    // `PLAYOUT-SOURCES-01` — and the contract it states is the band's alone: the list is the
+    // Playout's, so nothing on this tab saves as you go (the Channel pane's shape for an admin).
+    expect(contract(pane)).toEqual({
+      legend: 'Listed by the Playout. Apply band sets the layer band.',
+      tag: 'Apply separately',
+      footer: 'Nothing to apply here — Apply band applies on its own.',
+    });
+  });
+
+  it('`PLAYOUT-SOURCES-01` §1.F — NOBODY adds, edits or removes a source: the list is the Playout’s', async () => {
+    for (const auth of [OPERATOR, ADMIN]) {
+      const { pane } = await open('sources', { auth, catalog: CATALOG });
+      // Positive control: the pane rendered the list it is asked about.
+      expect(pane.querySelectorAll('[data-source-input]').length).toBeGreaterThan(0);
+      expect(buttonNamed(pane, 'Add live source')).toBeUndefined();
+      expect(buttonNamed(pane, /^Edit /)).toBeUndefined();
+      expect(buttonNamed(pane, /^Remove /)).toBeUndefined();
+      await unmountStationSetup();
+    }
   });
 });
 

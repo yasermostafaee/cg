@@ -115,6 +115,15 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     // A non-numeric or negative volume is a REFUSAL, not a clamp: silently
     // coercing it would let a malformed mute read as a successful one.
     if (!Number.isFinite(volume) || volume < 0) return { kind: 'err', code: 401, verb: 'MIXER' };
+    /*
+      `PLAYOUT-SOURCES-01` §1.I — `VOLUME <v> <frames>` is a RAMP (the core's `duration`, read with
+      `stoi`, so anything but a whole number is refused). The mock lands the end value at once — the
+      tween's shape is not modelled — and a malformed duration is refused rather than ignored.
+    */
+    const frames = args[3];
+    if (frames !== undefined && !/^\d+$/.test(frames)) {
+      return { kind: 'err', code: 401, verb: 'MIXER' };
+    }
     return apply({ volume });
   }
 
@@ -358,6 +367,12 @@ type ProducerVerdict =
 const ROUTE_TARGET = /^(\d+)(?:-(\d+))?$/;
 /** Anything that ANNOUNCES itself as a scheme: `<word>://`. */
 const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;
+/**
+ * The stream schemes a `stream` producer may use (`@cg/shared-ipc`'s `STREAM_URL_SCHEMES`, less
+ * `http`/`https`, which this mock has always read as a page). Quoted, not imported: the mock is the
+ * server's stand-in, not the product's.
+ */
+const STREAM_SCHEMES = new Set(['rtmp', 'rtmps', 'rtsp', 'srt', 'udp', 'rtp', 'mms']);
 
 /**
  * R-015 / D-137 — which producer real CasparCG would build for a `PLAY` /
@@ -395,9 +410,11 @@ const SCHEME = /^([a-z][a-z0-9+.-]*):\/\//i;
  * classifier models is therefore the form the server accepts, not a guess about it,
  * and it is right not to distinguish the two: they are one integer field.
  *
- * ⚠ **Still MODELLED, NOT MEASURED: the NDI spelling** — no NDI source exists on
- * this plant and the module is gated (C-021). When hardware confirms or corrects it,
- * this classifier and the mapping schema change together.
+ * ⭐ **The NDI spelling is the Playout core's own now** (`PLAYOUT-SOURCES-01` §1.D): the producer is
+ * the bracketed token, `PLAY 2-60 [NDI] "HOST (Cam 1)"` (their answer §1.2, citing
+ * `newtek_ndi_producer.cpp:289-292`). `NDI NAME "…"` is that core's CONSUMER syntax and builds no
+ * producer — the registry falls through to the file producer, which answers `404` — so it is
+ * refused here the same way. Cited from their source, not yet measured on an NDI signal (`C-021`).
  *
  * 🔴 **WHAT THIS MOCK DOES NOT MODEL, AND MUST NOT BE READ AS EVIDENCE ABOUT: DEVICE
  * CONTENTION.** On real hardware ONE physical input admits ONE producer, `CLEAR`
@@ -431,14 +448,24 @@ function classifyProducer(args: readonly string[]): ProducerVerdict {
     }
     return { ok: true, kind: 'decklink' };
   }
-  if (upper === 'NDI') {
-    const named = args[2]?.toUpperCase() === 'NAME' && (args[3] ?? '') !== '';
-    if (!named) return { ok: false, code: 404, detail: 'NDI NEEDS NAME <source>' };
+  if (upper === '[NDI]') {
+    if ((args[2] ?? '') === '') return { ok: false, code: 404, detail: '[NDI] NEEDS "<source>"' };
     return { ok: true, kind: 'ndi' };
+  }
+  if (upper === 'NDI') {
+    // The consumer's spelling: no producer is built, and the file producer finds no such file.
+    return { ok: false, code: 404, detail: 'NDI NAME IS THE CONSUMER SYNTAX: File not found.' };
   }
 
   const scheme = SCHEME.exec(first);
   if (scheme !== null) {
+    /*
+      `PLAYOUT-SOURCES-01` — a STREAM URL (C-025's schemes: `PLAY 1-10 "rtsp://…"`, the command the
+      owner proved by hand) is played by CasparCG's ffmpeg producer, so it is recorded as one. Any
+      other scheme is still refused: there is no reading of `rist://…` under which this server built
+      a producer, and a mock that acked it would hide an unusable input reaching the wire.
+    */
+    if (STREAM_SCHEMES.has((scheme[1] ?? '').toLowerCase())) return { ok: true, kind: 'ffmpeg' };
     if (scheme[1]?.toLowerCase() !== 'route') {
       return { ok: false, code: 404, detail: `UNKNOWN PRODUCER SCHEME ${scheme[1] ?? ''}` };
     }
@@ -454,9 +481,21 @@ function classifyProducer(args: readonly string[]): ProducerVerdict {
 }
 
 /**
+ * `PLAYOUT-SOURCES-01` — a media FILE the server no longer has answers `404`, as the core answers a
+ * clip that is gone. Only a file (`ffmpeg`, no scheme and no keyword) can be missing this way.
+ */
+function missingFile(
+  verdict: ProducerVerdict,
+  args: readonly string[],
+  ctx: HandlerContext,
+): boolean {
+  return verdict.ok && verdict.kind === 'ffmpeg' && ctx.isMissingMedia(args[1] ?? '');
+}
+
+/**
  * `PLAY <channel>-<layer> "<url|file|route://…>" [HTML]`
  * `PLAY <channel>-<layer> DECKLINK DEVICE <n>`
- * `PLAY <channel>-<layer> NDI NAME "<source>"`
+ * `PLAY <channel>-<layer> [NDI] "<source>"`
  */
 function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
@@ -468,6 +507,9 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   // reverse: looks refused, layer changed anyway.
   if (!verdict.ok) {
     return { kind: 'err', code: verdict.code, verb: 'PLAY', detail: verdict.detail };
+  }
+  if (missingFile(verdict, req.args, ctx)) {
+    return { kind: 'err', code: 404, verb: 'PLAY', detail: 'File not found.' };
   }
   const url = req.args[1] ?? '';
   // Non-fetching media/producer path — the page state is inertly 'resolved'.
@@ -491,6 +533,9 @@ function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const verdict = classifyProducer(req.args);
   if (!verdict.ok) {
     return { kind: 'err', code: verdict.code, verb: 'LOAD', detail: verdict.detail };
+  }
+  if (missingFile(verdict, req.args, ctx)) {
+    return { kind: 'err', code: 404, verb: 'LOAD', detail: 'File not found.' };
   }
   const url = req.args[1] ?? '';
   // LOAD primes the foreground but pauses immediately — PLAY is required to resume.

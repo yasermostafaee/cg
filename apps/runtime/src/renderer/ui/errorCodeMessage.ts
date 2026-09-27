@@ -134,6 +134,15 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'This template has a multi-frame group but no looks authored in it, so every box would go to air empty. It has to be opened in the Designer and given at least one look.',
   'live-source-unassigned':
     'This template has a live plate with no source assigned, so it would go to air empty. Assign it in CG Control → Sources, then take again.',
+  /*
+    `PLAYOUT-SOURCES-01` §1.C — refused BEFORE any AMCP because of what became of the bound entry.
+    The row's own line names the plate and the source (`takeRefusalLine`); this is the sentence for
+    a surface that has only the code.
+  */
+  'source-unavailable':
+    'The Playout no longer offers a source this row is bound to — nothing was sent. Bind another source, or take again once the Playout lists it.',
+  'source-unusable':
+    'A source this row is bound to cannot be played on this station — nothing was sent. Bind another source.',
   'live-source-aspect-mismatch':
     'A live plate is designed for a different picture shape than the source assigned to it — cropping it would cut part of the picture the author never saw. Re-assign the plate, or correct the source’s format.',
   'live-source-no-layer-range':

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { defaultFixedLayerBank } from '@cg/shared-ipc';
 import { CONSOLE_HEALTH_APP, CONSOLE_HEALTH_PATH } from '../src/console-http-server.js';
+import { LOCAL_PLAYOUT_SOURCES_MARKER } from './support/local-playout-sources.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01` — **THE SIDECAR CG CONTROL SHIPS, run as the shell runs it.**
@@ -147,6 +148,9 @@ describe('DESKTOP-APPS-01 — the bundled sidecar, started as the desktop shell 
       'bridge-fixed-layers.json',
       'bridge-source-catalog.json',
       'bridge-source-assignments.json',
+      // `PLAYOUT-SOURCES-01` — the Playout's last good input list and the bound media.
+      'bridge-playout-inputs.json',
+      'bridge-bound-media.json',
       'bridge-live-layers.json',
       'bridge-templates',
     ]) {
@@ -154,6 +158,18 @@ describe('DESKTOP-APPS-01 — the bundled sidecar, started as the desktop shell 
     }
     // The absence: nothing the sidecar printed points at the home directory it was given.
     expect(stderr).not.toContain(fakeHome);
+  });
+
+  it('`PLAYOUT-SOURCES-01` §1.G — the auth-off provider is NOT in the bundle the installer ships', () => {
+    const shipped = fs.readFileSync(bundle, 'utf8');
+    // Positive control: the instrument reads the real bundle — the Playout's own D11 reader, which
+    // asks `type=video,still`, is in it.
+    expect(shipped).toContain('video,still');
+    expect(shipped).toContain('/api/cg/media');
+    // The absence: the local provider's marker, and the fake's fixtures, are nowhere in it.
+    expect(shipped).not.toContain(LOCAL_PLAYOUT_SOURCES_MARKER);
+    expect(shipped).not.toContain('STUDIO-PC (Cam 1)');
+    expect(shipped).not.toContain('rtsp://cam:secret@');
   });
 
   it('serves the console and answers the health identity on the console origin', async () => {

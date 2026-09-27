@@ -1,6 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EMPTY_SOURCE_CATALOG, SourceCatalogSchema, type SourceCatalog } from '@cg/shared-ipc';
+import {
+  EMPTY_SOURCE_CATALOG,
+  SourceCatalogSchema,
+  type LiveSourceLayerRange,
+  type SourceCatalog,
+} from '@cg/shared-ipc';
 
 /**
  * D-137 / C-015 phase 4 — the SOURCE CATALOG store: bridge-side loading,
@@ -109,6 +114,28 @@ export function saveSourceCatalog(filePath: string, value: SourceCatalog): void 
   const tmp = `${filePath}.tmp`;
   fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
   fs.renameSync(tmp, filePath);
+}
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.F — **PERSIST THE PLATE BAND, AND ONLY IT.** The Playout defines the
+ * sources now; the band is the one fact this file still carries for the product. The file's
+ * hand-made `sources` are neither read nor migrated (P-031) — and not deleted either: they are
+ * written back as they were, so nothing a band save does removes what an operator once typed.
+ */
+export function saveSourceBand(filePath: string, range: LiveSourceLayerRange | undefined): void {
+  let sources: unknown = [];
+  try {
+    const held: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (typeof held === 'object' && held !== null && 'sources' in held) {
+      sources = (held as { sources: unknown }).sources;
+    }
+  } catch {
+    // Absent or unreadable: the band starts a fresh file.
+  }
+  saveSourceCatalog(filePath, {
+    sources: sources as SourceCatalog['sources'],
+    ...(range !== undefined ? { layerRange: range } : {}),
+  });
 }
 
 /**

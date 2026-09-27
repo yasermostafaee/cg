@@ -52,7 +52,7 @@ function tmpConfig(): string {
 }
 
 describe('A1 — the endpoints derive from the Playout address; the issuer is not required', () => {
-  it('with only an address, all five endpoints derive from it and there is no issuer yet', () => {
+  it('with only an address, every endpoint derives from it and there is no issuer yet', () => {
     const settings = resolvePlayoutSettings(
       {},
       { auth: 'playout', playout: { address: 'http://playout.example:8080/' } },
@@ -65,6 +65,9 @@ describe('A1 — the endpoints derive from the Playout address; the issuer is no
       refreshUrl: 'http://playout.example:8080/api/cg/auth/refresh',
       channelsUrl: 'http://playout.example:8080/api/cg/channels',
       revokedUrl: 'http://playout.example:8080/api/cg/revoked',
+      // `PLAYOUT-SOURCES-01` — contract v1.2's D10 and D11, derived like every other endpoint.
+      inputsUrl: 'http://playout.example:8080/api/cg/inputs',
+      mediaUrl: 'http://playout.example:8080/api/cg/media',
       audience: 'cg-control',
     });
   });
@@ -97,6 +100,9 @@ describe('A1 — the endpoints derive from the Playout address; the issuer is no
         refreshUrl: 'http://playout.local:8080/api/cg/auth/refresh',
         channelsUrl: 'http://playout.local:8080/api/cg/channels',
         revokedUrl: 'http://playout.local:8080/api/cg/revoked',
+        // `PLAYOUT-SOURCES-01` — D10 and D11 derive from the issuer exactly as D4 and D9 do.
+        inputsUrl: 'http://playout.local:8080/api/cg/inputs',
+        mediaUrl: 'http://playout.local:8080/api/cg/media',
         audience: 'cg-control',
       },
     });

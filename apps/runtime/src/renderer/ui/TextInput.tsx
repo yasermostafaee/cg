@@ -80,6 +80,8 @@ export interface TextInputProps {
    * there is no spelling of this prop that takes the skin off.
    */
   className?: string | undefined;
+  /** A finder's attributes (`data-*`) — never a style. */
+  data?: Readonly<Record<`data-${string}`, string>> | undefined;
 }
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
@@ -99,6 +101,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
     inputMode,
     maxLength,
     className,
+    data,
     'aria-label': ariaLabel,
     'aria-describedby': ariaDescribedBy,
   },
@@ -106,6 +109,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
 ): JSX.Element {
   return (
     <input
+      {...(data ?? {})}
       ref={ref}
       // `cg-field` FIRST and unconditional — the caller's class extends the skin, never
       // replaces it. Same idiom as `AutoGrowTextarea`.

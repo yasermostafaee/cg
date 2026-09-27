@@ -100,6 +100,8 @@ import type {
   SourceCatalog,
   SourcesAssignmentsChannel,
   SourcesConfigChannel,
+  SourcesMediaSearchChannel,
+  SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
 } from '@cg/shared-ipc';
@@ -917,15 +919,11 @@ export interface RuntimeBridge {
   sources: {
     config(): Promise<ChannelResponse<typeof SourcesConfigChannel>>;
     /**
-     * Replace the whole catalog. The BRIDGE is authoritative for the refusal —
-     * it rejects a duplicate id, a duplicate NAME, and a band overlapping the
-     * candidate bank or the reserved playout range, and supplies the wording —
-     * so a second browser cannot create a state this one is careful to prevent.
-     *
-     * A DELETION answers with `droppedAssignments`: the plates this change
-     * orphaned. The bridge cascades them rather than letting them dangle, and
-     * the caller is expected to SAY so at the moment of deletion — an operator
-     * who learns at the take is learning too late.
+     * 🔴 `PLAYOUT-SOURCES-01` §1.F — **the PLATE BAND, and nothing else.** The station's sources are
+     * the Playout's (D10 inputs, D11 media), read by the bridge; the one catalogue fact CG Control
+     * still owns is the band its plates are seated in. The BRIDGE is authoritative for the refusal —
+     * a band overlapping the candidate bank or the reserved playout range — and supplies the
+     * wording. It cascades nothing.
      */
     setConfig(
       req: ChannelRequest<typeof SourcesSetConfigChannel>,
@@ -933,13 +931,25 @@ export interface RuntimeBridge {
     onConfigChanged(handler: (catalog: SourceCatalog) => void): Unsubscribe;
     assignments(): Promise<ChannelResponse<typeof SourcesAssignmentsChannel>>;
     /**
-     * Replace the whole assignment set. Refused when a plate is assigned twice,
-     * or when it names a source this installation does not define.
+     * Replace the whole assignment set. Refused when a plate is assigned twice, or when a NEW or
+     * CHANGED binding names an entry that is not bindable (not offered, unusable, or gone).
      */
     setAssignments(
       req: ChannelRequest<typeof SourcesSetAssignmentsChannel>,
     ): Promise<ChannelResponse<typeof SourcesSetAssignmentsChannel>>;
     onAssignmentsChanged(handler: (assignments: SourceAssignments) => void): Unsubscribe;
+    /**
+     * `PLAYOUT-SOURCES-01` §1.A — one page of the Playout's media, searched on the Playout's side.
+     * A read: a viewer may search. Items carry no path — the bridge keeps the clip.
+     */
+    mediaSearch(
+      req: ChannelRequest<typeof SourcesMediaSearchChannel>,
+    ): Promise<ChannelResponse<typeof SourcesMediaSearchChannel>>;
+    /**
+     * `PLAYOUT-SOURCES-01` §1.A — a picker opened: ask the bridge to read again if its last read is
+     * older than 5 s. Answers at once; what changes arrives on {@link onConfigChanged}.
+     */
+    refresh(): Promise<ChannelResponse<typeof SourcesRefreshChannel>>;
   };
 
   delimiters: {

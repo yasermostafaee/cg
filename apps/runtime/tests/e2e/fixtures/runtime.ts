@@ -189,7 +189,7 @@ export class RuntimeApp {
    * the rail tab — which is also what the operator does, so the specs got MORE faithful
    * rather than less by losing their shortcut.
    *
-   * It is one method for the same reason `addLiveSource` is: six copies of "click, then
+   * It is one method for the same reason `setTemplateDefault` is: six copies of "click, then
    * click the tab" is six edits the next change to the rail would cost.
    */
   async openStationSetupAt(tab: string): Promise<void> {
@@ -229,31 +229,11 @@ export class RuntimeApp {
   }
 
   /**
-   * `STATION-CHROME-01` §6 — **define one live source through the Add dialog.**
-   *
-   * Station setup must already be open at Live sources. Every Add and every Edit in the
-   * settings dialog now opens the same small SECOND dialog, so the two-step
-   * "type a name, press Add" that four specs each spelled out by hand is one call here —
-   * which is also what stops the next change to that flow costing four edits.
-   *
-   * `kindFields` names the per-kind inputs to fill by their accessible label (§5: each kind
-   * has its own, labelled). A source added with none of them keeps its kind's defaults.
+   * 🔴 `PLAYOUT-SOURCES-01` §2.A — **CHOOSE IN A SOURCE PICKER**, the one control every binding
+   * site uses. See {@link chooseSource}; this is the page-object spelling of it.
    */
-  async addLiveSource(
-    name: string,
-    options: { kind?: string; fields?: Record<string, string> } = {},
-  ): Promise<void> {
-    const setup = this.page.getByRole('dialog', { name: 'Station setup' });
-    await setup.getByRole('button', { name: 'Add live source' }).click();
-    const sub = this.page.getByRole('dialog', { name: 'Add live source' });
-    await expect(sub).toBeVisible();
-    await sub.getByLabel('Source name', { exact: true }).fill(name);
-    if (options.kind !== undefined) await chooseSourceKind(sub, options.kind);
-    for (const [label, value] of Object.entries(options.fields ?? {})) {
-      await sub.getByLabel(label, { exact: true }).fill(value);
-    }
-    await sub.getByRole('button', { name: 'Add source' }).click();
-    await expect(sub).toBeHidden();
+  async chooseSource(field: Locator, pick: SourcePick): Promise<void> {
+    await chooseSource(this.page, field, pick);
   }
   /**
    * R-028 — the fixed-layers panel WAS its own region; it is now the Layers
@@ -572,13 +552,16 @@ export class RuntimeApp {
    * for one that does not, which is why this does NOT scope to either section: it asks the
    * Inspector for the one door, wherever that template put it.
    */
-  async setTemplateDefault(plateId: string, sourceLabel: string): Promise<void> {
+  async setTemplateDefault(plateId: string, source: string | SourcePick): Promise<void> {
     await this.inspector.locator('[data-open-template-defaults]').click();
     const dialog = this.page.getByRole('dialog', { name: 'Source defaults' });
     await expect(dialog).toBeVisible();
-    await dialog
-      .locator(`[data-defaults-select="${plateId}"]`)
-      .selectOption({ label: sourceLabel });
+    // `PLAYOUT-SOURCES-01` — the select became the source picker; a bare name is an INPUT's.
+    await chooseSource(
+      this.page,
+      dialog.locator(`[data-defaults-select="${plateId}"]`),
+      typeof source === 'string' ? { input: source } : source,
+    );
     await dialog.locator('[data-defaults-save]').click();
     // The dialog closes on acceptance; a refusal keeps it open with the reason on it, so this
     // also asserts the commit was ACCEPTED rather than leaving a spec to continue past one.
@@ -977,21 +960,188 @@ export function buildInvalidVcg(): Uint8Array {
  *    "show the splash" and the splash's own specs opt back in simply by not using this.
  */
 /**
- * 🔴 `SETTINGS-MATCH-02` §8b — **CHOOSE A PRODUCER KIND in the Add/Edit source dialog.**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.G — **THE OFFLINE CONSOLE'S PLAYOUT, AS A SPEC ARMS IT.**
  *
- * It was `getByLabel('Source kind').selectOption(kind)`, and the control is a RADIO GROUP now:
- * the kind is the one field whose value changes the FORM (pick NDI and the fields below become
- * a source name), and a `<select>` hid four of five answers behind a press.
+ * The station's sources are the Playout's now (D10 inputs, D11 media); nothing in the console
+ * defines one. With auth off there is no Playout, so a spec that needs sources seeds the offline
+ * mock's through `window.CG_E2E_PLAYOUT_SOURCES` — read ONCE, when the mock is built, through the
+ * bridge's own parsers and its one catalogue builder. Opt in per file with
+ * `test.use({ playoutSources: E2E_PLAYOUT })`; the default is no Playout at all, which is also
+ * the real state of a station whose Playout has shared nothing.
  *
- * It lives here rather than in each spec because six specs press it — which is also what made
- * the change cheap to carry: one helper, one edit. The group keeps its accessible name, so
- * what changed is the press and not what the press means.
+ * Catalogue ids are the builder's: an input `studio-1` binds as `in-studio-1`, a media item
+ * `m-studio1` as `md-m-studio1`.
  */
-export async function chooseSourceKind(scope: Locator, kind: string): Promise<void> {
-  await scope
-    .getByRole('radiogroup', { name: 'Source kind' })
-    .locator(`input[type="radio"][value="${kind}"]`)
-    .check();
+export interface PlayoutSeed {
+  readonly inputs: { readonly inputs: readonly unknown[]; readonly epoch?: string | number };
+  /** Inputs a later read no longer listed — kept, `unavailable` (ADR 0010 rule 14). */
+  readonly departed?: readonly unknown[];
+  /** The D11 library. */
+  readonly media?: readonly unknown[];
+  /** Media ids already bound on this station (the `Recent` group). */
+  readonly bound?: readonly string[];
+  /** Bound media ids the Playout no longer offers. */
+  readonly unavailable?: readonly string[];
+  /** A Playout that does not answer a media search. */
+  readonly down?: boolean;
+}
+
+/** One generated library clip — `Clip 001`…, in two folders, a minute or two long. */
+const libraryClip = (i: number): Record<string, unknown> => {
+  const n = String(i).padStart(3, '0');
+  return {
+    id: `m-clip-${n}`,
+    name: `Clip ${n}`,
+    clip: `D:/Media Library/clips/clip ${n}.mp4`,
+    type: 'video',
+    width: 1920,
+    height: 1080,
+    durationMs: 60_000 + i * 1_000,
+    folder: i % 2 === 0 ? 'SPORT' : 'NEWS',
+    updatedAt: `2026-09-${String(1 + (i % 26)).padStart(2, '0')}T08:00:00Z`,
+  };
+};
+
+/**
+ * The standard seed: the fake Playout's list (`tools/caspar-bridge/tests/support/fake-playout.ts`
+ * §3) cut to what the console needs — three NDI cameras, a stream CARRYING CREDENTIALS (§1.E: its
+ * URL must reach no DOM), a multicast stream, the two v1.3 routes (gated `Not supported yet` until
+ * `ROUTE-PLATES-01`; `ورودی ۴` is channel 1 only), and a library of 124 video items — more than two
+ * pages of 50 — with a media item named exactly `Studio 1`, a name to find through Arabic `ي`/`ك`,
+ * one with Persian digits, and audio that is never offered.
+ */
+export const E2E_PLAYOUT: PlayoutSeed = {
+  inputs: {
+    epoch: 'e2e-1',
+    inputs: [
+      { id: 'studio-1', name: 'Studio 1', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 1)' } },
+      { id: 'studio-2', name: 'Studio 2', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 2)' } },
+      { id: 'studio-3', name: 'Studio 3', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 3)' } },
+      {
+        id: 'newscam',
+        name: 'دوربین خبر',
+        producer: { kind: 'stream', url: 'rtsp://cam:secret@10.0.0.21/live' },
+      },
+      {
+        id: 'multicast',
+        name: 'Multicast',
+        producer: { kind: 'stream', url: 'udp://239.255.0.1:5000?reuse=1' },
+      },
+      {
+        id: 'input-3',
+        name: 'ورودی ۳',
+        producer: { kind: 'route', channel: 9, layer: 12, videoMode: '1080i5000' },
+        compatibleChannels: [
+          { casparHost: '127.0.0.1', casparChannel: 1 },
+          { casparHost: '127.0.0.1', casparChannel: 2 },
+        ],
+        available: true,
+      },
+      {
+        id: 'input-4',
+        name: 'ورودی ۴',
+        producer: { kind: 'route', channel: 9, layer: 13 },
+        compatibleChannels: [{ casparHost: '127.0.0.1', casparChannel: 1 }],
+        available: false,
+        reason: 'no signal',
+      },
+    ],
+  },
+  media: [
+    {
+      id: 'm-studio1',
+      name: 'Studio 1',
+      clip: 'D:/Media Library/studio one.mov',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      durationMs: 42_000,
+      folder: 'STUDIO',
+    },
+    {
+      id: 'm-kelip',
+      name: 'کلیپ معرفی',
+      clip: 'D:/Media Library/کلیپ معرفی.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      durationMs: 30_000,
+      folder: 'PROMO',
+    },
+    {
+      id: 'm-khabar',
+      name: 'خبر ۱۴۰۵',
+      clip: 'D:/Media Library/خبر ۱۴۰۵.mp4',
+      type: 'video',
+      width: 1920,
+      height: 1080,
+      durationMs: 1_059_000,
+      folder: 'NEWS',
+    },
+    {
+      id: 'm-bed',
+      name: 'Bed music',
+      clip: 'D:/Media Library/bed.wav',
+      type: 'audio',
+      durationMs: 60_000,
+    },
+    ...Array.from({ length: 121 }, (_, i) => libraryClip(i + 1)),
+  ],
+};
+
+/**
+ * Arm a Playout for every page load from now on. The `app` fixture calls it before it navigates;
+ * a spec that needs the Playout to CHANGE (an input leaves) arms a second seed and reloads — init
+ * scripts run in the order they were added, so the latest seed is the one the mock reads.
+ */
+export async function armPlayoutSources(page: Page, seed: PlayoutSeed): Promise<void> {
+  await page.addInitScript((value) => {
+    (window as unknown as { CG_E2E_PLAYOUT_SOURCES: unknown }).CG_E2E_PLAYOUT_SOURCES = value;
+  }, seed);
+}
+
+/** What to choose in a source picker: one of the call site's own choices, an input, or media. */
+export type SourcePick =
+  | { readonly choice: string }
+  | { readonly input: string }
+  | { readonly media: string; readonly search?: string };
+
+const exactly = (text: string): RegExp =>
+  new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §2.A — **CHOOSE IN A SOURCE PICKER.** Every binding site — the template
+ * defaults, a look's input, the live swap — is one field that opens one anchored panel: the call
+ * site's own choices on a row above two tabs, `Inputs` and `Media`. One helper, because the next
+ * change to the panel should cost one edit, not one per spec.
+ *
+ * An input and a call-site choice are named EXACTLY; a media row's accessible name also carries its
+ * folder and facts, so it is matched on its name element. `search` types into the Media search first
+ * (a library longer than a page does not show every item at once). Waits for the panel to close,
+ * which is what a pick does.
+ */
+export async function chooseSource(page: Page, field: Locator, pick: SourcePick): Promise<void> {
+  await field.click();
+  const panel = page.getByRole('dialog', { name: 'Choose a source' });
+  await expect(panel).toBeVisible();
+  if ('choice' in pick) {
+    await panel
+      .locator('[data-picker-choices]')
+      .getByRole('button', { name: pick.choice, exact: true })
+      .click();
+  } else if ('input' in pick) {
+    await panel.getByRole('tab', { name: /^Inputs/ }).click();
+    await panel.getByRole('option', { name: pick.input, exact: true }).click();
+  } else {
+    await panel.getByRole('tab', { name: /^Media/ }).click();
+    if (pick.search !== undefined) await panel.locator('[data-picker-search]').fill(pick.search);
+    await panel
+      .locator('[data-picker-media]')
+      .filter({ has: page.locator('.cg-picker-row__name', { hasText: exactly(pick.media) }) })
+      .first()
+      .click();
+  }
+  await expect(panel).toHaveCount(0);
 }
 
 /**
@@ -1026,7 +1176,13 @@ export async function disableSplash(page: Page): Promise<void> {
 }
 
 /** The extended `test` every Runtime spec imports: provides a booted `app`. */
-export const test = base.extend<{ app: RuntimeApp; splashDisabled: void }>({
+export const test = base.extend<{
+  app: RuntimeApp;
+  splashDisabled: void;
+  /** `PLAYOUT-SOURCES-01` — the offline console's Playout ({@link E2E_PLAYOUT}); none by default. */
+  playoutSources: PlayoutSeed | null;
+}>({
+  playoutSources: [null, { option: true }],
   /**
    * Auto, so a spec that drives the raw `page` (arming its own bridge URL and navigating
    * itself, e.g. `bridge-indicator.spec.ts`) is covered too — those never touch `app`, so
@@ -1040,8 +1196,9 @@ export const test = base.extend<{ app: RuntimeApp; splashDisabled: void }>({
     },
     { auto: true },
   ],
-  app: async ({ page }, use) => {
+  app: async ({ page, playoutSources }, use) => {
     await disableSplash(page);
+    if (playoutSources !== null) await armPlayoutSources(page, playoutSources);
     await page.addInitScript(() => {
       (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
       // R-028 — the declared bank is armed for EVERY spec now, because the

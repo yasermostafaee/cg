@@ -13,7 +13,13 @@ import { cssColour, test, expect } from './fixtures/runtime.js';
  *
  * §4's placement lives in `station-setup-match.spec.ts` §9 (it is that test's subject, and
  * splitting it would leave two specs measuring one band); §4's containment lives in
- * `modal-message-containment.spec.ts`. The other six are here.
+ * `modal-message-containment.spec.ts`. The other five are here.
+ *
+ * ⚠ `PLAYOUT-SOURCES-01` — §5 (the five source-kind options wrapping in the Add-source dialog) is
+ * RETIRED with the dialog it measured: the station's sources are the Playout's, listed read-only,
+ * and there is no kind to choose. The sub-dialog measurements (§1, §2b, §7) never depended on
+ * WHICH sub-dialog they read, so they are taken on Text file delimiters' Add and Remove — the same
+ * primitives, raised from inside Station setup in the same sub-family.
  *
  * ── THE PALETTE THESE NUMBERS COME FROM ─────────────────────────────────────────────────
  *
@@ -92,10 +98,10 @@ test('§1 — Revert and Apply layers sit 9 px apart, and so do the sub-dialog�
   // The SUB-dialog's footer takes the same nine — `.sub-foot{gap:9px}`, one family, one number.
   await dialog
     .getByRole('tablist', { name: 'Station setup sections' })
-    .getByRole('tab', { name: 'Live sources' })
+    .getByRole('tab', { name: 'Text file delimiters' })
     .click();
-  await dialog.getByRole('button', { name: 'Add live source' }).click();
-  const sub = page.getByRole('dialog', { name: /source/i }).last();
+  await dialog.getByRole('button', { name: 'Add delimiter' }).click();
+  const sub = page.getByRole('dialog', { name: 'Add delimiter' });
   await expect(sub).toBeVisible();
   expect(await buttonGaps(sub.locator('.cg-modal-footer')), 'the sub-dialog’s too').toEqual([9]);
 });
@@ -193,16 +199,20 @@ test('§2 — one red family, two weights: the console confirm FILLS and the sub
   await consoleConfirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(consoleConfirm).toBeHidden();
 
-  // ── (b) STATION SETUP'S — the reference's `.btn.danger`, filling on intent only.
-  await app.openStationSetupAt('Live sources');
+  // ── (b) STATION SETUP'S — the reference's `.btn.danger`, filling on intent only. Read on a
+  // delimiter's Remove: the same `useConfirm` call the retired source Remove made (`layer: 'sub'`,
+  // `tone: 'remove'`), so the same family is under test.
+  await app.openStationSetupAt('Text file delimiters');
   const dialog = setup(page);
-  await app.addLiveSource('Studio A');
 
-  await dialog.getByRole('button', { name: 'Remove Studio A' }).click();
+  await dialog
+    .getByRole('button', { name: /^Remove delimiter / })
+    .first()
+    .click();
   const confirm = page.getByRole('dialog', { name: /^Remove/ }).last();
   await expect(confirm).toBeVisible();
 
-  const commit = confirm.getByRole('button', { name: /^Remove source$/ });
+  const commit = confirm.getByRole('button', { name: /^Remove delimiter$/ });
   await expect(commit).toHaveCSS('background-color', RED_BG);
   await expect(commit).toHaveCSS('border-color', RED_LINE);
   await expect(commit).toHaveCSS('color', RED_INK);
@@ -252,60 +262,6 @@ test('§4 — the standing notice paints the reference’s own ground, edge and 
   const mark = notice.locator('svg').first();
   await expect(mark).toHaveCSS('width', '19px');
   await expect(mark).toHaveCSS('margin-top', '2px');
-});
-
-/**
- * 🔴 §5 — **THE `Input type` LABELS OVERFLOWED THEIR BOXES.**
- *
- * The reference draws three kinds in a 480 px dialog; ours draws five, and
- * `repeat(auto-fit, minmax(0, 1fr))` answered that by laying all five on one row. Measured
- * before: five 74 px cells, `DeckLink` reporting `scrollWidth 75` against `clientWidth 72`.
- *
- * ⚠ **`scrollWidth > clientWidth` IS THE ASSERTION, not the item's width.** A width test would
- * have to encode what the right width IS, which depends on the label, the font and the
- * viewport; overflow is the property the operator actually sees and it is true or false whatever
- * those are. The wrap is asserted by the Y coordinates, for the same reason.
- */
-test('§5 — the five kind options wrap instead of clipping, at 480 px and narrower', async ({
-  app,
-}) => {
-  const page = app.page;
-
-  for (const width of [1280, 420]) {
-    await page.setViewportSize({ width, height: 800 });
-    await app.openStationSetupAt('Live sources');
-    const dialog = setup(page);
-    await dialog.getByRole('button', { name: 'Add live source' }).click();
-    const group = page.getByRole('radiogroup', { name: 'Source kind' });
-    await expect(group).toBeVisible();
-
-    const items = await group.evaluate((el) =>
-      [...el.querySelectorAll('label')].map((l) => ({
-        text: (l.textContent ?? '').trim(),
-        overflow: l.scrollWidth - l.clientWidth,
-        top: Math.round(l.getBoundingClientRect().top),
-        width: Math.round(l.getBoundingClientRect().width),
-      })),
-    );
-
-    expect(items, 'all five kinds are offered').toHaveLength(5);
-    for (const item of items) {
-      expect(
-        item.overflow,
-        `${String(width)}: "${item.text}" must not be clipped`,
-      ).toBeLessThanOrEqual(0);
-    }
-
-    // It WRAPS — more than one row — and every box on the surface is the same width, which a
-    // flex row would not give (its last line distributes its own free space).
-    const rows = new Set(items.map((i) => i.top));
-    expect(rows.size, `${String(width)}: the group wraps`).toBeGreaterThan(1);
-    const widths = new Set(items.map((i) => i.width));
-    expect(widths.size, `${String(width)}: one track width across every row`).toBe(1);
-
-    await page.getByRole('dialog').last().getByRole('button', { name: 'Cancel' }).click();
-    await app.closeStationSetup();
-  }
 });
 
 /**
@@ -430,7 +386,7 @@ test('§7 — the scrim darkens and blurs, the sub-scrim stays lighter, and both
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
-  await app.openStationSetupAt('Live sources');
+  await app.openStationSetupAt('Text file delimiters');
   const dialog = setup(page);
 
   const base = page.locator('[data-modal-layer="base"]').first();
@@ -441,7 +397,7 @@ test('§7 — the scrim darkens and blurs, the sub-scrim stays lighter, and both
   const LIFT = 'rgba(0, 0, 0, 0.6) 0px 32px 100px 0px, rgba(0, 0, 0, 0.2) 0px 0px 0px 1px';
   await expect(dialog).toHaveCSS('box-shadow', LIFT);
 
-  await dialog.getByRole('button', { name: 'Add live source' }).click();
+  await dialog.getByRole('button', { name: 'Add delimiter' }).click();
   const sub = page.locator('[data-modal-layer="sub"]').first();
   await expect(sub).toHaveCSS('background-color', 'rgba(3, 6, 9, 0.62)');
   await expect(sub).toHaveCSS('backdrop-filter', 'blur(3px)');

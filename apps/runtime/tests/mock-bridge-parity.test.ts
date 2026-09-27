@@ -40,6 +40,8 @@ const BACKING_METHODS = [
   'stackSnapshot',
   'config',
   'setConfig',
+  // `PLAYOUT-SOURCES-01` §1.F — `sources.set-config` is the plate band's door on both backends.
+  'setSourceBand',
   'health',
   'failover',
   'orphans',
@@ -130,6 +132,9 @@ const BRIDGE_SURFACE: {
       'assignments',
       'setAssignments',
       'onAssignmentsChanged',
+      // `PLAYOUT-SOURCES-01` — the picker's two reads, on both backends.
+      'mediaSearch',
+      'refresh',
     ],
     stack: [
       'load',

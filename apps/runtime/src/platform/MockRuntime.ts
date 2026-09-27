@@ -32,10 +32,15 @@ import type {
   ChannelSettingsState,
   CHANNEL_SETTINGS_SET_REASONS,
   SourceAssignments,
+  SourceBandConfig,
   SourceCatalog,
   SourcesSetAssignmentsReason,
   SourcesSetConfigReason,
   TemplateSourceAssignment,
+  BoundMediaItem,
+  ConsoleMediaItem,
+  PlayoutInputsState,
+  PlayoutMediaItem,
 } from '@cg/shared-ipc';
 // R-030 — `videoModeRaster` is the ONE video-mode → raster map, shared with the
 // bridge. The mock must never carry a second copy: a mock that disagreed with the
@@ -60,7 +65,17 @@ import {
   layerAlias,
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
-  pruneAssignmentsForCatalog,
+  BoundMediaStateSchema,
+  EMPTY_PLAYOUT_INPUTS,
+  buildPlayoutSourceCatalog,
+  foldPlayoutInputsRead,
+  mediaSourceId,
+  parsePlayoutInputs,
+  parsePlayoutMediaPage,
+  playoutMediaIdOf,
+  toBoundMedia,
+  unbindableChange,
+  redactUrlCredentials,
   REFERENCE_RASTER,
   REMOVE_ON_AIR_CODE,
   SourceAssignmentsSchema,
@@ -82,6 +97,68 @@ const DELIMITERS_KEY = 'cg-runtime:delimiters';
 const SOURCE_CATALOG_KEY = 'cg-runtime:source-catalog';
 const SOURCE_ASSIGNMENTS_KEY = 'cg-runtime:source-assignments';
 const CHANNEL_SETTINGS_KEY = 'cg-runtime:channel-settings';
+/** `PLAYOUT-SOURCES-01` parity — the media items this console bound (the bridge's `bridge-bound-media.json`). */
+const BOUND_MEDIA_KEY = 'cg-runtime:bound-media';
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.G — **THE OFFLINE CONSOLE'S PLAYOUT, ARMED BY A TEST AND BY NOTHING
+ * ELSE.** `window.CG_E2E_PLAYOUT_SOURCES`, set with `addInitScript` before the app runs (the same
+ * convention as `CG_E2E_ORPHAN`): a D10 body (`inputs`), the inputs a later read no longer listed
+ * (`departed`), a D11 library (`media`), media ids already bound (`bound`) and bound ids the Playout
+ * no longer offers (`unavailable`), and `down` for a Playout that does not answer.
+ *
+ * No list ships in the console: without the flag the station has no inputs and no media. Parsed by
+ * the bridge's own readers, so a seed the bridge could not read is not one the mock reads either.
+ */
+interface PlayoutSeed {
+  readonly inputs: PlayoutInputsState;
+  readonly library: readonly PlayoutMediaItem[];
+  readonly bound: readonly string[];
+  readonly unavailable: readonly string[];
+  readonly down: boolean;
+}
+
+function readPlayoutSeed(): PlayoutSeed {
+  const raw = (globalThis as { CG_E2E_PLAYOUT_SOURCES?: Record<string, unknown> })
+    .CG_E2E_PLAYOUT_SOURCES;
+  if (raw === undefined || raw === null || typeof raw !== 'object') {
+    return { inputs: EMPTY_PLAYOUT_INPUTS, library: [], bound: [], unavailable: [], down: false };
+  }
+  const ids = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  const read = parsePlayoutInputs(raw['inputs'] ?? { inputs: [] });
+  const departed = parsePlayoutInputs({ inputs: raw['departed'] ?? [] });
+  const listed =
+    read === null
+      ? EMPTY_PLAYOUT_INPUTS
+      : foldPlayoutInputsRead(EMPTY_PLAYOUT_INPUTS, read, '2026-09-27T08:00:00.000Z');
+  return {
+    inputs: { ...listed, departed: departed?.inputs ?? [] },
+    library: parsePlayoutMediaPage({ items: raw['media'] ?? [] })?.items ?? [],
+    bound: ids(raw['bound']),
+    unavailable: ids(raw['unavailable']),
+    down: raw['down'] === true,
+  };
+}
+
+/**
+ * The mock Playout's search key: Arabic `ي`/`ى`/`ك` as Persian, U+200C, U+0640 and U+064B–U+065F
+ * dropped, Persian and Arabic-Indic digits as Latin, spaces collapsed, case folded — the contract's
+ * list (their answer §2.2), which the real search applies on the Playout's side. The invisible ones
+ * are written as escapes, and as an alternation: a mark straight after a letter inside one class
+ * reads as one combined character (`no-misleading-character-class`).
+ */
+function normalizeMediaSearch(text: string): string {
+  return text
+    .replace(/[يى]/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/‌|ـ|[ً-ٟ]/g, '')
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
 
 /**
  * D-137 / C-015 — read a `localStorage`-backed config value, falling back to
@@ -511,10 +588,37 @@ export class MockRuntime {
      * cleared a binding the test thought it had removed.
      */
     lookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>>,
-  ): { accepted: boolean; errorCode?: string } {
+  ): { accepted: boolean; errorCode?: string; message?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
     if (lookBindings !== undefined) {
+      /*
+        `PLAYOUT-SOURCES-01` parity, in the bridge's order: a media id the row newly names is bound
+        from the mock's OWN library first, then a binding the row NEWLY makes must pass the one rule
+        (`unbindableChange`), and a refusal refuses the WHOLE update (BM-2's atomic rule).
+      */
+      const flat = (
+        maps: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined,
+      ): { key: string; sourceId: string }[] =>
+        Object.entries(maps ?? {}).flatMap(([lookId, plates]) =>
+          Object.entries(plates).map(([plateId, sourceId]) => ({
+            key: `${lookId}\u0000${plateId}`,
+            sourceId,
+          })),
+        );
+      for (const sourceId of new Set(flat(lookBindings).map((b) => b.sourceId))) {
+        const bound = this.#bindMedia(sourceId);
+        if (!bound.ok)
+          return { accepted: false, errorCode: 'source-unusable', message: bound.message };
+      }
+      const refusal = unbindableChange(
+        flat(lookBindings),
+        flat(this.#lookSourceBindings.get(itemId)),
+        this.sourceCatalog(),
+      );
+      if (refusal !== null) {
+        return { accepted: false, errorCode: refusal.code, message: refusal.message };
+      }
       if (Object.keys(lookBindings).length === 0) this.#lookSourceBindings.delete(itemId);
       else
         this.#lookSourceBindings.set(
@@ -756,6 +860,16 @@ export class MockRuntime {
   ): { ok: boolean; reason?: string; message?: string } {
     const item = this.#find(itemId);
     if (item === null) return { ok: false, reason: 'unknown-item' };
+    /*
+      `PLAYOUT-SOURCES-01` parity, in the bridge's order: a media item is bound from the mock's own
+      library first, and a swap is a NEW binding, so it passes the one rule with nothing held.
+    */
+    if (sourceId !== null) {
+      const bound = this.#bindMedia(sourceId);
+      if (!bound.ok) return { ok: false, reason: 'source-unusable', message: bound.message };
+      const refusal = unbindableChange([{ key: plateId, sourceId }], [], this.sourceCatalog());
+      if (refusal !== null) return { ok: false, reason: refusal.code, message: refusal.message };
+    }
     if (lookId !== undefined) {
       const bindings: Record<string, Record<string, string>> = {
         ...this.#lookSourceBindings.get(itemId),
@@ -1135,7 +1249,10 @@ export class MockRuntime {
    * console incapable of showing an alarm it cannot really be in.
    */
   liveLayersState(): LiveLayerState[] {
-    return this.#liveLayerSeed.filter((r) => this.#liveSeatedItems.has(r.itemId));
+    // `PLAYOUT-SOURCES-01` §1.E parity — the bridge's wire projection redacts `producer`.
+    return this.#liveLayerSeed
+      .filter((r) => this.#liveSeatedItems.has(r.itemId))
+      .map((r) => ({ ...r, producer: redactUrlCredentials(r.producer) }));
   }
 
   /**
@@ -1153,9 +1270,9 @@ export class MockRuntime {
   /**
    * SESSION BP parity — the template's `{plate → catalog id}` as the store has it NOW.
    *
-   * Read through `sourceAssignments()`, which prunes against the catalog in force, so the
-   * snapshot a mock take freezes is the same answer a mock read would have given — never a
-   * raw `localStorage` peek that could pin a plate the catalog has already retired.
+   * Read through `sourceAssignments()`, so the snapshot a mock take freezes is the same answer a
+   * mock read would have given. (`PLAYOUT-SOURCES-01` — nothing is pruned on that read any more:
+   * a binding whose entry is gone is kept, exactly as the bridge keeps it.)
    */
   #assignmentMapFor(templateId: string): Record<string, string> {
     const map: Record<string, string> = {};
@@ -1868,81 +1985,195 @@ export class MockRuntime {
 
   // ── settings ────────────────────────────────────────────────────────
   /**
-   * D-137 / C-015 parity — the installation's SOURCE CATALOG.
+   * 🔴 `PLAYOUT-SOURCES-01` parity — **THE SOURCES ARE THE PLAYOUT'S, BUILT BY THE ONE BUILDER.**
    *
-   * The bridge persists it to a file of its own; the offline mock has no disk,
-   * so it uses `localStorage` — the closest thing test mode has to "survives a
-   * restart", and the same store the delimiters already use.
+   * Auth off has no Playout (§1.G), so the offline console's two lists come from
+   * {@link readPlayoutSeed} — which an e2e arms and nothing in the console ever fills — and go
+   * through `buildPlayoutSourceCatalog`, the SAME function the bridge's reader calls. Without a seed
+   * the station has no inputs and no media, which is `.111`'s real state today; the mock never
+   * invents a source (R-006).
    *
-   * ⚠ AN ABSENT/UNUSABLE STORE FALLS BACK TO THE EMPTY CATALOG, never to a
-   * seeded one. The delimiters fall back to the shipped defaults because an
-   * empty picker is a dead end; a seeded CATALOG would be the opposite mistake —
-   * test mode would show sources this plant does not have, which is exactly the
-   * kind of thing R-006 forbids the mock from wearing.
+   * The PLATE BAND is the one catalogue fact CG Control still owns: it is what this key keeps
+   * (P-031 — a hand-made entry still in it is ignored, never migrated and never deleted).
    */
   sourceCatalog(): SourceCatalog {
-    return readStored(SOURCE_CATALOG_KEY, SourceCatalogSchema, EMPTY_SOURCE_CATALOG);
-  }
-
-  /** D-137 / C-015 parity — which catalog entry each template's each plate uses. */
-  sourceAssignments(): SourceAssignments {
-    // PRUNED on every read, against the catalog in force. `localStorage` is two
-    // independently-writable keys, so the same disagreement the bridge meets
-    // between two files can happen here — and it must resolve the same way, or
-    // test mode would show a plate as bound that the real station shows as not.
-    const stored = readStored(
-      SOURCE_ASSIGNMENTS_KEY,
-      SourceAssignmentsSchema,
-      EMPTY_SOURCE_ASSIGNMENTS,
-    );
-    return pruneAssignmentsForCatalog(stored, this.sourceCatalog()).value;
+    const seed = this.#playoutSeed();
+    const band = readStored(
+      SOURCE_CATALOG_KEY,
+      SourceCatalogSchema,
+      EMPTY_SOURCE_CATALOG,
+    ).layerRange;
+    return buildPlayoutSourceCatalog({
+      inputs: seed.inputs,
+      media: this.#boundMedia(),
+      layerRange: band,
+      hostIsOurs: () => true,
+      channelFor: (_host, channel) => channel,
+    });
   }
 
   /**
-   * Mirrors the bridge's refusals exactly, because it IS the bridge's validator:
-   * `checkSourceCatalog` lives in `@cg/shared-ipc` so the mock cannot come to
-   * refuse something the real station allows, or allow something it refuses.
+   * D-137 / C-015 parity — which catalog entry each template's each plate uses.
    *
-   * The DELETE cascade is the bridge's too (`pruneAssignmentsForCatalog`), and
-   * it is here rather than in the UI for the same reason: a plate left dangling
-   * in test mode is a rehearsal of the on-air failure this prevents.
+   * `PLAYOUT-SOURCES-01` §1.C — NEVER PRUNED on read any more, exactly as the bridge: a binding whose
+   * entry the Playout stopped offering is kept, and reads unavailable (or, for a hand-made id the
+   * builder never produces, unassigned — P-031's existing refusal).
    */
-  setSourceCatalog(next: SourceCatalog): {
+  sourceAssignments(): SourceAssignments {
+    return readStored(SOURCE_ASSIGNMENTS_KEY, SourceAssignmentsSchema, EMPTY_SOURCE_ASSIGNMENTS);
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` §1.F parity — `sources.set-config` carries the PLATE BAND only, validated by
+   * the bridge's own plural check against every declared bank (the mock declares no playout
+   * reservation — there is no playout system behind it to fence off). Cascades nothing.
+   */
+  setSourceBand(next: SourceBandConfig): {
     ok: boolean;
     reason?: SourcesSetConfigReason;
     message?: string;
-    droppedAssignments?: TemplateSourceAssignment[];
   } {
-    // Every declared bank, through the bridge's own plural check. The mock declares no playout
-    // reservation — there is no playout system behind it to fence off.
-    const verdict = checkSourceCatalogAgainstBanks(next, this.#fixedBanks, []);
+    const verdict = checkSourceCatalogAgainstBanks(
+      { sources: [], ...(next.layerRange !== undefined ? { layerRange: next.layerRange } : {}) },
+      this.#fixedBanks,
+      [],
+    );
     if (!verdict.ok) return verdict;
-    // ⚠ READ THE ASSIGNMENTS FIRST. `sourceAssignments()` prunes against the
-    // catalog IN FORCE, so reading it after the write would return the already-
-    // pruned set and report NOTHING dropped — the deletion would cascade
-    // silently, which is the one thing this report exists to prevent.
-    const before = this.sourceAssignments();
-    writeStored(SOURCE_CATALOG_KEY, next);
-    this.sourceCatalogChanged.emit(next);
-    const pruned = pruneAssignmentsForCatalog(before, next);
-    if (pruned.dropped.length > 0) {
-      writeStored(SOURCE_ASSIGNMENTS_KEY, pruned.value);
-      this.sourceAssignmentsChanged.emit(pruned.value);
-      return { ok: true, droppedAssignments: [...pruned.dropped] };
-    }
+    const stored = readStored(SOURCE_CATALOG_KEY, SourceCatalogSchema, EMPTY_SOURCE_CATALOG);
+    const written: SourceCatalog = { ...stored };
+    if (next.layerRange === undefined) delete written.layerRange;
+    else written.layerRange = next.layerRange;
+    writeStored(SOURCE_CATALOG_KEY, written);
+    this.sourceCatalogChanged.emit(this.sourceCatalog());
     return { ok: true };
   }
 
-  /** Mirrors the bridge's assignment refusals, from the same shared validator. */
+  /**
+   * Mirrors the bridge's route and runtime, in the bridge's order: a media id not yet bound is
+   * bound from the mock's OWN library (the bridge's "own reads"), never from anything the console
+   * sent; then only a NEW or CHANGED binding must be bindable (`unbindableChange`, the one rule);
+   * then the shape rule.
+   */
   setSourceAssignments(next: SourceAssignments): {
     ok: boolean;
     reason?: SourcesSetAssignmentsReason;
     message?: string;
   } {
-    const verdict = checkSourceAssignments(next, { catalog: this.sourceCatalog() });
-    if (!verdict.ok) return verdict;
+    for (const id of new Set(next.assignments.map((a) => a.sourceId))) {
+      const bound = this.#bindMedia(id);
+      if (!bound.ok) return { ok: false, reason: 'source-unusable', message: bound.message };
+    }
+    const shape = checkSourceAssignments(next, { catalog: null });
+    if (!shape.ok) return shape;
+    const keyed = (a: TemplateSourceAssignment): { key: string; sourceId: string } => ({
+      key: `${a.templateId}\u0000${a.plateId}`,
+      sourceId: a.sourceId,
+    });
+    const refusal = unbindableChange(
+      next.assignments.map(keyed),
+      this.sourceAssignments().assignments.map(keyed),
+      this.sourceCatalog(),
+    );
+    if (refusal !== null) return { ok: false, reason: refusal.code, message: refusal.message };
     writeStored(SOURCE_ASSIGNMENTS_KEY, next);
     this.sourceAssignmentsChanged.emit(next);
+    return { ok: true };
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` §1.A parity — **a media search, on the (seeded) Playout's side.** Pages of
+   * 50 by default; the cursor is the mock's own (an offset), valid only with the query that made it,
+   * as the Playout's is. With the seed's `down` set, the Playout "does not answer".
+   */
+  searchMedia(req: {
+    q: string;
+    sort?: 'name' | 'recent' | undefined;
+    cursor?: string | undefined;
+    limit?: number | undefined;
+  }):
+    | { ok: true; items: ConsoleMediaItem[]; total: number; nextCursor: string | null }
+    | { ok: false; reason: 'playout-unreachable' | 'playout-refused'; message: string } {
+    const seed = this.#playoutSeed();
+    if (seed.down) {
+      return { ok: false, reason: 'playout-unreachable', message: 'The Playout did not answer.' };
+    }
+    const sort = req.sort ?? 'name';
+    const needle = normalizeMediaSearch(req.q);
+    const collator = new Intl.Collator('fa-IR');
+    const matched = seed.library
+      .filter(
+        (m) =>
+          needle === '' || normalizeMediaSearch(`${m.name} ${m.folder ?? ''}`).includes(needle),
+      )
+      .sort((a, b) =>
+        sort === 'name'
+          ? collator.compare(a.name, b.name) || (a.id < b.id ? -1 : 1)
+          : (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') || (a.id < b.id ? -1 : 1),
+      );
+    const limit = Math.min(req.limit ?? 50, 200);
+    let start = 0;
+    if (req.cursor !== undefined) {
+      const [q, s, offset] = req.cursor.split('\u0001');
+      if (q !== req.q || s !== sort || offset === undefined || !/^\d+$/.test(offset)) {
+        return { ok: false, reason: 'playout-refused', message: 'The Playout refused the search.' };
+      }
+      start = Number(offset);
+    }
+    const page = matched.slice(start, start + limit);
+    return {
+      ok: true,
+      items: page.map((m) => ({
+        id: mediaSourceId(m.id),
+        name: m.name,
+        ...(m.durationMs !== undefined ? { durationMs: m.durationMs } : {}),
+        ...(m.width !== undefined ? { width: m.width } : {}),
+        ...(m.height !== undefined ? { height: m.height } : {}),
+        ...(m.folder !== undefined ? { folder: m.folder } : {}),
+      })),
+      total: matched.length,
+      nextCursor:
+        start + limit < matched.length ? [req.q, sort, String(start + limit)].join('\u0001') : null,
+    };
+  }
+
+  /** The seed, read once per mock (the page arms it before the app starts). */
+  #seedCache: PlayoutSeed | null = null;
+  #playoutSeed(): PlayoutSeed {
+    this.#seedCache ??= readPlayoutSeed();
+    return this.#seedCache;
+  }
+
+  /** The media items this console has bound, persisted like the bridge's `bridge-bound-media.json`. */
+  #boundMedia(): BoundMediaItem[] {
+    const seed = this.#playoutSeed();
+    const held = readStored(BOUND_MEDIA_KEY, BoundMediaStateSchema, { items: [] }).items;
+    const ids = new Set(held.map((m) => m.id));
+    // A seeded pre-binding (an e2e's Recent group), then whatever this console bound itself.
+    const seeded = seed.bound
+      .filter((id) => !ids.has(id))
+      .flatMap((id) => {
+        const item = seed.library.find((m) => m.id === id);
+        return item === undefined ? [] : [toBoundMedia(item, '2026-09-01T00:00:00.000Z')];
+      });
+    return [...held, ...seeded].map((m) =>
+      seed.unavailable.includes(m.id) ? { ...m, unavailable: true as const } : m,
+    );
+  }
+
+  /** §1.B — a media id is bound from the mock's own library; anything else passes through. */
+  #bindMedia(sourceId: string): { ok: true } | { ok: false; message: string } {
+    const playoutId = playoutMediaIdOf(sourceId);
+    if (playoutId === null) return { ok: true };
+    if (this.#boundMedia().some((m) => m.id === playoutId)) return { ok: true };
+    const item = this.#playoutSeed().library.find((m) => m.id === playoutId);
+    if (item === undefined) {
+      return { ok: false, message: 'That media item could not be checked with the Playout.' };
+    }
+    const held = readStored(BOUND_MEDIA_KEY, BoundMediaStateSchema, { items: [] }).items;
+    writeStored(BOUND_MEDIA_KEY, {
+      items: [...held, toBoundMedia(item, new Date().toISOString())],
+    });
+    this.sourceCatalogChanged.emit(this.sourceCatalog());
     return { ok: true };
   }
 

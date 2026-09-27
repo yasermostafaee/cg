@@ -11,6 +11,7 @@ import type {
   LiveLayerState,
   PlayoutLayerState,
   SourceAssignments,
+  SourceBandConfig,
   SourceCatalog,
   StationStray,
   TemplateInfo,
@@ -108,12 +109,14 @@ export interface StationSetupStubOptions {
   stationLayers?: PlayoutLayerState[];
   liveLayers?: LiveLayerState[];
   catalog?: SourceCatalog;
-  /** Replaces the default `setConfig` for sources — e.g. to run the real validator. */
-  sourcesSetConfig?: (next: SourceCatalog) => Promise<{
+  /**
+   * Replaces the default `setConfig` for sources. `PLAYOUT-SOURCES-01` §1.F — it carries the plate
+   * BAND only now, and cascades nothing.
+   */
+  sourcesSetConfig?: (next: SourceBandConfig) => Promise<{
     ok: boolean;
     reason?: string;
     message?: string;
-    droppedAssignments?: unknown[];
   }>;
   assignments?: SourceAssignments;
   templates?: readonly TemplateInfo[];
@@ -214,6 +217,9 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       assignments: () => Promise.resolve(options.assignments ?? { assignments: [] }),
       onAssignmentsChanged: () => () => undefined,
       setAssignments: sourcesSetAssignments,
+      // `PLAYOUT-SOURCES-01` — the picker's two reads; a stub answers them emptily.
+      mediaSearch: () => Promise.resolve({ ok: true, items: [], total: 0, nextCursor: null }),
+      refresh: () => Promise.resolve({ ok: true }),
     },
     delimiters: {
       list: () => Promise.resolve([]),

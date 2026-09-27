@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
  * R-049 — A LIVE PLATE IS VISIBLE IN PVW, AND SAYS WHICH SOURCE IS BEHIND IT.
@@ -34,6 +34,9 @@ import { expect, test } from './fixtures/runtime.js';
  * positions its markers by the geometry chain, and the test compares the two
  * results in viewport pixels.
  */
+
+/** `PLAYOUT-SOURCES-01` — the station's sources are the seeded Playout's inputs. */
+test.use({ playoutSources: E2E_PLAYOUT });
 
 const TWO_BOX = 'tpl-e2e-pvw-plates';
 
@@ -236,13 +239,8 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   );
   await expect(marker(page, 'guest-1')).toHaveAttribute('aria-label', /placeholder, not video/i);
 
-  // Define a source, then BIND it to one plate through the Inspector.
-  await app.openStationSetupAt('Live sources');
-  // `STATION-CHROME-01` §6 — through the Add dialog every Add opens; the fixture owns the
-  // flow so a change to it does not cost this spec an edit.
-  await app.addLiveSource('Studio A');
-  await app.closeStationSetup();
-
+  // BIND one plate to a Playout input through the Inspector. (`PLAYOUT-SOURCES-01` — the inputs
+  // are the seeded Playout's; nothing in the console defines one any more.)
   await app.selectLayerRow(layer);
 
   /*
@@ -261,13 +259,13 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   await expect(marker(page, 'guest-1')).toContainText('no source assigned');
   await expect(marker(page, 'guest-1')).toHaveAttribute('data-live-plate-state', 'unassigned');
 
-  await app.setTemplateDefault('guest-1', 'Studio A');
+  await app.setTemplateDefault('guest-1', 'Studio 1');
 
-  // Assigned: the plate flips state and names the INSTALLATION's source — the join
+  // Assigned: the plate flips state and names the Playout input's NAME — the join
   // no exported page can make, because it carries a plate identifier and nothing
   // else.
   await expect(marker(page, 'guest-1')).toHaveAttribute('data-live-plate-state', 'assigned');
-  await expect(marker(page, 'guest-1')).toContainText('Studio A');
+  await expect(marker(page, 'guest-1')).toContainText('Studio 1');
   await expect(marker(page, 'guest-2')).toHaveAttribute('data-live-plate-state', 'unassigned');
 
   // ── THE ACROSS-THE-ROOM DIFFERENCE, asserted on COMPUTED STYLE ───────────

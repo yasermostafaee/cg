@@ -233,6 +233,13 @@ describe('C-038 — the census: every route, classified', () => {
       'setup.route-address',
       'sources.assignments',
       'sources.config',
+      /*
+        `PLAYOUT-SOURCES-01` §4 — the picker's two reads. `media-search` answers a VIEWER (D11 is
+        readable by every CG role, and the picker is a read); `refresh` asks for a D10 read no sooner
+        than 5 s after the last, and changes nothing a read would not.
+      */
+      'sources.media-search',
+      'sources.refresh',
       'stack.snapshot',
       // `DESKTOP-APPS-01-D` j — the strays, read by every console so its retention keeps them.
       'station.strays',

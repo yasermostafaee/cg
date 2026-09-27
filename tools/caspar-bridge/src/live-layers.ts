@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { LiveLayerState } from '@cg/shared-ipc';
+import { redactUrlCredentials, type LiveLayerState } from '@cg/shared-ipc';
 import type { CommandSlot } from './command-builder.js';
 
 /**
@@ -119,6 +119,15 @@ export interface LiveLayerRecord {
    * is what it was.
    */
   readonly held?: boolean | undefined;
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.I — **where the seated source came from.** `input` is a Playout input
+   * (D10: NDI, stream): contract v1.3 rule 2 says it is seated silent and its volume only ever
+   * RISES by a ramp (`VOLUME <v> 25`), because the Playout may route the same input to the same
+   * channel and two copies add up. Recorded because a later raise (the operator's fader, a plate
+   * leaving HELD, the reconnect re-send) reaches the layer from the RECORD, with no catalogue in
+   * hand. Additive: absent is every plate seated before this field existed, and today's wire.
+   */
+  readonly origin?: 'input' | 'media' | undefined;
 }
 
 /**
@@ -157,6 +166,8 @@ const LiveLayerRecordSchema = z.object({
   // Additive — see {@link LiveLayerRecord.held}. Absent parses as "not held", so a ledger
   // persisted before looks existed comes back describing exactly what it described then.
   held: z.boolean().optional(),
+  // Additive — see {@link LiveLayerRecord.origin}. Absent is today's plate.
+  origin: z.enum(['input', 'media']).optional(),
 });
 
 export const PersistedLiveLayersSchema = z.array(
@@ -287,6 +298,11 @@ export function reconcileLiveLayers(input: {
  * existed parses unchanged and means "on screen"). That is a persistence concern,
  * and it is answered exactly once — here — so no consumer re-decides what an
  * absent flag meant.
+ *
+ * 🔴 `PLAYOUT-SOURCES-01` §1.E — **`producer` is REDACTED here, and only here.** It is the
+ * argument actually sent, and a D10 stream's is its URL, credentials included. The persisted
+ * ledger keeps the real value (boot adoption compares it byte for byte against what the mapping
+ * would send now); the wire — the only road to a browser — carries `scheme://***@`.
  */
 export function projectLiveLayers(
   ledger: ReadonlyMap<string, readonly LiveLayerRecord[]>,
@@ -301,7 +317,7 @@ export function projectLiveLayers(
         itemId,
         sourceId: record.sourceId,
         role: record.role,
-        producer: record.producer,
+        producer: redactUrlCredentials(record.producer),
         held: record.held === true,
         unverified: isUnverified(itemId, record),
       });

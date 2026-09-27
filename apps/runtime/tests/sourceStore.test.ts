@@ -4,13 +4,13 @@ import {
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
   type SourceAssignments,
+  type SourceBandConfig,
   type SourceCatalog,
-  type TemplateSourceAssignment,
 } from '@cg/shared-ipc';
 import {
   __resetSourcesForTest,
   commitSourceAssignments,
-  commitSourceCatalog,
+  commitSourceBand,
   currentSourceAssignments,
   currentSourceCatalog,
   initSources,
@@ -31,22 +31,22 @@ import {
  *  3. A REFUSAL NEVER SHOWS A WIRE IDENTIFIER — `invalid request for
  *     sources.set-config` is what an operator actually met, and it names an IPC
  *     channel. Every refusal this surface can produce reads as a sentence.
- *  4. A DELETION'S CASCADE IS MIRRORED LOCALLY — the bridge drops the
- *     assignments a retired source orphaned, and this browser must not paint a
- *     plate as bound in the frames between the ack and the push.
+ *  4. 🔴 `PLAYOUT-SOURCES-01` §1.F — THE BAND IS THE ONLY CATALOGUE FACT THIS CONSOLE SENDS. The
+ *     sources are the Playout's; `sources.set-config` carries the plate band and nothing else, and
+ *     cascades nothing (the old fourth property, a deletion's cascade mirrored locally, went with
+ *     the catalogue editor).
  */
 
 interface SetConfigResult {
   ok: boolean;
   message?: string;
   reason?: string;
-  droppedAssignments?: TemplateSourceAssignment[];
 }
 
 interface FakeBridge {
   sources: {
     config: () => Promise<SourceCatalog>;
-    setConfig: (req: SourceCatalog) => Promise<SetConfigResult>;
+    setConfig: (req: SourceBandConfig) => Promise<SetConfigResult>;
     onConfigChanged: (handler: (c: SourceCatalog) => void) => () => void;
     assignments: () => Promise<SourceAssignments>;
     setAssignments: (
@@ -67,11 +67,10 @@ let storedCatalog: SourceCatalog = EMPTY_SOURCE_CATALOG;
 let storedAssignments: SourceAssignments = EMPTY_SOURCE_ASSIGNMENTS;
 let configRefusal: { message?: string; reason?: string } | null = null;
 let assignmentRefusal: { message?: string; reason?: string } | null = null;
-let dropOnSet: TemplateSourceAssignment[] | null = null;
 let throwOnSet: Error | null = null;
 let pushCatalog: ((c: SourceCatalog) => void) | null = null;
 let pushAssignments: ((a: SourceAssignments) => void) | null = null;
-const setConfigCalls: SourceCatalog[] = [];
+const setConfigCalls: SourceBandConfig[] = [];
 
 function installBridge(): FakeBridge {
   const bridge: FakeBridge = {
@@ -81,10 +80,8 @@ function installBridge(): FakeBridge {
         setConfigCalls.push(req);
         if (throwOnSet !== null) return Promise.reject(throwOnSet);
         if (configRefusal !== null) return Promise.resolve({ ok: false, ...configRefusal });
-        storedCatalog = req;
-        return Promise.resolve(
-          dropOnSet === null ? { ok: true } : { ok: true, droppedAssignments: dropOnSet },
-        );
+        storedCatalog = { ...storedCatalog, ...req };
+        return Promise.resolve({ ok: true });
       },
       onConfigChanged: (handler) => {
         pushCatalog = handler;
@@ -116,7 +113,6 @@ beforeEach(() => {
   storedAssignments = EMPTY_SOURCE_ASSIGNMENTS;
   configRefusal = null;
   assignmentRefusal = null;
-  dropOnSet = null;
   throwOnSet = null;
   pushCatalog = null;
   pushAssignments = null;
@@ -156,19 +152,19 @@ describe('the bridge owns both halves; this is a cache', () => {
 });
 
 describe('a refusal never becomes a local truth, and never shows a wire identifier', () => {
-  it('does NOT adopt a refused catalog', async () => {
+  it('does NOT adopt a refused band', async () => {
     initSources(installBridge());
     await settle();
-    configRefusal = { reason: 'duplicate-name', message: 'two sources are called "Studio A"' };
+    configRefusal = { reason: 'overlaps-fixed-bank', message: 'band 60-85 overlaps 80-99' };
 
-    const { refusal } = await commitSourceCatalog(studioA);
+    const refusal = await commitSourceBand({ start: 60, end: 85 });
     expect(refusal).not.toBeNull();
     // The RULE comes from the wire's own reason union, and it is the ONE line: the bridge's
     // sentence no longer rides beneath it (`DELTA-MULTI-CHANNEL-01-A` A5).
     expect(refusal).toEqual({
-      text: 'Another source already has that name. The name is what you pick from when binding a plate, so two the same would leave you choosing blind.',
+      text: 'The live source layer band would overlap the operator’s candidate layers — the two must stay disjoint.',
     });
-    // The cache is what the STATION has, which is nothing.
+    // The cache is what the STATION has, which is no band.
     expect(currentSourceCatalog()).toEqual(EMPTY_SOURCE_CATALOG);
   });
 
@@ -178,7 +174,8 @@ describe('a refusal never becomes a local truth, and never shows a wire identifi
     assignmentRefusal = { reason: 'unknown-source', message: 'plate "guest-1" …' };
 
     const refusal = await commitSourceAssignments(bound);
-    expect(refusal?.text).toContain('no longer defined on this station');
+    // `PLAYOUT-SOURCES-01` — nothing is "defined on this station" now: the sources are the Playout's.
+    expect(refusal?.text).toBe('That source is not one the Playout offers — choose another.');
     expect(currentSourceAssignments()).toEqual(EMPTY_SOURCE_ASSIGNMENTS);
   });
 
@@ -193,36 +190,31 @@ describe('a refusal never becomes a local truth, and never shows a wire identifi
       'unknown channel: sources.set-config',
     ]) {
       throwOnSet = new Error(message);
-      const { refusal } = await commitSourceCatalog(studioA);
+      const refusal = await commitSourceBand({ start: 60, end: 69 });
       expect(refusal?.text).toContain('older build');
       expect(refusal?.text).not.toContain('sources.set-config');
     }
   });
 });
 
-describe('deleting a source cascades, and this browser mirrors it at once', () => {
-  it('drops the orphaned bindings locally rather than waiting for the push', async () => {
+describe('`PLAYOUT-SOURCES-01` §1.F — the band is the only catalogue fact this console sends', () => {
+  it('sends the band and nothing else, and keeps the sources the bridge published', async () => {
     storedCatalog = studioA;
-    storedAssignments = bound;
     initSources(installBridge());
     await settle();
-
-    dropOnSet = [{ templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' }];
-    const { refusal, droppedAssignments } = await commitSourceCatalog(EMPTY_SOURCE_CATALOG);
-
-    expect(refusal).toBeNull();
-    // Handed back so the surface can NAME them at the moment of deletion — an
-    // operator who learns at the take is learning too late.
-    expect(droppedAssignments).toEqual(dropOnSet);
-    // …and gone from the cache, with no push involved: a frame showing a plate
-    // as bound to a source that no longer exists is the thing being prevented.
-    expect(currentSourceAssignments()).toEqual({ assignments: [] });
+    expect(await commitSourceBand({ start: 60, end: 69 })).toBeNull();
+    // Only `{ layerRange }` crossed the wire — never a source.
+    expect(setConfigCalls).toEqual([{ layerRange: { start: 60, end: 69 } }]);
+    // Adopted locally once accepted, beside the sources this console did not send.
+    expect(currentSourceCatalog()).toEqual({ ...studioA, layerRange: { start: 60, end: 69 } });
   });
 
-  it('sends the WHOLE catalog, never a delta', async () => {
+  it('control: no band sends an empty request, which clears it', async () => {
+    storedCatalog = { ...studioA, layerRange: { start: 60, end: 69 } };
     initSources(installBridge());
     await settle();
-    await commitSourceCatalog(studioA);
-    expect(setConfigCalls).toEqual([studioA]);
+    expect(await commitSourceBand(undefined)).toBeNull();
+    expect(setConfigCalls).toEqual([{}]);
+    expect(currentSourceCatalog().layerRange).toBeUndefined();
   });
 });

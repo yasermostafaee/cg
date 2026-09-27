@@ -1,10 +1,19 @@
 import {
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
+  type ChannelRequest,
+  type ChannelResponse,
+  type ConsoleMediaItem,
+  type LiveSourceLayerRange,
   type SourceAssignments,
   type SourceCatalog,
-  type TemplateSourceAssignment,
+  type SourcesMediaSearchChannel,
 } from '@cg/shared-ipc';
+
+/** One media search, as the picker asks it. */
+export type MediaSearchRequest = ChannelRequest<typeof SourcesMediaSearchChannel>;
+/** Its answer: a page, or one of the two named failures. */
+export type MediaSearchResponse = ChannelResponse<typeof SourcesMediaSearchChannel>;
 import { sourcesReasonMessage, sourcesTransportMessage } from '../../ui/sourcesReasonMessage.js';
 
 /**
@@ -141,41 +150,64 @@ function refusalOf(res: {
 }
 
 /**
- * Send a new catalog to the bridge and adopt it only once ACCEPTED.
- *
- * The local cache is NOT updated optimistically. The bridge is the owner and can
- * refuse — a duplicate id, a duplicate name, a band overlapping the candidate
- * bank or the reserved playout range — and showing the operator a catalog the
- * station does not have is worse here than anywhere else this rule applies: they
- * would walk away believing a guest box is bound, and find out at the take.
- *
- * On success it returns the assignments the change ORPHANED, so the caller can
- * name them at the moment of deletion. An empty array is the ordinary case.
+ * 🔴 `PLAYOUT-SOURCES-01` §1.F — **send the PLATE BAND to the bridge, and adopt it only once
+ * ACCEPTED.** The station's sources are the Playout's; the band is the one catalogue fact this
+ * console edits. The bridge can refuse (a band overlapping the candidate bank or the reserved
+ * playout range) and supplies the rule; it cascades nothing, so a refusal is the only answer
+ * there is to report.
  */
-export async function commitSourceCatalog(next: SourceCatalog): Promise<{
-  refusal: CommitRefusal | null;
-  droppedAssignments: readonly TemplateSourceAssignment[];
-}> {
+export async function commitSourceBand(
+  layerRange: LiveSourceLayerRange | undefined,
+): Promise<CommitRefusal | null> {
   try {
-    const res = await window.cg.sources.setConfig(next);
-    if (!res.ok) return { refusal: refusalOf(res), droppedAssignments: [] };
+    const res = await window.cg.sources.setConfig(layerRange === undefined ? {} : { layerRange });
+    if (!res.ok) return refusalOf(res);
+    const next: SourceCatalog = { ...catalog };
+    if (layerRange === undefined) delete next.layerRange;
+    else next.layerRange = layerRange;
     catalog = next;
-    const dropped = res.droppedAssignments ?? [];
-    if (dropped.length > 0) {
-      // The bridge already cascaded; mirror it locally so this browser cannot
-      // paint a plate as bound between the ack and the push that follows.
-      const orphaned = new Set(dropped.map((a) => `${a.templateId} ${a.plateId}`));
-      assignments = {
-        assignments: assignments.assignments.filter(
-          (a) => !orphaned.has(`${a.templateId} ${a.plateId}`),
-        ),
-      };
-    }
     bump();
-    return { refusal: null, droppedAssignments: dropped };
+    return null;
   } catch (err) {
-    return { refusal: { text: sourcesTransportMessage(err) }, droppedAssignments: [] };
+    return { text: sourcesTransportMessage(err) };
   }
+}
+
+/**
+ * `PLAYOUT-SOURCES-01` §1.A — a picker opened: ask the bridge to read the Playout again if its last
+ * read is older than 5 s. Never waited on; whatever changes arrives as a push.
+ */
+export function refreshPlayoutSources(): void {
+  try {
+    void window.cg.sources.refresh().catch(() => undefined);
+  } catch {
+    // No bridge yet (a page still booting): the picker opens on what is already held.
+  }
+}
+
+/** `PLAYOUT-SOURCES-01` §1.A — one page of the Playout's media, searched on the Playout's side. */
+export async function searchPlayoutMedia(req: MediaSearchRequest): Promise<MediaSearchResponse> {
+  try {
+    const res = await window.cg.sources.mediaSearch(req);
+    if (res.ok) {
+      for (const item of res.items) seenMedia.set(item.id, item);
+    }
+    return res;
+  } catch {
+    return { ok: false, reason: 'playout-unreachable', message: 'The Playout did not answer.' };
+  }
+}
+
+/**
+ * The media items this console has SEEN in a search this session, by catalogue id — so a field can
+ * name an item the operator just picked, before a commit binds it and the catalogue carries it.
+ * Names only; what is played is the bridge's own read, never this.
+ */
+const seenMedia = new Map<string, ConsoleMediaItem>();
+
+/** A media item seen in a search this session, or `undefined`. */
+export function seenMediaItem(id: string): ConsoleMediaItem | undefined {
+  return seenMedia.get(id);
 }
 
 /** Send new assignments to the bridge and adopt them only once ACCEPTED. */

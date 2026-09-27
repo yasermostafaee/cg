@@ -33,12 +33,23 @@ export function messageToEvent(msg: OscMessage): OscEvent | null {
     if (tail === 'foreground/producer') {
       const producer = stringArg(msg.args[0]);
       if (producer === null) return null;
-      return { kind: 'osc.layer.foreground.producer', channel, layer, producer };
+      return {
+        kind: 'osc.layer.foreground.producer',
+        channel,
+        layer,
+        producer: oscProducerKind(producer),
+      };
     }
     if (tail === 'foreground/file/path') {
       const path = stringArg(msg.args[0]);
       if (path === null) return null;
-      return { kind: 'osc.layer.foreground.file', channel, layer, path };
+      /*
+        🔴 `PLAYOUT-SOURCES-01` §1.E — contract v1.3 §3.3: the core sends every AMCP client the
+        full state, input ADDRESSES WITH CREDENTIALS included. So the path is DROPPED here, at the
+        one door every OSC value passes, and only the fact that a file event arrived survives.
+        Nothing downstream read the value (the reconciler reads the producer, never the file).
+      */
+      return { kind: 'osc.layer.foreground.file', channel, layer, path: '' };
     }
     if (tail === 'foreground/paused') {
       const paused = booleanArg(msg.args[0]);
@@ -48,11 +59,29 @@ export function messageToEvent(msg: OscMessage): OscEvent | null {
     if (tail === 'background/producer') {
       const producer = stringArg(msg.args[0]);
       if (producer === null) return null;
-      return { kind: 'osc.layer.background.producer', channel, layer, producer };
+      return {
+        kind: 'osc.layer.background.producer',
+        channel,
+        layer,
+        producer: oscProducerKind(producer),
+      };
     }
   }
 
   return null;
+}
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.E — **AN OSC PRODUCER VALUE AS ITS KIND, never where it reads from.**
+ * CasparCG reports kind names (`html`, `ffmpeg`, `route`, `empty` — measured), and every place that
+ * shows one needs only that: "a producer is there, and what sort". Anything carrying a scheme, a
+ * path, whitespace or an `@` is reduced to its leading word, so a URL with credentials can never be
+ * logged, published or shown from here.
+ */
+export function oscProducerKind(value: string): string {
+  const trimmed = value.trim();
+  if (!/[:/\\\s@"'[\]]/.test(trimmed)) return trimmed;
+  return /^[A-Za-z][A-Za-z0-9_-]*/.exec(trimmed)?.[0] ?? 'producer';
 }
 
 function numericArg(v: unknown): number | null {

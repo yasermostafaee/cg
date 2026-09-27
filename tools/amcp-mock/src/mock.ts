@@ -64,9 +64,14 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   // from any socket and survives the socket that staged it. Per mock instance rather than
   // per module, so one test's orphan cannot land in the next test's channel.
   const deferredMixer = new Map<number, (() => void)[]>();
+  // `PLAYOUT-SOURCES-01` — the files this server no longer has (`setMissingMedia`).
+  let missingMedia = new Set<string>();
 
   const ctx: HandlerContext = {
     channelCount,
+    isMissingMedia(file: string): boolean {
+      return missingMedia.has(file);
+    },
     getLayer(slot: LayerSlot): LayerState {
       return registry.get(slot);
     },
@@ -193,6 +198,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     setLayerVolume(slot: LayerSlot, volume: number): void {
       registry.patch(slot, { volume });
+    },
+    setMissingMedia(paths: readonly string[]): void {
+      missingMedia = new Set(paths);
     },
     stagedMixerCount(channel: number): number {
       return deferredMixer.get(channel)?.length ?? 0;

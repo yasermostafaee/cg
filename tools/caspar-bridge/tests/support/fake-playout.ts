@@ -81,7 +81,375 @@ const PATHS = {
   channels: '/api/cg/channels',
   /** D8 — who the bearer is. Served so a suite can show it introduces NOTHING (`-01-C` C4). */
   me: '/api/cg/me',
+  /** `PLAYOUT-SOURCES-01` — D10, the Playout's inputs (contract v1.2, v1.3's `route` and `epoch`). */
+  inputs: '/api/cg/inputs',
+  /** `PLAYOUT-SOURCES-01` — D11, the Playout's media library. */
+  media: '/api/cg/media',
 } as const;
+
+// ── `PLAYOUT-SOURCES-01` §3 — D10 AND D11, AS THEIR ANSWER DESCRIBES THEM ──────────────────────
+//
+// `PLAYOUT-CG-RESPONSE-INPUTS-MEDIA-v1` §1–§3 and `PLAYOUT-CG-RESPONSE-V13-INSTALL-v1`, quoted here
+// rather than imported from `@cg/shared-ipc`, for the reason `PATHS` gives: the fake is the OTHER
+// party to the contract, so it must not agree with the bridge by construction.
+
+/** One D10 input as the Playout sends it. `producer` is kept loose: the Playout decides its shape. */
+export interface FakeInput {
+  readonly id: string;
+  readonly name: string;
+  readonly casparHost?: string;
+  readonly producer: Readonly<Record<string, unknown>>;
+  readonly format?: string;
+  readonly aspect?: number;
+  readonly available?: boolean;
+  readonly reason?: string;
+  readonly compatibleChannels?: readonly { casparHost: string; casparChannel: number }[];
+}
+
+/**
+ * The inputs the fake lists, modelling the Playout's real list (§3 of the prompt): an NDI input, a
+ * stream CARRYING CREDENTIALS (for the redaction tests), a multicast, v1.3's two `route` inputs to
+ * the holder channel (one of them for channel 1 only, and down), and one stream on a scheme this
+ * product does not accept.
+ */
+export const FAKE_INPUTS: readonly FakeInput[] = [
+  {
+    id: 'li-studio1',
+    name: 'Studio 1',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 1)' },
+    format: '1080i5000',
+    aspect: 1.7778,
+  },
+  {
+    id: 'li-newscam',
+    name: 'دوربین خبر',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'stream', url: 'rtsp://cam:secret@10.0.0.21/live' },
+    format: 'AUTO',
+    aspect: 1.7778,
+  },
+  {
+    id: 'li-multicast',
+    name: 'Multicast',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'stream', url: 'udp://239.255.0.1:5000?reuse=1' },
+    format: '1080i5000',
+    aspect: 1.7778,
+  },
+  {
+    id: 'li-input3',
+    name: 'ورودی ۳',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'route', channel: 9, layer: 12, videoMode: '1080i5000' },
+    aspect: 1.7778,
+    available: true,
+    compatibleChannels: [
+      { casparHost: '127.0.0.1', casparChannel: 1 },
+      { casparHost: '127.0.0.1', casparChannel: 2 },
+    ],
+  },
+  {
+    id: 'li-input4',
+    name: 'ورودی ۴',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'route', channel: 9, layer: 13 },
+    aspect: 1.7778,
+    available: false,
+    reason: 'no signal',
+    compatibleChannels: [{ casparHost: '127.0.0.1', casparChannel: 1 }],
+  },
+  {
+    id: 'li-rist',
+    name: 'RIST feed',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'stream', url: 'rist://10.0.0.30:5004' },
+    aspect: 1.7778,
+  },
+];
+
+/** One D11 item as the Playout sends it (§2.1–§2.2). `clip` is ABSOLUTE, with `/`. */
+export interface FakeMediaItem {
+  readonly id: string;
+  readonly name: string;
+  readonly clip: string;
+  readonly type: 'video' | 'audio';
+  readonly durationMs: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly folder: string;
+  readonly updatedAt: string;
+}
+
+/** How big the fake library is (§3: 5,000 items). */
+export const FAKE_MEDIA_COUNT = 5_000;
+
+/** The named items every suite can rely on (§3), by their Playout ids. */
+export const FAKE_MEDIA_IDS = {
+  /** A media item named EXACTLY like an input — the separation test's subject. */
+  studio1: 'm-studio1',
+  /** Typed with ARABIC `ي`/`ك` — found by a Persian query, and the reverse. */
+  arabicTyped: 'm-arabic',
+  /** Persian digits: `خبر ۱۴۰۵`, found by `خبر 1405`. */
+  khabar1405: 'm-khabar1405',
+  /** The prompt's own media sentence names it. */
+  titraj20: 'm-titraj20',
+  /** Persian `کلیپ`, found by the Arabic-typed `كليپ`. */
+  kelip: 'm-kelip',
+} as const;
+
+const PERSIAN_WORDS = ['خبر', 'گزارش', 'مستند', 'ورزش', 'اقتصاد', 'فرهنگ', 'آرشیو', 'میان‌برنامه'];
+const LATIN_WORDS = ['News', 'Promo', 'Sport', 'Weather', 'Archive', 'Bumper', 'Trailer', 'Opener'];
+const FOLDERS = [
+  'Apasai_CIaB/News',
+  'Apasai_CIaB/Film/khareji',
+  'آرشیو/۱۴۰۵',
+  'Share/Video',
+  'Promo',
+];
+const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const toPersianDigits = (n: number): string =>
+  String(n).replace(/\d/g, (d) => PERSIAN_DIGITS[Number(d)] ?? d);
+
+/** An "original" path — where the library keeps the file: absolute, spaces and Persian allowed. */
+const originalClip = (folder: string, name: string, ext: string): string =>
+  `C:/Apasai CIaB/${folder}/${name}.${ext}`;
+/** A "cache" path — the engine's content-hashed copy (§2.1). */
+const cacheClip = (id: string): string =>
+  `C:/Apasai CIaB/Engine/bin/engine/data/cache/${id.replace(/[^0-9a-z]/gi, '')}c0ffee.mpg`;
+
+/**
+ * THE FAKE LIBRARY: {@link FAKE_MEDIA_COUNT} items, generated deterministically (the same list on
+ * every call), Persian and Latin names in five folders, audio mixed in (never offered), no stills.
+ */
+export function fakeMediaLibrary(): FakeMediaItem[] {
+  const named: FakeMediaItem[] = [
+    {
+      id: FAKE_MEDIA_IDS.studio1,
+      name: 'Studio 1',
+      clip: originalClip('Promo', 'Studio 1', 'mov'),
+      type: 'video',
+      durationMs: 12_000,
+      width: 1920,
+      height: 1080,
+      folder: 'Promo',
+      updatedAt: '2026-09-20T08:00:00Z',
+    },
+    {
+      id: FAKE_MEDIA_IDS.arabicTyped,
+      name: 'كليپ خبري',
+      clip: originalClip('Apasai_CIaB/News', 'كليپ خبري', 'mp4'),
+      type: 'video',
+      durationMs: 45_000,
+      width: 1920,
+      height: 1080,
+      folder: 'Apasai_CIaB/News',
+      updatedAt: '2026-09-21T09:30:00Z',
+    },
+    {
+      id: FAKE_MEDIA_IDS.khabar1405,
+      name: 'خبر ۱۴۰۵',
+      clip: originalClip('آرشیو/۱۴۰۵', 'خبر ۱۴۰۵', 'mp4'),
+      type: 'video',
+      durationMs: 1_059_000,
+      width: 1920,
+      height: 1080,
+      folder: 'آرشیو/۱۴۰۵',
+      updatedAt: '2026-09-22T10:00:00Z',
+    },
+    {
+      id: FAKE_MEDIA_IDS.titraj20,
+      name: 'تیتراژ خبر ۲۰',
+      clip: originalClip('Apasai_CIaB/News', 'تیتراژ خبر ۲۰', 'mov'),
+      type: 'video',
+      durationMs: 20_000,
+      width: 1920,
+      height: 1080,
+      folder: 'Apasai_CIaB/News',
+      updatedAt: '2026-09-23T11:15:00Z',
+    },
+    {
+      id: FAKE_MEDIA_IDS.kelip,
+      name: 'کلیپ معرفی',
+      clip: originalClip('Promo', 'کلیپ معرفی', 'mp4'),
+      type: 'video',
+      durationMs: 30_000,
+      width: 1280,
+      height: 720,
+      folder: 'Promo',
+      updatedAt: '2026-09-24T12:45:00Z',
+    },
+  ];
+  const items = [...named];
+  for (let i = 0; items.length < FAKE_MEDIA_COUNT; i += 1) {
+    const persian = i % 2 === 0;
+    const word = persian
+      ? (PERSIAN_WORDS[i % PERSIAN_WORDS.length] as string)
+      : (LATIN_WORDS[i % LATIN_WORDS.length] as string);
+    const serial = 100 + i;
+    const name = persian ? `${word} ${toPersianDigits(serial)}` : `${word} ${String(serial)}`;
+    const folder = FOLDERS[i % FOLDERS.length] as string;
+    const audio = i % 7 === 3;
+    const id = `m-${i.toString(16).padStart(8, '0')}`;
+    const day = String(1 + (i % 28)).padStart(2, '0');
+    const minute = String(i % 60).padStart(2, '0');
+    items.push({
+      id,
+      name,
+      // Every third video plays from the engine's cache copy, as `.111`'s 26 of 86 do (S5).
+      clip: audio
+        ? originalClip(folder, name, 'wav')
+        : i % 3 === 0
+          ? cacheClip(id)
+          : originalClip(folder, name, 'mp4'),
+      type: audio ? 'audio' : 'video',
+      durationMs: 5_000 + (i % 600) * 1_000,
+      ...(audio ? {} : { width: 1920, height: 1080 }),
+      folder,
+      updatedAt: `2026-08-${day}T${String(i % 24).padStart(2, '0')}:${minute}:00Z`,
+    });
+  }
+  return items;
+}
+
+/**
+ * §2.2 — the search normalisation, EXACTLY as the contract lists it and nothing more: `ي/ى→ی`,
+ * `ك→ک`, U+200C, U+0640 and U+064B–U+065F removed, `۰–۹` and `٠–٩` to `0–9`, spaces collapsed, and
+ * case folded.
+ */
+export function normalizeFakeSearch(text: string): string {
+  return (
+    text
+      .replace(/[يى]/g, 'ی')
+      .replace(/ك/g, 'ک')
+      // An alternation, not one class: a mark straight after a letter in a class is one combined
+      // character to the regex reader (`no-misleading-character-class`).
+      .replace(/\u200C|\u0640|[\u064B-\u065F]/g, '')
+      .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+      .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+  );
+}
+
+/** The keyset cursor, bound to its query (§2.2: another query gets `400`). */
+interface FakeMediaCursor {
+  readonly q: string;
+  readonly type: string;
+  readonly sort: string;
+  readonly key: string;
+  readonly id: string;
+}
+
+const encodeCursor = (cursor: FakeMediaCursor): string =>
+  Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+
+function decodeCursor(raw: string): FakeMediaCursor | null {
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const c = parsed as Record<string, unknown>;
+    return typeof c['q'] === 'string' &&
+      typeof c['type'] === 'string' &&
+      typeof c['sort'] === 'string' &&
+      typeof c['key'] === 'string' &&
+      typeof c['id'] === 'string'
+      ? (c as unknown as FakeMediaCursor)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const FA_COLLATOR = new Intl.Collator('fa-IR');
+const CONTRACT_ID = /^[A-Za-z0-9_-]{1,48}$/;
+const MEDIA_TYPES = new Set(['video', 'audio', 'still']);
+
+/** A D11 page as the Playout answers it. */
+export interface FakeMediaPage {
+  readonly items: readonly FakeMediaItem[];
+  readonly total: number;
+  readonly nextCursor: string | null;
+}
+
+/**
+ * D11, answered over a library (their answer §2.2) — or `null` for a `400 invalid_query`. ONE
+ * answer, shared by the HTTP fake and the auth-off provider (`local-playout-sources.ts`), so the
+ * two cannot come to search differently:
+ *
+ *   - `ids=`: at most 100 contract ids, answered in REQUEST order; an id the library no longer
+ *     holds is simply absent;
+ *   - `q`: normalised ({@link normalizeFakeSearch}) and matched on the name and the readable folder;
+ *   - `type`: a comma list of `video`/`audio`/`still` (still is accepted and has no items);
+ *   - `sort`: `name` (fa-IR, then id) or `recent` (`updatedAt` descending, then id);
+ *   - `limit`: 50 by default, clamped at 200, and `400` when not a positive whole number;
+ *   - `cursor`: a KEYSET bound to its `q`/`type`/`sort` — `400` under another query — so an item
+ *     added or removed between two pages causes neither a repeat nor a gap.
+ */
+export function answerFakeMediaQuery(
+  library: Iterable<FakeMediaItem>,
+  query: URLSearchParams,
+): FakeMediaPage | null {
+  const all = [...library];
+  const idsParam = query.get('ids');
+  if (idsParam !== null) {
+    const ids = idsParam.split(',').filter((id) => id !== '');
+    if (ids.length === 0 || ids.length > 100 || !ids.every((id) => CONTRACT_ID.test(id))) {
+      return null;
+    }
+    const byId = new Map(all.map((m) => [m.id, m] as const));
+    const items = ids.map((id) => byId.get(id)).filter((m): m is FakeMediaItem => m !== undefined);
+    return { items, total: items.length, nextCursor: null };
+  }
+  const rawLimit = query.get('limit');
+  const limitNumber = rawLimit === null ? 50 : Number(rawLimit);
+  if (!Number.isInteger(limitNumber) || limitNumber <= 0) return null;
+  const limit = Math.min(limitNumber, 200);
+  const sort = query.get('sort') ?? 'name';
+  if (sort !== 'name' && sort !== 'recent') return null;
+  const typeParam = query.get('type') ?? 'video,audio';
+  const types = typeParam.split(',').filter((t) => t !== '');
+  if (types.length === 0 || !types.every((t) => MEDIA_TYPES.has(t))) return null;
+  const q = query.get('q') ?? '';
+  const needle = normalizeFakeSearch(q);
+  const keyOf = (m: FakeMediaItem): string => (sort === 'name' ? m.name : m.updatedAt);
+  const compare = (a: { key: string; id: string }, b: { key: string; id: string }): number => {
+    const byKey = sort === 'name' ? FA_COLLATOR.compare(a.key, b.key) : b.key.localeCompare(a.key);
+    return byKey !== 0 ? byKey : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  };
+  const matched = all
+    .filter((m) => types.includes(m.type))
+    .filter(
+      (m) =>
+        needle === '' ||
+        normalizeFakeSearch(m.name).includes(needle) ||
+        normalizeFakeSearch(m.folder).includes(needle),
+    )
+    .sort((a, b) => compare({ key: keyOf(a), id: a.id }, { key: keyOf(b), id: b.id }));
+  let start = 0;
+  const rawCursor = query.get('cursor');
+  if (rawCursor !== null) {
+    const cursor = decodeCursor(rawCursor);
+    if (cursor === null || cursor.q !== q || cursor.type !== typeParam || cursor.sort !== sort) {
+      return null;
+    }
+    const after = matched.findIndex(
+      (m) => compare({ key: keyOf(m), id: m.id }, { key: cursor.key, id: cursor.id }) > 0,
+    );
+    start = after === -1 ? matched.length : after;
+  }
+  const page = matched.slice(start, start + limit);
+  const last = page[page.length - 1];
+  return {
+    items: page,
+    total: matched.length,
+    nextCursor:
+      start + limit < matched.length && last !== undefined
+        ? encodeCursor({ q, type: typeParam, sort, key: keyOf(last), id: last.id })
+        : null,
+  };
+}
 
 /** One D4 catalogue row (§4, `handoff/2026-09-16/channels.json`), spelled as the contract does. */
 export interface FakeCatalogueRow {
@@ -363,6 +731,8 @@ const ERROR_STATUS = {
   invalid_refresh_token: 401,
   invalid_token: 401,
   not_found: 404,
+  /** `PLAYOUT-SOURCES-01` — D11's bad parameter (§3 of their answer): a stale cursor, a bad limit. */
+  invalid_query: 400,
 } as const;
 
 /** A contract error code. `not_found` is this fake's own; the SHAPE is the contract's (§4.6). */
@@ -389,6 +759,7 @@ const ERROR_MESSAGES: Readonly<Record<FakePlayoutErrorCode, string>> = {
   invalid_refresh_token: 'توکن تازه سازی نامعتبر یا مصرف شده است.',
   invalid_token: 'توکن نامعتبر است.',
   not_found: 'چنین مسیری وجود ندارد.',
+  invalid_query: 'پارامتر نامعتبر است.',
 };
 
 /**
@@ -416,6 +787,12 @@ export interface FakePlayoutRequestCounts {
   revoked: number;
   /** D4 reads, `304`s included — a cadence test's positive control. */
   channels: number;
+  /** `PLAYOUT-SOURCES-01` — D10 reads, `304`s and `404`s included. */
+  inputs: number;
+  /** `PLAYOUT-SOURCES-01` — D11 SEARCH requests (no `ids=`). */
+  media: number;
+  /** `PLAYOUT-SOURCES-01` — D11 `ids=` requests — the one retry's positive control. */
+  mediaIds: number;
 }
 
 /**
@@ -582,6 +959,40 @@ export interface FakePlayout {
   setCredentialFailure(code: FakeCredentialFailure | null): void;
   /** Mint a token directly, bypassing D1 — the only way to reach the malformed/expired cases. */
   issueToken(options?: IssueTokenOptions): Promise<IssuedToken>;
+
+  // ── `PLAYOUT-SOURCES-01` §3 — D10 and D11, and their test-only hooks ──────────────────────
+  /** D10 — the Playout's inputs. Bearer-gated, `ETag`'d. */
+  readonly inputsUrl: string;
+  /** D11 — the Playout's media library. Bearer-gated. */
+  readonly mediaUrl: string;
+  /** Every D11 request's query string, in order — what the bridge actually asked. LIVE. */
+  readonly mediaQueries: readonly string[];
+  /** The inputs D10 lists now, in order. */
+  readonly inputs: readonly FakeInput[];
+  /**
+   * "CG Control" in the Playout's settings: switched OFF, D10 and D11 answer `404` (their answer
+   * §3). Default on.
+   */
+  setCgEnabled(enabled: boolean): void;
+  /** Replace the whole input list (and change D10's `ETag`). */
+  setInputs(inputs: readonly FakeInput[]): void;
+  /** Take one input off the list; answers whether it was there. */
+  removeInput(id: string): boolean;
+  /** Put a removed input back, at its place in {@link FAKE_INPUTS}. */
+  restoreInput(id: string): void;
+  /** v1.3's top-level `epoch` (it changes with every core start); `null` sends none. */
+  setEpoch(epoch: number | string | null): void;
+  /** One media item as the library holds it now, or `undefined`. */
+  mediaItem(id: string): FakeMediaItem | undefined;
+  /** Take one media item out of the library ("not playable now"); answers whether it was there. */
+  removeMedia(id: string): boolean;
+  /** Put a removed media item back. */
+  restoreMedia(id: string): void;
+  /**
+   * Move one item's `clip` between its cache copy and its original (§2.1: the path moves; the content
+   * does not). Answers the NEW clip.
+   */
+  flipMediaClip(id: string): string;
 }
 
 /** A generated key pair plus the public JWK the JWKS would publish for it. */
@@ -696,7 +1107,18 @@ class FakePlayoutServer implements FakePlayout {
     refresh: 0,
     revoked: 0,
     channels: 0,
+    inputs: 0,
+    media: 0,
+    mediaIds: 0,
   };
+  // `PLAYOUT-SOURCES-01` — D10, D11 and their switch.
+  #cgEnabled = true;
+  #inputs: readonly FakeInput[] = FAKE_INPUTS;
+  #inputsRevision = 0;
+  #epoch: number | string | null = 'epoch-1';
+  readonly #library = new Map<string, FakeMediaItem>(fakeMediaLibrary().map((m) => [m.id, m]));
+  readonly #removedMedia = new Map<string, FakeMediaItem>();
+  readonly #mediaQueries: string[] = [];
   readonly #requestLog: FakePlayoutRequest[] = [];
   /** `DESKTOP-APPS-01-C` C8 — the AMCP allow list, the pending list, and the one automatic slot. */
   readonly #trusted = new Set<string>();
@@ -854,6 +1276,77 @@ class FakePlayoutServer implements FakePlayout {
 
   get meUrl(): string {
     return `${this.baseUrl}${PATHS.me}`;
+  }
+
+  get inputsUrl(): string {
+    return `${this.baseUrl}${PATHS.inputs}`;
+  }
+
+  get mediaUrl(): string {
+    return `${this.baseUrl}${PATHS.media}`;
+  }
+
+  get mediaQueries(): readonly string[] {
+    return this.#mediaQueries;
+  }
+
+  get inputs(): readonly FakeInput[] {
+    return this.#inputs;
+  }
+
+  setCgEnabled(enabled: boolean): void {
+    this.#cgEnabled = enabled;
+  }
+
+  setInputs(inputs: readonly FakeInput[]): void {
+    this.#inputs = inputs;
+    this.#inputsRevision += 1;
+  }
+
+  removeInput(id: string): boolean {
+    const had = this.#inputs.some((i) => i.id === id);
+    if (had) this.setInputs(this.#inputs.filter((i) => i.id !== id));
+    return had;
+  }
+
+  restoreInput(id: string): void {
+    if (this.#inputs.some((i) => i.id === id)) return;
+    const wanted = new Set([...this.#inputs.map((i) => i.id), id]);
+    // Back at its place in the fixture order — the Playout's order is the list's order.
+    this.setInputs(FAKE_INPUTS.filter((i) => wanted.has(i.id)));
+  }
+
+  setEpoch(epoch: number | string | null): void {
+    this.#epoch = epoch;
+    this.#inputsRevision += 1;
+  }
+
+  mediaItem(id: string): FakeMediaItem | undefined {
+    return this.#library.get(id);
+  }
+
+  removeMedia(id: string): boolean {
+    const item = this.#library.get(id);
+    if (item === undefined) return false;
+    this.#library.delete(id);
+    this.#removedMedia.set(id, item);
+    return true;
+  }
+
+  restoreMedia(id: string): void {
+    const item = this.#removedMedia.get(id);
+    if (item === undefined) return;
+    this.#removedMedia.delete(id);
+    this.#library.set(id, item);
+  }
+
+  flipMediaClip(id: string): string {
+    const item = this.#library.get(id);
+    if (item === undefined) throw new Error(`fake Playout: no media item ${id}`);
+    const cached = item.clip.includes('/Engine/bin/engine/data/cache/');
+    const clip = cached ? originalClip(item.folder, item.name, 'mp4') : cacheClip(item.id);
+    this.#library.set(id, { ...item, clip });
+    return clip;
   }
 
   isTrusted(sourceAddress: string): boolean {
@@ -1081,7 +1574,73 @@ class FakePlayoutServer implements FakePlayout {
       this.#serveMe(req, res);
       return;
     }
+    if (method === 'GET' && pathname === PATHS.inputs) {
+      this.#counts.inputs += 1;
+      this.#serveInputs(req, res);
+      return;
+    }
+    if (method === 'GET' && pathname === PATHS.media) {
+      const query = new URL(req.url ?? '/', this.baseUrl).searchParams;
+      if (query.has('ids')) this.#counts.mediaIds += 1;
+      else this.#counts.media += 1;
+      this.#mediaQueries.push(query.toString());
+      this.#serveMedia(req, res, query);
+      return;
+    }
     sendError(res, 'not_found');
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` — D10 (their answer §1, v1.3): the inputs, bearer-gated, `ETag`/`304`, a
+   * top-level `epoch` when one is set, and `404` while CG Control is switched off (§3).
+   */
+  #serveInputs(req: http.IncomingMessage, res: http.ServerResponse): void {
+    if (!this.#cgEnabled) {
+      sendError(res, 'not_found');
+      return;
+    }
+    const authorization = req.headers.authorization;
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
+      sendError(res, 'invalid_token');
+      return;
+    }
+    const etag = `"inputs-${String(this.#inputsRevision)}"`;
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ...CORS_HEADERS, ETag: etag });
+      res.end();
+      return;
+    }
+    sendJson(
+      res,
+      200,
+      { ...(this.#epoch !== null ? { epoch: this.#epoch } : {}), inputs: this.#inputs },
+      { ETag: etag },
+    );
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` — D11 (their answer §2.2): `q` normalised and matched on the name and the
+   * readable folder; `type` a comma list; `sort=name` (fa-IR, then id) or `recent` (`updatedAt`
+   * descending); `limit` 50 by default, clamped at 200, `400` when not a positive number; a KEYSET
+   * cursor bound to its `q`/`type`/`sort` (`400` for another query); and `ids=` — at most 100, answered
+   * in REQUEST order, an id the library no longer holds simply absent.
+   */
+  #serveMedia(req: http.IncomingMessage, res: http.ServerResponse, query: URLSearchParams): void {
+    if (!this.#cgEnabled) {
+      sendError(res, 'not_found');
+      return;
+    }
+    const authorization = req.headers.authorization;
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
+      sendError(res, 'invalid_token');
+      return;
+    }
+    const answer = answerFakeMediaQuery(this.#library.values(), query);
+    if (answer === null) {
+      sendError(res, 'invalid_query');
+      return;
+    }
+    sendJson(res, 200, answer);
   }
 
   /**

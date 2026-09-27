@@ -86,10 +86,11 @@ test('the rail: Settings opens on Channel, and every section is one press away',
   /*
     🔴 `STATION-CHROME-02` §5 — the Live-sources footer used to read "Saved as you go — there
     is nothing waiting to be applied" with an `Apply band` six inches above it. One of the two
-    was lying, and it was the footer.
+    was lying, and it was the footer. `PLAYOUT-SOURCES-01` — the list is the Playout's now and
+    nothing on the tab saves as you go, so the footer names the one button that applies.
   */
   await expect(dialog.locator('[data-section-footer="sources"]')).toContainText(
-    'The catalogue saves as you go; the layer band is applied separately.',
+    'Nothing to apply here — Apply band applies on its own.',
   );
   await expect(dialog.getByRole('button', { name: 'Apply band' })).toBeVisible();
 

@@ -156,10 +156,17 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
   {
     id: 'sources',
     title: 'Live sources',
-    commit: 'immediate',
+    /*
+      🔴 `PLAYOUT-SOURCES-01` §2.C — NOTHING ON THIS TAB SAVES AS YOU GO ANY MORE. The catalogue
+      the three sentences below used to describe is the Playout's now, listed read-only; the one
+      thing applied here is the band, by its own button. That is the Channel pane's shape for a
+      station-admin (`CHANNEL_FOR_STATION_ADMIN`), so it takes the same contract and the same
+      words: reported by someone else, and the one control that sets something applies on its
+      own. `Auto-save` would now be a tag on a pane where nothing auto-saves.
+    */
+    commit: 'separate',
     group: 'Content',
-    /* §5 again, one line up: the legend cannot say "saves as you go" flat either. */
-    legend: 'The catalogue saves as you go; the layer band is applied.',
+    legend: 'Listed by the Playout. Apply band sets the layer band.',
     /*
      * 🔴 `STATION-CHROME-02` §5 — THE SENTENCE THAT WAS UNTRUE.
      *
@@ -184,17 +191,21 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
       is not untrue, but it is SILENT about the band, and silence is what §5 was about. So the
       clause is shortened and BOTH contracts survive: the band's own card now carries an
       `Apply separately` tag, so the footer can name it in three words instead of a sentence.
+
+      ⚠ `PLAYOUT-SOURCES-01` — and then the catalogue clause went with the editor: there is no
+      catalogue to save here. What §5 fought for survives intact — the footer does not claim
+      there is nothing to apply while an Apply sits above it; it names that button.
     */
-    footerRest: 'The catalogue saves as you go; the layer band is applied separately.',
+    footerRest: 'Nothing to apply here — Apply band applies on its own.',
     /*
       ⚠ FALSE, and it is the one row of this column that has to be read rather than skimmed.
       The LAYER BAND in this tab is applied — by its OWN button, in its own card, which is
       what the sentence above says. What this column decides is whether the SECTION carries a
       commit in the FOOTER, and this one does not; a footer `Apply live sources` here would
-      claim to commit a catalogue that is already saved.
+      claim to commit a list that is the Playout's.
     */
     commits: false,
-    footerIcon: 'saved',
+    footerIcon: 'info',
   },
   {
     id: 'delimiters',
@@ -260,7 +271,7 @@ const CHANNEL_FOR_STATION_ADMIN: Partial<StationSetupSectionSpec> = {
 /**
  * 🔴 `MULTI-CHANNEL-01` §2 I — **EVERY COMMIT IN STATION SETUP IS A `station-admin` ROUTE**, walked
  * against the route classes rather than a list: `connections.set-config` (Servers),
- * `sources.set-config` (Live sources, the catalogue AND the band), `delimiters.set` (Text file
+ * `sources.set-config` (Live sources — the band; `PLAYOUT-SOURCES-01`), `delimiters.set` (Text file
  * delimiters), `fixedLayers.set-config` / `set-banks` (Layers, and the Channel pane's Change
  * channel…). So for any other principal every pane that commits shows its values as VALUES — no
  * Apply, no Revert, no inputs (golden rule 13: absent, never offered-then-refused) — and its head

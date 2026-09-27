@@ -12,8 +12,10 @@
 //   caspar-bridge --fixed-layers-path C:\cg\fixed.json  # R-021: the fixed operator layer bank
 //   caspar-bridge --reserved-layers 60-69             # R-028/C-015: the playout system's layers
 //   caspar-bridge --templates-dir C:\cg\templates     # R-028: where the template library persists
-//   caspar-bridge --source-catalog-path C:\cg\sources.json      # D-137/C-015: the lives this plant has
+//   caspar-bridge --source-catalog-path C:\cg\sources.json      # D-137/C-015: the plate band (PLAYOUT-SOURCES-01)
 //   caspar-bridge --source-assignments-path C:\cg\plates.json   # D-137/C-015: which live each plate uses
+//   caspar-bridge --playout-inputs-path C:\cg\inputs.json       # PLAYOUT-SOURCES-01: the last good D10 list
+//   caspar-bridge --bound-media-path C:\cg\media.json           # PLAYOUT-SOURCES-01: the media items bound
 //   caspar-bridge --live-layers-path C:\cg\live.json         # B-145: where the live-layer ledger persists
 //   caspar-bridge --no-live-layers                    # B-145: deliberately DO NOT persist it
 //   caspar-bridge --template-serve-host 192.168.21.93 # B-162/C-024: the address CasparCG fetches templates from
@@ -76,10 +78,16 @@
 // reaches air and each take refuses legibly. PRESENT but invalid = HARD boot
 // failure, because a partially parsed config is worse than none.
 //
-// ONE deliberate exception, on the assignments alone: an assignment naming a
-// source the catalog does not define is PRUNED (loudly, on this line) rather
-// than fatal. It has a clear reading — that plate is unassigned — and an
-// unassigned plate already refuses its take.
+// 🔴 PLAYOUT-SOURCES-01 — THE PLAYOUT DEFINES THE SOURCES NOW (D10 inputs, D11 media). The
+// catalog file keeps only the PLATE BAND; its hand-made `sources` are ignored and never deleted
+// (P-031). Two more files hold what the Playout said: the LAST GOOD input list
+// (--playout-inputs-path, ~/.cg-runtime/bridge-playout-inputs.json) and the media items this
+// station BOUND (--bound-media-path, ~/.cg-runtime/bridge-bound-media.json). They are the
+// bridge's own cache — a missing or unusable one starts empty until the next good read, never
+// a boot failure — and they keep a binding resolvable through an outage and a restart.
+//
+// And NOTHING IS PRUNED at boot any more: a binding whose entry the Playout stopped offering is
+// kept, shown unavailable, and its take refused (ADR 0010 rule 14).
 //
 // ⚠ NEITHER is under --templates-dir: the template registry reads EVERY *.json
 // there as a template, so a config file placed beside the templates warns
@@ -179,6 +187,15 @@ const sourceAssignmentsPath =
   typeof args['source-assignments-path'] === 'string'
     ? args['source-assignments-path']
     : path.join(stateHome, '.cg-runtime', 'bridge-source-assignments.json');
+// PLAYOUT-SOURCES-01 — the Playout's last good input list and the bound media (see the header).
+const playoutInputsPath =
+  typeof args['playout-inputs-path'] === 'string'
+    ? args['playout-inputs-path']
+    : path.join(stateHome, '.cg-runtime', 'bridge-playout-inputs.json');
+const boundMediaPath =
+  typeof args['bound-media-path'] === 'string'
+    ? args['bound-media-path']
+    : path.join(stateHome, '.cg-runtime', 'bridge-bound-media.json');
 
 // 🔴 B-145 — the LIVE LAYER LEDGER: which layers the bridge itself has seated behind a
 // template's holes. Unlike every store above, this one is not station CONFIG — it is the
@@ -480,6 +497,11 @@ const playoutFlags = {
   ...(typeof args['playout-revoked-url'] === 'string'
     ? { revokedUrl: args['playout-revoked-url'] }
     : {}),
+  // PLAYOUT-SOURCES-01 — D10 and D11; derived from --playout-address when not named.
+  ...(typeof args['playout-inputs-url'] === 'string'
+    ? { inputsUrl: args['playout-inputs-url'] }
+    : {}),
+  ...(typeof args['playout-media-url'] === 'string' ? { mediaUrl: args['playout-media-url'] } : {}),
   ...(typeof args['playout-audience'] === 'string' ? { audience: args['playout-audience'] } : {}),
 };
 
@@ -495,6 +517,8 @@ const bridgeOptions = {
   templatesDir,
   sourceCatalogPath,
   sourceAssignmentsPath,
+  playoutInputsPath,
+  boundMediaPath,
   ...(liveLayersPath !== null ? { liveLayersPath } : {}),
   auditLogPath,
   amcpLogPath,
@@ -591,6 +615,12 @@ function describeBoot(handle) {
   console.error(
     `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
   );
+  // PLAYOUT-SOURCES-01 — where the Playout's last good lists are kept, said like every other file.
+  if (handle.playoutSources !== null) {
+    console.error(
+      `[caspar-bridge] playout lists: inputs ${playoutInputsPath}; bound media ${boundMediaPath}`,
+    );
+  }
   console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
   // C-031 — the one number every take depends on, said at boot like the rest.
   console.error(`[caspar-bridge] templates: ${describeTemplates(handle.templates)}`);
@@ -823,36 +853,41 @@ function describeTemplates({ loaded, skipped, dir }) {
  * with garbage in the middle of a layer range.
  */
 function describeSourceCatalog({ value, source }) {
+  // PLAYOUT-SOURCES-01 — the file carries the BAND only; the sources are the Playout's. Counts,
+  // never names: a Playout name is often Persian, and this line is ASCII (see above).
   const band =
     value.layerRange === undefined
-      ? 'no layer band declared'
-      : `layers ${value.layerRange.start}-${value.layerRange.end}`;
-  if (value.sources.length === 0) {
-    const why =
-      source === 'absent'
-        ? `no file at ${sourceCatalogPath}`
-        : source === 'none'
-          ? 'no --source-catalog-path configured'
-          : `from ${source === 'file' ? sourceCatalogPath : source}`;
-    // Said plainly, because it is the state in which the feature does nothing:
-    // no plate can be assigned, and every take carrying one refuses.
-    return `NONE DEFINED (${why}) - a template declaring a Live Source will refuse its take`;
+      ? 'no plate band declared'
+      : `plate band ${value.layerRange.start}-${value.layerRange.end}`;
+  const bandFrom =
+    source === 'absent'
+      ? `no file at ${sourceCatalogPath}`
+      : source === 'none'
+        ? 'no --source-catalog-path configured'
+        : source === 'file'
+          ? sourceCatalogPath
+          : source;
+  const inputs = value.sources.filter((s) => s.origin === 'input').length;
+  const media = value.sources.filter((s) => s.origin === 'media').length;
+  if (source === 'explicit') {
+    return `${value.sources.length} given in-process, ${band}`;
   }
-  const names = value.sources.map((s) => s.name).join(', ');
-  const where = source === 'file' ? sourceCatalogPath : source;
-  return `${value.sources.length} defined (${names}), ${band} - from ${where}`;
+  // Said plainly, because it is the state in which nothing can be bound: no read has ever
+  // succeeded, so every take carrying a plate refuses as unassigned.
+  const read =
+    value.inputsReadAt === undefined
+      ? 'NO SUCCESSFUL PLAYOUT READ YET - nothing can be bound until one'
+      : `last good Playout read ${value.inputsReadAt}`;
+  return `${band} (${bandFrom}); from the Playout: ${inputs} inputs, ${media} bound media (${read})`;
 }
 
 /**
- * The per-plate ASSIGNMENTS in force, and — the half with no other surface —
- * WHAT THE BOOT PRUNED.
+ * The per-plate ASSIGNMENTS in force, and where they came from.
  *
- * A pruned entry is a plate that WAS bound and now is not, because the catalog
- * beside it no longer defines the source (two hand-editable files, restorable
- * apart). It is dropped rather than dangling, and dropping it silently would
- * start a station with a plate the operator believes is assigned.
+ * PLAYOUT-SOURCES-01 — nothing is pruned at boot any more, so there is no "DROPPED" clause: a
+ * binding whose entry the Playout stopped offering is kept, and only an operator removes one.
  */
-function describeAssignments({ value, source, pruned }) {
+function describeAssignments({ value, source }) {
   const where =
     source === 'absent'
       ? `no file at ${sourceAssignmentsPath}`
@@ -861,13 +896,9 @@ function describeAssignments({ value, source, pruned }) {
         : source === 'file'
           ? sourceAssignmentsPath
           : source;
-  const head =
-    value.assignments.length === 0
-      ? `NONE ASSIGNED (${where})`
-      : `${value.assignments.length} assigned - from ${where}`;
-  if (pruned.length === 0) return head;
-  const lost = pruned.map((a) => `${a.templateId}/${a.plateId} -> ${a.sourceId}`).join(', ');
-  return `${head} - DROPPED ${pruned.length} naming a source this catalog does not define (${lost})`;
+  return value.assignments.length === 0
+    ? `NONE ASSIGNED (${where})`
+    : `${value.assignments.length} assigned - from ${where}`;
 }
 
 /**

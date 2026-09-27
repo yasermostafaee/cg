@@ -285,6 +285,14 @@ export interface MockHandle {
    */
   setLayerVolume(slot: LayerSlot, volume: number): void;
   /**
+   * `PLAYOUT-SOURCES-01` §3 — **the media files this server no longer has.** A `PLAY`/`LOAD` of a
+   * file named here answers `404 PLAY FAILED` and leaves the layer untouched, as the core answers
+   * a clip that is gone (`File not found.`). Test hook: the Playout's `clip` moves between its
+   * cache and its original, and the path a take held a moment ago can be the stale one. Replaces
+   * the whole set; `[]` clears it.
+   */
+  setMissingMedia(paths: readonly string[]): void;
+  /**
    * B-038 — the last `CG ADD` seen on a slot: the template argument and the data
    * payload. Lets tests assert `CG ADD` carried a real URL + non-empty fields.
    * B-041 — `data` is what `window.update` would receive (post BOTH un-escape
@@ -379,6 +387,8 @@ export interface HandlerContext {
    * the real server also answers `202`).
    */
   commitMixer(channel: number): number;
+  /** `PLAYOUT-SOURCES-01` — is this file one the server no longer has ({@link MockHandle.setMissingMedia})? */
+  isMissingMedia(file: string): boolean;
   /** Channel count the mock was started with. */
   readonly channelCount: number;
 }

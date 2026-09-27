@@ -8,6 +8,8 @@ import { Icon } from '../../ui/Icon.js';
 import { Notice } from '../../ui/Notice.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
+import { CommandText, commandForDisplay } from '../sources/producerDisplay.js';
+import { currentSourceCatalog } from '../sources/sourceStore.js';
 import { auditTimeParts, placeName, shortId, templateName, timingClause } from './auditFormat.js';
 
 interface Props {
@@ -221,7 +223,8 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       e.itemId,
       e.templateId,
       e.errorCode,
-      e.command,
+      // What the row SHOWS — a stream's address is not on it (§1.E), so it is not a hit either.
+      e.command === undefined ? undefined : commandForDisplay(e.command),
       // `R3` — the timing clause is ON the row, and this file's rule is that a hit is
       // something VISIBLE. Searching "until stop" has to find the rows that say it.
       timingClause(e.timing),
@@ -683,10 +686,18 @@ function Row({
             {timing}
           </span>
         ) : null}
-        {/* `B-209` — the line CasparCG refused, beside the code it refused it with. */}
+        {/*
+          `B-209` — the line CasparCG refused, beside the code it refused it with.
+          `PLAYOUT-SOURCES-01` §2.B — its source named as every surface names it, and a stream's
+          address never shown (§1.E): not in the line, and not on its hover either.
+        */}
         {entry.command !== undefined ? (
-          <span className="cg-audit-command" data-audit-command="" title={entry.command}>
-            {entry.command}
+          <span
+            className="cg-audit-command"
+            data-audit-command=""
+            title={commandForDisplay(entry.command)}
+          >
+            <CommandText command={entry.command} catalog={currentSourceCatalog()} />
           </span>
         ) : null}
       </span>

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
  * ⭐ **SESSION BQ — PVW NAMES WHAT A TAKE WOULD SHOW, IN THIS LOOK.**
@@ -30,6 +30,9 @@ import { expect, test } from './fixtures/runtime.js';
 
 const TPL = 'tpl-e2e-pvw-looks';
 
+/** `PLAYOUT-SOURCES-01` — Studio 1 and Studio 3 are the seeded Playout's inputs. */
+test.use({ playoutSources: E2E_PLAYOUT });
+
 const LEFT = { x: 0, y: 0, width: 960, height: 540 };
 const RIGHT = { x: 960, y: 0, width: 960, height: 540 };
 const FULL = { x: 0, y: 0, width: 1920, height: 1080 };
@@ -52,7 +55,7 @@ async function stubRetainedPage(page: Page): Promise<void> {
   });
 }
 
-/** Two sources, and a two-look template whose `l-1` appears in BOTH looks. */
+/** The band, the default, and a two-look template whose `l-1` appears in BOTH looks. */
 async function setUp(page: Page): Promise<void> {
   await page.evaluate(
     async ({ templateId, left, right, full }) => {
@@ -65,19 +68,13 @@ async function setUp(page: Page): Promise<void> {
           };
         };
       };
-      await w.cg.sources.setConfig({
-        sources: [
-          { id: 'studio-1', name: 'Studio 1', producer: { kind: 'route', channel: 2 } },
-          { id: 'studio-3', name: 'Studio 3', producer: { kind: 'route', channel: 4 } },
-        ],
-        layerRange: { start: 60, end: 79 },
-      });
+      await w.cg.sources.setConfig({ layerRange: { start: 60, end: 79 } });
       // The TEMPLATE DEFAULT — level 2. This is the name the overlay used to show in
       // every look, whatever the operator bound.
       await w.cg.sources.setAssignments({
         assignments: [
-          { templateId, plateId: 'l-1', sourceId: 'studio-1' },
-          { templateId, plateId: 'l-2', sourceId: 'studio-1' },
+          { templateId, plateId: 'l-1', sourceId: 'in-studio-1' },
+          { templateId, plateId: 'l-2', sourceId: 'in-studio-1' },
         ],
       });
       await w.cg.templates.import({
@@ -160,7 +157,7 @@ test('🔴 the PVW placeholder names the PER-LOOK binding, not the template defa
   */
   const looks = app.inspector.locator('[aria-label="Look inputs"]');
   await expect(looks).toBeVisible();
-  await looks.locator('[data-look-binding="look-1:l-1"]').selectOption('studio-3');
+  await app.chooseSource(looks.locator('[data-look-binding="look-1:l-1"]'), { input: 'Studio 3' });
   await app.applyEdits();
 
   // 🔴 THE ASSERTION. Before this session the placeholder kept reading "Studio 1" — the
@@ -186,7 +183,7 @@ test('the name follows a PVW LOOK switch, not just the boxes', async ({ app }) =
   await app.selectLayerRow(layer);
 
   const looks = app.inspector.locator('[aria-label="Look inputs"]');
-  await looks.locator('[data-look-binding="look-1:l-1"]').selectOption('studio-3');
+  await app.chooseSource(looks.locator('[data-look-binding="look-1:l-1"]'), { input: 'Studio 3' });
   await app.applyEdits();
   await expect(marker(page, 'l-1')).toContainText('Studio 3');
 

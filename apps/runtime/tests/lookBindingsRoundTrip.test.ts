@@ -82,6 +82,16 @@ const TEMPLATE: TemplateInfo = {
   },
 } as unknown as TemplateInfo;
 
+/** The two Playout inputs the row binds (`in-studio-3`, `in-studio-4` in the catalogue). */
+const PLAYOUT = {
+  inputs: {
+    inputs: [
+      { id: 'studio-3', name: 'Studio 3', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 3)' } },
+      { id: 'studio-4', name: 'Studio 4', producer: { kind: 'ndi', source: 'STUDIO-PC (Cam 4)' } },
+    ],
+  },
+};
+
 afterEach(() => {
   __resetDraftsForTest();
   vi.unstubAllGlobals();
@@ -97,6 +107,9 @@ afterEach(() => {
  * reaches past it.
  */
 function boot(): { cg: RuntimeBridge; latest: () => readonly StackItemState[] } {
+  // `PLAYOUT-SOURCES-01` — a row binds the Playout's inputs, and a NEW binding must be to one the
+  // catalogue holds (the bridge's rule, which the mock shares); offline, the Playout is the seed.
+  vi.stubGlobal('CG_E2E_PLAYOUT_SOURCES', PLAYOUT);
   const cg = createMockBridge();
   let latest: readonly StackItemState[] = [];
   cg.stack.onStateChanged((snapshot) => {
@@ -120,12 +133,12 @@ it('🔴 §3c — a per-look input SURVIVES the UPDATE: the panel reads back wha
   await cg.stack.load({ itemId: 'item-1', templateId: 'debate', fields: { title: 'before' } });
 
   // 1. THE PANEL stages an edit, through the real store.
-  stageLookBinding('item-1', 'solo', 'l-1', 'studio-3');
+  stageLookBinding('item-1', 'solo', 'l-1', 'in-studio-3');
   const staged = itemOf(latest());
   expect(
     effectiveLookBinding('item-1', 'solo', 'l-1', staged.lookSourceOverride?.solo?.['l-1']),
     'the draft renders before it is applied',
-  ).toBe('studio-3');
+  ).toBe('in-studio-3');
 
   // 2. UPDATE — the real apply path, across a real bridge.
   const res = await applyDraft(staged);
@@ -148,12 +161,12 @@ it('🔴 §3c — a per-look input SURVIVES the UPDATE: the panel reads back wha
   */
   const published = itemOf(latest());
   expect(published.lookSourceOverride, 'the published item carries the map').toEqual({
-    solo: { 'l-1': 'studio-3' },
+    solo: { 'l-1': 'in-studio-3' },
   });
   expect(
     effectiveLookBinding('item-1', 'solo', 'l-1', published.lookSourceOverride?.solo?.['l-1']),
     'and the panel reads the applied value, not the default',
-  ).toBe('studio-3');
+  ).toBe('in-studio-3');
 });
 
 it('§3c — a SECOND update does not lose the first look bindings', async () => {
@@ -170,15 +183,15 @@ it('§3c — a SECOND update does not lose the first look bindings', async () =>
   });
   await cg.stack.load({ itemId: 'item-1', templateId: 'debate', fields: {} });
 
-  stageLookBinding('item-1', 'solo', 'l-1', 'studio-3');
+  stageLookBinding('item-1', 'solo', 'l-1', 'in-studio-3');
   expect((await applyDraft(itemOf(latest()))).accepted).toBe(true);
 
-  stageLookBinding('item-1', 'two', 'l-2', 'studio-4');
+  stageLookBinding('item-1', 'two', 'l-2', 'in-studio-4');
   expect((await applyDraft(itemOf(latest()))).accepted).toBe(true);
 
   expect(itemOf(latest()).lookSourceOverride).toEqual({
-    solo: { 'l-1': 'studio-3' },
-    two: { 'l-2': 'studio-4' },
+    solo: { 'l-1': 'in-studio-3' },
+    two: { 'l-2': 'in-studio-4' },
   });
 });
 
@@ -190,9 +203,9 @@ it('§3c — staging BLANK removes the binding, which is how a composition is un
   });
   await cg.stack.load({ itemId: 'item-1', templateId: 'debate', fields: {} });
 
-  stageLookBinding('item-1', 'solo', 'l-1', 'studio-3');
+  stageLookBinding('item-1', 'solo', 'l-1', 'in-studio-3');
   expect((await applyDraft(itemOf(latest()))).accepted).toBe(true);
-  expect(itemOf(latest()).lookSourceOverride).toEqual({ solo: { 'l-1': 'studio-3' } });
+  expect(itemOf(latest()).lookSourceOverride).toEqual({ solo: { 'l-1': 'in-studio-3' } });
 
   // '' is a real staged edit meaning "fall back to the template assignment".
   stageLookBinding('item-1', 'solo', 'l-1', '');

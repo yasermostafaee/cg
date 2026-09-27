@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `RUNTIME-REDESIGN-01` §4 — **LOOKS: the set is the template's own, and a switch keeps the
@@ -29,6 +29,9 @@ import { expect, test } from './fixtures/runtime.js';
 
 const SIX = 'e2e-looks-six';
 
+/** `PLAYOUT-SOURCES-01` — the station's sources are the seeded Playout's inputs. */
+test.use({ playoutSources: E2E_PLAYOUT });
+
 /** The offline mock retains no page, so PVW needs a stand-in to have a frame at all. */
 async function stubRetainedPage(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -47,7 +50,7 @@ async function stubRetainedPage(page: Page): Promise<void> {
   });
 }
 
-/** Two catalog inputs and the template default (level 2) for every frame of the six. */
+/** The band, and the template default (level 2) for every frame of the six: the Playout's Studio 1. */
 async function seedSources(page: Page): Promise<void> {
   await page.evaluate(async (templateId) => {
     const w = window as unknown as {
@@ -58,18 +61,12 @@ async function seedSources(page: Page): Promise<void> {
         };
       };
     };
-    await w.cg.sources.setConfig({
-      sources: [
-        { id: 'studio-1', name: 'Studio 1', producer: { kind: 'route', channel: 2 } },
-        { id: 'studio-3', name: 'Studio 3', producer: { kind: 'route', channel: 4 } },
-      ],
-      layerRange: { start: 60, end: 79 },
-    });
+    await w.cg.sources.setConfig({ layerRange: { start: 60, end: 79 } });
     await w.cg.sources.setAssignments({
       assignments: ['l-1', 'l-2', 'l-3', 'l-4', 'l-5', 'l-6'].map((plateId) => ({
         templateId,
         plateId,
-        sourceId: 'studio-1',
+        sourceId: 'in-studio-1',
       })),
     });
   }, SIX);
@@ -261,7 +258,7 @@ test('🔴 §4 — RED-FIRST: switch away and back, and the same source is on th
   // that re-derived the frames from the template would lose.
   const looks = app.inspector.locator('[aria-label="Look inputs"]');
   await expect(looks).toBeVisible();
-  await looks.locator('[data-look-binding="trio:l-3"]').selectOption('studio-3');
+  await app.chooseSource(looks.locator('[data-look-binding="trio:l-3"]'), { input: 'Studio 3' });
   await app.applyEdits();
   await expect(marker(page, 'l-3')).toContainText('Studio 3');
 

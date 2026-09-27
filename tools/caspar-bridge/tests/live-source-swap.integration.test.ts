@@ -366,7 +366,12 @@ it('an unknown plate and an unknown source are refused by name, not silently ign
 
   const source = await r.swapLiveSource('item-1', 'guest-1', 'src-nope');
   expect(source.reason).toBe('unknown-source');
-  expect(source.message).toContain('src-nope');
+  /*
+    `PLAYOUT-SOURCES-01` — a catalogue id is never in an operator's sentence (golden rule 11): the
+    refusal says what is wrong in the operator's words, and the id stays out of it.
+  */
+  expect(source.message).toBe('That source is not one the Playout offers. Choose another.');
+  expect(source.message).not.toContain('src-nope');
 });
 
 it('a row that is not on air records the override and sends nothing', async () => {

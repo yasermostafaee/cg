@@ -1,33 +1,39 @@
-import { chooseSourceKind, test, expect } from './fixtures/runtime.js';
+import { test, expect } from './fixtures/runtime.js';
 
 /**
- * `STATION-CHROME-01` §5, §6 and §7 — **one way to add anything, kind-aware fields, and a
- * lock that asks twice** — in a real browser.
+ * `STATION-CHROME-01` §6 and §7 — **one way to add anything, and a lock that asks twice** — in a
+ * real browser.
  *
- * ── WHY THESE THREE ARE IN ONE FILE ─────────────────────────────────────────
+ * ── WHY THESE ARE IN ONE FILE ───────────────────────────────────────────────
  *
  * They share one mechanism: a dialog on top of a dialog. `nestedDialog.dom.test.ts` measures
  * what jsdom can see of it (Escape reaching only the top layer, no trap hijacking a mid-ring
  * Tab), and says plainly what it CANNOT: **jsdom does not implement sequential focus
  * navigation**, so "Tab actually walks the sub-dialog's fields" is unmeasurable there. It is
  * measurable here, and it is the assertion an operator would notice failing.
+ *
+ * ⚠ `PLAYOUT-SOURCES-01` — §5 (the live-source fields that changed with the kind) is RETIRED with
+ * the dialog it drove: the station's sources are the Playout's, and Station setup lists them
+ * read-only (`live-source-sources.spec.ts`). §6's claims never depended on WHICH Add opened the
+ * second dialog, so they are carried by the delimiter Add, the same primitive.
  */
 
-test('§6 — every Add opens the SAME small second dialog, and the keyboard belongs to it', async ({
-  app,
-}) => {
+test('§6 — an Add opens a small SECOND dialog, and the keyboard belongs to it', async ({ app }) => {
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
-  await app.openStationSetupAt('Live sources');
+  await app.openStationSetupAt('Text file delimiters');
   await expect(dialog).toBeVisible();
 
-  // ── the SOURCES Add ───────────────────────────────────────────────────────
-  await dialog.getByRole('button', { name: 'Add live source' }).click();
-  const sub = page.getByRole('dialog', { name: 'Add live source' });
+  await dialog.getByRole('button', { name: 'Add delimiter' }).click();
+  const sub = page.getByRole('dialog', { name: 'Add delimiter' });
   await expect(sub).toBeVisible();
   // BOTH dialogs are up: the second sits ON the first rather than replacing it.
   await expect(page.getByRole('dialog')).toHaveCount(2);
+  await expect(sub.getByLabel('New delimiter name')).toBeVisible();
+  await expect(sub.getByLabel('New delimiter character')).toBeVisible();
+  // …and the INLINE strip it replaces is gone.
+  await expect(dialog.getByLabel('New delimiter name')).toHaveCount(0);
 
   /*
     🔴 TAB WALKS THE SUB-DIALOG. This is the half `nestedDialog.dom.test.ts` cannot run: with
@@ -55,64 +61,12 @@ test('§6 — every Add opens the SAME small second dialog, and the keyboard bel
   await expect(sub).toBeHidden();
   await expect(dialog).toBeVisible();
 
-  // ── the DELIMITERS Add is the same shape ──────────────────────────────────
+  // …and the Live sources tab carries no Add at all any more: nothing there is defined here.
   await dialog
     .getByRole('tablist', { name: 'Station setup sections' })
-    .getByRole('tab', { name: 'Text file delimiters' })
+    .getByRole('tab', { name: /^Live sources/ })
     .click();
-  await dialog.getByRole('button', { name: 'Add delimiter' }).click();
-  const delim = page.getByRole('dialog', { name: 'Add delimiter' });
-  await expect(delim).toBeVisible();
-  await expect(delim.getByLabel('New delimiter name')).toBeVisible();
-  await expect(delim.getByLabel('New delimiter character')).toBeVisible();
-  // …and the INLINE strip it replaces is gone.
-  await expect(dialog.getByLabel('New delimiter name')).toHaveCount(0);
-  await delim.getByRole('button', { name: 'Cancel' }).click();
-  await expect(delim).toBeHidden();
-});
-
-test('§5 — the live-source fields change with the kind, and the row labels what it shows', async ({
-  app,
-}) => {
-  const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Station setup' });
-
-  await app.openStationSetupAt('Live sources');
-  await dialog.getByRole('button', { name: 'Add live source' }).click();
-  const sub = page.getByRole('dialog', { name: 'Add live source' });
-
-  // DECKLINK — a device index (and the fill/key pair's second input).
-  await expect(sub.getByLabel('DeckLink device index')).toBeVisible();
-  await expect(sub.getByLabel('NDI source name')).toHaveCount(0);
-  await expect(sub.getByLabel('Stream URL')).toHaveCount(0);
-
-  // NDI — the name the network announces, and nothing about devices.
-  await chooseSourceKind(sub, 'ndi');
-  await expect(sub.getByLabel('NDI source name')).toBeVisible();
-  await expect(sub.getByLabel('DeckLink device index')).toHaveCount(0);
-
-  // STREAM — a URL.
-  await chooseSourceKind(sub, 'stream');
-  await expect(sub.getByLabel('Stream URL')).toBeVisible();
-  await expect(sub.getByLabel('NDI source name')).toHaveCount(0);
-
-  // Commit an NDI source and read the ROW: the value carries its own LABEL.
-  await chooseSourceKind(sub, 'ndi');
-  await sub.getByLabel('Source name', { exact: true }).fill('Ingest');
-  await sub.getByLabel('NDI source name').fill('CG-INGEST (Studio 2)');
-  await sub.getByRole('button', { name: 'Add source' }).click();
-  await expect(sub).toBeHidden();
-
-  const parts = dialog.locator('[data-source-parts]').first();
-  await expect(parts).toContainText('Source name');
-  await expect(parts).toContainText('CG-INGEST (Studio 2)');
-  await expect(dialog.locator('[data-source-kind="ndi"]')).toHaveCount(1);
-
-  // EDIT opens the SAME dialog on the record — §6's "and every Edit".
-  await dialog.getByRole('button', { name: 'Edit Ingest' }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit live source' });
-  await expect(edit.getByLabel('Source name', { exact: true })).toHaveValue('Ingest');
-  await edit.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog.getByRole('button', { name: /^Add/ })).toHaveCount(0);
 });
 
 test('§7 — engaging the lock asks for the PIN twice and refuses a mismatch', async ({ app }) => {

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, chooseSource, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `SOURCE-DEFAULTS-20` §4 — **WHAT MUST STILL BE TRUE AFTER THE MOVE.**
@@ -23,23 +23,12 @@ import { expect, test } from './fixtures/runtime.js';
  * exercised.
  */
 
-const SOURCES = [
-  { id: 'src-a', name: 'Studio A', producer: { kind: 'route', channel: 2 } },
-  { id: 'src-b', name: 'Studio B', producer: { kind: 'route', channel: 3 } },
-] as const;
-
-async function defineSources(page: Page): Promise<void> {
-  const res = await page.evaluate(
-    async (sources) => {
-      const w = window as unknown as {
-        cg: { sources: { setConfig: (r: unknown) => Promise<{ ok: boolean; message?: string }> } };
-      };
-      return w.cg.sources.setConfig({ sources });
-    },
-    SOURCES as unknown as unknown[],
-  );
-  expect(res.ok, `the catalogue was accepted: ${res.message ?? ''}`).toBe(true);
-}
+/**
+ * `PLAYOUT-SOURCES-01` — the two sources are the seeded Playout's cameras, Studio 1 and Studio 2
+ * (`in-studio-1` / `in-studio-2`): a station's sources are the Playout's inputs, and nothing in
+ * the console defines one any more.
+ */
+test.use({ playoutSources: E2E_PLAYOUT });
 
 /** A template with two plates and one look, registered as an import would leave it. */
 async function registerTwoBox(page: Page, templateId: string): Promise<void> {
@@ -87,7 +76,9 @@ async function setDefault(
   await app.inspector.locator('[data-open-template-defaults]').click();
   const dialog = app.page.getByRole('dialog', { name: 'Source defaults' });
   await expect(dialog).toBeVisible();
-  await dialog.locator(`[data-defaults-select="${plateId}"]`).selectOption({ label });
+  await chooseSource(app.page, dialog.locator(`[data-defaults-select="${plateId}"]`), {
+    input: label,
+  });
   await dialog.locator('[data-defaults-save]').click();
   await expect(dialog).toHaveCount(0);
 }
@@ -97,30 +88,33 @@ test('🔴 §4.1 — a ROW OVERRIDE survives a default change, and the inheritin
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 900 });
-  await defineSources(page);
   const templateId = 'tpl-defaults-override';
   await registerTwoBox(page, templateId);
   const row = await app.loadTemplate(templateId);
   await app.selectLayerRow(row);
 
   // Both plates start on the SAME default.
-  await setDefault(app, 'guest-1', 'Studio A');
-  await setDefault(app, 'guest-2', 'Studio A');
+  await setDefault(app, 'guest-1', 'Studio 1');
+  await setDefault(app, 'guest-2', 'Studio 1');
 
   /*
-    THE OVERRIDE: this ROW, in this look, pins `guest-1` to Studio B. Level 3 of the chain —
+    THE OVERRIDE: this ROW, in this look, pins `guest-1` to Studio 2. Level 3 of the chain —
     above the template default and below an emergency patch.
   */
   const looks = app.inspector.locator('[aria-label="Look inputs"]');
-  await looks.locator('[data-look-binding="both:guest-1"]').selectOption({ label: 'Studio B' });
+  await chooseSource(page, looks.locator('[data-look-binding="both:guest-1"]'), {
+    input: 'Studio 2',
+  });
   await app.applyEdits();
   await expect
-    .poll(() => looks.locator('[data-look-binding="both:guest-1"]').inputValue())
-    .toBe('src-b');
+    .poll(() =>
+      looks.locator('[data-look-binding="both:guest-1"]').getAttribute('data-picker-value'),
+    )
+    .toBe('in-studio-2');
 
-  // …now move the TEMPLATE default for BOTH plates to Studio B → A is the new default.
-  await setDefault(app, 'guest-1', 'Studio B');
-  await setDefault(app, 'guest-2', 'Studio B');
+  // …now move the TEMPLATE default for BOTH plates to Studio 2 → 2 is the new default.
+  await setDefault(app, 'guest-1', 'Studio 2');
+  await setDefault(app, 'guest-2', 'Studio 2');
 
   /*
     🔴 THE CLAIM. `guest-1` is overridden on this row, so its value is untouched by anything
@@ -129,20 +123,22 @@ test('🔴 §4.1 — a ROW OVERRIDE survives a default change, and the inheritin
   await expect(
     looks.locator('[data-look-binding="both:guest-1"]'),
     'the row override is untouched by a default change',
-  ).toHaveValue('src-b');
+  ).toHaveAttribute('data-picker-value', 'in-studio-2');
 
   /*
     …AND THE POSITIVE CONTROL, without which the assertion above is worthless: the plate that
     is NOT overridden must have MOVED to the new default. A dialog that wrote nothing at all
     would pass the first assertion and fail this one.
 
-    The inheriting plate shows its default inside the control that inherits it — the blank
-    option NAMES it — so the change is read there rather than from the store.
+    The inheriting plate shows its default inside the control that inherits it — the picker's
+    `Default (…)` choice NAMES it, and is what the field shows while it is chosen — so the change
+    is read there rather than from the store.
   */
-  await expect(
-    looks.locator('[data-look-binding="both:guest-2"] option[value=""]'),
-    'the inheriting plate follows the new default',
-  ).toHaveText('Default (Studio B)');
+  const inheriting = looks.locator('[data-look-binding="both:guest-2"]');
+  await expect(inheriting).toHaveAttribute('data-picker-value', '');
+  await expect(inheriting, 'the inheriting plate follows the new default').toContainText(
+    'Default (Studio 2)',
+  );
 });
 
 test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and re-points nothing', async ({
@@ -150,13 +146,12 @@ test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and 
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 900 });
-  await defineSources(page);
   const templateId = 'tpl-defaults-onair';
   await registerTwoBox(page, templateId);
   const row = await app.loadTemplate(templateId);
   await app.selectLayerRow(row);
-  await setDefault(app, 'guest-1', 'Studio A');
-  await setDefault(app, 'guest-2', 'Studio A');
+  await setDefault(app, 'guest-1', 'Studio 1');
+  await setDefault(app, 'guest-2', 'Studio 1');
 
   // ON AIR. The take is what SEATS the plates, and what FREEZES the assignment it resolved.
   await app.layerRow(row).getByRole('button', { name: 'PLAY' }).click();
@@ -184,7 +179,7 @@ test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and 
   });
 
   // THE EDIT, on a live row, through the dialog.
-  await setDefault(app, 'guest-1', 'Studio B');
+  await setDefault(app, 'guest-1', 'Studio 2');
 
   /*
     🔴 THE CLAIM: not one stack intent. An assignment is read when a row is TAKEN; it never
@@ -211,7 +206,7 @@ test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and 
     plates.locator('[data-plate-frozen="guest-1"]'),
     'the row states that it is still on what it froze',
   ).toBeVisible();
-  await expect(plates.locator('[data-plate-frozen="guest-1"]')).toContainText('Studio A');
+  await expect(plates.locator('[data-plate-frozen="guest-1"]')).toContainText('Studio 1');
 
   /*
     ⚠ THE POSITIVE CONTROL FOR THE SPY. Every assertion above is "nothing happened", which is

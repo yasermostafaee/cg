@@ -359,7 +359,8 @@ export function LayersPanel({
   */
   const listFailed = bankFailed || slotsFailed;
   /*
-    The installation's source catalogue and its template assignments, for the LIVE PLATES
+    The station's source catalogue (the Playout's inputs and the media bound here —
+    `PLAYOUT-SOURCES-01`) and its template assignments, for the LIVE PLATES
     table's `Plate / source` column. Subscribed HERE rather than in the tab for
     `operatorRowName`'s reason: this panel already holds the stack, and the four-level
     binding chain needs the ITEM as well as the store. One reading serves the rows and the

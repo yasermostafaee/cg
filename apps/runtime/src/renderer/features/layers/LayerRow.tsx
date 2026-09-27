@@ -29,7 +29,8 @@ import { lookSwitchBanner, lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
-import { takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
+import { plateLabelOf, takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
+import { currentSourceCatalog } from '../sources/sourceStore.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -403,7 +404,11 @@ export function LayerRow({
   */
   const refusalLine =
     item?.takeRefusal !== undefined
-      ? takeRefusalLine(operatorName?.names[0] ?? rowName, item.takeRefusal)
+      ? takeRefusalLine(operatorName?.names[0] ?? rowName, item.takeRefusal, {
+          // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
+          plateLabel: plateLabelOf(template, item.takeRefusal.plateId),
+          entry: currentSourceCatalog().sources.find((s) => s.id === item.takeRefusal?.sourceId),
+        })
       : null;
 
   const templateLabel =

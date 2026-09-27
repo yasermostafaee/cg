@@ -17,7 +17,7 @@ export type { OccupiedLayer } from './osc/occupancy-tap.js';
 export { OscChannelTickTap } from './osc/channel-tick-tap.js';
 export { parsePacket, flatten } from './osc/parser.js';
 export type { OscPacket, OscBundle, OscMessage, OscArgValue } from './osc/parser.js';
-export { messageToEvent } from './osc/event-mapper.js';
+export { messageToEvent, oscProducerKind } from './osc/event-mapper.js';
 
 export { CommandQueue } from './queue/command-queue.js';
 export type {

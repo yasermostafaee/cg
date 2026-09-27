@@ -4,6 +4,7 @@ import {
   isLiveState,
   LayerManager,
   OutOfLayersError,
+  oscProducerKind,
   Reconciler,
   RedundancyAdapter,
   ServerSession,
@@ -93,8 +94,14 @@ import {
   lookPlateFits,
   lookPlateRects,
   pruneAssignmentsForCatalog,
+  // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
+  sourceSeatable,
+  unbindableChange,
+  redactUrlCredentials,
+  type LiveSourceLayerRange,
   type SourceAssignments,
   type SourceCatalog,
+  type SourceDefinition,
   type SourceProducer,
   type SourcesSetAssignmentsReason,
   type SourcesSetConfigReason,
@@ -309,7 +316,15 @@ interface LivePlatePlacement {
    * the resolution the wire was built from, never from a later read of a catalog that may have
    * been edited since.
    */
-  readonly source: { readonly id: string; readonly name: string };
+  readonly source: {
+    readonly id: string;
+    readonly name: string;
+    /**
+     * `PLAYOUT-SOURCES-01` — where the entry came from. `input` (D10) makes this a plate that is seated
+     * silent and only ever raised by a ramp (contract v1.3 rule 2).
+     */
+    readonly origin?: 'input' | 'media';
+  };
   /** `FILL` and `CLIP`, from ONE computation — never assembled separately. */
   readonly fit: { readonly fill: NormalizedRect; readonly clip: NormalizedRect };
   /**
@@ -329,10 +344,33 @@ interface SeatRequest {
    * Hide it before its `PLAY`: `OPACITY 0` + `VOLUME 0` + its fit, committed first. TRUE only on
    * a layer no producer of ours is on — see `#seatPlates` for why a layer carrying ours is never
    * hidden.
+   *
+   * `PLAYOUT-SOURCES-01` §1.I — a Playout input on a layer of ours is not hidden either, but it is
+   * still MUTED first (`VOLUME 0` alone, in the same commit), so it starts silent on every seating.
    */
   readonly hide: boolean;
   /** A PARKED preset: a refusal DROPS it and the action goes on (session BM). */
   readonly optional: boolean;
+}
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.I — **a Playout input seated IN PLACE** (an `R-048` swap or restore,
+ * on a layer of ours). It is not hidden — that would take the working picture off air before the
+ * replace is known to land (`B-126`) — but it IS muted before its `PLAY`, in the seat step's one
+ * commit, so a D10 plate starts silent on every seating (contract v1.3 rule 2).
+ */
+function mutedInPlace(request: SeatRequest): boolean {
+  return !request.hide && request.placement.source.origin === 'input';
+}
+
+/**
+ * The volume a ledger record's layer carries as today's code computes it: SILENT while held or
+ * parked (a box nobody can see is never audible), its recorded intent otherwise.
+ */
+function wireVolumeOf(record: LiveLayerRecord): number {
+  return record.held === true || isParkedFit(record.fill)
+    ? CREATED_MUTED_VOLUME
+    : record.intendedVolume;
 }
 
 /** What the seat step did for one seat — the facts its action's failure path reads. */
@@ -344,6 +382,11 @@ interface SeatResult {
   readonly sent: boolean;
   /** `OPACITY 0` + `VOLUME 0` + the fit were committed before the `PLAY`. */
   readonly hidden: boolean;
+  /**
+   * `PLAYOUT-SOURCES-01` §1.C — the producer argument actually played when the one retry replaced
+   * the placement's (a media item's fresh `clip`). The ledger records THIS; absent = the placement's.
+   */
+  readonly playedArg?: string;
   readonly errorCode?: string;
   /** The refused line as `#send` summarised it (`B-209`). */
   readonly command?: string;
@@ -393,6 +436,18 @@ interface LivePlateApplyResult {
   readonly refused?: {
     readonly plateId: string;
     readonly source: { readonly id: string; readonly name: string };
+  };
+}
+
+/**
+ * A catalogue entry as a seat carries it: its id, its NAME and — `PLAYOUT-SOURCES-01` — where it came
+ * from, which decides the D10 audio rule. One spelling, for every seat the plan builds.
+ */
+function sourceLabelOf(source: SourceDefinition): LivePlatePlacement['source'] {
+  return {
+    id: source.id,
+    name: source.name,
+    ...(source.origin !== undefined ? { origin: source.origin } : {}),
   };
 }
 
@@ -500,7 +555,16 @@ type LiveSeatingPlan =
        */
       readonly fitProvenance: readonly PlateFitReport[];
     }
-  | { readonly ok: false; readonly errorCode: string; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly errorCode: string;
+      readonly message: string;
+      /**
+       * `PLAYOUT-SOURCES-01` — for `source-unavailable` / `source-unusable`, the plate the refusal
+       * stopped on and its entry, so the row can carry its one line (`FIELD-FIXES-01` B).
+       */
+      readonly refused?: { readonly plateId: string; readonly source: SourceDefinition };
+    };
 
 /**
  * ⭐ `B-178` — one plate's resolved fit mode and the link of the chain that answered.
@@ -592,6 +656,28 @@ const INTENDED_VOLUME = 1;
  * every site that touches it.
  */
 const CREATED_MUTED_VOLUME = 0;
+
+/**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.I — **the ramp a Playout input's plate rises by: 25 frames.**
+ *
+ * Contract v1.3 rule 2 (`PLAYOUT-CG-RESPONSE-V13-STATE` §3.1): the Playout may route the same
+ * input to the same channel, where the two sounds add up (about +6 dB), and it warns on air when
+ * a CG plate on such an input is not at 0. So a D10 plate is seated silent and its volume never
+ * JUMPS up — even `VOLUME 1 4` reaches 0.25 in its first block. Silences stay immediate.
+ */
+export const D10_VOLUME_RAMP_FRAMES = 25;
+
+/**
+ * `PLAYOUT-SOURCES-01` §1.I — the frames one plate's `MIXER … VOLUME <v>` carries. **The one
+ * spelling** every plate site asks: a Playout input going above silence ramps; every silence, and
+ * every other plate (media, and anything seated before `origin` existed), is today's bare line.
+ */
+export function plateVolumeFrames(
+  origin: 'input' | 'media' | undefined,
+  volume: number,
+): number | undefined {
+  return origin === 'input' && volume > CREATED_MUTED_VOLUME ? D10_VOLUME_RAMP_FRAMES : undefined;
+}
 
 /**
  * C-015 phase 6 (6.5b) — the load was refused because the layer could not be
@@ -1408,6 +1494,11 @@ export class CasparRuntime {
    * adjudicated at take time (the fixed-bank governing principle).
    */
   #sourceCatalog: SourceCatalog;
+  /**
+   * `PLAYOUT-SOURCES-01` §1.C — the one retry's read ({@link setMediaFreshener}): a media item's
+   * `clip` read fresh from the Playout, answered only when it differs from the path played.
+   */
+  #freshMediaClip: ((sourceId: string, played: string) => Promise<string | null>) | null = null;
   /**
    * D-137 / C-015 — which catalog entry each template's each PLATE uses.
    * LOADED, VALIDATED and PRUNED in `createBridge`, before the WebSocket binds.
@@ -3797,7 +3888,14 @@ export class CasparRuntime {
    * replaces the previous one: the row says why its LAST take was refused.
    */
   #recordTakeRefusal(itemId: string, refusal: TakeRefusal): void {
-    this.#takeRefusals.set(itemId, refusal);
+    // `PLAYOUT-SOURCES-01` §1.E — the row's record is published to every console: a stream URL's
+    // credentials never ride it, whichever door recorded it.
+    this.#takeRefusals.set(
+      itemId,
+      refusal.command === undefined
+        ? refusal
+        : { ...refusal, command: redactUrlCredentials(refusal.command) },
+    );
     this.#markDirty(itemId);
   }
 
@@ -3947,6 +4045,28 @@ export class CasparRuntime {
       // break that, so it is written on the far side of this return rather than before the
       // plan (`tasks.md` 7.9's rule, met by a fourth writer).
       process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${plan.message}\n`);
+      if (plan.refused !== undefined) {
+        /*
+          🔴 `PLAYOUT-SOURCES-01` §1.C — a plate bound to an entry the Playout stopped offering (or
+          one that became unusable) is refused BEFORE ANY AMCP, and the row carries its own reason
+          exactly as a server's refusal does (`FIELD-FIXES-01` B): one line, no banner. The binding
+          is kept; a later read that lists the entry again lets the next take play.
+        */
+        const { plateId, source } = plan.refused;
+        this.#recordTakeRefusal(itemId, {
+          code: plan.errorCode,
+          plateId,
+          sourceId: source.id,
+          sourceName: source.name,
+          ...(source.origin !== undefined ? { sourceOrigin: source.origin } : {}),
+        });
+        return {
+          accepted: false,
+          errorCode: plan.errorCode,
+          message: plan.message,
+          refusalOnRow: true,
+        };
+      }
       // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
       // two aspects disagree, are the facts that make these refusals actionable,
       // and no fixed code can carry them — see `StackTakeChannel`.
@@ -4558,6 +4678,28 @@ export class CasparRuntime {
       press of UPDATE an atomic operator action rather than two commands sharing a button.
     */
     if (lookBindings !== undefined) {
+      /*
+        🔴 `PLAYOUT-SOURCES-01` — a binding the row NEWLY makes must be to something bindable: never
+        an unusable entry (the route gate included), never one the Playout stopped offering, never
+        an id the catalogue does not hold. One the row already had passes whatever became of it —
+        only an operator action removes a binding. Refused before anything else, so the WHOLE
+        update is refused (BM-2).
+      */
+      const flat = (maps: LookSourceBindings | undefined): { key: string; sourceId: string }[] =>
+        Object.entries(maps ?? {}).flatMap(([lookId, plates]) =>
+          Object.entries(plates).map(([plateId, sourceId]) => ({
+            key: `${lookId}\u0000${plateId}`,
+            sourceId,
+          })),
+        );
+      const refusal = unbindableChange(
+        flat(lookBindings),
+        flat(this.#lookSourceBindings.get(itemId)),
+        this.#sourceCatalog,
+      );
+      if (refusal !== null) {
+        return { accepted: false, errorCode: refusal.code, message: refusal.message };
+      }
       // `B-155` §B — under the item's live-seat lock (see `#withLiveSeatLock`), so a
       // binding apply cannot interleave into an in-flight look switch's window; the
       // overrides are read INSIDE the lock so a queued apply composes with what the
@@ -5533,11 +5675,22 @@ export class CasparRuntime {
       all questions about the same union, so they must all be asked of the same level 2.
     */
     const resolvedFrom = this.#assignmentMapFor(itemId, templateId, levelTwo);
+    /*
+      🔴 `PLAYOUT-SOURCES-01` — ONLY SEATABLE ENTRIES CAN RESOLVE A FRAME. An entry the Playout
+      stopped offering, one it marks unavailable, and one that is unusable (its rules, or the route
+      gate) are KEPT in the catalogue so their bindings keep their names — and here they resolve to
+      nothing, so they can never reach the producer builder: no `PLAY … route://` is ever built for
+      a gated input. The refusal below names what happened, from the full catalogue.
+    */
+    const seatableCatalog: SourceCatalog = {
+      ...this.#sourceCatalog,
+      sources: this.#sourceCatalog.sources.filter(sourceSeatable),
+    };
     const bindings = resolveLookBindings({
       templateId,
       carrier,
       assignments: this.#assignmentsFor(itemId, templateId, levelTwo).assignments,
-      catalog: this.#sourceCatalog,
+      catalog: seatableCatalog,
       bindings: this.#lookSourceBindings.get(itemId),
       overrides: this.#sourceOverrides.get(itemId),
       argumentOf: (source) => this.#builder.sourceArgument(source.producer),
@@ -5595,7 +5748,14 @@ export class CasparRuntime {
         catalog: this.#sourceCatalog,
         overrides: this.#effectiveOverridesFor(itemId, lookId),
       });
-      if (!refusal.ok) return { ok: false, errorCode: refusal.errorCode, message: refusal.message };
+      if (!refusal.ok) {
+        return {
+          ok: false,
+          errorCode: refusal.errorCode,
+          message: refusal.message,
+          ...(refusal.refused !== undefined ? { refused: refusal.refused } : {}),
+        };
+      }
     }
 
     /*
@@ -5721,7 +5881,7 @@ export class CasparRuntime {
           plateId: frame.plateId,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
-          source: { id: seat.source.id, name: seat.source.name },
+          source: sourceLabelOf(seat.source),
           fit: parkedFit(this.#parkedSize(itemId, slot, carrier, frame, aspect.aspect)),
           held: true,
         });
@@ -5768,7 +5928,7 @@ export class CasparRuntime {
           plateId: frame.plateId,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
-          source: { id: seat.source.id, name: seat.source.name },
+          source: sourceLabelOf(seat.source),
           fit: parkedFit({ width: fit.fill.width, height: fit.fill.height }),
           held: true,
         });
@@ -5778,7 +5938,7 @@ export class CasparRuntime {
         plateId: frame.plateId,
         producerArg: seat.producerArg,
         producer: seat.source.producer,
-        source: { id: seat.source.id, name: seat.source.name },
+        source: sourceLabelOf(seat.source),
         fit: { fill: fit.fill, clip: fit.clip },
         held: false,
       });
@@ -6995,6 +7155,9 @@ export class CasparRuntime {
           plateId: reconciled.refused.plateId,
           sourceId: reconciled.refused.source.id,
           sourceName: reconciled.refused.source.name,
+          ...(reconciled.refused.source.origin !== undefined
+            ? { sourceOrigin: reconciled.refused.source.origin }
+            : {}),
         });
         return { refusalOnRow: true };
       };
@@ -7229,7 +7392,11 @@ export class CasparRuntime {
     command?: string;
     refused?: {
       readonly plateId: string;
-      readonly source: { readonly id: string; readonly name: string };
+      readonly source: {
+        readonly id: string;
+        readonly name: string;
+        readonly origin?: 'input' | 'media';
+      };
     };
   }> {
     const slot = this.#slots.get(itemId);
@@ -7242,7 +7409,28 @@ export class CasparRuntime {
       // SESSION BP — a take resolves level 2 afresh; every other reconcile reads the pin.
       opts.mode === 'take' ? 'fresh' : 'pinned',
     );
-    if (!plan.ok) return { ok: false, errorCode: plan.errorCode, message: plan.message };
+    if (!plan.ok) {
+      // `PLAYOUT-SOURCES-01` — a switch into an entry the Playout stopped offering names its plate,
+      // so the row says it in `FIELD-FIXES-01`'s one line (`setActiveLook`'s `onRow`).
+      const refused = plan.refused;
+      return {
+        ok: false,
+        errorCode: plan.errorCode,
+        message: plan.message,
+        ...(refused !== undefined
+          ? {
+              refused: {
+                plateId: refused.plateId,
+                source: {
+                  id: refused.source.id,
+                  name: refused.source.name,
+                  ...(refused.source.origin !== undefined ? { origin: refused.source.origin } : {}),
+                },
+              },
+            }
+          : {}),
+      };
+    }
     /*
       🔴 `LOOK-SWITCH-01` / `B-273` — A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE `beforeApply` TELLS
       THE PAGE ANYTHING ({@link #preSeatSwitch}). A refused plate refuses the switch HERE, with the
@@ -7538,12 +7726,14 @@ export class CasparRuntime {
         );
         for (const channel of new Set(records.map((r) => r.slot.channel))) {
           for (const record of records.filter((r) => r.slot.channel === channel)) {
-            const parked = record.held === true || isParkedFit(record.fill);
+            const volume = wireVolumeOf(record);
             for (const line of [
               ...this.#builder.mixerFit(record.slot, { fill: record.fill, clip: record.clip }),
+              // `PLAYOUT-SOURCES-01` §1.I — a Playout input's declared volume is re-set by a ramp.
               this.#builder.mixerVolume(
                 record.slot,
-                parked ? CREATED_MUTED_VOLUME : record.intendedVolume,
+                volume,
+                plateVolumeFrames(record.origin, volume),
               ),
               this.#builder.mixerOpacity(record.slot, 1),
             ]) {
@@ -7643,15 +7833,20 @@ export class CasparRuntime {
   async #seatPlates(requests: readonly SeatRequest[]): Promise<Map<string, SeatResult>> {
     const results = new Map<string, SeatResult>();
     if (requests.length === 0) return results;
-    if (requests.some((r) => r.hide)) {
+    if (requests.some((r) => r.hide || mutedInPlace(r))) {
       let hideFailure: { errorCode: string; command?: string } | undefined;
-      hide: for (const { placement, hide } of requests) {
-        if (!hide) continue;
-        for (const line of [
-          this.#builder.mixerOpacity(placement.slot, 0),
-          this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME),
-          ...this.#builder.mixerFit(placement.slot, placement.fit),
-        ]) {
+      hide: for (const request of requests) {
+        const { placement } = request;
+        const lines = request.hide
+          ? [
+              this.#builder.mixerOpacity(placement.slot, 0),
+              this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME),
+              ...this.#builder.mixerFit(placement.slot, placement.fit),
+            ]
+          : mutedInPlace(request)
+            ? [this.#builder.mixerVolume(placement.slot, CREATED_MUTED_VOLUME)]
+            : [];
+        for (const line of lines) {
           this.#stagedMixerChannel = placement.slot.channel;
           const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
           if (sent.ok) continue;
@@ -7685,6 +7880,7 @@ export class CasparRuntime {
             ...hideFailure,
           });
         }
+        await this.#restoreInPlaceMutes(requests.filter(mutedInPlace));
         return results;
       }
     }
@@ -7696,12 +7892,50 @@ export class CasparRuntime {
         outcome,
         sent: true,
         hidden: r.hide,
+        ...(sent.playedArg !== undefined && { playedArg: sent.playedArg }),
         ...(sent.errorCode !== undefined && { errorCode: sent.errorCode }),
         ...(sent.command !== undefined && { command: sent.command }),
       });
       if (outcome !== 'landed' && !r.optional) break;
     }
+    /*
+      `PLAYOUT-SOURCES-01` §1.I — an in-place mute whose replace did NOT happen gives the working
+      producer its volume back: its `PLAY` was refused, or never tried (a seat before it stopped the
+      step). A `PLAY` whose reply never came may have landed, so that layer stays silent until its
+      reveal or the operator — the safe direction.
+    */
+    await this.#restoreInPlaceMutes(
+      requests.filter((r) => {
+        if (!mutedInPlace(r)) return false;
+        const seat = results.get(r.placement.producerArg);
+        return seat === undefined || seat.outcome === 'refused';
+      }),
+    );
     return results;
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` §1.I — give back the volume an in-place mute ({@link mutedInPlace}) took
+   * from the producer that stayed on the layer: its ledger record's volume as today's code computes
+   * it ({@link wireVolumeOf} — held or parked is silent, so nothing is sent), ramped when that
+   * producer is itself a Playout input.
+   */
+  async #restoreInPlaceMutes(requests: readonly SeatRequest[]): Promise<void> {
+    for (const { placement } of requests) {
+      const wanted = adoptionKey(placement.slot);
+      let record: LiveLayerRecord | undefined;
+      for (const records of this.#liveLayers.values()) {
+        record = records.find((r) => adoptionKey(r.slot) === wanted) ?? record;
+      }
+      if (record === undefined) continue;
+      const volume = wireVolumeOf(record);
+      if (volume <= CREATED_MUTED_VOLUME) continue;
+      await this.#send(
+        this.#builder.mixerVolume(record.slot, volume, plateVolumeFrames(record.origin, volume)),
+        this.#nextSeq(),
+        'urgent',
+      );
+    }
   }
 
   /**
@@ -7713,12 +7947,40 @@ export class CasparRuntime {
    */
   async #startSeatProducer(
     placement: LivePlatePlacement,
-  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
-    return this.#send(
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string; playedArg?: string }> {
+    const first = await this.#send(
       this.#builder.playSource(placement.slot, placement.producer),
       this.#nextSeq(),
       'urgent',
     );
+    /*
+      🔴 `PLAYOUT-SOURCES-01` §1.C — **THE ONE RETRY.** A Playout media item's `clip` moves between
+      its cache and its original, so a `PLAY` answered `404` may be a path that was right a moment
+      ago. ONE `ids=` read, bounded at 1.5 s; if the item's `clip` changed, the `PLAY` is sent ONCE
+      more with the fresh path, and whatever that answers is the seat's answer — never a second
+      retry. Otherwise the first refusal stands, and the action fails as `FIELD-FIXES-01-A` decided.
+      The only Playout read inside a verb, and only on its failure path (ADR 0010 rule 14).
+    */
+    const freshen = this.#freshMediaClip;
+    if (
+      first.ok ||
+      first.errorCode !== 'amcp-404' ||
+      freshen === null ||
+      placement.producer.kind !== 'media' ||
+      placement.source.origin !== 'media'
+    ) {
+      return first;
+    }
+    const fresh = await freshen(placement.source.id, placement.producer.file);
+    if (fresh === null) return first;
+    const producer = { ...placement.producer, file: fresh };
+    const retried = await this.#send(
+      this.#builder.playSource(placement.slot, producer),
+      this.#nextSeq(),
+      'urgent',
+    );
+    // The ledger records the argument actually SENT — asked of the one formatter, never re-spelt.
+    return { ...retried, playedArg: this.#builder.sourceArgument(producer) };
   }
 
   /**
@@ -7983,6 +8245,9 @@ export class CasparRuntime {
         pre-seat, which must seat exactly the plates this loop would otherwise `PLAY`.
       */
       const seatUnchanged = isSeatUnchanged(mode, prior, placement);
+      // `PLAYOUT-SOURCES-01` §1.C — the argument the seat step actually played: the one retry
+      // may have played a media item's fresh `clip` instead of the placement's.
+      const playedArg = seatUnchanged ? undefined : seats.get(producer)?.playedArg;
 
       const record: LiveLayerRecord = {
         slot: placement.slot,
@@ -7993,7 +8258,7 @@ export class CasparRuntime {
         // `keyDevice` is stored and NOT sent (the Sources modal says so in the
         // operator's own words); until C-027 lands, every record here is a fill.
         role: 'fill',
-        producer,
+        producer: playedArg ?? producer,
         fill: placement.fit.fill,
         clip: placement.fit.clip,
         // `??`, never `||`: a plate whose recorded intent IS 0 must resolve to 0
@@ -8001,6 +8266,8 @@ export class CasparRuntime {
         // the two agree today, and a future non-zero default would make the bug
         // appear in a line nobody edited.
         intendedVolume: intent[placement.plateId] ?? CREATED_MUTED_VOLUME,
+        // `PLAYOUT-SOURCES-01` §1.I — a later raise reaches this layer from the record alone.
+        ...(placement.source.origin !== undefined && { origin: placement.source.origin }),
         /*
           🔴 A FRESH PARK STARTS `held: false` AND IS CORRECTED TO WHAT LANDED.
 
@@ -8042,7 +8309,14 @@ export class CasparRuntime {
         // re-asserted or a deliberately-raised source returns silent — the same fault
         // 6.9c names for the swap, arriving by the look switch instead.
         if (prior.held === true) {
-          lines.push(this.#builder.mixerVolume(placement.slot, record.intendedVolume));
+          // `PLAYOUT-SOURCES-01` §1.I — a Playout input comes back by a ramp, never a jump.
+          lines.push(
+            this.#builder.mixerVolume(
+              placement.slot,
+              record.intendedVolume,
+              plateVolumeFrames(record.origin, record.intendedVolume),
+            ),
+          );
         }
       }
       /*
@@ -8074,12 +8348,18 @@ export class CasparRuntime {
             producer nobody can see must not be audible in the meantime — and a plate the
             operator had deliberately raised in an earlier look is exactly the case where seating
             it at its recorded intent would put a live voice on air from an empty box.
+
+            🔴 `PLAYOUT-SOURCES-01` §1.I — a Playout input's declared volume is RE-APPLIED here, after
+            it is seated silent, and by a ramp ({@link plateVolumeFrames}); its default is 0, so an
+            input nobody raised stays silent.
           */
+          const revealVolume = placement.held ? CREATED_MUTED_VOLUME : record.intendedVolume;
           lines.push(
             this.#builder.mixerOpacity(placement.slot, 1),
             this.#builder.mixerVolume(
               placement.slot,
-              placement.held ? CREATED_MUTED_VOLUME : record.intendedVolume,
+              revealVolume,
+              plateVolumeFrames(record.origin, revealVolume),
             ),
             ...(seat?.hidden === true ? [] : this.#builder.mixerFit(placement.slot, placement.fit)),
           );
@@ -8176,9 +8456,11 @@ export class CasparRuntime {
         next.pop();
         const dropped = touched.indexOf(record);
         if (dropped >= 0) touched.splice(dropped, 1);
+        // `PLAYOUT-SOURCES-01` §1.E — a stream argument can carry credentials; never printed.
         process.stderr.write(
           `[caspar-bridge] ${itemId}: could not pre-seat "${placement.plateId}" ` +
-            `(${placement.producerArg}) for a look that is not on screen: ${failure}\n`,
+            `(${redactUrlCredentials(placement.producerArg)}) for a look that is not on screen: ` +
+            `${redactUrlCredentials(String(failure))}\n`,
         );
         failure = undefined;
         failedPlate = undefined;
@@ -8793,16 +9075,15 @@ export class CasparRuntime {
         message: `This template has no live plate called "${plateId}".`,
       };
     }
-    const source =
-      sourceId === null
-        ? null
-        : (this.#sourceCatalog.sources.find((s) => s.id === sourceId) ?? null);
-    if (sourceId !== null && source === null) {
-      return {
-        ok: false,
-        reason: 'unknown-source',
-        message: `This installation has no live source with the id "${sourceId}".`,
-      };
+    /*
+      `PLAYOUT-SOURCES-01` — a swap is a NEW binding, so it passes the one rule every binding door
+      asks (`unbindableChange`), with nothing held to compare against: never an id the catalogue
+      does not hold, never an unusable entry (the route gate included), never one the Playout no
+      longer offers. The same sentences as every other door, and no id in them (golden rule 11).
+    */
+    if (sourceId !== null) {
+      const refusal = unbindableChange([{ key: plateId, sourceId }], [], this.#sourceCatalog);
+      if (refusal !== null) return { ok: false, reason: refusal.code, message: refusal.message };
     }
 
     /*
@@ -9144,8 +9425,10 @@ export class CasparRuntime {
       (silencing || this.#ownsLiveSeats(itemId))
     ) {
       if (this.#noServerReachable()) return { ok: false, reason: 'disconnected' };
+      // `PLAYOUT-SOURCES-01` §1.I — a raise of a Playout input RAMPS; a silence (and PANIC) is
+      // immediate, as it always was.
       const ack = await this.#send(
-        this.#builder.mixerVolume(record.slot, volume),
+        this.#builder.mixerVolume(record.slot, volume, plateVolumeFrames(record.origin, volume)),
         this.#nextSeq(),
         'urgent',
       );
@@ -11879,9 +12162,13 @@ export class CasparRuntime {
    * prevent. Every assignment the new catalog orphans is dropped and RETURNED,
    * so the caller can name at the moment of deletion which templates referenced
    * it; those plates then read as unassigned and their take refuses naming the
-   * plate. The prune is `@cg/shared-ipc`'s, the SAME one the boot path uses —
-   * two spellings of "which assignments does this catalog orphan" is how they
-   * come to disagree.
+   * plate. The prune is `@cg/shared-ipc`'s — two spellings of "which assignments
+   * does this catalog orphan" is how they come to disagree.
+   *
+   * ⚠ `PLAYOUT-SOURCES-01` §1.F — **NO ROUTE REACHES THIS ANY MORE.** `sources.set-config` carries the
+   * plate band only ({@link setSourceBand}), and the station's sources are the Playout's, applied by
+   * {@link setResolvedSourceCatalog}, which never prunes. This remains the in-process door for an
+   * EXPLICIT catalogue (tests, embedders), where a hand-made list is still the whole truth.
    */
   setSourceCatalog(next: SourceCatalog): {
     ok: boolean;
@@ -11909,19 +12196,82 @@ export class CasparRuntime {
    * An assignment naming a source this installation does not define is REFUSED
    * here rather than pruned: the product's own surface cannot produce one, so a
    * caller that does is stale or hand-written, and silently dropping its request
-   * would report a success the caller did not get. The LOAD path prunes instead,
-   * and `pruneAssignmentsForCatalog`'s docstring records why the two doors
-   * answer differently.
+   * would report a success the caller did not get. ⚠ `PLAYOUT-SOURCES-01` — the
+   * LOAD path no longer prunes either: a binding whose entry is gone is kept, and
+   * only an operator removes one (ADR 0010 rule 14).
    */
   setSourceAssignments(next: SourceAssignments): {
     ok: boolean;
     reason?: SourcesSetAssignmentsReason;
     message?: string;
   } {
-    const verdict = checkSourceAssignments(next, { catalog: this.#sourceCatalog });
-    if (!verdict.ok) return verdict;
+    // No plate twice — the shape rule, whatever the catalogue holds.
+    const shape = checkSourceAssignments(next, { catalog: null });
+    if (!shape.ok) return shape;
+    /*
+      🔴 `PLAYOUT-SOURCES-01` — ONLY A NEW OR CHANGED BINDING MUST BE BINDABLE. One left as it was
+      passes whatever became of its entry (an input the Playout dropped, a hand-made `src-*` id that
+      now reads unassigned): only an operator action removes a binding, and a dropped input must not
+      make every other edit to the defaults impossible.
+    */
+    const keyed = (a: TemplateSourceAssignment): { key: string; sourceId: string } => ({
+      key: `${a.templateId}\u0000${a.plateId}`,
+      sourceId: a.sourceId,
+    });
+    const refusal = unbindableChange(
+      next.assignments.map(keyed),
+      this.#sourceAssignments.assignments.map(keyed),
+      this.#sourceCatalog,
+    );
+    if (refusal !== null) return { ok: false, reason: refusal.code, message: refusal.message };
     this.#sourceAssignments = next;
     this.sourceAssignmentsChanged.emit(next);
+    return { ok: true };
+  }
+
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` — **THE CATALOGUE THE PLAYOUT'S READS BUILT.** Set as-is and published:
+   * no validation (the builder already listed what fails as `unusable`) and — the point — NO PRUNE.
+   * An entry that went away is still in it, `unavailable`, and a binding to it is kept (ADR 0010
+   * rule 14). `pruneAssignmentsForCatalog` never runs on this door.
+   */
+  setResolvedSourceCatalog(next: SourceCatalog): void {
+    if (JSON.stringify(next) === JSON.stringify(this.#sourceCatalog)) return;
+    this.#sourceCatalog = next;
+    this.sourceCatalogChanged.emit(next);
+  }
+
+  /**
+   * 🔴 `PLAYOUT-SOURCES-01` §1.C — **THE ONE RETRY'S READ, handed in by the bridge** (the Playout's
+   * reader is built after the runtime). `null` — no Playout media — means no retry at all.
+   */
+  setMediaFreshener(
+    read: ((sourceId: string, played: string) => Promise<string | null>) | null,
+  ): void {
+    this.#freshMediaClip = read;
+  }
+
+  /**
+   * `PLAYOUT-SOURCES-01` §1.F — **THE PLATE BAND, the one catalogue fact CG Control still owns.**
+   * Validated against every declared bank and the reserved layers (the same function the boot path
+   * calls), applied to the catalogue in force, published. Cascades nothing.
+   */
+  setSourceBand(range: LiveSourceLayerRange | undefined): {
+    ok: boolean;
+    reason?: SourcesSetConfigReason;
+    message?: string;
+  } {
+    const verdict = checkSourceCatalogAgainstBanks(
+      { sources: [], ...(range !== undefined ? { layerRange: range } : {}) },
+      this.#fixedBanks,
+      this.#reservedLayers,
+    );
+    if (!verdict.ok) return verdict;
+    const next: SourceCatalog = { ...this.#sourceCatalog };
+    if (range === undefined) delete next.layerRange;
+    else next.layerRange = range;
+    this.#sourceCatalog = next;
+    this.sourceCatalogChanged.emit(next);
     return { ok: true };
   }
 
@@ -12654,9 +13004,11 @@ export class CasparRuntime {
       if (this.#layers.isAllocated(slot)) continue;
       this.#layers.quarantine(slot);
       // The one line whoever wonders why a layer is being skipped will grep for.
+      // `PLAYOUT-SOURCES-01` §1.E / v1.3 §3.3 — an OSC producer string is reduced to its KIND
+      // before it is printed: what a layer holds, never where it reads from.
       process.stderr.write(
         `[caspar-bridge] layer ${String(slot.channel)}-${String(slot.layer)} quarantined from ` +
-          `allocation: a foreign producer (${producer}) is on it. It will not be allocated or ` +
+          `allocation: a foreign producer (${oscProducerKind(producer)}) is on it. It will not be allocated or ` +
           `cleared; it returns to the pool when the producer leaves.
 `,
       );

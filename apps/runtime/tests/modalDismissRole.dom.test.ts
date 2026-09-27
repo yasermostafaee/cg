@@ -264,17 +264,23 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
       applied", because that was UNTRUE: the LAYER BAND in the same tab carries an
       `Apply band`, and the band is genuinely applied. The footer now states both contracts
       and says where the second one's control is. A signal must not say what it does not mean.
+
+      ⚠ `PLAYOUT-SOURCES-01` — and then the catalogue clause went with the editor: the list is
+      the Playout's, read-only, so nothing here saves as you go. The footer names the band's own
+      button instead, which is the half §5 fought for.
     */
     await selectSetupTab(dialog, 'sources');
     const sourcesFoot = dialog.querySelector('[data-section-footer="sources"]')?.textContent ?? '';
-    expect(sourcesFoot).toContain('The catalogue saves as you go');
-    expect(sourcesFoot).toContain('the layer band is applied separately');
+    expect(sourcesFoot).toContain('Nothing to apply here — Apply band applies on its own.');
+    expect(sourcesFoot, 'no catalogue is saved on this tab any more').not.toContain(
+      'saves as you go',
+    );
     expect(sourcesFoot, 'the sentence that was untrue must not come back').not.toContain(
       'there is nothing waiting to be applied',
     );
     // …and the section's own legend agrees with its footer rather than repeating the lie.
     expect(sectionOf(dialog, 'sources').textContent).toContain(
-      'The catalogue saves as you go; the layer band is applied.',
+      'Listed by the Playout. Apply band sets the layer band.',
     );
     // The band's own control is right there, which is what makes the footer's claim checkable.
     expect(

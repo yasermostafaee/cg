@@ -94,6 +94,11 @@ export const TakeRefusalSchema = z.object({
   /** The catalog entry that plate resolved to at the take — its stable id and its NAME. */
   sourceId: z.string().min(1).optional(),
   sourceName: z.string().min(1).optional(),
+  /**
+   * `PLAYOUT-SOURCES-01` — where that entry came from (`input`: the Playout's D10 list; `media`: its
+   * D11 library), so a `source-unavailable` line can say which list it left.
+   */
+  sourceOrigin: z.enum(['input', 'media']).optional(),
 });
 export type TakeRefusal = z.infer<typeof TakeRefusalSchema>;
 

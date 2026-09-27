@@ -120,9 +120,18 @@ describe('CommandBuilder — Live Source verbs (C-015 phase 6, task 6.1)', () =>
       );
     });
 
-    it('ndi: the NAME is a value and IS quoted, the keywords are not', () => {
+    it('ndi: the source is a value and IS quoted, after the bracketed `[NDI]` token', () => {
+      /*
+        `PLAYOUT-SOURCES-01` §1.D — the ONE sanctioned wire change. `NDI NAME "…"` is the Playout
+        core's CONSUMER syntax and plays nothing; the producer is `[NDI] "<source>"` (their answer
+        §1.2, `newtek_ndi_producer.cpp:289-292`).
+      */
       expect(builder.playSource(slot, { kind: 'ndi', source: 'STUDIO A' })).toBe(
-        'PLAY 1-10 NDI NAME "STUDIO A"',
+        'PLAY 1-10 [NDI] "STUDIO A"',
+      );
+      // Control: the source is still escaped as every other value is.
+      expect(builder.playSource(slot, { kind: 'ndi', source: 'STUDIO-PC (Cam 1)' })).toBe(
+        'PLAY 1-10 [NDI] "STUDIO-PC (Cam 1)"',
       );
     });
 

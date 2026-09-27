@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, test, expect, type PlayoutSeed } from './fixtures/runtime.js';
 
 /**
  * THE ASSERTION THE DIALOG WAVE OWED (DEBT.md:38, DEBT.md:2082).
@@ -27,7 +27,7 @@ import { test, expect } from './fixtures/runtime.js';
  * is written never to do.
  *
  * `Live sources` satisfies every property the debt actually requires, and one more:
- * its body genuinely scrolls once a few sources are defined (asserted below rather
+ * its body genuinely scrolls once the Playout lists a dozen inputs (asserted below rather
  * than assumed), its refusal comes from the REAL validator the bridge itself runs,
  * and it is the modal whose message the owner reported as illegible. The mechanism
  * under test is the primitive's, so it is the same mechanism either way.
@@ -44,6 +44,14 @@ import { test, expect } from './fixtures/runtime.js';
  * vacuous. Nothing else about the spec changed: the negative control, the Persian
  * neighbour and the scroll-position claim are all as they were.
  *
+ * ── ⚠ RE-POINTED AGAIN BY `PLAYOUT-SOURCES-01` ─────────────────────────────
+ *
+ * Nothing on the tab is DEFINED any more: the list is the Playout's inputs, read-only. So the
+ * rows come from a seeded Playout rather than from six Adds, and the refusal is the one control
+ * the tab still applies — the band, checked by the bridge's own rule. Both conditions were
+ * re-checked again, not assumed: the overflow assertion below still guards the first, and the
+ * band refusal is `checkSourceCatalogAgainstBanks`, the bridge's.
+ *
  * ── THE NEGATIVE CONTROL IS THE POINT ───────────────────────────────────────
  *
  * `toBeInViewport()` on a short dialog would pass for the broken code as easily as
@@ -53,8 +61,25 @@ import { test, expect } from './fixtures/runtime.js';
  * being in view while its old neighbours are not is the whole claim.
  */
 
-/** Enough defined sources that the dialog's body cannot fit on one screen. */
-const NAMES = ['Studio A', 'Studio B', 'Baku', 'Skype 1', 'Skype 2', 'Roving'];
+/**
+ * Enough inputs that the dialog's body cannot fit on one screen: the standard seven and five more,
+ * one of them carrying a real Persian name.
+ */
+const EXTRA = ['Baku', 'Skype 1', 'Skype 2', 'Roving', 'مهمان دو'];
+const MANY: PlayoutSeed = {
+  ...E2E_PLAYOUT,
+  inputs: {
+    inputs: [
+      ...E2E_PLAYOUT.inputs.inputs,
+      ...EXTRA.map((name, i) => ({
+        id: `extra-${String(i + 1)}`,
+        name,
+        producer: { kind: 'ndi', source: `GUEST-PC (Cam ${String(i + 1)})` },
+      })),
+    ],
+  },
+};
+test.use({ playoutSources: MANY });
 
 test('a refusal stays in the viewport when the modal body is scrolled away from it', async ({
   app,
@@ -65,22 +90,17 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   await app.openStationSetupAt('Live sources');
   await expect(dialog).toBeVisible();
 
-  for (const name of NAMES) await app.addLiveSource(name);
-  await expect(dialog.locator('[data-source-id]')).toHaveCount(NAMES.length);
+  await expect(dialog.locator('[data-source-input]')).toHaveCount(
+    E2E_PLAYOUT.inputs.inputs.length + EXTRA.length,
+  );
 
   /*
     PERSIAN SITS BESIDE IT. These strings are shown on a station whose operator
-    surface is Persian, and a source's NAME is free text — so one of the six
-    carries a real RTL name while the refusal below is Latin. If the message
+    surface is Persian, and an input's NAME is free text — the Playout operators' —
+    so several carry a real RTL name while the refusal below is Latin. If the message
     region's direction handling were wrong the two would fight for the same line
     box, and this is the spec that has a real layout engine to notice.
-
-    ⭐ `STATION-CHROME-01` §6 — names are typed in the Add dialog now, so the Persian one is
-    given at creation rather than by editing a row's inline field afterwards. The property
-    under test is unchanged: a real RTL name is on the list while the refusal below is Latin.
   */
-  await app.addLiveSource('مهمان دو');
-  await expect(dialog.locator('[data-source-id]')).toHaveCount(NAMES.length + 1);
   await expect(dialog.getByText('مهمان دو')).toBeVisible();
 
   /*

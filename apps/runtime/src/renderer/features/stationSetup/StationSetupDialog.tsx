@@ -65,9 +65,9 @@ import { playoutOriginOf } from '../firstRun/firstRunStation.js';
  * TABS.**
  *
  * This was `ServerSettingsPanel` — the Server connection dialog — which GREW into the
- * settings home: the live-source catalogue, the delimiter list, candidate-layer membership,
- * and the channel. What it looks like is `STATION-CHROME-01`'s subject; what it stores is
- * unchanged, key for key.
+ * settings home: the live sources (the Playout's inputs, read-only since `PLAYOUT-SOURCES-01`,
+ * and the plate band), the delimiter list, candidate-layer membership, and the channel. What it
+ * looks like is `STATION-CHROME-01`'s subject; what it stores is unchanged, key for key.
  *
  * ── TABS, AND THE ARGUMENT AGAINST THEM, ANSWERED ───────────────────────────
  *

@@ -323,6 +323,9 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'setup.route-address',
         'sources.assignments',
         'sources.config',
+        // `PLAYOUT-SOURCES-01` — the picker's reads: a media search and a D10 refresh change nothing.
+        'sources.media-search',
+        'sources.refresh',
         // The client's own reconnect machinery, unreachable from any operator control.
         'stack.restore',
         'stack.snapshot',

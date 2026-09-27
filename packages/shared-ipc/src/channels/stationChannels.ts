@@ -101,6 +101,13 @@ export const StationChannelSchema = z.object({
   /** `UI-POLISH-01` G — the joined catalogue row's `playlist`, in the Playout's word. Information. */
   playlist: ChannelPlaylistSchema.optional(),
   /**
+   * `PLAYOUT-SOURCES-01` / v1.3 — the channel's video mode in the Playout's RUNNING core; `null` for
+   * a channel that core does not have yet (with {@link pendingRestart}). Published; no UI yet.
+   */
+  videoMode: z.string().nullable().optional(),
+  /** `PLAYOUT-SOURCES-01` / v1.3 — the Playout's settings differ from its running core. */
+  pendingRestart: z.boolean().optional(),
+  /**
    * THIS STATION OPERATES IT — `#declaredChannels()`. The one fact that decides what the bridge
    * writes to (the station fence reads the same predicate).
    */

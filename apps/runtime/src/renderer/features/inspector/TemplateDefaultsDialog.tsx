@@ -4,10 +4,10 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { SourcePicker } from '../sources/SourcePicker.js';
 import {
   commitSourceAssignments,
   currentSourceAssignments,
-  currentSourceCatalog,
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
@@ -98,7 +98,6 @@ export function TemplateDefaultsDialog({
 
   if (!open) return null;
 
-  const catalog = currentSourceCatalog();
   const applied = appliedPlateSources(templateId, plates);
   const valueOf = (plateId: string): string => draft?.get(plateId) ?? applied.get(plateId) ?? '';
   const stage = (plateId: string, sourceId: string): void => {
@@ -218,11 +217,6 @@ export function TemplateDefaultsDialog({
           <p style={styles.empty} data-defaults-empty="">
             This template declares no live plates, so it has no sources to default.
           </p>
-        ) : catalog.sources.length === 0 ? (
-          <p style={styles.empty} data-defaults-no-catalog="">
-            No sources are defined on this station yet — define them under Station setup ▸ Live
-            sources first.
-          </p>
         ) : (
           <>
             {plates.map((plate, i) => (
@@ -241,22 +235,19 @@ export function TemplateDefaultsDialog({
                 >
                   Plate {i + 1}
                 </label>
-                <select
+                {/*
+                  🔴 `PLAYOUT-SOURCES-01` §2.A — THE ONE PICKER. It only returns a choice; this
+                  dialog's own model is unchanged — the choice is staged, and `Save defaults`
+                  commits it. Template-wide, so no channel gates the inputs here.
+                */}
+                <SourcePicker
                   id={`plate-default-${plate.sourceId}`}
-                  className="cg-field"
-                  style={styles.select}
                   aria-label={`Default source for ${plate.sourceId}`}
-                  data-defaults-select={plate.sourceId}
+                  data={{ 'data-defaults-select': plate.sourceId }}
                   value={valueOf(plate.sourceId)}
-                  onChange={(e) => stage(plate.sourceId, e.target.value)}
-                >
-                  <option value="">— not assigned —</option>
-                  {catalog.sources.map((source) => (
-                    <option key={source.id} value={source.id}>
-                      {source.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(sourceId) => stage(plate.sourceId, sourceId)}
+                  choices={[{ value: '', label: 'None' }]}
+                />
               </div>
             ))}
             {/*
@@ -312,7 +303,6 @@ const styles = {
     fontWeight: 'var(--r-weight-medium)',
     whiteSpace: 'nowrap' as const,
   },
-  select: { width: '100%' },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-md)', margin: 0 },
   foot: {
     margin: 'var(--r-space-6) 0 0',

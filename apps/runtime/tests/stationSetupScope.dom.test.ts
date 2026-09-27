@@ -234,8 +234,9 @@ describe('§3 — the six that did not move', () => {
     expect(setup.querySelector('[data-plate-unassigned]')).toBeNull();
     // §6 — the two shapes: the settings home reaches the CATALOG channel only. Its source
     // never names the assignments writer, on either seam.
+    // `PLAYOUT-SOURCES-01` §1.F — and on the catalogue channel it sends the plate BAND only.
     expect(stationSetupSource()).not.toMatch(/\b(setAssignments|commitSourceAssignments)\(/);
-    expect(stationSetupSource()).toMatch(/\bcommitSourceCatalog\(/);
+    expect(stationSetupSource()).toMatch(/\bcommitSourceBand\(/);
   });
 
   it('6. the stack is the work, not a setting — Station setup renders no layer row', async () => {

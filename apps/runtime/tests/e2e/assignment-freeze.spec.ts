@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
  * ⭐ **SESSION BP — A ROW ON AIR DOES NOT CHANGE ITS PICTURE BECAUSE SOMEBODY EDITED
@@ -20,7 +20,12 @@ import { expect, test } from './fixtures/runtime.js';
  * ⚠ Against the offline MockRuntime, which models the freeze's LIFETIME (pinned at take,
  * thawed at a landed out/stop, dropped at remove) and publishes the field, but seats no
  * producers. What it cannot show is anything about the PLANT.
+ *
+ * `PLAYOUT-SOURCES-01` — the two cameras are the seeded Playout's (`E2E_PLAYOUT`), no longer a
+ * catalogue this spec defines: a station's sources are the Playout's inputs.
  */
+
+test.use({ playoutSources: E2E_PLAYOUT });
 
 const TPL = 'tpl-e2e-freeze';
 
@@ -38,17 +43,12 @@ async function registerTemplate(app: { page: Page }): Promise<void> {
     };
     const left = { x: 0, y: 0, width: 960, height: 540 };
     const right = { x: 960, y: 0, width: 960, height: 540 };
-    await w.cg.sources.setConfig({
-      sources: [
-        { id: 'studio-a', name: 'Studio A', producer: { kind: 'route', channel: 2 } },
-        { id: 'studio-b', name: 'Studio B', producer: { kind: 'route', channel: 3 } },
-      ],
-      layerRange: { start: 60, end: 79 },
-    });
+    // The band only — `sources.set-config` carries nothing else now.
+    await w.cg.sources.setConfig({ layerRange: { start: 60, end: 79 } });
     await w.cg.sources.setAssignments({
       assignments: [
-        { templateId, plateId: 'l-1', sourceId: 'studio-a' },
-        { templateId, plateId: 'l-2', sourceId: 'studio-b' },
+        { templateId, plateId: 'l-1', sourceId: 'in-studio-1' },
+        { templateId, plateId: 'l-2', sourceId: 'in-studio-2' },
       ],
     });
     await w.cg.templates.import({
@@ -128,8 +128,8 @@ async function repointFromElsewhere(app: { page: Page }): Promise<void> {
     };
     const res = await w.cg.sources.setAssignments({
       assignments: [
-        { templateId, plateId: 'l-1', sourceId: 'studio-b' },
-        { templateId, plateId: 'l-2', sourceId: 'studio-b' },
+        { templateId, plateId: 'l-1', sourceId: 'in-studio-2' },
+        { templateId, plateId: 'l-2', sourceId: 'in-studio-2' },
       ],
     });
     return res.ok;
@@ -172,15 +172,20 @@ test('🔴 an ON-AIR row says what it is FROZEN on when the template default is 
   */
   await app.inspector.locator('[data-open-template-defaults]').click();
   const dialog = app.page.getByRole('dialog', { name: 'Source defaults' });
-  await expect(dialog.locator('[data-defaults-select="l-1"]')).toHaveValue('studio-b');
+  // The field is the source picker now: its value is a finder attribute, its face the NAME.
+  await expect(dialog.locator('[data-defaults-select="l-1"]')).toHaveAttribute(
+    'data-picker-value',
+    'in-studio-2',
+  );
+  await expect(dialog.locator('[data-defaults-select="l-1"]')).toContainText('Studio 2');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 
   const said = plates.locator('[data-plate-frozen="l-1"]');
   await expect(said).toBeVisible();
-  await expect(said).toContainText('Studio A');
+  await expect(said).toContainText('Studio 1');
   await expect(said).toContainText('frozen at take');
 
-  // ⚠ `l-2` was already Studio B and still is, so it does NOT acquire a line. The statement
+  // ⚠ `l-2` was already Studio 2 and still is, so it does NOT acquire a line. The statement
   // is per-plate and only where the two actually disagree, or it becomes noise.
   await expect(plates.locator('[data-plate-frozen="l-2"]')).toHaveCount(0);
 });
@@ -199,7 +204,10 @@ test('an OFF-AIR row is not pinned: the edit is simply what it will take', async
 
   await app.inspector.locator('[data-open-template-defaults]').click();
   const dialog = app.page.getByRole('dialog', { name: 'Source defaults' });
-  await expect(dialog.locator('[data-defaults-select="l-1"]')).toHaveValue('studio-b');
+  await expect(dialog.locator('[data-defaults-select="l-1"]')).toHaveAttribute(
+    'data-picker-value',
+    'in-studio-2',
+  );
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   /*
     …and NO pin line. An off-air row has no picture to protect, so it acquires none — the mark

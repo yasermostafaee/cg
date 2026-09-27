@@ -160,10 +160,14 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
     The value is `''` — `PLATE_UNASSIGNED`, the blank option's own value — which is a stable
     handle in a way its LABEL is not: this spec is red today precisely because that label was
     renamed (`— template default (none set) —` → `Default (none set)`).
+
+    ⚠ `PLAYOUT-SOURCES-01` — the control is the source picker now, and the blank option is the
+    call site's `Default (…)` CHOICE: while the plate inherits, the field's value is `''` and its
+    face IS that choice (`data-source-label="choice"`), addressed directly for the reason above.
   */
-  const blankOption = looks.locator('[data-look-binding="two:l-1"] option[value=""]');
-  await expect(blankOption).toHaveCount(1);
-  await expect(blankOption).toHaveText(/^Default \(/);
+  const inheriting = looks.locator('[data-look-binding="two:l-1"]');
+  await expect(inheriting).toHaveAttribute('data-picker-value', '');
+  await expect(inheriting.locator('[data-source-label="choice"]')).toHaveText(/^Default \(/);
 
   /*
     ⚠ §2.1 — A TEMPLATE WITH NO LOOKS GETS NO LOOK INPUTS SECTION, and must therefore keep its

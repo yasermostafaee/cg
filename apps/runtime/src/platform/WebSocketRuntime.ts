@@ -70,6 +70,8 @@ import {
   SourcesAssignmentsChannel,
   SourcesConfigChangedChannel,
   SourcesConfigChannel,
+  SourcesMediaSearchChannel,
+  SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
   type SourceAssignments,
@@ -2046,6 +2048,10 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(SourcesSetAssignmentsChannel, req),
     onAssignmentsChanged: (handler: (assignments: SourceAssignments) => void) =>
       this.#sourceAssignmentSubs.add(handler),
+    // `PLAYOUT-SOURCES-01` — the picker's two reads.
+    mediaSearch: (req: ChannelRequest<typeof SourcesMediaSearchChannel>) =>
+      this.#invoke(SourcesMediaSearchChannel, req),
+    refresh: () => this.#invoke(SourcesRefreshChannel, undefined),
   };
 
   /** R-034 — the station's delimiter list, owned and disk-persisted by the bridge. */

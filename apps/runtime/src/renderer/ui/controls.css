@@ -4453,7 +4453,7 @@ input[type='checkbox']:disabled:checked {
 /*
  * 🔴 THE MINT, WHERE OWNER ANSWER A4 LOCALISES IT — the dialog's PRIMARY.
  *
- * `Add source`, `Add delimiter`, `Apply servers`, `Apply layers`: one role, one colour, which
+ * `Add to draft`, `Add delimiter`, `Apply servers`, `Apply layers`: one role, one colour, which
  * is what the reference draws (`.btn.primary`) and what keeps one footer from carrying two
  * different "this is the action" colours. `--add` and `--primary` are matched together for
  * exactly that reason — splitting them would put a mint Add beside a sky Apply.
@@ -4894,7 +4894,7 @@ input[type='checkbox']:disabled:checked {
  *
  * Head = title + ✕. Body = the `.field` idiom, gapped 17. Foot = `Cancel` + ONE primary,
  * right-aligned, on its own darker band. **The primary's verb names the ACT** — `Add to
- * draft`, `Add source`, `Save delimiter`, `Remove source` — never a generic `OK` or `Save`.
+ * draft`, `Add delimiter`, `Lock` — never a generic `OK` or `Save`.
  */
 [data-modal-size='record'] {
   background: var(--r-setup-surface);
@@ -7372,4 +7372,238 @@ input[type='checkbox']:disabled:checked {
 .cg-output-dot[data-output-dot='off'] {
   background: transparent;
   border: var(--r-output-dot-ring) solid var(--r-text-muted);
+}
+
+/*
+ * 🔴 `PLAYOUT-SOURCES-01` §2.A/§2.B — THE SOURCE PICKER, AND THE ONE WAY A SOURCE IS NAMED.
+ *
+ * ── THE CLOSED FIELD (`ComboField`) ─────────────────────────────────────────────────────
+ *
+ * `.cg-field` first, so the picker IS the select it replaces — ground, edge, radius, hover, the
+ * one focus ring and the Inspector's height all come from that one rule (`button.cg-field` joins
+ * the Inspector's `input`/`select` height below). What a button needs that an input does not: its
+ * value on one line, a chevron at the end, and a start-aligned label.
+ */
+.cg-combo-field {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  min-width: 0;
+  text-align: start;
+  cursor: pointer;
+}
+.cg-combo-field__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cg-combo-field > svg {
+  color: var(--r-text-muted);
+}
+/* §2.1 — a masked Look input: the VALUE is struck through, the control stays enabled. */
+.cg-combo-field.is-struck .cg-combo-field__value {
+  text-decoration: line-through;
+}
+.cg-inspector-body button.cg-field {
+  height: var(--r-insp-field-h);
+  min-height: var(--r-insp-field-h);
+}
+
+/* ── THE ANCHORED PANEL (`Popover`) — above every dialog, and never a scrim of its own ───── */
+.cg-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+}
+.cg-popover {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--r-surface);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-field);
+  box-shadow: var(--r-shadow-menu);
+  color: var(--r-text);
+  font-size: var(--r-text-md);
+}
+
+/* ── THE PICKER'S INSIDE ─────────────────────────────────────────────────────────────── */
+.cg-picker {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.cg-picker-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-space-1);
+  padding: var(--r-space-2);
+  border-bottom: 1px solid var(--r-border);
+}
+.cg-picker-choice {
+  justify-content: flex-start;
+}
+.cg-picker-tab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.cg-picker-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  padding: var(--r-space-2);
+}
+.cg-picker-controls .cg-field {
+  flex: 1;
+  min-width: 0;
+}
+.cg-picker-sort {
+  display: flex;
+  flex: none;
+  gap: var(--r-space-1);
+}
+/* Earlier results stay while the next ones load, under this thin line — no flash. */
+.cg-picker-progress {
+  height: 2px;
+  margin: 0 var(--r-space-2);
+  background: linear-gradient(90deg, transparent, var(--r-accent), transparent);
+  background-size: 200% 100%;
+  animation: cg-picker-progress 1s linear infinite;
+}
+@keyframes cg-picker-progress {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-picker-progress {
+    animation: none;
+  }
+}
+.cg-picker-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  margin: 0;
+  padding: var(--r-space-3) var(--r-space-2);
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
+}
+.cg-picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  min-width: 0;
+}
+.cg-picker-row__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cg-picker-media {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+.cg-picker-media__facts {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-inline-start: 22px;
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+}
+
+/* ── THE VIRTUALISED LIST (`VirtualList`) ────────────────────────────────────────────── */
+.cg-vlist {
+  position: relative;
+  overflow-y: auto;
+  outline: none;
+}
+.cg-vlist:focus-visible {
+  box-shadow: inset 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+.cg-vlist-spacer {
+  position: relative;
+}
+.cg-vlist-option,
+.cg-vlist-heading {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 var(--r-space-3);
+}
+.cg-vlist-option {
+  cursor: pointer;
+}
+.cg-vlist-option.is-active {
+  background: var(--r-menu-hover-fill);
+}
+.cg-vlist-option[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.cg-vlist-heading {
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── `SourceLabel` — icon, name, a clip's length, `Unavailable` ──────────────────────── */
+.cg-source-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.cg-source-label__name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cg-source-label__meta {
+  flex: none;
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+}
+.cg-source-tag {
+  flex: none;
+  padding: 0 var(--r-space-1);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-field);
+  color: var(--r-text-muted);
+  font-size: var(--r-text-xs);
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: default;
+}
+/* §2.A — an unavailable entry wears the amber tag; amber is the caution ink, never a control's. */
+.cg-source-tag--unavailable {
+  border-color: var(--r-caution-line);
+  background: var(--r-caution-bg);
+  color: var(--r-caution-text);
+}
+
+/* §2.C — when the Playout's list was last read, beside its count. */
+.cg-setup-read {
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
 }

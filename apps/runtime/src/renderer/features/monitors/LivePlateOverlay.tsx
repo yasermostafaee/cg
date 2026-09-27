@@ -6,6 +6,7 @@ import type { CSSProperties } from 'react';
 import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
+import { SourceLabel } from '../sources/SourceLabel.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 
@@ -349,7 +350,10 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
               )}
               <span style={styles.plate}>{p.plateId}</span>
               {assigned ? (
-                <span style={styles.source}>{p.sourceName}</span>
+                // `PLAYOUT-SOURCES-01` §2.B — the name as every surface names it.
+                <span style={styles.source}>
+                  <SourceLabel sourceId={p.sourceId} fallback={p.sourceName ?? undefined} />
+                </span>
               ) : (
                 <span style={styles.unassigned} data-live-plate-unassigned="">
                   no source assigned

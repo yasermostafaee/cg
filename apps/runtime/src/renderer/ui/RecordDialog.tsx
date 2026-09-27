@@ -43,9 +43,9 @@ export function RecordDialog({
   onCancel,
   onSubmit,
 }: {
-  /** Sentence case, like every dialog title: "Add live source", "Edit delimiter". */
+  /** Sentence case, like every dialog title: "Add backup server", "Add delimiter". */
   title: string;
-  /** The confirming action's word — "Add source", "Save", "Add backup". */
+  /** The confirming action's word — "Add delimiter", "Add to draft", "Lock". */
   confirmLabel: string;
   /** One line above the fields, when the record needs one. */
   lede?: string | undefined;
@@ -98,8 +98,8 @@ export function RecordDialog({
           <ModalAction actionRole="cancel" onClick={onCancel}>
             Cancel
           </ModalAction>
-          {/* ⭐ §8 — ONE primary, and its label NAMES THE ACT: `Add to draft`, `Add source`,
-              `Save delimiter`. Never `OK`, never a bare `Save` — the caller supplies the verb
+          {/* ⭐ §8 — ONE primary, and its label NAMES THE ACT: `Add to draft`, `Add delimiter`,
+              `Lock`. Never `OK`, never a bare `Save` — the caller supplies the verb
               because only the caller knows what pressing it does. */}
           <ModalAction actionRole="primary" disabled={confirmDisabled} onClick={submit}>
             {confirmLabel}
@@ -179,7 +179,7 @@ export function DialogField({
    *
    * ⚠ Marked per form, on the first field, rather than inferred: the CONFIRM dialogs must NOT
    * take it. Focus on the ✕ is right where the other button is destructive, and a dialog that
-   * put focus near `Remove source` on open would be handing the operator a loaded press.
+   * put focus near a `Remove …` on open would be handing the operator a loaded press.
    */
   focusFirst?: boolean;
   children: ReactNode;

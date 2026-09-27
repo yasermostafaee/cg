@@ -18,6 +18,12 @@ import {
   initSources,
 } from '../src/renderer/features/sources/sourceStore.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import {
+  choosePickerOption,
+  closePicker,
+  openPicker,
+  pickerValue,
+} from './support/sourcePicker.js';
 
 /**
  * D-137 / C-015 — WHERE a plate is bound, after the 2026-08-10 correction.
@@ -167,24 +173,20 @@ async function openDefaults(el: HTMLElement): Promise<HTMLElement> {
   return dialog;
 }
 
-/** The dialog's select for one plate. */
-function defaultsSelect(dialog: HTMLElement, plateId: string): HTMLSelectElement {
-  const select = dialog.querySelector<HTMLSelectElement>(
-    `select[aria-label="Default source for ${plateId}"]`,
-  );
-  if (select === null) throw new Error(`no picker for ${plateId}`);
-  return select;
+/**
+ * The dialog's picker field for one plate. `PLAYOUT-SOURCES-01` §2.A — the ONE source picker
+ * replaced the native select; its field carries the plate's value as `data-picker-value`.
+ */
+function defaultsSelect(dialog: HTMLElement, plateId: string): HTMLElement {
+  const field = dialog.querySelector<HTMLElement>(`[aria-label="Default source for ${plateId}"]`);
+  if (field === null) throw new Error(`no picker for ${plateId}`);
+  return field;
 }
 
 /** Open the dialog, choose a source for a plate, and leave the dialog open. */
 async function pick(el: HTMLElement, plateId: string, sourceId: string): Promise<HTMLElement> {
   const dialog = await openDefaults(el);
-  const select = defaultsSelect(dialog, plateId);
-  await act(async () => {
-    select.value = sourceId;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    await Promise.resolve();
-  });
+  await choosePickerOption(defaultsSelect(dialog, plateId), sourceId);
   return dialog;
 }
 
@@ -326,33 +328,12 @@ describe('the Live sources section of Station setup defines sources and binds no
     const section = dialog?.querySelector('[data-station-section="sources"]');
     expect(section).not.toBeNull();
     /*
-      It still DEFINES sources…
-
-      ⭐ `STATION-CHROME-01` §5/§6 — the heading is CATALOGUE (the mockup's word, and the one
-      that distinguishes the installation's list from the per-template bindings), and a row
-      SHOWS its name rather than holding it in an inline input: names are edited in the small
-      second dialog now. The claim this case makes is unchanged — the section lists the
-      station's sources — so only how it reads them moved.
+      🔴 `PLAYOUT-SOURCES-01` §2.C — it LISTS the station's sources, read-only: they are the
+      Playout's now, and this section no longer defines any (the editor went with §1.F). The claim
+      this case makes is unchanged in its point — the settings home lists sources and binds none.
     */
-    /*
-      ⚠ `STATION-CHROME-02` §3 — the word is `Catalogue` in the DOM, and the card head's
-      treatment is the ONE treatment, in `.cg-card__title`, rather than a shouted string per
-      section (it was uppercase-by-CSS; `RUNTIME-REDESIGN-01` Phase 7 took it to the
-      reference's 16 px sentence case — the string never changed). Asserting a shouted form
-      here would have pinned the old hand-spelled uppercase and re-created the drift the
-      shared class removes.
-    */
-    /*
-      ⭐ `SETTINGS-MATCH-02` — the heading is `Source catalogue` now, the reference's own
-      `.list-header` wording, and it sits ABOVE the card with the list's COUNT beside it rather
-      than inside the card's head. The word this case actually cares about is `catalogue` — the
-      one that distinguishes the installation's list from the per-template bindings — so that
-      is what is matched, case-insensitively, rather than a capitalisation that belongs to
-      whichever element happens to carry it.
-    */
-    expect(section?.textContent?.toLowerCase()).toContain('catalogue');
     expect(
-      [...(section?.querySelectorAll<HTMLElement>('[data-source-id] bdi') ?? [])]
+      [...(section?.querySelectorAll<HTMLElement>('[data-source-input] bdi') ?? [])]
         .map((el) => el.textContent)
         .filter((t) => t === 'Studio A' || t === 'Baku'),
     ).toEqual(['Studio A', 'Baku']);
@@ -363,41 +344,11 @@ describe('the Live sources section of Station setup defines sources and binds no
     expect(dialog?.textContent).not.toContain('guest-1');
     expect(dialog?.querySelector('[data-plate-unassigned]')).toBeNull();
     expect(dialog?.querySelector('select[aria-label^="Source for"]')).toBeNull();
-
-    /*
-      Edit the catalogue through the section — rename a source — and the assignments channel
-      is never written: the two shapes stay separately stored.
-
-      ⭐ §6 — the rename happens in the small second dialog now, so the edit goes: press
-      Edit, type, press Save. The CLAIM is untouched and this is if anything a stronger
-      exercise of it, because it drives the whole commit path rather than one keystroke.
-    */
-    const edit = [...(section?.querySelectorAll('button') ?? [])].find(
-      (b) => b.getAttribute('aria-label') === 'Edit Studio A',
-    );
-    if (edit === undefined) throw new Error('no Edit button on the Studio A row');
-    await act(async () => {
-      edit.click();
-      await Promise.resolve();
-    });
-    const sub = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
-    const name = sub?.querySelector<HTMLInputElement>('input[aria-label="Source name"]');
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-    await act(async () => {
-      if (name === null || name === undefined) throw new Error('no name field');
-      setter?.call(name, 'Studio One');
-      name.dispatchEvent(new Event('input', { bubbles: true }));
-      await Promise.resolve();
-    });
-    const save = [...(sub?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Save');
-    await act(async () => {
-      save?.click();
-      await Promise.resolve();
-    });
-    await act(async () => {
-      for (let i = 0; i < 8; i++) await Promise.resolve();
-    });
-    expect(setCalls, 'the catalog edit must not write the assignments').toEqual([]);
+    // …and no picker either: binding a plate is the Inspector's job, never the settings home's.
+    expect(dialog?.querySelector('[data-picker-value]')).toBeNull();
+    // `PLAYOUT-SOURCES-01` — nothing in the section can edit a source now (the rename this case
+    // used to drive went with the editor), so the assignments channel is never written.
+    expect(setCalls, 'the settings home must not write the assignments').toEqual([]);
     await act(async () => {
       root.unmount();
     });
@@ -416,13 +367,14 @@ describe('the Inspector binds THIS template plates', () => {
     */
     expect(section?.querySelector('[data-open-template-defaults]')).not.toBeNull();
     expect(section?.querySelectorAll('select').length).toBe(0);
+    expect(section?.querySelectorAll('[data-picker-value]').length).toBe(0);
 
     const dialog = await openDefaults(el as HTMLElement);
     expect(dialog.querySelectorAll('[data-defaults-select]').length).toBe(2);
     // A freshly imported template has ALL of its plates unassigned, which is the ordinary
     // state — the blank option NAMES itself rather than leaving the box empty.
-    expect(defaultsSelect(dialog, 'guest-1').value).toBe('');
-    expect(defaultsSelect(dialog, 'guest-2').value).toBe('');
+    expect(pickerValue(defaultsSelect(dialog, 'guest-1'))).toBe('');
+    expect(pickerValue(defaultsSelect(dialog, 'guest-2'))).toBe('');
     /*
       The SCOPE is stated in the section, not hidden in a tooltip: this is the template's
       default, so editing it here changes every row using it.
@@ -472,15 +424,25 @@ describe('the Inspector binds THIS template plates', () => {
     expect(el.querySelector('[aria-label="Live plates"]')).toBeNull();
   });
 
-  it('offers every defined source by NAME, never by its internal id', async () => {
+  it('offers every source by NAME, never by its internal id', async () => {
     const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
     const dialog = await openDefaults(el as HTMLElement);
-    const select = defaultsSelect(dialog, 'guest-1');
-    const labels = [...select.options].map((o) => o.textContent);
-    expect(labels).toEqual(['— not assigned —', 'Studio A', 'Baku']);
-    // The id is the VALUE — stable across a rename — while the operator picks
-    // the name.
-    expect([...select.options].map((o) => o.value)).toEqual(['', 'src-aaa', 'src-bbb']);
+    // `PLAYOUT-SOURCES-01` §2.A — the ONE picker: the call site's own choice above the tabs, then
+    // the inputs by name.
+    const panel = await openPicker(defaultsSelect(dialog, 'guest-1'));
+    expect([...panel.querySelectorAll('[data-picker-choice]')].map((c) => c.textContent)).toEqual([
+      'None',
+    ]);
+    const inputs = [...panel.querySelectorAll<HTMLElement>('[data-picker-input]')];
+    expect(inputs.map((o) => o.textContent)).toEqual(['Studio A', 'Baku']);
+    // The id is the VALUE — stable across a rename — while the operator picks the name; it is
+    // never on screen.
+    expect(inputs.map((o) => o.dataset['pickerInput'])).toEqual(['src-aaa', 'src-bbb']);
+    expect(panel.textContent).not.toContain('src-');
+    // Escape closes the panel — and only the panel: the dialog it opened from stays.
+    await closePicker();
+    expect(document.querySelector('[data-popover]')).toBeNull();
+    expect(dialog.isConnected).toBe(true);
   });
 
   /**
@@ -534,7 +496,7 @@ describe('the Inspector binds THIS template plates', () => {
     // Reopening shows the APPLIED value, not the abandoned one — a discarded edit that came
     // back on the next open would be an edit the operator thought they had dropped.
     const again = await openDefaults(el as HTMLElement);
-    expect(defaultsSelect(again, 'guest-1').value).toBe('');
+    expect(pickerValue(defaultsSelect(again, 'guest-1'))).toBe('');
   });
 
   it('§6 — a REFUSED commit says why, keeps the edit, and rewrites nothing', async () => {
@@ -546,10 +508,11 @@ describe('the Inspector binds THIS template plates', () => {
     // The reason is ON the dialog — never swallowed, never shown optimistically — and it is the
     // RULE, in the operator's words: the bridge's own sentence is the record's, never this line's
     // (`DELTA-MULTI-CHANNEL-01-A` A5).
-    expect(dialog.textContent).toContain('That source is no longer defined on this station');
+    // `PLAYOUT-SOURCES-01` — the rule's words changed with the sources' owner.
+    expect(dialog.textContent).toContain('That source is not one the Playout offers');
     expect(dialog.textContent).not.toContain('No such source');
     // The operator's edit is exactly where they left it, and the dialog is still open for it.
-    expect(defaultsSelect(dialog, 'guest-1').value).toBe('src-aaa');
+    expect(pickerValue(defaultsSelect(dialog, 'guest-1'))).toBe('src-aaa');
   });
 
   it('🔴 an APPLIED assignment is TEMPLATE-LEVEL: a SECOND row reads the same binding', async () => {
@@ -559,7 +522,7 @@ describe('the Inspector binds THIS template plates', () => {
       assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' }],
     };
     const first = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
-    expect(defaultsSelect(await openDefaults(first as HTMLElement), 'guest-1').value).toBe(
+    expect(pickerValue(defaultsSelect(await openDefaults(first as HTMLElement), 'guest-1'))).toBe(
       'src-aaa',
     );
     first.remove();
@@ -569,9 +532,9 @@ describe('the Inspector binds THIS template plates', () => {
     // evidence that it is true.
     const second = await renderInspector(item('item-2', 'tpl-two-box'), TWO_BOX);
     const secondDialog = await openDefaults(second as HTMLElement);
-    expect(defaultsSelect(secondDialog, 'guest-1').value).toBe('src-aaa');
+    expect(pickerValue(defaultsSelect(secondDialog, 'guest-1'))).toBe('src-aaa');
     // …and its OTHER plate is still owed one.
-    expect(defaultsSelect(secondDialog, 'guest-2').value).toBe('');
+    expect(pickerValue(defaultsSelect(secondDialog, 'guest-2'))).toBe('');
   });
 });
 
@@ -647,7 +610,7 @@ describe('BP — a frozen row says what it is on', () => {
       what it is frozen on, the editor says what the template is set to, and the two differ.
     */
     const dialog = await openDefaults(el as HTMLElement);
-    expect(defaultsSelect(dialog, 'guest-1').value).toBe('src-bbb');
+    expect(pickerValue(defaultsSelect(dialog, 'guest-1'))).toBe('src-bbb');
   });
 
   it('says NOTHING when the pin and the default agree — silence is the common case', async () => {

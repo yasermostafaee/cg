@@ -1,24 +1,26 @@
 import type { Page } from '@playwright/test';
-import { chooseSourceKind, expect, test } from './fixtures/runtime.js';
+import { E2E_PLAYOUT, expect, test } from './fixtures/runtime.js';
 
 /**
- * D-137 / C-015 phase 4 — the CG Control surfaces that make a live plate resolve.
+ * D-137 / C-015 phase 4, re-cut by `PLAYOUT-SOURCES-01` — the CG Control surfaces that make a live
+ * plate resolve.
  *
- * TWO surfaces, and the split is the subject: the **Live sources** modal DEFINES
- * what lives this installation has; the **Inspector** BINDS a selected template's
- * plates to them. Nothing reaches air until both have been done, and the binding
- * lives beside the template rather than in a global list — a dialog that did both
- * jobs listed every plate in the station before the first source existed.
+ * TWO surfaces, and the split is still the subject: Station setup's **Live sources** SHOWS what the
+ * Playout offers this station — read-only, because the Playout's operators define the inputs and CG
+ * Control never does — and the **Inspector** BINDS a selected template's plates to them, through the
+ * one source picker. Nothing reaches air until a plate is bound, and the binding lives beside the
+ * template rather than in a global list.
  *
- * Driven against the offline MockRuntime, which shares the bridge's own
- * validators (`checkSourceCatalog` / `checkSourceAssignments`) and its delete
- * CASCADE (`pruneAssignmentsForCatalog`), so every refusal and every consequence
- * below is the one a real station gives.
+ * Driven against the offline MockRuntime seeded with the fake Playout's list (`E2E_PLAYOUT`): its
+ * catalogue is built by the bridge's own builder and its bindings pass the bridge's own rule, so
+ * every refusal and every consequence below is the one a real station gives.
  *
- * Maps the `#### Scenario`s of "The installation DEFINES its live sources, and an
- * absent catalog fails CLOSED" and "A template's plate is ASSIGNED a source, once
- * per template".
+ * Maps the `#### Scenario`s of `playout-sources` — "Station setup lists the Playout's inputs,
+ * read-only", "A binding is never pruned" — and "A template's plate is ASSIGNED a source, once per
+ * template".
  */
+
+test.use({ playoutSources: E2E_PLAYOUT });
 
 /** A template that declares two live plates, registered as an import would leave it. */
 const TWO_BOX = 'tpl-e2e-two-box';
@@ -53,7 +55,9 @@ async function registerTwoBox(app: { page: Page }): Promise<void> {
   }, TWO_BOX);
 }
 
-test('sources: an installation defines its lives, and the modal binds nothing', async ({ app }) => {
+test('sources: Station setup lists the Playout’s inputs, read-only, and binds nothing', async ({
+  app,
+}) => {
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
@@ -61,89 +65,56 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   await app.openStationSetupAt('Live sources');
   await expect(dialog).toBeVisible();
 
-  // NOTHING DEFINED is a real, common and important state, and it is said
-  // plainly: an operator whose take refuses must be able to find out why here.
-  await expect(dialog.getByText(/Nothing is defined yet/)).toBeVisible();
+  // The Playout's inputs, in ITS order, by the names its operators gave them.
+  const list = dialog.getByRole('region', { name: 'Inputs from the Playout' });
+  const rows = list.locator('[data-source-input]');
+  await expect(rows.locator('.cg-resource__name')).toHaveText([
+    'Studio 1',
+    'Studio 2',
+    'Studio 3',
+    'دوربین خبر',
+    'Multicast',
+    'ورودی ۳',
+    'ورودی ۴',
+  ]);
+  // The KIND — the one place it is shown: SDI for a route, NDI, Stream.
+  await expect(rows.nth(0).locator('[data-source-kind]')).toHaveText('NDI');
+  await expect(rows.nth(3).locator('[data-source-kind]')).toHaveText('Stream');
+  await expect(rows.nth(5).locator('[data-source-kind]')).toHaveText('SDI');
+  // Both routes are marked, with the gate's reason on hover (`ROUTE-PLATES-01` lifts it)…
+  for (const i of [5, 6]) {
+    await expect(rows.nth(i)).toHaveAttribute('data-source-unusable', '');
+    await expect(rows.nth(i).getByText('Unusable', { exact: true })).toHaveAttribute(
+      'title',
+      'Not supported yet.',
+    );
+  }
+  // …and control: a camera is not.
+  await expect(rows.nth(0)).not.toHaveAttribute('data-source-unusable', '');
+  // When the Playout's list was last read is said.
+  await expect(dialog.locator('[data-sources-read]')).toHaveText(/^Last read /);
 
-  // 🔴 The dialog has ONE job. A template with two plates is registered above,
-  // and none of it appears here — the binding is the Inspector's.
-  await expect(dialog.getByText('TEMPLATE PLATES')).toHaveCount(0);
+  /*
+    🔴 §1.E — NO ADDRESS, ANYWHERE ON THE PAGE. `دوربین خبر`'s URL carries a user and password;
+    a stream URL, an NDI name and a path are never shown — here or on any other surface.
+  */
+  const html = await page.content();
+  for (const address of ['secret', 'rtsp://', 'udp://', 'STUDIO-PC', 'Media Library']) {
+    expect(html, `the page shows ${address}`).not.toContain(address);
+  }
+  // Control: what IS shown is on the page — the names.
+  expect(html).toContain('دوربین خبر');
+
+  // 🔴 Nothing here is DEFINED any more: no Add, no Edit, no Remove.
+  await expect(dialog.getByRole('button', { name: /^(Add|Edit|Remove)\b/ })).toHaveCount(0);
+  // One job: a registered template's plates appear nowhere here — binding is the Inspector's.
   await expect(dialog.getByText('guest-1')).toHaveCount(0);
+  // Media are not this list's: they are chosen in the picker, never listed here.
+  await expect(dialog.getByText('کلیپ معرفی')).toHaveCount(0);
 
-  /*
-    Define a source. The bridge is authoritative; the section adopts only what it accepts,
-    so seeing the row appear IS the round-trip.
-
-    ⭐ `STATION-CHROME-01` §5/§6 — the kind and its fields are in the small SECOND dialog
-    every Add and Edit opens, and the ROW shows the kind's fields as LABELLED PARTS. Every
-    claim below is the one it always made; what moved is where the field is typed and how
-    the row is read.
-  */
-  await app.addLiveSource('Studio A', {
-    kind: 'route',
-    fields: { 'Route source channel': '3' },
-  });
-  await expect(dialog.getByText(/Nothing is defined yet/)).toHaveCount(0);
-  const row = dialog.locator('[data-source-parts]').first();
-  await expect(row).toContainText('Channel');
-  await expect(row).toContainText('3');
-
-  // The FORMAT is a picker and the aspect DERIVES from it — a hand-entered aspect is a
-  // number that can be wrong on air while looking reasonable.
-  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  const edit = page.getByRole('dialog', { name: 'Edit live source' });
-  await edit.getByLabel('Signal format').selectOption('1080i5000');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(dialog.getByText('aspect: 16:9 (from the format)')).toBeVisible();
-
-  /*
-    C-025 — the FIFTH kind: an internet stream by URL. The kind is labelled as a feed,
-    choosing it shows a URL field, a scheme outside the client's allowlist is refused BY NAME
-    at the config boundary (the mock runs the bridge's own validator, so this refusal is the
-    real station's), and an accepted URL reads back under a URL LABEL — a feed, and one a
-    second operator reading the config can tell from a clip.
-  */
-  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  await chooseSourceKind(edit, 'stream');
-  await expect(edit.getByLabel('Stream URL')).toBeVisible();
-  await edit.getByLabel('Stream URL').fill('ftp://server/feed.ts');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(dialog.getByText(/accepted scheme/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  await chooseSourceKind(edit, 'stream');
-  await edit.getByLabel('Stream URL').fill('srt://10.0.0.20:9000');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(dialog.locator('[data-source-kind="stream"]')).toHaveCount(1);
-  await expect(dialog.locator('[data-source-parts]').first()).toContainText('srt://10.0.0.20:9000');
-
-  /*
-    ONE source, a fill/key DEVICE PAIR: the pair is a property of the INSTALLATION, and no
-    template ever names it (design.md §1a). The pair is STORED — and, C-027, it is not yet
-    SENT: `producerArgument` emits the fill alone, so the row must describe the fill alone
-    and must say out loud that the key device does not reach CasparCG. Asserting the absence
-    AND the sentence together is the point: dropping the term without saying anything would
-    trade a line that overclaims for one that hides.
-  */
-  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  await chooseSourceKind(edit, 'decklink');
-  await edit.getByLabel('DeckLink key device index').fill('2');
-  await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(dialog.locator('[data-source-parts]').first()).toContainText('Device');
-  await expect(dialog.getByText('DECKLINK DEVICE 1 + KEY 2')).toHaveCount(0);
-  await expect(dialog.getByText(/not sent to CasparCG/)).toBeVisible();
-
-  // A duplicate NAME is refused, and the refusal is a SENTENCE — never a wire identifier and
-  // never a reason code. The Add dialog answers this one itself, in its own region.
-  await dialog.getByRole('button', { name: 'Add live source' }).click();
-  const dup = page.getByRole('dialog', { name: 'Add live source' });
-  await dup.getByLabel('Source name', { exact: true }).fill('Studio A');
-  await dup.getByRole('button', { name: 'Add source' }).click();
-  await expect(dup.getByText(/There is already a source called Studio A/)).toBeVisible();
-  await dup.getByRole('button', { name: 'Cancel' }).click();
-
-  // The band must be disjoint from the operator's candidate bank. The mock's
-  // seeded bank starts at 80, so 60–85 reaches into it and the refusal names
-  // BOTH ranges rather than merely saying no.
+  // The BAND is the one catalogue fact the station still owns. It must be disjoint from the
+  // operator's candidate bank: the mock's seeded bank starts at 80, so 60–85 reaches into it and
+  // the refusal names BOTH ranges rather than merely saying no.
   await dialog.getByLabel('Live source band start layer').fill('60');
   await dialog.getByLabel('Live source band end layer').fill('85');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
@@ -152,44 +123,40 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
 
   // A band clear of the bank is accepted, and the hint states what is in force.
   //
-  // ⚠ `LAYER-BANDS-16` — this was 10–59, which is now BELOW the graphics beds (50–59) and
-  // would be refused by `low-bank-not-below-band` rather than accepted. The band that is
-  // clear of BOTH is the plate band itself.
+  // ⚠ `LAYER-BANDS-16` — the band clear of BOTH the beds (50–59) and the bank is the plate band.
   await dialog.getByLabel('Live source band start layer').fill('60');
   await dialog.getByLabel('Live source band end layer').fill('79');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
   await expect(dialog.getByText(/Currently 60–79/)).toBeVisible();
 
-  // Durable: the catalog survives closing and reopening the surface, because the
-  // value lives on the bridge (here, the mock's store) and not in the modal. The
-  // stored `keyDevice` survives with it — C-027 keeps the FIELD precisely so a
-  // pair the operator already wrote is not deleted — and the not-sent sentence
-  // comes back with it rather than being a one-shot toast at edit time.
+  // Durable: the band survives closing and reopening the surface, because the value lives on the
+  // bridge (here, the mock's store) and not in the modal — and the list is still the Playout's.
   await app.closeStationSetup();
   await expect(dialog).toBeHidden();
   await app.openStationSetupAt('Live sources');
-  await expect(dialog.locator('[data-source-parts]').first()).toContainText('Device');
-  await expect(dialog.getByText(/not sent to CasparCG/)).toBeVisible();
-  // …and the stored key device survives, which is what C-027 keeps the FIELD for.
-  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  await expect(edit.getByLabel('DeckLink key device index')).toHaveValue('2');
-  await edit.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog.getByText(/Currently 60–79/)).toBeVisible();
+  await expect(rows).toHaveCount(7);
   await app.closeStationSetup();
 });
 
-test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says which it freed', async ({
-  app,
-}) => {
+test.describe('a Playout that has shared nothing', () => {
+  test.use({ playoutSources: null });
+
+  test('sources: the list says so, plainly — `.111`’s real state today', async ({ app }) => {
+    const dialog = app.page.getByRole('dialog', { name: 'Station setup' });
+    await app.openStationSetupAt('Live sources');
+    await expect(dialog.locator('[data-sources-empty]')).toHaveText('No inputs from the Playout.');
+    await expect(dialog.locator('[data-source-input]')).toHaveCount(0);
+    // …and it has never been read, which is said too, rather than a time nobody read at.
+    await expect(dialog.locator('[data-sources-read]')).toHaveText('Not read yet');
+    await app.closeStationSetup();
+  });
+});
+
+test('plates: the Inspector binds them through the picker, TEMPLATE-wide', async ({ app }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
   await registerTwoBox(app);
-
-  // Two sources to choose between, so the picker is a real choice.
-  await app.openStationSetupAt('Live sources');
-  for (const name of ['Studio A', 'Baku']) await app.addLiveSource(name);
-  await app.closeStationSetup();
 
   // Load the template onto a row and select it — that is what shows its plates.
   const first = await app.loadTemplate(TWO_BOX);
@@ -197,25 +164,10 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   const plates = app.inspector.locator('[aria-label="Live plates"]');
   await expect(plates).toBeVisible();
   /*
-    The scope is STATED, because editing here changes every row using the template and an
-    operator must not discover that by surprise.
-
-    ⚠ REWORDED BY SESSION BM-2. It read _"Set for the template, not this row"_ — true of a
-    flat map, and a lie about the four-level model, because it says "not this row" while two
-    of the four levels ARE this row's. The CLAIM is unchanged: the section says which level
-    its own control is on. Only the sentence moved.
-  */
-  /*
-    ⚠ `SOURCE-DEFAULTS-20` — THE SCOPE IS STATED WHERE THE CONTROL IS, and the control moved
-    into a dialog. The section now carries the DOOR; the sentence carrying the level went with
-    the selects it introduced.
+    ⚠ `SOURCE-DEFAULTS-20` — THE SCOPE IS STATED WHERE THE CONTROL IS, and the control is in a
+    dialog: the section carries the DOOR, with the COUNT of plates still owed a source on it.
   */
   await expect(plates.locator('[data-open-template-defaults]')).toBeVisible();
-  /*
-    ⚠ The per-plate `needs a source` markers went with the selects. The same fact is on the
-    DOOR now — one mark carrying the COUNT, so the operator sees from the panel that the
-    dialog is owed a visit (the owner's «یه هشدار کوچیک کنار لینک مودال»).
-  */
   await expect(plates.locator('[data-open-template-defaults]')).toHaveAttribute(
     'data-defaults-needed',
     '2',
@@ -224,21 +176,22 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   /*
     ── A8: EDIT-THEN-ABANDON ──────────────────────────────────────────
 
-    🔴 **A8's CLAIM SURVIVES; ITS MECHANISM CHANGED (`SOURCE-DEFAULTS-20` §3).** A8 is that
-    a TEMPLATE-wide edit must not reach the bridge the instant a select moves — one stray
-    click must not silently change what every other row does. That is asserted below and is
-    unchanged.
-
-    What moved is WHERE the confirmation lives: it was the ROW's draft store (the edit staged
-    beside the row's fields and rode its UPDATE), and it is now the dialog's own `Cancel` /
-    `Save defaults`. The scope confusion is why that is an improvement rather than a lateral
-    move — an installation-wide value committed by one ROW's Update was always the wrong
-    shape.
+    🔴 A TEMPLATE-wide edit must not reach the bridge the instant a field changes — one stray
+    click must not silently change what every other row does. The dialog's own `Cancel` /
+    `Save defaults` is the confirmation.
   */
   await app.inspector.locator('[data-open-template-defaults]').click();
   const defaults = page.getByRole('dialog', { name: 'Source defaults' });
-  await defaults.locator('[data-defaults-select="guest-2"]').selectOption({ label: 'Baku' });
-  // WHEN it takes effect, said where the change is made — the dialog's own footer now.
+  await app.chooseSource(defaults.locator('[data-defaults-select="guest-2"]'), {
+    input: 'Studio 2',
+  });
+  // The field now names the choice — by its NAME, never its id.
+  await expect(defaults.locator('[data-defaults-select="guest-2"]')).toContainText('Studio 2');
+  await expect(defaults.locator('[data-defaults-select="guest-2"]')).toHaveAttribute(
+    'data-picker-value',
+    'in-studio-2',
+  );
+  // WHEN it takes effect, said where the change is made — the dialog's own footer.
   await expect(defaults.locator('[data-defaults-foot]')).toContainText('next take');
   await expect(defaults.locator('[data-defaults-foot]')).toContainText('No playout command');
   // ABANDON: Cancel writes nothing, and the plate is still owed a source.
@@ -250,7 +203,7 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   );
 
   // ── A8: EDIT-THEN-SAVE ──────────────────────────────────────────
-  await app.setTemplateDefault('guest-1', 'Studio A');
+  await app.setTemplateDefault('guest-1', 'Studio 1');
   // In force now: one plate answered, one still owed — and the door says so.
   await expect(plates.locator('[data-open-template-defaults]')).toHaveAttribute(
     'data-defaults-needed',
@@ -260,50 +213,87 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   await expect(app.inspector.getByRole('button', { name: 'Discard staged edits' })).toBeDisabled();
 
   // 🔴 TEMPLATE-LEVEL, pinned rather than trusted: a SECOND row carrying the
-  // same template reads back the binding the first one APPLIED.
+  // same template reads back the binding the first one saved.
   const second = await app.loadTemplate(TWO_BOX);
   await app.selectLayerRow(second);
-  /*
-    ⚠ READ FROM THE DOOR'S OWN COUNT. The per-plate `needs a source` markers went with the
-    selects into the dialog; the same fact is on the link, as the COUNT of plates still owed
-    one. A SECOND row of the same template must read back what the first one saved — one plate
-    answered, one still owed — and that is what template-level MEANS, so it is pinned rather
-    than trusted to the label that says it.
-  */
   await expect(app.inspector.locator('[data-open-template-defaults]')).toHaveAttribute(
     'data-defaults-needed',
     '1',
   );
+});
 
-  // Deleting a source that is in use is ALLOWED, CASCADES, and says at the
-  // moment of deletion which plates it freed — an operator who learns at the
-  // take is learning too late.
-  await app.openStationSetupAt('Live sources');
-  await dialog.getByRole('button', { name: 'Remove Studio A' }).click();
+test.describe('an input the Playout stopped offering', () => {
   /*
-    🔴 `B-237` — IT ASKS FIRST NOW, and the question names the fallout BEFORE the act rather
-    than reporting it after. That is strictly more than this spec used to assert: the same
-    template and plate are named, and they are named while the operator can still say no.
+    `Studio 5` was bound as a template default while the Playout listed it, and a later read no
+    longer lists it. The binding in the store is the one written THEN — which is why it is put
+    there before the page starts rather than through the console: binding it NOW is refused, and
+    that refusal is this file's control below.
   */
-  const confirm = page.getByRole('dialog', { name: /^Remove / });
-  await expect(confirm).toBeVisible();
-  await expect(confirm.getByText(/two box/)).toBeVisible();
-  await expect(confirm.getByText(/already on air stays up/)).toBeVisible();
-  await confirm.getByRole('button', { name: 'Remove source' }).click();
+  test.use({
+    playoutSources: {
+      ...E2E_PLAYOUT,
+      departed: [
+        { id: 'studio-5', name: 'Studio 5', producer: { kind: 'ndi', source: 'OLD-PC (Cam)' } },
+      ],
+    },
+  });
 
-  // …and the cascade still reports what it freed, naming the template the way the operator
-  // knows it (the imported file name, cleaned), never by its id.
-  await expect(dialog.getByText(/need.* a new one/)).toBeVisible();
-  await expect(dialog.getByText(/two box \/ guest-1/)).toBeVisible();
-  await app.closeStationSetup();
+  test('🔴 the binding is KEPT, reads Unavailable, and still counts as answered', async ({
+    app,
+  }) => {
+    const page = app.page;
+    await page.evaluate((templateId) => {
+      localStorage.setItem(
+        'cg-runtime:source-assignments',
+        JSON.stringify({
+          assignments: [{ templateId, plateId: 'guest-1', sourceId: 'in-studio-5' }],
+        }),
+      );
+    }, TWO_BOX);
+    await page.reload();
+    await registerTwoBox(app);
+    const layer = await app.loadTemplate(TWO_BOX);
+    await app.selectLayerRow(layer);
 
-  // …and the plate is back to needing a source, which is a state the whole
-  // feature already handles, rather than a dangling binding nobody can see. The door's count
-  // goes back to BOTH plates, which is also the operator's cue to reopen it.
-  await expect(app.inspector.locator('[data-open-template-defaults]')).toHaveAttribute(
-    'data-defaults-needed',
-    '2',
-  );
+    // ONE plate is still owed a source — `guest-1`'s binding was not pruned (ADR 0010 rule 14).
+    const door = app.inspector.locator('[data-open-template-defaults]');
+    await expect(door).toHaveAttribute('data-defaults-needed', '1');
+    await door.click();
+    const defaults = page.getByRole('dialog', { name: 'Source defaults' });
+    const field = defaults.locator('[data-defaults-select="guest-1"]');
+    // …and it is named, by its name, with the amber tag and the reason on hover.
+    await expect(field.locator('.cg-source-label__name')).toHaveText('Studio 5');
+    await expect(field.locator('.cg-source-tag--unavailable')).toHaveText('Unavailable');
+    await expect(field.locator('.cg-source-tag--unavailable')).toHaveAttribute(
+      'title',
+      "Not in the Playout's input list.",
+    );
+    // It is not offered as a new choice: the picker lists the Playout's inputs as they stand.
+    await field.click();
+    const panel = page.getByRole('dialog', { name: 'Choose a source' });
+    await expect(panel.getByRole('option', { name: 'Studio 5', exact: true })).toHaveCount(0);
+    // Control: the Playout's own inputs ARE offered.
+    await expect(panel.getByRole('option', { name: 'Studio 1', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await defaults.getByRole('button', { name: 'Cancel' }).click();
+
+    // Control: binding it ANEW is refused — it can be kept, never newly chosen.
+    const refused = await page.evaluate(async (templateId) => {
+      const w = window as unknown as {
+        cg: {
+          sources: { setAssignments: (req: unknown) => Promise<{ ok: boolean; reason?: string }> };
+        };
+      };
+      return w.cg.sources.setAssignments({
+        assignments: [
+          { templateId, plateId: 'guest-1', sourceId: 'in-studio-5' },
+          { templateId, plateId: 'guest-2', sourceId: 'in-studio-5' },
+        ],
+      });
+    }, TWO_BOX);
+    expect(refused).toMatchObject({ ok: false, reason: 'source-unusable' });
+  });
 });
 
 test('library: DELETE FROM STATION is a different verb from the row REMOVE, and it takes the bindings with it', async ({
@@ -312,15 +302,12 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   const page = app.page;
 
   await registerTwoBox(app);
-  await app.openStationSetupAt('Live sources');
-  await app.addLiveSource('Studio A');
-  await app.closeStationSetup();
 
   // Bind a plate, which is what makes this template the one the reported bug hit:
   // binding requires SELECTING the template, which requires LOADING it onto a row.
   const layer = await app.loadTemplate(TWO_BOX);
   await app.selectLayerRow(layer);
-  await app.setTemplateDefault('guest-1', 'Studio A');
+  await app.setTemplateDefault('guest-1', 'Studio 1');
 
   // ── THE REPORTED BUG: while a row still holds it, the deletion is REFUSED …
   await app.openTemplatePicker();

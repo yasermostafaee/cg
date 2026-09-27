@@ -264,8 +264,9 @@ describe('Update writes it, through the same apply the fields use', () => {
       `DELTA-MULTI-CHANNEL-01-A` A5 — the banner reads the RULE, one line: the bridge's own
       sentence used to be glued onto it (`${text} ${detail}`) and is the record's, not this line's.
     */
+    // `PLAYOUT-SOURCES-01` — the rule's words changed with the sources' owner: the Playout.
     expect(getRefusal()?.message).toBe(
-      'That source is no longer defined on this station — pick another, or define it again under Live sources.',
+      'That source is not one the Playout offers — choose another.',
     );
   });
 

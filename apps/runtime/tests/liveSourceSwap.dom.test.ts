@@ -13,6 +13,7 @@ import {
 } from '../src/renderer/features/sources/sourceStore.js';
 import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { choosePickerOption, openPicker, pickerValue } from './support/sourcePicker.js';
 
 /**
  * R-048 / C-015 phase 6 (6.9 / 6.9e) — **the operator's route to a live-source
@@ -158,46 +159,46 @@ describe('6.9 — the dialog states the layering, and commits in ONE more action
     expect(text).toMatch(/every other row/i);
   });
 
-  it('shows the plate, its ASSIGNED source, and offers the catalog', async () => {
+  /** `PLAYOUT-SOURCES-01` §2.A — the plate's picker field (the ONE source picker). */
+  const field = (): HTMLElement => {
+    const el = openDialog()?.querySelector<HTMLElement>('[data-picker-value]');
+    if (el === null || el === undefined) throw new Error('no source picker in the swap dialog');
+    return el;
+  };
+
+  it('shows the plate, its ASSIGNED source, and offers the sources', async () => {
     await renderDialog(() => Promise.resolve({ ok: true }));
-    const select = openDialog()?.querySelector('select');
     expect(openDialog()?.textContent).toContain('guest-1');
     expect(openDialog()?.textContent).toContain('Studio A');
-    const options = [...(select?.options ?? [])].map((o) => o.textContent ?? '');
-    // The empty option is REVERT, not "no source".
-    expect(options[0]).toContain('Use template assignment');
-    expect(options.some((o) => o.includes('Baku'))).toBe(true);
+    const panel = await openPicker(field());
+    // The call site's own choice is REVERT, not "no source".
+    expect(panel.querySelector('[data-picker-choice=""]')?.textContent).toContain(
+      'Use template assignment',
+    );
+    expect(
+      [...panel.querySelectorAll('[data-picker-input]')].some((o) => o.textContent === 'Baku'),
+    ).toBe(true);
   });
 
   it('🔴 choosing a source COMMITS immediately — there is no Apply step', async () => {
     const onSwap = vi.fn(() => Promise.resolve({ ok: true }));
     await renderDialog(onSwap);
-    const select = openDialog()?.querySelector('select');
 
-    act(() => {
-      if (select !== null && select !== undefined) {
-        select.value = 'src-b';
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
+    // Two actions total: open the row's swap, choose the source — pressing the field and an input
+    // is the one "choose", exactly as the native select was. An Apply would be a third, and under
+    // pressure a third action is one that does not happen.
+    await choosePickerOption(field(), 'src-b');
 
-    // Two actions total: open the dialog, choose the source. An Apply would be a
-    // third, and under pressure a third action is one that does not happen.
+    expect(onSwap).toHaveBeenCalledTimes(1);
     expect(onSwap).toHaveBeenCalledWith('guest-1', 'src-b');
   });
 
   it('the empty option reverts the plate — it sends null, not an empty id', async () => {
     const onSwap = vi.fn(() => Promise.resolve({ ok: true }));
     await renderDialog(onSwap, { sourceOverride: { 'guest-1': 'src-b' } });
-    const select = openDialog()?.querySelector('select');
-    expect(select?.value).toBe('src-b');
+    expect(pickerValue(field())).toBe('src-b');
 
-    act(() => {
-      if (select !== null && select !== undefined) {
-        select.value = '';
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-    });
+    await choosePickerOption(field(), '');
 
     expect(onSwap).toHaveBeenCalledWith('guest-1', null);
   });
@@ -216,15 +217,8 @@ describe('6.9 — the dialog states the layering, and commits in ONE more action
     const message =
       'CasparCG refused the substitution, so plate "guest-1" is still on its previous source.';
     await renderDialog(() => Promise.resolve({ ok: false, message }));
-    const select = openDialog()?.querySelector('select');
 
-    await act(async () => {
-      if (select !== null && select !== undefined) {
-        select.value = 'src-b';
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-      await Promise.resolve();
-    });
+    await choosePickerOption(field(), 'src-b');
 
     // The operator must be told the plate did NOT move. A silent refusal here
     // leaves them believing they patched around a dead feed when they did not.

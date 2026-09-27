@@ -527,7 +527,7 @@ describe('the STREAM arm — C-025, the URL the owner proved by hand', () => {
 });
 
 describe('the refusal codes are ONE definition', () => {
-  it('names the six the catalog can raise and the two the assignments can', () => {
+  it('names the six the catalog can raise and the three the assignments can', () => {
     // The stores DERIVE their error types from these arrays. A code added on one
     // side and not the other is exactly the drift the shared const prevents.
     expect([...SOURCES_SET_CONFIG_REASONS]).toEqual([
@@ -540,7 +540,12 @@ describe('the refusal codes are ONE definition', () => {
       // from `overlaps-fixed-bank` because the test is strictly-below rather than disjoint.
       'low-bank-not-below-band',
     ]);
-    expect([...SOURCES_SET_ASSIGNMENTS_REASONS]).toEqual(['duplicate-plate', 'unknown-source']);
+    expect([...SOURCES_SET_ASSIGNMENTS_REASONS]).toEqual([
+      'duplicate-plate',
+      'unknown-source',
+      // `PLAYOUT-SOURCES-01` — a NEW binding to an entry that is unusable or no longer offered.
+      'source-unusable',
+    ]);
   });
 });
 

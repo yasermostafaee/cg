@@ -605,7 +605,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('fourteen routes carry a channel key; eleven carry it at the top level, where the fence reads', () => {
+  it('thirteen routes carry a channel key; eleven carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -627,8 +627,11 @@ describe('the census: every route that names a channel, classified', () => {
       'fixedLayers.set-config': ['req.channel'],
       'layers.clear': ['req.channel'],
       'playoutLayers.clear': ['req.channel'],
-      // A `route` SOURCE's channel is read FROM — never a write target.
-      'sources.set-config': ['req.sources[].producer.channel'],
+      /*
+        `PLAYOUT-SOURCES-01` §1.F — `sources.set-config` carries the plate BAND only now, so the
+        `route` source channel it used to carry (`req.sources[].producer.channel`) left this list:
+        the sources are the Playout's, and no request writes one.
+      */
       /*
         `MULTI-CHANNEL-01` §2 B — the four housekeeping verbs' OPTIONAL channel, at the top level:
         a bulk verb scoped to a channel this station does not declare is refused by the fence.

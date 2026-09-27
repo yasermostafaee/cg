@@ -1,4 +1,4 @@
-import type { StationChannel, StationChannels } from '@cg/shared-ipc';
+import { redactCatalogForConsole, type StationChannel, type StationChannels } from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { resolveBridgeUrl } from './bridgeUrl.js';
@@ -436,12 +436,19 @@ export function createMockBridge(): RuntimeBridge {
     // its delete CASCADE (`pruneAssignmentsForCatalog`), so a refusal the
     // operator meets here is the one the real station would give.
     sources: {
-      config: () => Promise.resolve(mock.sourceCatalog()),
-      setConfig: (req) => Promise.resolve(mock.setSourceCatalog(req)),
-      onConfigChanged: (handler) => mock.sourceCatalogChanged.subscribe(handler),
+      // `PLAYOUT-SOURCES-01` §1.E — as the bridge's route hands it over: the console never shows a
+      // stream URL, and it never even HOLDS one with its password in it.
+      config: () => Promise.resolve(redactCatalogForConsole(mock.sourceCatalog())),
+      // `PLAYOUT-SOURCES-01` §1.F — the band only.
+      setConfig: (req) => Promise.resolve(mock.setSourceBand(req)),
+      onConfigChanged: (handler) =>
+        mock.sourceCatalogChanged.subscribe((catalog) => handler(redactCatalogForConsole(catalog))),
       assignments: () => Promise.resolve(mock.sourceAssignments()),
       setAssignments: (req) => Promise.resolve(mock.setSourceAssignments(req)),
       onAssignmentsChanged: (handler) => mock.sourceAssignmentsChanged.subscribe(handler),
+      mediaSearch: (req) => Promise.resolve(mock.searchMedia(req)),
+      // Nothing to read again offline: the seeded lists are all there is.
+      refresh: () => Promise.resolve({ ok: true as const }),
     },
 
     delimiters: {

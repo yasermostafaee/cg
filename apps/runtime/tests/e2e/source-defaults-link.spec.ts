@@ -31,15 +31,14 @@ test('the warning dot carries no underline, and the link’s words still do', as
   /*
     A one-plate template and an EMPTY catalogue, which is what makes the dot appear at all: the
     plate can be owed a source only when there is no source it could already have.
+    `PLAYOUT-SOURCES-01` — the catalogue is the Playout's, and this spec arms none, so it is empty.
   */
   await app.page.evaluate(async () => {
     const w = window as unknown as {
       cg: {
-        sources: { setConfig: (r: unknown) => Promise<unknown> };
         templates: { import: (r: { template: unknown; html: string }) => Promise<unknown> };
       };
     };
-    await w.cg.sources.setConfig({ sources: [] });
     const rect = { x: 0, y: 0, width: 960, height: 540 };
     await w.cg.templates.import({
       template: {

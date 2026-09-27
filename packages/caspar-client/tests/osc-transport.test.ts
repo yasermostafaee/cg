@@ -158,12 +158,14 @@ describe('OscTransport', () => {
     // the heartbeat. After the first ambient tick we should see them all in one go.
     mock.emitOsc('/channel/1/stage/layer/10/foreground/file/path', ['file:///x.html']);
     const next = await waitForEvent(transport);
+    // The event arrives — `PLAYOUT-SOURCES-01` §1.E: its PATH is dropped at the mapper, because
+    // the core sends input addresses, credentials included, to every client (contract v1.3 §3.3).
     expect(next).toEqual([
       {
         kind: 'osc.layer.foreground.file',
         channel: 1,
         layer: 10,
-        path: 'file:///x.html',
+        path: '',
       },
     ]);
   });

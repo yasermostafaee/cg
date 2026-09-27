@@ -60,10 +60,33 @@ describe('the producer classifier', () => {
     expect(m.layerState(L(12))?.producer).toBe('decklink');
   });
 
-  it('records NDI NAME <source> as NDI', async () => {
+  it('`PLAYOUT-SOURCES-01` — records `[NDI] "<source>"` as NDI, the Playout core’s producer spelling', async () => {
     const m = await boot();
-    expect(await send(m.amcpPort, 'PLAY 1-13 NDI NAME "STUDIO (CAM1)"')).toBe('202 PLAY\r\n');
+    expect(await send(m.amcpPort, 'PLAY 1-13 [NDI] "STUDIO (CAM1)"')).toBe('202 PLAY\r\n');
     expect(m.layerState(L(13))?.producer).toBe('ndi');
+  });
+
+  it('`PLAYOUT-SOURCES-01` — refuses `NDI NAME "…"`: that is the CONSUMER syntax, and builds no producer', async () => {
+    const m = await boot();
+    const reply = await send(m.amcpPort, 'PLAY 1-19 NDI NAME "STUDIO (CAM1)"');
+    expect(reply).toContain('404 ERROR');
+    expect(m.layerState(L(19))).toBeUndefined();
+  });
+
+  it('`PLAYOUT-SOURCES-01` — records a stream URL as ffmpeg, and still refuses a scheme it cannot play', async () => {
+    const m = await boot();
+    expect(await send(m.amcpPort, 'PLAY 1-29 "rtsp://cam:secret@10.0.0.21/live"')).toBe(
+      '202 PLAY\r\n',
+    );
+    expect(m.layerState(L(29))?.producer).toBe('ffmpeg');
+    expect(await send(m.amcpPort, 'PLAY 1-29 "udp://239.255.0.1:5000?reuse=1"')).toBe(
+      '202 PLAY\r\n',
+    );
+    // Control: a scheme outside the stream list is still a refusal, and the layer keeps its producer.
+    expect(await send(m.amcpPort, 'PLAY 1-29 "rist://10.0.0.30:5004"')).toContain(
+      'UNKNOWN PRODUCER SCHEME',
+    );
+    expect(m.layerState(L(29))?.producer).toBe('ffmpeg');
   });
 
   it('still records a bare media file name as ffmpeg', async () => {
@@ -124,10 +147,33 @@ describe('an unrecognised producer form is REFUSED, not silently acked', () => {
     expect(m.layerState(L(22))).toBeUndefined();
   });
 
-  it('refuses NDI without a source name', async () => {
+  it('refuses [NDI] without a source name', async () => {
     const m = await boot();
-    expect(await send(m.amcpPort, 'PLAY 1-23 NDI')).toContain('NDI NEEDS NAME');
+    expect(await send(m.amcpPort, 'PLAY 1-23 [NDI]')).toContain('[NDI] NEEDS');
     expect(m.layerState(L(23))).toBeUndefined();
+  });
+
+  it('`PLAYOUT-SOURCES-01` — a media file the server no longer has answers 404 on PLAY and LOAD, and nothing else does', async () => {
+    const m = await boot();
+    m.setMissingMedia(['C:/Media/cache/stale.mov']);
+    expect(await send(m.amcpPort, 'PLAY 1-26 "C:/Media/cache/stale.mov"')).toContain('404 ERROR');
+    expect(await send(m.amcpPort, 'LOAD 1-26 "C:/Media/cache/stale.mov"')).toContain('404 ERROR');
+    expect(m.layerState(L(26))).toBeUndefined();
+    // Control: another file plays, and so does the stale one once the set is cleared.
+    expect(await send(m.amcpPort, 'PLAY 1-27 "C:/Media/original/clip.mov"')).toBe('202 PLAY\r\n');
+    m.setMissingMedia([]);
+    expect(await send(m.amcpPort, 'PLAY 1-26 "C:/Media/cache/stale.mov"')).toBe('202 PLAY\r\n');
+  });
+
+  it('`PLAYOUT-SOURCES-01` — a VOLUME ramp (`VOLUME <v> <frames>`) is accepted; a malformed duration is refused', async () => {
+    const m = await boot();
+    expect(await send(m.amcpPort, 'MIXER 1-28 VOLUME 0.5 25')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(28))?.volume).toBe(0.5);
+    expect(await send(m.amcpPort, 'MIXER 1-28 VOLUME 0.8 25 DEFER')).toBe('202 MIXER\r\n');
+    expect(await send(m.amcpPort, 'MIXER 1 COMMIT')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(28))?.volume).toBe(0.8);
+    expect(await send(m.amcpPort, 'MIXER 1-28 VOLUME 0.5 soon')).toBe('401 ERROR\r\n');
+    expect(m.layerState(L(28))?.volume).toBe(0.8);
   });
 
   it('refuses a PLAY with no producer argument at all', async () => {

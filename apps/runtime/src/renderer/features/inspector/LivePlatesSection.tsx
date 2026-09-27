@@ -3,6 +3,7 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { SourceLabel } from '../sources/SourceLabel.js';
 import { SourceDefaultsLink } from './SourceDefaultsLink.js';
 import {
   assignmentsWereCarriedOver,
@@ -266,17 +267,15 @@ export function LivePlatesSection({
         const appliedSource = applied.get(plate.sourceId) ?? null;
         // R-048 — the per-ROW patch, folded in through the ONE join that reads it.
         const onAir = onAirPlateSource(item, plate.sourceId, appliedSource);
+        // The `title`'s words — never the id (golden rule 11): an entry the catalogue no longer
+        // names reads as `nothing`, as the label beside it does.
         const onAirName =
-          catalog.sources.find((src) => src.id === onAir.sourceId)?.name ??
-          onAir.sourceId ??
-          'nothing';
+          catalog.sources.find((src) => src.id === onAir.sourceId)?.name ?? 'nothing';
         // SESSION BP — what LEVEL 2 resolves to on this row, which for a row on air is the
         // snapshot its take froze rather than the value the dialog now edits.
         const frozen = frozenPlateSource(item, plate.sourceId, appliedSource);
         const frozenName =
-          catalog.sources.find((src) => src.id === frozen.sourceId)?.name ??
-          frozen.sourceId ??
-          'nothing';
+          catalog.sources.find((src) => src.id === frozen.sourceId)?.name ?? 'nothing';
         const patched = onAir.overridden && rowIsOnAir;
         const isFrozen = !onAir.patched && frozen.diverged && rowIsOnAir;
         if (!patched && !isFrozen) return null;
@@ -305,7 +304,9 @@ export function LivePlatesSection({
                   `would use.`
                 }
               >
-                on air: {onAirName} (patched on this row)
+                {/* `PLAYOUT-SOURCES-01` §2.B — the source as `SourceLabel` names it everywhere. */}
+                on air: <SourceLabel sourceId={onAir.sourceId} fallback="nothing" /> (patched on
+                this row)
               </span>
             )}
             {/*
@@ -336,7 +337,8 @@ export function LivePlatesSection({
                   `again to adopt it, or set this look’s input below to change it now.`
                 }
               >
-                this row: {frozenName} (frozen at take)
+                this row: <SourceLabel sourceId={frozen.sourceId} fallback="nothing" /> (frozen at
+                take)
               </span>
             )}
           </div>

@@ -265,6 +265,10 @@ export const CatalogueChannelSchema = z.object({
   output: ChannelOutputSchema.optional(),
   /** `UI-POLISH-01` G — the row's `playlist`, in the Playout's word. Information only. */
   playlist: ChannelPlaylistSchema.optional(),
+  /** `PLAYOUT-SOURCES-01` / v1.3 — the running core's video mode; `null` = not there yet. */
+  videoMode: z.string().nullable().optional(),
+  /** `PLAYOUT-SOURCES-01` / v1.3 — settings differ from the running core. */
+  pendingRestart: z.boolean().optional(),
 });
 export type CatalogueChannel = z.infer<typeof CatalogueChannelSchema>;
 
