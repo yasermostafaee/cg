@@ -10,6 +10,8 @@ import { useFocusTrap } from '../../ui/focusTrap.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { PlayoutSignInError } from '../../../platform/playoutSession.js';
 import { signInMarksField, signInMessage } from '../auth/signInMessages.js';
+import { airFrom } from '../channels/channelAir.js';
+import { OutputDot } from '../channels/OutputDot.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
 import { PlayoutConnection } from './PlayoutConnection.js';
 import {
@@ -630,6 +632,8 @@ export function ChannelStep({
                         }}
                       />
                       <span className="cg-channel-row__name">
+                        {/* `UI-POLISH-01` G — the Playout's output, before the name. */}
+                        <OutputDot air={airFrom(row)} />
                         {`CH ${channel}`}
                         {row.unnamed !== true && (
                           <>

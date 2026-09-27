@@ -2768,6 +2768,13 @@ export const cssVars = {
   '--r-channel-row-gap': '8px',
   '--r-channel-row-inner-gap': '10px',
   '--r-channel-row-pad': '9px 12px',
+  /*
+   * `UI-POLISH-01` G — THE OUTPUT DOT before a channel's name: 8 px, a filled disc in `--r-onair`
+   * while on air, a 1.5 px ring in the muted ink while off, nothing while unknown. 6 px to the name.
+   */
+  '--r-output-dot': '8px',
+  '--r-output-dot-ring': '1.5px',
+  '--r-output-dot-gap': '6px',
   '--r-subbar-h': `${String(LAYER_SUBBAR_PX.h)}px`,
   '--r-subbar-pad': `${String(LAYER_SUBBAR_PX.padY)}px ${String(LAYER_SUBBAR_PX.padX)}px`,
   '--r-subbar-gap': `${String(LAYER_SUBBAR_PX.gap)}px`,

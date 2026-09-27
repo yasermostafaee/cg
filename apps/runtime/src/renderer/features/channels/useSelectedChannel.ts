@@ -3,7 +3,9 @@ import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { useFixedBanksState } from '../../hooks/useFixedLayers.js';
 import { useStationChannels } from '../../hooks/useStationChannels.js';
+import { NO_AIR, type ChannelAir } from './channelAir.js';
 import {
+  channelAirs,
   channelIds,
   channelNames,
   operableChannels,
@@ -43,6 +45,11 @@ export function useSelectedChannel(): {
    * decision anywhere reads it.
    */
   names: ReadonlyMap<number, string>;
+  /**
+   * `UI-POLISH-01` G — the Playout's `output` and `playlist` for a listed channel, where D4 said
+   * any. Absent is unknown (`NO_AIR`). Colours a dot and the PROGRAM head; decides nothing.
+   */
+  air: ReadonlyMap<number, ChannelAir>;
   /** `MULTI-CHANNEL-01` — every declared bank, in channel order. */
   banks: readonly FixedLayerBank[];
   /** `MULTI-CHANNEL-01` — the SELECTED channel's bank, or `null` when it declares none. */
@@ -72,6 +79,7 @@ export function useSelectedChannel(): {
     operable,
     canOperateSelected: operable.includes(selected),
     names: channelNames(discovered),
+    air: channelAirs(discovered),
     banks,
     bank: bankForChannel(banks, selected),
     banksReady,
@@ -132,4 +140,19 @@ export function useChannelBankState(): {
     viewChannel,
     verbScope,
   };
+}
+
+/**
+ * `UI-POLISH-01` G — every declared channel's air, for a surface that does not need the rest of
+ * {@link useSelectedChannel} (the unlicensed line, the strip's marks).
+ */
+export function useChannelAirs(): ReadonlyMap<number, ChannelAir> {
+  const discovery = useStationChannels();
+  return channelAirs(discovery.ready ? discovery.value : null);
+}
+
+/** `UI-POLISH-01` G — one channel's air, or {@link NO_AIR} when D4 said nothing about it. */
+export function useChannelAir(channel: number | null): ChannelAir {
+  const airs = useChannelAirs();
+  return channel === null ? NO_AIR : (airs.get(channel) ?? NO_AIR);
 }

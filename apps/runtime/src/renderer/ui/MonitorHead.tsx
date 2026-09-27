@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { ChannelOutput } from '@cg/shared-ipc';
+import { Tag } from './Tag.js';
 /**
  * 🔴 `CONSOLE-MATCH-03` §1 — THE MONITOR HEAD, AND WHY IT IS ONE COMPOSITION.
  *
@@ -25,18 +27,38 @@ export function MonitorHead({
   word,
   channel,
   tone,
+  output,
+  tags = [],
 }: {
   /** `PREVIEW` / `PROGRAM` — the output, in the operator's word. */
   word: string;
   /** The channel this pane is showing. `null` before the bank has answered. */
   channel: number | null;
   tone: 'pvw' | 'pgm';
+  /**
+   * 🔴 `UI-POLISH-01` G — PROGRAM only: the Playout's `output` for this channel. The label is the air
+   * green WHILE `on-air` and the bar's own ink otherwise; a head that is green without knowing
+   * claims air nobody confirmed. It was green whatever happened (`CONSOLE-LOOK-06`'s mint).
+   */
+  output?: ChannelOutput | undefined;
+  /** Neutral facts after the label — `Output unknown`, the playlist's state. Never a colour. */
+  tags?: readonly string[];
 }): JSX.Element {
   return (
-    <span className={`cg-monitor-label cg-monitor-label--${tone}`}>
-      {word}
-      {channel !== null && <span className="cg-monitor-ch">CH {channel}</span>}
-    </span>
+    <>
+      <span
+        className={`cg-monitor-label cg-monitor-label--${tone}`}
+        {...(output !== undefined ? { 'data-output': output } : {})}
+      >
+        {word}
+        {channel !== null && <span className="cg-monitor-ch">CH {channel}</span>}
+      </span>
+      {tags.map((tag) => (
+        <Tag key={tag} className="cg-setup-tag cg-monitor-tag" data-testid="monitor-head-tag">
+          {tag}
+        </Tag>
+      ))}
+    </>
   );
 }
 

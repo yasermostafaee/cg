@@ -1,3 +1,5 @@
+import { NO_AIR } from '../channels/channelAir.js';
+import { OutputDot } from '../channels/OutputDot.js';
 import {
   cloneElement,
   isValidElement,
@@ -469,7 +471,7 @@ export function StationSetupDialog({
     same read the channel strip makes (`useSelectedChannel`), so the subtitle, the strip and
     the Channel tab cannot name three different channels. Station-wide tabs never read it.
   */
-  const { selected: channel, names: channelNames } = useSelectedChannel();
+  const { selected: channel, names: channelNames, air: channelAirs } = useSelectedChannel();
   const [active, setActive] = useState<StationSetupSection>(section);
   const [primary, setPrimary] = useState<EndpointDraft>(UNREAD_SERVERS.primary);
   const [backupEnabled, setBackupEnabled] = useState(UNREAD_SERVERS.backupEnabled);
@@ -1045,6 +1047,8 @@ export function StationSetupDialog({
       */
       subtitle={
         <>
+          {/* `UI-POLISH-01` G — the output dot, before the channel's name, as on the strip. */}
+          <OutputDot air={channelAirs.get(channel) ?? NO_AIR} />
           Channel {String(channel)}
           {channelNames.get(channel) !== undefined && (
             <>

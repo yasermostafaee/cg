@@ -1,3 +1,4 @@
+import { airFrom, type ChannelAir } from './channelAir.js';
 import type { AuthSessionState } from '../../../shared/runtime-bridge.js';
 import type {
   BankSet,
@@ -148,6 +149,22 @@ export function channelNames(discovered: StationChannels | null): ReadonlyMap<nu
     if (c.declared && c.named !== null) names.set(c.channel, c.named.name);
   }
   return names;
+}
+
+/**
+ * 🔴 `UI-POLISH-01` G — **THE PLAYOUT'S AIR FACTS FOR EACH CHANNEL THIS STATION OPERATES**, from the
+ * discovery answer's `output` and `playlist` (the joined D4 row's). Declared channels only, for
+ * `channelNames`' reason; a channel the answer says nothing about is simply absent, which every
+ * reader takes as {@link NO_AIR} — unknown, no dot.
+ */
+export function channelAirs(discovered: StationChannels | null): ReadonlyMap<number, ChannelAir> {
+  const airs = new Map<number, ChannelAir>();
+  for (const c of discovered?.channels ?? []) {
+    if (c.declared && (c.output !== undefined || c.playlist !== undefined)) {
+      airs.set(c.channel, airFrom(c));
+    }
+  }
+  return airs;
 }
 
 /**

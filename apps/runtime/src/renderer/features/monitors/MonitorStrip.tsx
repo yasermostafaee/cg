@@ -1,5 +1,5 @@
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
-import { useChannelBankState } from '../channels/useSelectedChannel.js';
+import { useChannelAir, useChannelBankState } from '../channels/useSelectedChannel.js';
 import { useProgramReturn } from '../../hooks/useProgramReturn.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
 import { airTally, onChannel } from '../stack/onAir.js';
@@ -37,6 +37,8 @@ export function MonitorStrip(): JSX.Element {
   */
   // `MULTI-CHANNEL-01` — the SELECTED channel: PROGRAM is the channel on screen.
   const { viewChannel } = useChannelBankState();
+  // `UI-POLISH-01` G — the Playout's air facts for the channel PROGRAM shows (its head's colour).
+  const air = useChannelAir(viewChannel);
   const { items } = useStackSnapshot();
   // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
   const onAirRows = airTally(onChannel(items, viewChannel)).onAir;
@@ -95,6 +97,7 @@ export function MonitorStrip(): JSX.Element {
           channel={viewChannel}
           onAirRows={onAirRows}
           programReturn={programReturn}
+          air={air}
         />
       )}
     </div>

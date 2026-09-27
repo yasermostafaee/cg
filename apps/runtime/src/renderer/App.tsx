@@ -10,7 +10,10 @@ import { BridgeSkewBanner } from './features/status/BridgeSkewBanner.js';
 import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js';
 import { losingAirChecks, OutputMissingBanner } from './features/status/OutputMissingBanner.js';
 import { getRefusal, onRefusal } from './features/status/refusalStore.js';
+import { unlicensedChannels } from './features/channels/channelAir.js';
 import { channelSignals, inScope } from './features/channels/channelSignals.js';
+import { UnlicensedLine } from './features/channels/UnlicensedLine.js';
+import { useChannelAirs } from './features/channels/useSelectedChannel.js';
 import { useChannelSettings } from './hooks/useChannelSettings.js';
 import { useLink } from './hooks/useLink.js';
 import { useBridgeReadable } from './hooks/useBridgeSnapshot.js';
@@ -159,6 +162,8 @@ export function App(): JSX.Element {
   const channelSettingsState = useChannelSettings();
   const standingRefusal = useSyncExternalStore(onRefusal, getRefusal, getRefusal);
   const linkLive = useLink() === 'live';
+  // `UI-POLISH-01` G — the Playout's air facts, for the one playlist state that reaches our air.
+  const channelAirs = useChannelAirs();
   const signals = useMemo(
     () =>
       multiChannel
@@ -175,6 +180,8 @@ export function App(): JSX.Element {
               ...(standingRefusal?.channel != null ? [standingRefusal.channel] : []),
               // `FIELD-FIXES-01` B — a row carrying a refused take's line, shown in ITS view only.
               ...takeRefusalChannels(items, fixedSlots),
+              // `UI-POLISH-01` G — unlicensed in the Playout: cleared every minute, ours included.
+              ...unlicensedChannels(channelAirs),
             ],
           })
         : undefined,
@@ -190,6 +197,7 @@ export function App(): JSX.Element {
       standingRefusal,
       items,
       fixedSlots,
+      channelAirs,
     ],
   );
 
@@ -343,6 +351,8 @@ export function App(): JSX.Element {
           answers, OSC ticks, every pill reads HEALTHY. Renders nothing unless a declared
           consumer is genuinely missing — or was, the last time the bridge could look. */}
         <OutputMissingBanner scope={verbScope} />
+        {/* `UI-POLISH-01` G — an unlicensed channel's one line, in its own view only. */}
+        <UnlicensedLine scope={verbScope} />
         {/*
           🔴 `CONSOLE-LOOK-06` DELTA R — THE REFUSAL SURFACE, and it is IN FLOW on purpose.
 

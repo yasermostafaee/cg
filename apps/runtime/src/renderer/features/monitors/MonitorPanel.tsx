@@ -6,6 +6,7 @@ import { Panel } from '../../ui/Panel.js';
 import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/MonitorHead.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
 import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
+import { playlistTag, type ChannelAir } from '../channels/channelAir.js';
 
 /**
  * The PROGRAM output box — `C-016`'s programme return: what the Playout is putting on air,
@@ -94,6 +95,19 @@ interface Props {
   onAirRows: number;
   /** The programme return for `channel` — lifted to the strip, like the air count. */
   programReturn: ProgramReturn;
+  /**
+   * 🔴 `UI-POLISH-01` G — the Playout's `output` and `playlist` for `channel` (`NO_AIR` when it said
+   * nothing). `output` alone colours the head; the playlist is a neutral tag and never a colour.
+   */
+  air: ChannelAir;
+}
+
+/** The head's neutral tags: `Output unknown` when it is, then the playlist's state in its words. */
+export function programHeadTags(air: ChannelAir): string[] {
+  return [
+    ...(air.output === 'unknown' ? ['Output unknown'] : []),
+    ...(air.playlist !== null ? [playlistTag(air.playlist)] : []),
+  ];
 }
 
 export function MonitorPanel({
@@ -103,6 +117,7 @@ export function MonitorPanel({
   channel,
   onAirRows,
   programReturn,
+  air,
 }: Props): JSX.Element {
   const { src, signal, onError } = programReturn;
   const words = PROGRAM_SIGNAL_WORDS[signal];
@@ -111,7 +126,20 @@ export function MonitorPanel({
       id={id}
       title={title}
       compactHead
-      heading={<MonitorHead word={word} channel={channel} tone="pgm" />}
+      /*
+        🔴 `UI-POLISH-01` G — the head is GREEN ONLY WHILE the Playout says the channel is on air, and
+        the playlist is a neutral tag beside it: the owner's multi-box case (playlist STOPPED, output
+        ON AIR) keeps the green. The return-feed words below are about the FEED and stay as they are.
+      */
+      heading={
+        <MonitorHead
+          word={word}
+          channel={channel}
+          tone="pgm"
+          output={air.output}
+          tags={programHeadTags(air)}
+        />
+      }
       /*
         `Server return` — the reference's standing label for what this pane is FOR. It is not
         a state (the state is on the strip below); it names the source, so an operator reading

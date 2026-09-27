@@ -358,7 +358,8 @@
   color: var(--r-rehearsing);
 }
 /*
- * 🔴 `CONSOLE-LOOK-06` — PGM'S HEAD IS MINT, reversing `CONSOLE-MATCH-03`'s ARGUED (f).
+ * 🔴 `CONSOLE-LOOK-06` — PGM'S HEAD WAS MINT, reversing `CONSOLE-MATCH-03`'s ARGUED (f). ⚠ SUPERSEDED
+ * by `UI-POLISH-01` G (below): the always-mint rule is gone. Kept as the record of why it was mint.
  *
  * That argument was: this console splits air-green from health-green, so a permanently green
  * `PROGRAM` over a pane rendering nothing would be the most misleading pixel on the surface.
@@ -371,8 +372,19 @@
  * ⚠ So the rule "green means air, never health" is intact; it was applied to a token that is
  * not the air token. A LABEL naming an output is not a claim about that output's state.
  */
-.cg-monitor-label--pgm {
-  color: var(--r-success);
+/*
+ * 🔴 `UI-POLISH-01` G — AND NOW IT IS GREEN ONLY WHILE THE CHANNEL IS ON AIR. The owner found the
+ * head green whatever happened; the mint above was a label, not a claim, and read as one anyway. So
+ * the colour follows the Playout's `output` for the channel shown: the AIR green (`--r-onair`, the
+ * dot's) while `on-air`, and the bar's own ink — no rule — when off or unknown. The playlist never
+ * changes it (the owner's multi-box case: playlist stopped, still on air, still green).
+ */
+.cg-monitor-label--pgm[data-output='on-air'] {
+  color: var(--r-onair);
+}
+/* The head's neutral facts — `Output unknown`, the playlist's state — in the reference's `.tag`. */
+.cg-setup-tag.cg-monitor-tag {
+  margin-top: 0;
 }
 /*
  * 🔴 `CONSOLE-LOOK-06` §2 — THE CHANNEL RIDES THE LABEL'S OWN HUE.
@@ -7090,7 +7102,8 @@ input[type='checkbox']:disabled:checked {
  * ⚠ ADDENDUM A §A2 — the dismiss control is INSIDE the notice (its `onDismiss`), so this rule
  * has no button in it. A sibling control is what put the dismiss on the page ground.
  */
-.cg-refusal {
+.cg-refusal,
+.cg-channel-air-line {
   padding: 0 var(--r-space-3);
   flex: none;
 }
@@ -7329,4 +7342,27 @@ input[type='checkbox']:disabled:checked {
   .cg-channel-row {
     transition: none;
   }
+}
+
+/*
+ * 🔴 `UI-POLISH-01` G — THE OUTPUT DOT, before every channel name (`OutputDot`). ON AIR a filled disc
+ * in the air green; OFF a hollow ring in the muted ink — never red or amber, which are the strip's
+ * alarm marks, and a different SHAPE as well as a different colour. UNKNOWN renders no element.
+ */
+.cg-output-dot {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--r-output-dot);
+  height: var(--r-output-dot);
+  margin-inline-end: var(--r-output-dot-gap);
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.cg-output-dot[data-output-dot='on-air'] {
+  background: var(--r-onair);
+}
+.cg-output-dot[data-output-dot='off'] {
+  background: transparent;
+  border: var(--r-output-dot-ring) solid var(--r-text-muted);
 }

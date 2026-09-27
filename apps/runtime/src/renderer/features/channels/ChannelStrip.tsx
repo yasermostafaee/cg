@@ -1,6 +1,8 @@
 import { useLockCoverage } from '../../hooks/useLock.js';
 import { TabStrip, type TabSpec } from '../../ui/Tabs.js';
+import { NO_AIR } from './channelAir.js';
 import { signalLabel, type ChannelSignal } from './channelSignals.js';
+import { OutputDot } from './OutputDot.js';
 import { selectChannel } from './channelStore.js';
 import { useSelectedChannel } from './useSelectedChannel.js';
 
@@ -32,7 +34,7 @@ export function ChannelStrip({
    */
   signals?: ReadonlyMap<number, ChannelSignal>;
 } = {}): JSX.Element {
-  const { channels, selected, operable, names } = useSelectedChannel();
+  const { channels, selected, operable, names, air } = useSelectedChannel();
   const coverage = useLockCoverage();
   const locked = coverage.kind === 'partial' ? coverage.channels : [];
 
@@ -90,12 +92,27 @@ export function ChannelStrip({
     const signal = signals.get(channel);
     const mark =
       signal === undefined ? {} : { signal: { tone: signal, label: signalLabel(signal) } };
+    /*
+      🔴 `UI-POLISH-01` G — THE OUTPUT DOT, BEFORE THE NAME; the alarm mark stays AFTER it (the
+      `TabStrip` renders `signal` after the label), so both read at once. Nothing when unknown.
+    */
+    const dot = <OutputDot air={air.get(channel) ?? NO_AIR} />;
     return name === undefined
-      ? { id: String(channel), label: `CHANNEL ${String(channel)}${suffix}`, ...mark }
+      ? {
+          id: String(channel),
+          label: (
+            <>
+              {dot}
+              {`CHANNEL ${String(channel)}${suffix}`}
+            </>
+          ),
+          ...mark,
+        }
       : {
           id: String(channel),
           label: (
             <>
+              {dot}
               <bdi>{name}</bdi>
               {suffix}
             </>

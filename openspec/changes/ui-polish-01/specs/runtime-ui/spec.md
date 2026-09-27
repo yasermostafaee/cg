@@ -74,9 +74,10 @@ saturation and brightness than `onAir`, at AA contrast or better on the panel gr
 The console SHALL show the Playout's `output` for a channel before every name of it — the header's
 tabs, the channel rows of first-run and `Change channel…`, and Station setup's channel subtitle:
 `on-air` a small filled dot in the `onAir` green; `off` a small hollow neutral ring;
-`unknown`, a missing field, an unknown value, a failed read or an unreachable Playout NO dot. The
-dot's `title` and accessible name SHALL read `On air` / `Off air`, then the playlist state when
-there is one, and `Output unknown` when there is no dot. The playlist state SHALL NEVER change a
+`unknown`, a missing field, an unknown value, a failed read or an unreachable Playout NO dot — no
+element at all, so nothing can read as a grey ring. The dot's `title` and accessible name SHALL
+read `On air` / `Off air`, then the playlist state's tag when there is one; `Output unknown` is said
+by the PROGRAM head's tag. The playlist state SHALL NEVER change a
 colour, except `unlicensed`, which also raises the channel's AMBER strip mark and one
 channel-scoped line: `Unlicensed in the Playout — this channel is cleared every minute.` The dot
 SHALL never mean the console's own connection. The alarm mark SHALL stay after the name, the dot
