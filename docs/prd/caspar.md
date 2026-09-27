@@ -2801,8 +2801,47 @@ inputs are not listed at all, because a second producer on them blacks the Playo
 - WHEN a stream URL carries credentials THEN the console never shows the URL, and the AMCP log and
   the audit write `scheme://***@`.
 - WHEN a v1.3 `route` input is listed THEN it is shown and cannot be bound or seated
-  ("Not supported yet."), until `ROUTE-PLATES-01`.
+  ("Not supported yet."), until `ROUTE-PLATES-01`. — ✅ Lifted 2026-09-28 by [[C-045]]: a route
+  with a layer is bindable and is seated by contract v1.3's rules.
 - WHEN auth is off THEN the lists come from a test-only local provider behind the same interface,
   and that provider is not in the installer.
 
 **Filed alongside:** [[B-286]] (a backup server is sent the primary's paths).
+
+## [~] C-045 — Contract v1.3 — route plates from the holder channel ⟨priority: high⟩ — FILED 2026-09-28 by `ROUTE-PLATES-01` (v3) · openspec change `route-plates`
+
+**What.** Under contract v1.3 every exclusive input reaches CG Control as a D10 `route` to the
+Playout's holder channel (`route://H-L`). A plate bound to one is now seated, by the Playout's
+rules as their V13-STATE answer completed them (C1–C5): hidden and silent first, `LOADBG` then the
+bare `PLAY` 40–200 ms later, shown by `OPACITY` in one `MIXER <ch> COMMIT`; only on a channel the
+input names; never from a stale or unconfirmed `epoch`; never on a backup server; and nothing the
+contract forbids ever leaves the bridge. `PLAYOUT-SOURCES-01`'s `Not supported yet` gate is gone.
+The Playout keeps `CgControl.RouteInputs` off until we confirm in writing.
+
+**Why.** A cold route can put one black, silent frame on air, a preloaded one holds a stale frame,
+`BEGIN…COMMIT` is not same-frame on their core, mixer state belongs to the layer number, and a
+route to a holder number of another epoch connects without an error to whatever holds it now. Each
+rule closes one of those, and the seam's guard keeps a stray command off the Playout's channels.
+
+**Acceptance.**
+
+- WHEN a route plate is seated (take, look switch, swap, restore) THEN its layer is hidden and
+  muted in one committed `MIXER <ch> COMMIT` before anything else; `LOADBG <ch>-<L> "route://H-L"`
+  follows; the bare `PLAY` goes at least 40 ms and at most 200 ms after it (else one fresh
+  `LOADBG`); and the reveal is `OPACITY 1` in one `COMMIT`, one or two ticks later. Never
+  `BEGIN…COMMIT`, never a transition.
+- WHEN a look holds a route plate THEN it stays playing at `OPACITY 0`, muted, never `PAUSE`d;
+  showing it again is the reveal alone, and is refused while its input is not available.
+- WHEN the row's channel is not in the input's `compatibleChannels` THEN the action is refused
+  before any AMCP: `Bed 59 · Plate 1: “ورودی ۴” can't be shown on CH 2.`
+- WHEN the AMCP connection comes back, the epoch changes, or a route plate is to be restored THEN
+  D10 is re-read within 1.5 s, and no route of another or unknown epoch is sent: the plate stays
+  empty and its row says `Bed 59 · Plate 1: waiting for the Playout's input list.`
+- WHEN a line targets a channel this station does not declare, or is a command contract v1.3
+  forbids (C5) THEN the send seam refuses it and nothing is sent.
+- WHEN a backup server is declared THEN no route line reaches it — mirrored, journaled or after a
+  failover — the row says `Backup: live boxes not mirrored.`, and every other plate mirrors as
+  before.
+- WHEN D10 carries a 64-bit `epoch` THEN it is kept digit for digit.
+
+**Filed alongside:** [[B-287]] (`SendOptions.target` is read by nothing).

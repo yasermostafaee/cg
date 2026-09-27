@@ -12810,3 +12810,15 @@ to a plate and so makes the case reachable. **Not fixed there**: a per-server pa
 Playout to say where each install keeps an item, which the contract does not carry yet. Anchors:
 `CasparRuntime`'s `#send` → `RedundancyAdapter.send`;
 `openspec/changes/archive/2026-09-27-playout-sources/design.md` §0.8.
+
+## [ ] B-287 — `SendOptions.target` is documented as an override and read by nothing ⟨priority: low⟩ — FILED 2026-09-28 by `ROUTE-PLATES-01` §0.5 · not fixed
+
+`SendOptions.target` (`packages/caspar-client/src/redundancy/types.ts`) says it overrides where a
+line goes — `'primary'`, `'backup'` or `'both'` — and `RedundancyAdapter.send` never reads it: the
+strategy alone decides (`redundancy-adapter.ts`, `send`), so a caller that passes `target:
+'primary'` under `mirror-sync` still reaches server B. Nothing in the bridge passes it today, which
+is why nothing is broken; the hazard is the next caller who trusts the type. Found while
+establishing `ROUTE-PLATES-01` §0.5 (what reaches server B for a plate), which needed a line that
+must NEVER reach B and so could not use it: C4's route lines go by the new `mirror: false` instead,
+which IS read, bypasses the journal as well, and is tested under all three strategies. The fix is
+to honour `target` or delete it; which is a decision, not a rider.

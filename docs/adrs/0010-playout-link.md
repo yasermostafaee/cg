@@ -231,6 +231,34 @@ address; `iss` is a constant check, never an install identity** (`DESKTOP-APPS-0
 Playout 2.8.54 every install signs with the same `iss`, `urn:apasai:playout`, so two installs are
 told apart only by the keys each publishes at its own address — never by `iss`.
 
+**Amendment — 2026-09-28 (`ROUTE-PLATES-01`): contract v1.3, accepted with C1–C5, and the ONE door
+each obligation is kept at.** The draft is `PLAYOUT-CG-RESPONSE-HOLDER-v1.md` §3; their V13-STATE
+answers complete it and win where they say more. **Rule 1** (a route only on a channel its
+`compatibleChannels` names — none named is none — and one server's D10 never on another server):
+`sourceShowableOn` (`@cg/shared-ipc`), asked by the picker and by every take, switch and swap plan,
+which refuses before any AMCP (`source-not-showable`). **Rule 2 / C1** (silent first: `VOLUME 0`
+committed before the `PLAY`; no take or connect sweep raises it; a raise ramps over 25 frames; PANIC
+is an immediate 0): the seat step's hide and `plateVolumeFrames`, landed by `PLAYOUT-SOURCES-01` and
+verified for routes. **Rule 3 / C5** (no command to a holder or guard channel; no `CLEAR ALL`,
+`CHANNEL_GRID`, `CLEAR <ch>`, `MIXER <ch> CLEAR`, `SWAP`, `SET MODE` or consumer `ADD`/`REMOVE`; a
+`CLEAR <ch>-<L>` only on our own layers, 50–99; no `MIXER <ch>-<L> CLEAR` under a seated plate; no
+`route://H` without a layer): the one guard at the AMCP send seam (`amcp-guard.ts`, asked by
+`#send`), and a layerless route is also `unusable` in the catalogue. **Rule 4 / C2 as corrected**
+(hide and mute, one `MIXER <ch> COMMIT`; `LOADBG` → at least 40 ms → the bare `PLAY`, at most 200 ms
+in all, or a fresh `LOADBG`; the reveal one or two ticks later in one `COMMIT`; a cut, never inside
+`BEGIN…COMMIT`; a held route stays playing at `OPACITY 0`, never `PAUSE`): `#startRouteProducer`
+inside the seat step, the reveal's wait in the applier, and the release policy's hold. **Rule 5 /
+C3** (never a route from a stale or unknown epoch — a bounded 1.5 s D10 re-read after a reconnect,
+on an epoch change and before a restore; the 64-bit epoch read digit for digit): the epoch
+confirmation at every door that seats a route, the waiting line on the row, and the send seam's own
+refusal of a route line whose epoch is not the current, confirmed one; `parsePlayoutJson` keeps the
+digits. **C4** (a route never reaches a backup — not mirrored, not journaled, and not sent to a backup
+promoted by a failover, whose channel `H` is not the Playout's holder): `mirror: false` at the seam
+and the primary-is-`A` condition on a confirmed epoch; the row says `Backup: live boxes not
+mirrored.` **Rule 6** (live sources only as D10 gives them) is `PLAYOUT-SOURCES-01` §1.F, and §3.3's
+credentialed OSC addresses are never logged or shown (§1.E). `CgControl.RouteInputs` stays off on
+their side until we confirm in writing.
+
 ## Consequences
 
 - **No hop is added to the path to air**, and no second copy of the CG contract has to exist in
