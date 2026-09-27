@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SourceCatalog } from '@cg/shared-ipc';
+import { ROUTE_NO_LAYER_REASON, type SourceCatalog } from '@cg/shared-ipc';
 import {
   __resetSourcesForTest,
   initSources,
@@ -52,12 +52,21 @@ const PLAYOUT: SourceCatalog = {
       producer: { kind: 'stream', url: 'rtsp://***@10.0.0.21/live' },
     },
     {
+      // `ROUTE-PLATES-01` — a Playout route: an ordinary input now the gate is gone.
       id: 'in-input3',
       name: 'ورودی ۳',
       origin: 'input',
       producer: { kind: 'route', channel: 9, layer: 12 },
+      channels: [1, 2],
+    },
+    {
+      // v1.3 rule 3 — a route with no layer: listed, and unusable.
+      id: 'in-nolayer',
+      name: 'No layer',
+      origin: 'input',
+      producer: { kind: 'route', channel: 9 },
       status: 'unusable',
-      reason: 'Not supported yet.',
+      reason: ROUTE_NO_LAYER_REASON,
     },
     {
       id: 'in-gone',
@@ -97,10 +106,12 @@ describe('§2.C — the Playout’s inputs, read-only', () => {
       'Studio 1',
       'دوربین خبر',
       'ورودی ۳',
+      'No layer',
     ]);
     expect(rows.map((r) => r.querySelector('[data-source-kind]')?.textContent)).toEqual([
       'NDI',
       'Stream',
+      'SDI',
       'SDI',
     ]);
     expect(rows[0]?.textContent).toContain('1080i5000');
@@ -122,7 +133,10 @@ describe('§2.C — the Playout’s inputs, read-only', () => {
     const section = await renderSources(PLAYOUT);
     const route = section.querySelector('[data-source-unusable]');
     expect(route?.textContent).toContain('Unusable');
-    expect(route?.querySelector('[title]')?.getAttribute('title')).toBe('Not supported yet.');
+    expect(route?.textContent).toContain('No layer');
+    expect(route?.querySelector('[title]')?.getAttribute('title')).toBe(ROUTE_NO_LAYER_REASON);
+    // `ROUTE-PLATES-01` — and a Playout route WITH a layer is not unusable any more.
+    expect(section.querySelectorAll('[data-source-unusable]')).toHaveLength(1);
     // Control: a usable input carries no such mark.
     const ndi = section.querySelector('[data-source-input]');
     expect(ndi?.textContent).not.toContain('Unusable');

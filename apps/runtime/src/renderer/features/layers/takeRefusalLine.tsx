@@ -1,4 +1,9 @@
-import { unseatableWords, type SourceDefinition, type TemplateInfo } from '@cg/shared-ipc';
+import {
+  notShowableWords,
+  unseatableWords,
+  type SourceDefinition,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import type { TakeRefusal } from '@cg/shared-schema';
 import { amcpCommandFacts, amcpRefusalWords } from '../../ui/amcpRefusal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
@@ -43,10 +48,28 @@ export interface TakeRefusalLine {
     readonly name: string;
     readonly rest: string;
   };
+  /**
+   * `ROUTE-PLATES-01` rule 5 — a line that names the PLATE and no source:
+   * `Bed 59 · Plate 1: waiting for the Playout's input list.`
+   */
+  readonly plate?: string | null;
 }
+
+/**
+ * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — the row's other one-line state fact: the backup server
+ * carries this row's graphic without its Playout route plates (`StackItemState.backupUnmirrored`).
+ * Said on the row and in its Inspector, in the channel's own view; a refused take's line outranks it.
+ */
+export const BACKUP_UNMIRRORED_LINE = 'Backup: live boxes not mirrored.';
 
 /** The codes a take refused before any AMCP because of what became of a bound entry (§1.C). */
 const UNSEATABLE_CODES = new Set(['source-unavailable', 'source-unusable']);
+
+/** `ROUTE-PLATES-01` rule 1 — the row's channel is not one the entry may be shown on. */
+const NOT_SHOWABLE_CODE = 'source-not-showable';
+
+/** `ROUTE-PLATES-01` rule 5 — a Playout route whose epoch could not be confirmed stays empty. */
+const ROUTE_WAITING_CODE = 'route-epoch-waiting';
 
 export function takeRefusalLine(
   rowName: string,
@@ -56,8 +79,34 @@ export function takeRefusalLine(
     readonly plateLabel?: string | undefined;
     /** The catalogue entry the plate was bound to, as it stands now. */
     readonly entry?: SourceDefinition | undefined;
+    /** `ROUTE-PLATES-01` — the row's channel, for a source that may not be shown on it. */
+    readonly channel?: number | undefined;
   } = {},
 ): TakeRefusalLine {
+  if (refusal.code === NOT_SHOWABLE_CODE && context.channel !== undefined) {
+    // `“ورودی ۴” can't be shown on CH 2.` — the bridge's own clause (`notShowableWords`).
+    const words = notShowableWords(
+      refusal.sourceName ?? context.entry?.name ?? 'the source',
+      context.channel,
+    );
+    const plate = context.plateLabel ?? null;
+    const who = plate === null ? rowName : `${rowName} · ${plate}`;
+    const clause = `“${words.name}”${words.rest}`;
+    return {
+      row: rowName,
+      source: null,
+      input: null,
+      clause,
+      text: `${who}: ${clause}`,
+      unseatable: { plate, name: words.name, rest: words.rest },
+    };
+  }
+  if (refusal.code === ROUTE_WAITING_CODE) {
+    const plate = context.plateLabel ?? null;
+    const who = plate === null ? rowName : `${rowName} · ${plate}`;
+    const clause = "waiting for the Playout's input list.";
+    return { row: rowName, source: null, input: null, clause, text: `${who}: ${clause}`, plate };
+  }
   if (UNSEATABLE_CODES.has(refusal.code)) {
     /*
       THE WORDS ARE THE BRIDGE'S OWN CLAUSE (`unseatableWords`, `@cg/shared-ipc`), from the refusal
@@ -144,6 +193,10 @@ export function TakeRefusalText({ line }: { line: TakeRefusalLine }): JSX.Elemen
   return (
     <>
       <bdi>{line.row}</bdi>
+      {line.source === null &&
+        line.plate !== undefined &&
+        line.plate !== null &&
+        ` · ${line.plate}`}
       {line.source !== null && (
         <>
           {' · '}

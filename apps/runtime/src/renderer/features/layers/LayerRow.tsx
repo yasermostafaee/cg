@@ -29,7 +29,12 @@ import { lookSwitchBanner, lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
-import { plateLabelOf, takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
+import {
+  BACKUP_UNMIRRORED_LINE,
+  plateLabelOf,
+  takeRefusalLine,
+  TakeRefusalText,
+} from './takeRefusalLine.js';
 import { currentSourceCatalog } from '../sources/sourceStore.js';
 import {
   ROW_GEOMETRY,
@@ -408,8 +413,11 @@ export function LayerRow({
           // `PLAYOUT-SOURCES-01` §1.C — `Plate N`, and the entry as it stands now.
           plateLabel: plateLabelOf(template, item.takeRefusal.plateId),
           entry: currentSourceCatalog().sources.find((s) => s.id === item.takeRefusal?.sourceId),
+          channel: slot.channel,
         })
       : null;
+  // `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes: one line, here.
+  const backupLine = item?.backupUnmirrored === true ? BACKUP_UNMIRRORED_LINE : null;
 
   const templateLabel =
     template !== null
@@ -1055,6 +1063,15 @@ export function LayerRow({
             dir="ltr"
           >
             <TakeRefusalText line={refusalLine} />
+          </span>
+        ) : backupLine !== null ? (
+          <span
+            style={styles.secondary}
+            data-backup-unmirrored=""
+            title={templateLabel === null ? backupLine : `${backupLine} — ${templateLabel}`}
+            dir="ltr"
+          >
+            {backupLine}
           </span>
         ) : templateLabel !== null ? (
           <span

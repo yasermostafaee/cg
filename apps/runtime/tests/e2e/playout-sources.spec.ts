@@ -119,7 +119,7 @@ test('the picker hangs from its field, over the dialog — not a second modal �
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
-test('Inputs: the Playout’s inputs by name, in its order; the gated routes shown and refused; no address anywhere', async ({
+test('Inputs: the Playout’s inputs by name, in its order; a route is an ordinary input now; no address anywhere', async ({
   app,
 }) => {
   const page = app.page;
@@ -140,17 +140,15 @@ test('Inputs: the Playout’s inputs by name, in its order; the gated routes sho
   // Each row is the icon and the NAME only — no kind word, no address.
   await expect(panel.locator('[data-picker-input="in-studio-1"]')).toHaveText('Studio 1');
 
-  // §1.H — the routes are SHOWN, disabled, saying why on hover…
+  // `ROUTE-PLATES-01` §1.G — the gate is gone: a route is enabled, by its name alone, with no tag
+  // (a template's defaults name no channel, so rule 1 is asked where a row takes it)…
   const route = panel.locator('[data-picker-input="in-input-3"]');
-  await expect(route).toBeDisabled();
-  await expect(route).toHaveAttribute('title', 'Not supported yet.');
-  await expect(route).toContainText('Not supported yet');
-  // …and a press does not bind one.
-  await route.click({ force: true });
-  await expect(panel).toBeVisible();
-  await expect(field).toHaveAttribute('data-picker-value', '');
-  // Control: a camera is enabled.
+  await expect(route).toBeEnabled();
+  await expect(route).toHaveText('ورودی ۳');
+  await expect(route.locator('.cg-source-tag')).toHaveCount(0);
+  // …and control: a camera is enabled, the same way.
   await expect(panel.locator('[data-picker-input="in-studio-1"]')).toBeEnabled();
+  await expect(field).toHaveAttribute('data-picker-value', '');
 
   // 🔴 §1.E — no stream URL, no credentials, no NDI name, no path: anywhere on the page.
   const html = await page.content();

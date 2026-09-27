@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConsoleMediaItem, SourceCatalog } from '@cg/shared-ipc';
+import { ROUTE_NO_LAYER_REASON, type ConsoleMediaItem, type SourceCatalog } from '@cg/shared-ipc';
 import { SourcePicker, type SourceChoice } from '../src/renderer/features/sources/SourcePicker.js';
 import {
   __resetSourcesForTest,
@@ -38,13 +38,21 @@ const CATALOG: SourceCatalog = {
       producer: { kind: 'stream', url: 'rtsp://***@10.0.0.21/live' },
     },
     {
+      // `ROUTE-PLATES-01` — a Playout route (the gate is gone): bindable, on channels 1 and 2.
       id: 'in-input3',
       name: 'ورودی ۳',
       origin: 'input',
       producer: { kind: 'route', channel: 9, layer: 12 },
-      status: 'unusable',
-      reason: 'Not supported yet.',
       channels: [1, 2],
+    },
+    {
+      // A route with no layer (v1.3 rule 3): listed, unusable, never bindable.
+      id: 'in-nolayer',
+      name: 'No layer',
+      origin: 'input',
+      producer: { kind: 'route', channel: 9 },
+      status: 'unusable',
+      reason: ROUTE_NO_LAYER_REASON,
     },
     {
       id: 'in-ch1only',
@@ -220,10 +228,17 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
     const panel = await openPicker(await render({}));
     await settle();
     const names = [...panel.querySelectorAll('[data-picker-input] bdi')].map((b) => b.textContent);
-    expect(names).toEqual(['Studio 1', 'دوربین خبر', 'ورودی ۳', 'Channel one only', 'Studio 7']);
+    expect(names).toEqual([
+      'Studio 1',
+      'دوربین خبر',
+      'ورودی ۳',
+      'No layer',
+      'Channel one only',
+      'Studio 7',
+    ]);
     expect(panel.textContent).not.toMatch(/NDI|Stream|rtsp|STUDIO-PC/);
     const tabs = [...panel.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
-    expect(tabs).toEqual(['Inputs 5', `Media ${String(LIBRARY.length)}`]);
+    expect(tabs).toEqual(['Inputs 6', `Media ${String(LIBRARY.length)}`]);
   });
 
   it('opens on the tab of the current binding — Media for a media item, Inputs otherwise', async () => {
@@ -239,18 +254,37 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
 });
 
 describe('what cannot be chosen is SHOWN, disabled, with the reason — never hidden', () => {
-  it('an unusable input (the route gate) is disabled, says why, and cannot be picked', async () => {
+  it('an unusable input (a route with no layer) is disabled, says why, and cannot be picked', async () => {
     const onChange = vi.fn();
     const panel = await openPicker(await render({ onChange }));
-    const route = panel.querySelector<HTMLElement>('[data-picker-input="in-input3"]');
+    const route = panel.querySelector<HTMLElement>('[data-picker-input="in-nolayer"]');
     expect(route?.getAttribute('aria-disabled')).toBe('true');
-    expect(route?.getAttribute('title')).toBe('Not supported yet.');
-    expect(route?.textContent).toContain('Not supported yet');
+    expect(route?.getAttribute('title')).toBe(ROUTE_NO_LAYER_REASON);
     await act(async () => {
       route?.click();
       await Promise.resolve();
     });
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('🔴 `ROUTE-PLATES-01` — the gate is gone: a Playout route on a channel it names is enabled and carries no tag', async () => {
+    const onChange = vi.fn();
+    const panel = await openPicker(await render({ onChange, channel: 2 }));
+    const route = panel.querySelector<HTMLElement>('[data-picker-input="in-input3"]');
+    expect(route?.getAttribute('aria-disabled')).toBe('false');
+    expect(route?.querySelector('.cg-source-tag')).toBeNull();
+    await act(async () => {
+      route?.click();
+      await Promise.resolve();
+    });
+    expect(onChange).toHaveBeenCalledWith('in-input3');
+  });
+
+  it('🔴 v1.3 rule 1 — a Playout route on a channel it does NOT name is disabled with `Not available on CH n`', async () => {
+    const panel = await openPicker(await render({ channel: 3 }));
+    const route = panel.querySelector<HTMLElement>('[data-picker-input="in-input3"]');
+    expect(route?.getAttribute('aria-disabled')).toBe('true');
+    expect(route?.getAttribute('title')).toBe('Not available on CH 3');
   });
 
   it('🔴 v1.3 rule 1 — an input not on THIS row’s channel is disabled with `Not available on CH n`', async () => {

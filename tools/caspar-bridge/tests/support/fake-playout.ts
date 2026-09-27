@@ -168,6 +168,30 @@ export const FAKE_INPUTS: readonly FakeInput[] = [
   },
 ];
 
+/**
+ * `ROUTE-PLATES-01` §1.H — the epoch after `epoch`, as a core start moves it (it never repeats): a
+ * number counts up; `epoch-N` becomes `epoch-(N+1)`; none becomes 1.
+ */
+export function nextEpoch(epoch: number | string | null): number | string {
+  if (epoch === null) return 1;
+  if (typeof epoch === 'number') return epoch + 1;
+  const tail = /^(.*?)(\d+)$/.exec(epoch);
+  return tail === null ? `${epoch}-2` : `${tail[1] ?? ''}${String(Number(tail[2]) + 1)}`;
+}
+
+/**
+ * `ROUTE-PLATES-01` §1.H — every held input's holder layer moved (+100), as a restart that added a
+ * programme channel renumbers them (their design §2.2). A `route://H-L` from before now names a
+ * layer nothing holds.
+ */
+export function renumberHolders(inputs: readonly FakeInput[]): FakeInput[] {
+  return inputs.map((input) => {
+    const producer = input.producer as { kind?: unknown; layer?: unknown };
+    if (producer.kind !== 'route' || typeof producer.layer !== 'number') return input;
+    return { ...input, producer: { ...input.producer, layer: producer.layer + 100 } };
+  });
+}
+
 /** One D11 item as the Playout sends it (§2.1–§2.2). `clip` is ABSOLUTE, with `/`. */
 export interface FakeMediaItem {
   readonly id: string;
@@ -982,6 +1006,18 @@ export interface FakePlayout {
   restoreInput(id: string): void;
   /** v1.3's top-level `epoch` (it changes with every core start); `null` sends none. */
   setEpoch(epoch: number | string | null): void;
+  /**
+   * `ROUTE-PLATES-01` — v1.3's epoch as the Playout WRITES it: a 64-bit JSON integer, its digits
+   * verbatim in the body. A JS number cannot carry one past 2^53, so this is the only way the fake
+   * can send what a real core's epoch looks like. `setEpoch` replaces it.
+   */
+  setEpochLiteral(digits: string): void;
+  /**
+   * `ROUTE-PLATES-01` §1.H — a core restart: a new `epoch`, every held input's holder layer
+   * renumbered ({@link renumberHolders}), and — through `dropAmcp`, wired by the test to the AMCP
+   * mock's `closeAllAmcpConnections` — the AMCP connection dropped. Answers the new epoch.
+   */
+  simulateCoreRestart(options?: { readonly dropAmcp?: () => void }): number | string;
   /** One media item as the library holds it now, or `undefined`. */
   mediaItem(id: string): FakeMediaItem | undefined;
   /** Take one media item out of the library ("not playable now"); answers whether it was there. */
@@ -1082,7 +1118,17 @@ function sendJson(
   body: unknown,
   extraHeaders: Readonly<Record<string, string>> = {},
 ): void {
-  const payload = Buffer.from(JSON.stringify(body), 'utf8');
+  sendJsonText(res, status, JSON.stringify(body), extraHeaders);
+}
+
+/** A JSON body already written as text — for a value `JSON.stringify` cannot spell (a 64-bit int). */
+function sendJsonText(
+  res: http.ServerResponse,
+  status: number,
+  text: string,
+  extraHeaders: Readonly<Record<string, string>> = {},
+): void {
+  const payload = Buffer.from(text, 'utf8');
   res.writeHead(status, {
     ...CORS_HEADERS,
     'Content-Type': 'application/json; charset=utf-8',
@@ -1116,6 +1162,8 @@ class FakePlayoutServer implements FakePlayout {
   #inputs: readonly FakeInput[] = FAKE_INPUTS;
   #inputsRevision = 0;
   #epoch: number | string | null = 'epoch-1';
+  /** `ROUTE-PLATES-01` — an epoch sent as raw digits ({@link FakePlayout.setEpochLiteral}). */
+  #epochLiteral: string | null = null;
   readonly #library = new Map<string, FakeMediaItem>(fakeMediaLibrary().map((m) => [m.id, m]));
   readonly #removedMedia = new Map<string, FakeMediaItem>();
   readonly #mediaQueries: string[] = [];
@@ -1318,7 +1366,26 @@ class FakePlayoutServer implements FakePlayout {
 
   setEpoch(epoch: number | string | null): void {
     this.#epoch = epoch;
+    this.#epochLiteral = null;
     this.#inputsRevision += 1;
+  }
+
+  setEpochLiteral(digits: string): void {
+    if (!/^\d+$/.test(digits)) throw new Error(`fake Playout: not an integer literal: ${digits}`);
+    this.#epochLiteral = digits;
+    this.#inputsRevision += 1;
+  }
+
+  simulateCoreRestart(options: { readonly dropAmcp?: () => void } = {}): number | string {
+    // A 64-bit literal counts up as the integer it is — never through a JS number.
+    const literal = this.#epochLiteral;
+    const next = literal !== null ? String(BigInt(literal) + 1n) : nextEpoch(this.#epoch);
+    if (literal !== null) this.#epochLiteral = String(next);
+    else this.#epoch = next;
+    this.#inputs = renumberHolders(this.#inputs);
+    this.#inputsRevision += 1;
+    options.dropAmcp?.();
+    return next;
   }
 
   mediaItem(id: string): FakeMediaItem | undefined {
@@ -1608,6 +1675,12 @@ class FakePlayoutServer implements FakePlayout {
     if (req.headers['if-none-match'] === etag) {
       res.writeHead(304, { ...CORS_HEADERS, ETag: etag });
       res.end();
+      return;
+    }
+    if (this.#epochLiteral !== null) {
+      // The digits go into the TEXT verbatim — the one form a 64-bit integer survives in.
+      const text = `{"epoch":${this.#epochLiteral},"inputs":${JSON.stringify(this.#inputs)}}`;
+      sendJsonText(res, 200, text, { ETag: etag });
       return;
     }
     sendJson(

@@ -11,8 +11,8 @@ import {
 } from 'react';
 import { Cable, Check, Film } from 'lucide-react';
 import {
-  ROUTE_NOT_SUPPORTED_YET,
   sourceBindable,
+  sourceShowableOn,
   type ConsoleMediaItem,
   type SourceDefinition,
 } from '@cg/shared-ipc';
@@ -344,8 +344,8 @@ function InputsTab({
   const shown =
     needle === '' ? inputs : inputs.filter((s) => s.name.toLowerCase().includes(needle));
   const rows: VirtualRow[] = shown.map((source) => {
-    const offChannel =
-      channel !== undefined && source.channels !== undefined && !source.channels.includes(channel);
+    // `ROUTE-PLATES-01` — v1.3 rule 1, asked of the one predicate the bridge's refusal asks.
+    const offChannel = channel !== undefined && !sourceShowableOn(source, channel);
     const bindable = sourceBindable(source);
     const selected = source.id === value;
     return {
@@ -363,9 +363,6 @@ function InputsTab({
         <span className="cg-picker-row">
           <Icon icon={Cable} size={14} />
           <bdi className="cg-picker-row__name">{source.name}</bdi>
-          {source.reason === ROUTE_NOT_SUPPORTED_YET && (
-            <Tag className="cg-source-tag">Not supported yet</Tag>
-          )}
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}

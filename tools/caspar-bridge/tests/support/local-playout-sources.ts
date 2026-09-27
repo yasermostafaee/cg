@@ -3,6 +3,8 @@ import {
   FAKE_INPUTS,
   answerFakeMediaQuery,
   fakeMediaLibrary,
+  nextEpoch,
+  renumberHolders,
   type FakeInput,
   type FakeMediaItem,
 } from './fake-playout.js';
@@ -108,6 +110,36 @@ export class LocalPlayoutSources implements PlayoutSourcesProvider {
   setEpoch(epoch: number | string | null): void {
     this.#epoch = epoch;
     this.#revision += 1;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` — an input's signal comes or goes, as the Playout reports it: `available` and
+   * its `reason`, on the entry it lists now (the list keeps its order).
+   */
+  setAvailable(id: string, available: boolean, reason?: string): void {
+    this.#inputs = this.#inputs.map((i) => {
+      if (i.id !== id) return i;
+      const next: { -readonly [K in keyof FakeInput]: FakeInput[K] } = { ...i, available };
+      delete next.reason;
+      if (reason !== undefined) next.reason = reason;
+      return next;
+    });
+    this.#revision += 1;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` §1.H — **a core restart, as the Playout lives it**: a new `epoch` (it never
+   * repeats), every held input's holder LAYER renumbered, and — through `dropAmcp`, which the test
+   * wires to the AMCP mock's `closeAllAmcpConnections` — the AMCP connection dropped. Answers the new
+   * epoch.
+   */
+  simulateCoreRestart(options: { readonly dropAmcp?: () => void } = {}): number | string {
+    const next = nextEpoch(this.#epoch);
+    this.#epoch = next;
+    this.#inputs = renumberHolders(this.#inputs);
+    this.#revision += 1;
+    options.dropAmcp?.();
+    return next;
   }
 
   mediaItem(id: string): FakeMediaItem | undefined {

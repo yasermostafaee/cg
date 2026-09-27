@@ -1747,6 +1747,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     playoutSources.onCatalogChanged((catalog) => runtime.setResolvedSourceCatalog(catalog));
     // §1.C — the one retry's read, the only Playout read a verb may make (on its failure path).
     runtime.setMediaFreshener((sourceId, played) => playoutSources.freshClipFor(sourceId, played));
+    // `ROUTE-PLATES-01` rule 5 — the bounded D10 re-read a Playout route waits on (1.5 s).
+    runtime.setInputsConfirmer((timeoutMs) => playoutSources.confirmInputs(timeoutMs));
     playoutSources.start();
     // A local provider can answer before anybody signs in; the Playout's first read is at sign-in.
     if (options.playoutSources !== undefined) void playoutSources.refresh(0);

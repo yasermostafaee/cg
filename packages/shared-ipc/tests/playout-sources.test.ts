@@ -4,16 +4,20 @@ import {
   INPUT_GONE_REASON,
   MEDIA_GONE_REASON,
   OTHER_SERVER_REASON,
-  ROUTE_NOT_SUPPORTED_YET,
   ROUTE_NO_LAYER_REASON,
   buildPlayoutSourceCatalog,
+  canonicalPlayoutEpoch,
   foldPlayoutInputsRead,
+  isPlayoutRoute,
+  notShowableWords,
+  parsePlayoutJson,
   parsePlayoutInputs,
   parsePlayoutMediaPage,
   redactCatalogForConsole,
   redactUrlCredentials,
   sourceBindable,
   sourceSeatable,
+  sourceShowableOn,
   unseatableClause,
   unseatableWords,
   type BoundMediaItem,
@@ -138,7 +142,13 @@ describe('buildPlayoutSourceCatalog (§1.B)', () => {
     expect(sourceSeatable(catalog.sources[0]!)).toBe(true);
   });
 
-  it('gates every route input, and a route with no layer is unusable (v1.3 rule 3)', () => {
+  /*
+    `ROUTE-PLATES-01` §1.G — SUPERSEDED: this case pinned `PLAYOUT-SOURCES-01`'s gate (every `route`
+    input `unusable`, "Not supported yet."). The gate is gone: a route WITH a layer is an ordinary
+    bindable input, seated at the bridge by contract v1.3's rules; its availability is the Playout's
+    own flag, and a route with no layer stays unusable (rule 3).
+  */
+  it('🔴 a route with a layer is bindable (the gate is gone); an unavailable one keeps its reason; one with no layer is unusable (v1.3 rule 3)', () => {
     const noLayer: PlayoutInput = {
       ...input3,
       id: 'li-nolayer',
@@ -147,17 +157,17 @@ describe('buildPlayoutSourceCatalog (§1.B)', () => {
     };
     const [three, four, bare] = catalogOf([input3, input4, noLayer]).sources;
     expect(three).toMatchObject({
-      status: 'unusable',
-      reason: ROUTE_NOT_SUPPORTED_YET,
+      origin: 'input',
+      producer: { kind: 'route', channel: 9, layer: 12 },
       channels: [1, 2],
     });
-    expect(four).toMatchObject({
-      status: 'unusable',
-      reason: ROUTE_NOT_SUPPORTED_YET,
-      channels: [1],
-    });
+    expect(three?.status).toBeUndefined();
+    expect(sourceBindable(three!)).toBe(true);
+    expect(sourceSeatable(three!)).toBe(true);
+    expect(four).toMatchObject({ status: 'unavailable', reason: 'no signal', channels: [1] });
+    expect(sourceSeatable(four!)).toBe(false);
     expect(bare).toMatchObject({ status: 'unusable', reason: ROUTE_NO_LAYER_REASON });
-    expect(sourceBindable(three!)).toBe(false);
+    expect(sourceBindable(bare!)).toBe(false);
   });
 
   it('an unusable stream scheme is listed, with the validator reason, and never bound', () => {
@@ -313,7 +323,74 @@ describe('unseatableWords (§1.C) — one spelling for the bridge and the consol
   });
 
   it('control: an unusable entry says it cannot be played, with its reason', () => {
-    const route = { name: 'ورودی ۳', status: 'unusable', reason: ROUTE_NOT_SUPPORTED_YET } as const;
-    expect(unseatableClause(route)).toBe(`“ورودی ۳” cannot be played: ${ROUTE_NOT_SUPPORTED_YET}`);
+    const route = { name: 'No layer', status: 'unusable', reason: ROUTE_NO_LAYER_REASON } as const;
+    expect(unseatableClause(route)).toBe(`“No layer” cannot be played: ${ROUTE_NO_LAYER_REASON}`);
+  });
+});
+
+describe('`ROUTE-PLATES-01` — the epoch, the route predicate, and rule 1', () => {
+  const EPOCH = '638954123456789013';
+
+  it('🔴 a 64-bit epoch survives the parse digit for digit — and plain `JSON.parse` does not (the control)', () => {
+    const text = `{"epoch":${EPOCH},"inputs":[]}`;
+    // The instrument is live: the loss is real on this runtime.
+    expect(String((JSON.parse(text) as { epoch: number }).epoch)).not.toBe(EPOCH);
+    expect((parsePlayoutJson(text) as { epoch: unknown }).epoch).toBe(EPOCH);
+    expect(parsePlayoutInputs(parsePlayoutJson(text))?.epoch).toBe(EPOCH);
+  });
+
+  it('🔴 two consecutive epochs past 2^53 stay DIFFERENT through the parse', () => {
+    const next = '638954123456789014';
+    const a = parsePlayoutJson(`{"epoch":${EPOCH},"inputs":[]}`) as { epoch: unknown };
+    const b = parsePlayoutJson(`{"epoch":${next},"inputs":[]}`) as { epoch: unknown };
+    expect(a.epoch).not.toBe(b.epoch);
+    // …which is exactly what `JSON.parse` could not tell apart.
+    expect(JSON.parse(`{"e":${EPOCH}}`)).toEqual(JSON.parse(`{"e":${next}}`));
+  });
+
+  it('control: everything else in the body parses as JSON always did', () => {
+    const body = parsePlayoutJson(
+      '{"epoch":7,"inputs":[{"id":"li-a","name":"A","aspect":1.7778}]}',
+    );
+    expect(body).toEqual({ epoch: '7', inputs: [{ id: 'li-a', name: 'A', aspect: 1.7778 }] });
+  });
+
+  it('the one spelling: a number is its digits, a string itself trimmed, and empty is none', () => {
+    expect(canonicalPlayoutEpoch(42)).toBe('42');
+    expect(canonicalPlayoutEpoch(' epoch-2 ')).toBe('epoch-2');
+    expect(canonicalPlayoutEpoch(EPOCH)).toBe(EPOCH);
+    expect(canonicalPlayoutEpoch('  ')).toBeUndefined();
+    expect(canonicalPlayoutEpoch(undefined)).toBeUndefined();
+  });
+
+  it('🔴 a PLAYOUT route is an input whose producer is a route; a hand-made route is not', () => {
+    expect(isPlayoutRoute({ origin: 'input', producer: { kind: 'route' } })).toBe(true);
+    expect(isPlayoutRoute({ producer: { kind: 'route' } })).toBe(false);
+    expect(isPlayoutRoute({ origin: 'input', producer: { kind: 'ndi' } })).toBe(false);
+  });
+
+  it('🔴 rule 1: a Playout route only on a channel it names — none named is none; every other entry as before', () => {
+    const [three] = catalogOf([input3]).sources;
+    expect(sourceShowableOn(three!, 2)).toBe(true);
+    expect(sourceShowableOn(three!, 3)).toBe(false);
+    const unnamed = structuredClone(three!);
+    delete unnamed.channels;
+    expect(sourceShowableOn(unnamed, 2)).toBe(false);
+    // Control: a hand-made route and a D10 stream with no channels named go anywhere, as before.
+    const handMade = {
+      id: 'src-pip',
+      name: 'PiP',
+      producer: { kind: 'route' as const, channel: 2 },
+    };
+    expect(sourceShowableOn(handMade, 1)).toBe(true);
+    const [cam] = catalogOf([camera]).sources;
+    expect(sourceShowableOn(cam!, 2)).toBe(true);
+  });
+
+  it('the clause names the entry apart from the words, for the console to isolate', () => {
+    expect(notShowableWords('ورودی ۴', 2)).toEqual({
+      name: 'ورودی ۴',
+      rest: " can't be shown on CH 2.",
+    });
   });
 });

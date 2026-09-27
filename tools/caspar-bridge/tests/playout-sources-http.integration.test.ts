@@ -151,12 +151,32 @@ describe('D10 over HTTP', () => {
     expect(
       PlayoutInputsStateSchema.parse(JSON.parse(fs.readFileSync(inputsPath, 'utf8'))).epoch,
     ).toBeUndefined();
-    // Control: an `epoch` is stored.
+    // Control: an `epoch` is stored — `ROUTE-PLATES-01`: as its decimal STRING. It is a 64-bit
+    // integer (V13-STATE §3.3), and a JSON number past 2^53 would be rounded on the way in, so two
+    // different epochs could compare equal.
     playout.setEpoch(42);
     await r.refresh(0);
     expect(
       PlayoutInputsStateSchema.parse(JSON.parse(fs.readFileSync(inputsPath, 'utf8'))).epoch,
-    ).toBe(42);
+    ).toBe('42');
+  });
+
+  it('🔴 `ROUTE-PLATES-01` — a 64-bit epoch arrives digit for digit over HTTP, and the next one is different', async () => {
+    const dir = tmpDir();
+    const inputsPath = path.join(dir, 'inputs.json');
+    const playout = await fakePlayout();
+    // A real core's epoch: past 2^53, where `JSON.parse` rounds to …9000.
+    playout.setEpochLiteral('638954123456789013');
+    const r = reader(playout, { inputsPath });
+    await r.refresh(0);
+    expect(r.catalog().inputsEpoch).toBe('638954123456789013');
+    expect(
+      PlayoutInputsStateSchema.parse(JSON.parse(fs.readFileSync(inputsPath, 'utf8'))).epoch,
+    ).toBe('638954123456789013');
+    // The core restarts: the next epoch differs in the last digit only — and is seen to.
+    expect(playout.simulateCoreRestart()).toBe('638954123456789014');
+    await r.refresh(0);
+    expect(r.catalog().inputsEpoch).toBe('638954123456789014');
   });
 
   it('🔴 a restart while the Playout is down keeps the persisted list in force', async () => {

@@ -128,6 +128,15 @@ export interface LiveLayerRecord {
    * hand. Additive: absent is every plate seated before this field existed, and today's wire.
    */
   readonly origin?: 'input' | 'media' | undefined;
+  /**
+   * 🔴 `ROUTE-PLATES-01` / contract v1.3 rule 5 — **the Playout epoch this `route://H-L` was sent
+   * under**, for a Playout route only. The holder `(channel, layer)` behind a route is only
+   * meaningful inside the epoch that named it: after a core restart or a holder move, the same
+   * `route://9-12` may be a different input or nothing. So a held route whose epoch is not the
+   * current one is not shown again by a reveal — it is refused until a take seats it afresh.
+   * Additive: absent is every plate that is not a Playout route, and every plate before this field.
+   */
+  readonly epoch?: string | undefined;
 }
 
 /**
@@ -168,6 +177,8 @@ const LiveLayerRecordSchema = z.object({
   held: z.boolean().optional(),
   // Additive — see {@link LiveLayerRecord.origin}. Absent is today's plate.
   origin: z.enum(['input', 'media']).optional(),
+  // Additive — see {@link LiveLayerRecord.epoch}. A decimal string, never a number (64-bit).
+  epoch: z.string().optional(),
 });
 
 export const PersistedLiveLayersSchema = z.array(

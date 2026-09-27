@@ -241,6 +241,16 @@ export const StackItemStateSchema = z.object({
    * statement about the plant as the bridge last heard it.
    */
   takeRefusal: TakeRefusalSchema.optional(),
+  /**
+   * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — **THE BACKUP CARRIES THIS ROW WITHOUT ITS LIVE BOXES.**
+   * A Playout route plate is never mirrored to the backup server, so while a backup is declared and
+   * this row's seats include one, the backup shows the graphic with those boxes empty. The row and
+   * its Inspector say so in one line, in the channel's own view: `Backup: live boxes not mirrored.`
+   *
+   * ABSENT means nothing of this row is withheld from the backup. ⚠ NOT in
+   * {@link RetainedStackItemSchema}, for `removeExempt`'s reason: it describes the plant now.
+   */
+  backupUnmirrored: z.boolean().optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 

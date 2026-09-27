@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ROUTE_NOT_SUPPORTED_YET } from '@cg/shared-ipc';
+import { ROUTE_NO_LAYER_REASON } from '@cg/shared-ipc';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
 import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
 
@@ -52,6 +52,8 @@ const SEED = {
         producer: { kind: 'stream', url: 'rtsp://cam:secret@10.0.0.21/live' },
       },
       { id: 'li-input3', name: 'ورودی ۳', producer: { kind: 'route', channel: 9, layer: 12 } },
+      // v1.3 rule 3 — a route with no layer is unusable: the seed's one unusable input.
+      { id: 'li-nolayer', name: 'No layer', producer: { kind: 'route', channel: 9 } },
     ],
   },
   departed: [
@@ -101,18 +103,21 @@ describe('without a seed there is no Playout', () => {
 });
 
 describe('with a seed, the one builder decides', () => {
-  it('inputs are `in-<id>`, in the Playout’s order; the route is gated; one that left is kept, unavailable', () => {
+  it('inputs are `in-<id>`, in the Playout’s order; a route with a layer is bindable, one without is unusable; one that left is kept, unavailable', () => {
     host.CG_E2E_PLAYOUT_SOURCES = SEED;
     const sources = new MockRuntime().sourceCatalog().sources;
     expect(sources.map((s) => s.id)).toEqual([
       'in-li-studio1',
       'in-li-newscam',
       'in-li-input3',
+      'in-li-nolayer',
       'in-li-studio5',
     ]);
-    expect(sources.find((s) => s.id === 'in-li-input3')).toMatchObject({
+    // `ROUTE-PLATES-01` §1.G — the gate is gone: the route is an ordinary input.
+    expect(sources.find((s) => s.id === 'in-li-input3')?.status).toBeUndefined();
+    expect(sources.find((s) => s.id === 'in-li-nolayer')).toMatchObject({
       status: 'unusable',
-      reason: ROUTE_NOT_SUPPORTED_YET,
+      reason: ROUTE_NO_LAYER_REASON,
     });
     expect(sources.find((s) => s.id === 'in-li-studio5')).toMatchObject({
       status: 'unavailable',
@@ -169,7 +174,7 @@ describe('with a seed, the one builder decides', () => {
     const rt = new MockRuntime();
     expect(
       rt.setSourceAssignments({
-        assignments: [{ templateId: 't', plateId: 'guest-1', sourceId: 'in-li-input3' }],
+        assignments: [{ templateId: 't', plateId: 'guest-1', sourceId: 'in-li-nolayer' }],
       }),
     ).toMatchObject({ ok: false, reason: 'source-unusable' });
     // A binding to Studio 5 written before it left (the store as the page reloaded it)…
@@ -259,8 +264,10 @@ describe('with a seed, the one builder decides', () => {
         mergeMode: 'merge',
         lookBindings: { two: { 'l-1': sourceId } },
       });
-    // The route gate, and an id the catalogue does not hold: the WHOLE update is refused.
-    expect(await update('in-li-input3')).toMatchObject({
+    // An unusable input (a route with no layer), and an id the catalogue does not hold: the WHOLE
+    // update is refused. (`ROUTE-PLATES-01` — a route WITH a layer is no longer the example: the
+    // gate that held it back is gone.)
+    expect(await update('in-li-nolayer')).toMatchObject({
       accepted: false,
       errorCode: 'source-unusable',
     });
@@ -273,7 +280,11 @@ describe('with a seed, the one builder decides', () => {
     expect((await cg.sources.config()).sources.some((s) => s.id === 'md-m-kelip')).toBe(true);
     // The swap is a new binding: the same rule, the same sentences…
     expect(
-      await cg.stack.swapLiveSource({ itemId: 'item-1', plateId: 'l-1', sourceId: 'in-li-input3' }),
+      await cg.stack.swapLiveSource({
+        itemId: 'item-1',
+        plateId: 'l-1',
+        sourceId: 'in-li-nolayer',
+      }),
     ).toMatchObject({ ok: false, reason: 'source-unusable' });
     expect(
       await cg.stack.swapLiveSource({ itemId: 'item-1', plateId: 'l-1', sourceId: 'src-handmade' }),

@@ -1005,8 +1005,8 @@ const libraryClip = (i: number): Record<string, unknown> => {
 /**
  * The standard seed: the fake Playout's list (`tools/caspar-bridge/tests/support/fake-playout.ts`
  * §3) cut to what the console needs — three NDI cameras, a stream CARRYING CREDENTIALS (§1.E: its
- * URL must reach no DOM), a multicast stream, the two v1.3 routes (gated `Not supported yet` until
- * `ROUTE-PLATES-01`; `ورودی ۴` is channel 1 only), and a library of 124 video items — more than two
+ * URL must reach no DOM), a multicast stream, the two v1.3 routes (bindable since `ROUTE-PLATES-01`;
+ * `ورودی ۴` is channel 1 only, and down), and a library of 124 video items — more than two
  * pages of 50 — with a media item named exactly `Studio 1`, a name to find through Arabic `ي`/`ك`,
  * one with Persian digits, and audio that is never offered.
  */

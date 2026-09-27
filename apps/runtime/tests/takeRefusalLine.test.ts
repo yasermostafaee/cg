@@ -65,6 +65,45 @@ describe('the line', () => {
   });
 });
 
+describe('`ROUTE-PLATES-01` — contract v1.3’s two lines', () => {
+  it('🔴 rule 1: `Bed 59 · Plate 1: “ورودی ۴” can’t be shown on CH 2.` — the name apart, to isolate', () => {
+    const line = takeRefusalLine(
+      'Bed 59',
+      {
+        code: 'source-not-showable',
+        plateId: 'guest-1',
+        sourceId: 'in-li-input4',
+        sourceName: 'ورودی ۴',
+        sourceOrigin: 'input',
+      },
+      { plateLabel: 'Plate 1', channel: 2 },
+    );
+    expect(line.text).toBe("Bed 59 · Plate 1: “ورودی ۴” can't be shown on CH 2.");
+    expect(line.unseatable).toEqual({
+      plate: 'Plate 1',
+      name: 'ورودی ۴',
+      rest: " can't be shown on CH 2.",
+    });
+  });
+
+  it('🔴 rule 5: `Bed 59 · Plate 1: waiting for the Playout’s input list.` — no source named, no epoch', () => {
+    const line = takeRefusalLine(
+      'Bed 59',
+      { code: 'route-epoch-waiting', plateId: 'guest-1', sourceOrigin: 'input' },
+      { plateLabel: 'Plate 1' },
+    );
+    expect(line.text).toBe("Bed 59 · Plate 1: waiting for the Playout's input list.");
+    expect(line.plate).toBe('Plate 1');
+    expect(line.text).not.toMatch(/epoch/i);
+  });
+
+  it('control: with no plate label known, the row alone opens the line', () => {
+    expect(takeRefusalLine('Bed 59', { code: 'route-epoch-waiting' }).text).toBe(
+      "Bed 59: waiting for the Playout's input list.",
+    );
+  });
+});
+
 describe('where it is said', () => {
   it('🔴 a refusal the ROW carries raises nothing else — the async result has no message', () => {
     expect(

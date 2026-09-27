@@ -143,6 +143,24 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'The Playout no longer offers a source this row is bound to — nothing was sent. Bind another source, or take again once the Playout lists it.',
   'source-unusable':
     'A source this row is bound to cannot be played on this station — nothing was sent. Bind another source.',
+  /*
+    `ROUTE-PLATES-01` — contract v1.3. Rule 1: a Playout input only on a channel it may be shown
+    on. Rule 5: a Playout route only from a confirmed input list. Rule 4: its start window. The
+    row's own line names the plate (`takeRefusalLine`); these are for a surface with only the code.
+  */
+  'source-not-showable':
+    'A source this row is bound to cannot be shown on this channel — nothing was sent. Bind another source.',
+  'route-epoch-waiting': 'Waiting for the Playout’s input list — nothing was sent.',
+  'route-epoch-stale': 'The Playout’s input list changed — nothing was sent. Take again.',
+  'route-window-missed': 'The Playout input did not start in time — nothing was shown. Take again.',
+  // `ROUTE-PLATES-01` §1.E — the send seam's guard. Each refuses before anything is sent.
+  'amcp-guard-channel':
+    'That command targets a channel this station does not own — nothing was sent.',
+  'amcp-guard-layer':
+    'That command targets a layer outside this console’s band — nothing was sent.',
+  'amcp-guard-forbidden': 'That command could disturb the Playout’s channel — nothing was sent.',
+  'amcp-guard-global': 'That command addresses the whole server — nothing was sent.',
+  'amcp-guard-route-layer': 'A Playout input with no layer cannot be played — nothing was sent.',
   'live-source-aspect-mismatch':
     'A live plate is designed for a different picture shape than the source assigned to it — cropping it would cut part of the picture the author never saw. Re-assign the plate, or correct the source’s format.',
   'live-source-no-layer-range':

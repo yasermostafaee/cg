@@ -28,12 +28,28 @@
  *   - `unknown` — no usable answer (a timeout, a dead socket, a 5xx raised mid-execution): a
  *                 producer MAY be there, unmasked. It may be cleared — but, like `landed`, never
  *                 on a layer that held one of ours before, whose picture may still be the old one.
+ *   - `loaded`  — `ROUTE-PLATES-01`: a Playout route's `LOADBG` landed and its `PLAY` did not (the
+ *                 server refused it, or the 200 ms window was missed). The FOREGROUND is as it was
+ *                 — the `PLAY` changed nothing, as for `refused` — and THIS operation's producer
+ *                 sits in the layer's BACKGROUND. It may be cleared, which drops what we loaded —
+ *                 but never on a layer that held one of ours before: there the `CLEAR` would take
+ *                 the working foreground with it, and a loaded background is harmless (the next
+ *                 `LOADBG` replaces it, and nothing else of ours sends a bare `PLAY`).
  *
  * Every site that cleans up after a refusal — the take's rollback, the dropped preset, the
  * live/switch teardown of the failed plate, and the page a refused take added — asks
  * {@link mayClearAfterRefusal} and nothing else.
  */
-export type SeatOutcome = 'landed' | 'refused' | 'unknown';
+export type SeatOutcome = 'landed' | 'refused' | 'unknown' | 'loaded';
+
+/**
+ * Is the layer's FOREGROUND exactly as it was before the operation? True for `refused` and for
+ * `loaded` (only the background changed), so the ledger keeps the producer it named and a muted
+ * working producer gets its volume back.
+ */
+export function foregroundUnchanged(outcome: SeatOutcome): boolean {
+  return outcome === 'refused' || outcome === 'loaded';
+}
 
 export interface RefusalSeat {
   /** What the reply said about THIS operation's producer on the layer. */

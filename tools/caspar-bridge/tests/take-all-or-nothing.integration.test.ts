@@ -14,7 +14,7 @@ import type {
 } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
-import { mayClearAfterRefusal, outcomeOf } from '../src/refusal-cleanup.js';
+import { foregroundUnchanged, mayClearAfterRefusal, outcomeOf } from '../src/refusal-cleanup.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
 /**
@@ -474,9 +474,17 @@ describe('THE RULE — a refused PLAY never clears a working picture', () => {
     expect(mayClearAfterRefusal({ outcome: 'landed', heldBefore: false })).toBe(true);
     expect(mayClearAfterRefusal({ outcome: 'unknown', heldBefore: false })).toBe(true);
     expect(mayClearAfterRefusal({ outcome: 'refused', heldBefore: false })).toBe(false);
-    for (const outcome of ['landed', 'unknown', 'refused'] as const) {
+    // `ROUTE-PLATES-01` — a route's `LOADBG` landed and its `PLAY` did not: ours is in the
+    // background of a layer that held nothing of ours, so the CLEAR drops only what we loaded.
+    expect(mayClearAfterRefusal({ outcome: 'loaded', heldBefore: false })).toBe(true);
+    for (const outcome of ['landed', 'unknown', 'refused', 'loaded'] as const) {
       expect(mayClearAfterRefusal({ outcome, heldBefore: true })).toBe(false);
     }
+    // …and the foreground a `loaded` failure left is the one before it, as for `refused`.
+    expect(foregroundUnchanged('loaded')).toBe(true);
+    expect(foregroundUnchanged('refused')).toBe(true);
+    expect(foregroundUnchanged('unknown')).toBe(false);
+    expect(foregroundUnchanged('landed')).toBe(false);
     // The reply decides the outcome: a 4xx arrived and refused; anything else is unknown.
     expect(outcomeOf({ ok: true })).toBe('landed');
     expect(outcomeOf({ ok: false, errorCode: 'amcp-403' })).toBe('refused');

@@ -32,22 +32,6 @@ export function redactUrlCredentials(text: string): string {
   return text.replace(/([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^\s/"'<>]*@/g, '$1***@');
 }
 
-// ── The route gate ──────────────────────────────────────────────────────────
-
-/** The reason every `route` input carries while the gate holds (the prompt's words). */
-export const ROUTE_NOT_SUPPORTED_YET = 'Not supported yet.';
-
-/**
- * 🔴 **THE ONE ROUTE GATE.** Contract v1.3 brings every exclusive input as a `route` to the Playout's
- * holder channel, and seating one safely needs rules 2, 4 and 5 (audio before `PLAY`, `LOADBG`
- * timing, the epoch) — `ROUTE-PLATES-01`'s work. Until that lands, a `route` input is listed and can
- * never be bound or seated: this answers the reason it is held back, and `ROUTE-PLATES-01` removes the
- * gate HERE, in one place, by answering `null`.
- */
-export function routeInputGate(): string | null {
-  return ROUTE_NOT_SUPPORTED_YET;
-}
-
 // ── D10: the inputs ─────────────────────────────────────────────────────────
 
 /** A Playout id: stable forever, `[A-Za-z0-9_-]`, 1–48 characters (both D10 and D11). */
@@ -91,9 +75,46 @@ export const PlayoutInputSchema = z.object({
 });
 export type PlayoutInput = z.infer<typeof PlayoutInputSchema>;
 
-/** v1.3's `epoch`: changes with every core start. Kept, not acted on here (`ROUTE-PLATES-01`). */
+/**
+ * v1.3's `epoch`: changes with every core start and whenever an input's holder `(channel, layer)`
+ * moves; never repeats (their answer, `PLAYOUT-CG-RESPONSE-V13-STATE` §3.3). A 64-bit JSON integer on
+ * the wire — read losslessly by {@link parsePlayoutJson}, which hands it over as its digits — and
+ * compared only in its canonical form ({@link canonicalPlayoutEpoch}).
+ */
 export const PlayoutEpochSchema = z.union([z.number(), z.string().min(1)]);
 export type PlayoutEpoch = z.infer<typeof PlayoutEpochSchema>;
+
+/**
+ * 🔴 `ROUTE-PLATES-01` — **THE ONE SPELLING OF AN EPOCH**, the only form two epochs are compared in.
+ * A number is its decimal digits; a string is itself, trimmed. Two answers from the same core carry
+ * the same canonical epoch, and a restart never does.
+ */
+export function canonicalPlayoutEpoch(epoch: PlayoutEpoch | undefined): string | undefined {
+  if (epoch === undefined) return undefined;
+  if (typeof epoch === 'number') return Number.isFinite(epoch) ? String(epoch) : undefined;
+  const trimmed = epoch.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+/** The top-level `"epoch": <digits>` of a D10 body, as written — the raw-text fallback. */
+const RAW_EPOCH = /"epoch"\s*:\s*(-?\d+)\s*[,}]/;
+
+/**
+ * 🔴 `ROUTE-PLATES-01` — **PARSE A D10 BODY WITHOUT LOSING THE EPOCH.** The epoch is a 64-bit
+ * integer, and `JSON.parse` turns any integer above 2^53 into the nearest double: measured,
+ * `638954123456789013` parses as `638954123456789000`, so two consecutive epochs of a real core could
+ * compare EQUAL and a restart would pass unseen — the one thing rule 5 exists to catch. So the epoch
+ * is taken from its SOURCE TEXT (the reviver's `context.source`, Node 22+), falling back to the raw
+ * digits in the body; everything else parses as JSON always did.
+ */
+export function parsePlayoutJson(text: string): unknown {
+  const reviver = (key: string, value: unknown, context?: { source?: unknown }): unknown => {
+    if (key !== 'epoch' || typeof value !== 'number') return value;
+    const source = typeof context?.source === 'string' ? context.source : RAW_EPOCH.exec(text)?.[1];
+    return source ?? value;
+  };
+  return JSON.parse(text, reviver as (key: string, value: unknown) => unknown) as unknown;
+}
 
 /**
  * Read a D10 body. `null` = not a D10 answer at all (a failed read). Otherwise every input that has an
@@ -320,12 +341,10 @@ function unusableReason(
   hostIsOurs: (casparHost: string) => boolean,
 ): string | null {
   if (input.casparHost !== undefined && !hostIsOurs(input.casparHost)) return OTHER_SERVER_REASON;
-  if (producer.kind === 'route') {
-    // v1.3 rule 3 — a route with no layer stacks every held input.
-    if (producer.layer === undefined) return ROUTE_NO_LAYER_REASON;
-    const gate = routeInputGate();
-    if (gate !== null) return gate;
-  }
+  // v1.3 rule 3 — a route with no layer stacks every held input. (`ROUTE-PLATES-01` removed the gate
+  // that held every `route` input back: a route WITH a layer is bindable, and seated by contract
+  // v1.3's rules at the bridge — `route-plates.ts`.)
+  if (producer.kind === 'route' && producer.layer === undefined) return ROUTE_NO_LAYER_REASON;
   // The SAME rules a hand-made entry passed — asked of the one validator, never restated here.
   const check = checkSourceCatalog(
     { sources: [{ id: 'in-check', name: input.name, producer }] },
@@ -418,10 +437,12 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
       },
     });
   }
+  const inputsEpoch = canonicalPlayoutEpoch(input.inputs.epoch);
   return {
     sources,
     ...(input.layerRange !== undefined ? { layerRange: input.layerRange } : {}),
     ...(input.inputs.readAt !== undefined ? { inputsReadAt: input.inputs.readAt } : {}),
+    ...(inputsEpoch !== undefined ? { inputsEpoch } : {}),
   };
 }
 
@@ -452,6 +473,40 @@ export function sourceBindable(entry: SourceDefinition): boolean {
 /** Whether a catalogue entry may be SEATED: only a usable one. */
 export function sourceSeatable(entry: SourceDefinition): boolean {
   return entry.status === undefined;
+}
+
+/**
+ * 🔴 `ROUTE-PLATES-01` — **IS THIS A PLAYOUT ROUTE?** A D10 input the Playout holds on its holder
+ * channel, seated by `route://H-L` under contract v1.3's rules 1–5. The ONE question every door asks;
+ * a hand-made `route` entry (no `origin`) is not one, and keeps today's wire.
+ */
+export function isPlayoutRoute(entry: {
+  readonly origin?: 'input' | 'media' | undefined;
+  readonly producer: { readonly kind: string };
+}): boolean {
+  return entry.origin === 'input' && entry.producer.kind === 'route';
+}
+
+/**
+ * 🔴 `ROUTE-PLATES-01` / v1.3 rule 1 — **MAY THIS ENTRY BE SHOWN ON STATION CHANNEL `channel`?** A
+ * Playout route only on a channel its `compatibleChannels` named (none named is none allowed); any
+ * other entry wherever it names no channels, as before. The picker's disabled row and the bridge's
+ * refusal both ask THIS.
+ */
+export function sourceShowableOn(entry: SourceDefinition, channel: number): boolean {
+  if (isPlayoutRoute(entry)) return entry.channels?.includes(channel) === true;
+  return entry.channels === undefined || entry.channels.includes(channel);
+}
+
+/**
+ * `ROUTE-PLATES-01` — the clause for an entry that may not be shown on a channel, the entry's NAME
+ * apart so a console can isolate it: `“ورودی ۴” can't be shown on CH 2.`
+ */
+export function notShowableWords(
+  name: string,
+  channel: number,
+): { readonly name: string; readonly rest: string } {
+  return { name, rest: ` can't be shown on CH ${String(channel)}.` };
 }
 
 /**

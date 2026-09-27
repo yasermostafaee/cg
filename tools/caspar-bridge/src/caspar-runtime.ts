@@ -96,6 +96,9 @@ import {
   pruneAssignmentsForCatalog,
   // `PLAYOUT-SOURCES-01` — what may be bound and what may be seated, asked of the ONE module.
   sourceSeatable,
+  // `ROUTE-PLATES-01` — which entries are Playout routes, and on which channels one may be shown.
+  isPlayoutRoute,
+  sourceShowableOn,
   unbindableChange,
   redactUrlCredentials,
   type LiveSourceLayerRange,
@@ -146,6 +149,7 @@ import type { AmcpLogEntry } from './amcp-log.js';
 import { CommandBuilder, summarizeWireLine, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import {
+  foregroundUnchanged,
   mayClearAfterRefusal,
   outcomeOf,
   type RefusalSeat,
@@ -163,6 +167,20 @@ import {
 } from './live-layers.js';
 import { AuditWriter, readRecentEntries } from '@cg/audit';
 import { resolvePlateAssignments } from './live-plate-assignment.js';
+import { amcpLineRefusal } from './amcp-guard.js';
+import {
+  ROUTE_EPOCH_READ_MS,
+  ROUTE_EPOCH_STALE_CODE,
+  ROUTE_LOADBG_MAX_MS,
+  ROUTE_LOADBG_MIN_MS,
+  ROUTE_REVEAL_AFTER_PLAY_MS,
+  ROUTE_WAITING_CODE,
+  ROUTE_WINDOW_MISSED_CODE,
+  SYSTEM_ROUTE_CLOCK,
+  isPlayoutRouteRecord,
+  sleepUntil,
+  type RouteClock,
+} from './route-plates.js';
 import { resolvePlateAspect, resolvePlateFitMode } from './live-plate-fit.js';
 import {
   allocateLiveLayers,
@@ -333,6 +351,54 @@ interface LivePlatePlacement {
    * Its {@link fit} is the parked one (`B-154`), so it renders nothing.
    */
   readonly held: boolean;
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — for a PLAYOUT ROUTE, the `epoch` of the D10 answer its
+   * `route://H-L` was resolved from (canonical). The seat step sends the route only while this is
+   * the current, confirmed epoch; the ledger keeps it. Absent on every other seat.
+   */
+  readonly epoch?: string;
+}
+
+/** Is this placement a Playout route (`@cg/shared-ipc`'s one predicate, asked of a placement)? */
+function placementIsPlayoutRoute(placement: LivePlatePlacement): boolean {
+  return isPlayoutRoute({ origin: placement.source.origin, producer: placement.producer });
+}
+
+/** `ROUTE-PLATES-01` — the first Playout-route seat a plan holds (punched or parked), if any. */
+function planSeatsPlayoutRoute(plan: {
+  readonly placements: readonly LivePlatePlacement[];
+  readonly parked: readonly LivePlatePlacement[];
+}): LivePlatePlacement | undefined {
+  return [...plan.placements, ...plan.parked].find(placementIsPlayoutRoute);
+}
+
+/** `ROUTE-PLATES-01` — the refusal's sentence when no epoch could be confirmed for a route plate. */
+function routeWaitingMessage(plateId: string): string {
+  return (
+    `Plate "${plateId}": waiting for the Playout's input list — its route cannot be sent until ` +
+    `a fresh one is read. Nothing was sent.`
+  );
+}
+
+/** `ROUTE-PLATES-01` — a reconcile refused for a waiting route plate, naming it for the row's line. */
+function routeWaitingRefusal(placement: LivePlatePlacement): {
+  readonly ok: false;
+  readonly errorCode: string;
+  readonly message: string;
+  readonly refused: {
+    readonly plateId: string;
+    readonly source: { readonly id: string; readonly name: string; readonly origin: 'input' };
+  };
+} {
+  return {
+    ok: false,
+    errorCode: ROUTE_WAITING_CODE,
+    message: routeWaitingMessage(placement.plateId),
+    refused: {
+      plateId: placement.plateId,
+      source: { id: placement.source.id, name: placement.source.name, origin: 'input' },
+    },
+  };
 }
 
 /**
@@ -373,6 +439,15 @@ function wireVolumeOf(record: LiveLayerRecord): number {
     : record.intendedVolume;
 }
 
+/**
+ * 🔴 `ROUTE-PLATES-01` (C2) — the opacity a ledger record's layer carries as today's code computes
+ * it: a PLAYOUT ROUTE that is held or parked is HIDDEN, `OPACITY 0` — kept playing, never paused,
+ * so showing it again is only the reveal. Every other settled plate is shown, as before.
+ */
+function wireOpacityOf(record: LiveLayerRecord): number {
+  return isPlayoutRouteRecord(record) && (record.held === true || isParkedFit(record.fill)) ? 0 : 1;
+}
+
 /** What the seat step did for one seat — the facts its action's failure path reads. */
 interface SeatResult {
   readonly placement: LivePlatePlacement;
@@ -387,6 +462,11 @@ interface SeatResult {
    * the placement's (a media item's fresh `clip`). The ledger records THIS; absent = the placement's.
    */
   readonly playedArg?: string;
+  /**
+   * `ROUTE-PLATES-01` rule 4 — for a Playout route, when (on the route clock) its bare `PLAY` left:
+   * the reveal waits until {@link ROUTE_REVEAL_AFTER_PLAY_MS} after the latest one.
+   */
+  readonly routePlayedAt?: number;
   readonly errorCode?: string;
   /** The refused line as `#send` summarised it (`B-209`). */
   readonly command?: string;
@@ -902,6 +982,24 @@ const ROW_LEFT_AIR_MID_SWITCH =
  * the hold is at most a frame or two, far inside every teardown bound, and a cancellation
  * path would be a second way for the fills to go out early. */
 const sleepMs = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * `ROUTE-PLATES-01` §1.E — the layer a PRODUCER command puts something on (`PLAY`/`LOADBG`/`LOAD`
+ * `<ch>-<L>`, `CG <ch>-<L> ADD`), or `null`. The seam's "holds a seated plate" answer reads it.
+ */
+function producerTargetOf(line: string): CommandSlot | null {
+  const match = /^(?:PLAY|LOADBG|LOAD) (\d+)-(\d+)(?:\s|$)|^CG (\d+)-(\d+) ADD\s/.exec(line);
+  if (match === null) return null;
+  const channel = Number(match[1] ?? match[3]);
+  const layer = Number(match[2] ?? match[4]);
+  return { channel, layer };
+}
+
+/** `ROUTE-PLATES-01` §1.E — the layer a `CLEAR <ch>-<L>` empties, or `null`. */
+function clearTargetOf(line: string): CommandSlot | null {
+  const match = /^CLEAR (\d+)-(\d+)$/.exec(line.trim());
+  return match === null ? null : { channel: Number(match[1]), layer: Number(match[2]) };
+}
 
 /**
  * R-021 stage 2a (D7) — is a FIXED slot busy (a resident item or retained
@@ -1500,6 +1598,34 @@ export class CasparRuntime {
    */
   #freshMediaClip: ((sourceId: string, played: string) => Promise<string | null>) | null = null;
   /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — the bounded D10 re-read ({@link setInputsConfirmer}), handed in by
+   * the bridge like the media freshener. Answers the catalogue's epoch once a successful read lands
+   * within the bound. `null` — no Playout reader — means no route can ever be confirmed.
+   */
+  #confirmInputs:
+    | ((
+        timeoutMs: number,
+      ) => Promise<{ readonly ok: true; readonly epoch?: string } | { readonly ok: false }>)
+    | null = null;
+  /**
+   * `ROUTE-PLATES-01` rule 5 — counts the PRIMARY's new AMCP connections. An epoch confirmed on an
+   * earlier connection says nothing about this one: the core may have restarted in between.
+   */
+  #amcpGeneration = 0;
+  /** `ROUTE-PLATES-01` rule 5 — the epoch a D10 read confirmed, and on which connection. */
+  #routeEpochConfirmed: { readonly generation: number; readonly epoch: string } | null = null;
+  /** `ROUTE-PLATES-01` rule 4 — the clock the `LOADBG` → `PLAY` window and the reveal wait use. */
+  readonly #routeClock: RouteClock;
+  /**
+   * `ROUTE-PLATES-01` §1.E — layers a `CLEAR` of ours LANDED on (primary-acked) and nothing was
+   * played on since: the guard's "holds a seated plate" answer excludes them, so a teardown's
+   * `MIXER CLEAR` — sent only after its `CLEAR` landed, while the ledger still names the layer —
+   * is not taken for a mixer clear under a seated plate. Keys are {@link adoptionKey}s.
+   */
+  readonly #emptiedLayers = new Set<string>();
+  /** `ROUTE-PLATES-01` C4 — the rows last published `backupUnmirrored` (see `#publishLiveLayers`). */
+  #backupUnmirroredItems = new Set<string>();
+  /**
    * D-137 / C-015 — which catalog entry each template's each PLATE uses.
    * LOADED, VALIDATED and PRUNED in `createBridge`, before the WebSocket binds.
    */
@@ -1843,6 +1969,23 @@ export class CasparRuntime {
        * not be handed. A file sink is not a publication, so it is not shaped like one.
        */
       onAmcpExchange?: (entry: AmcpLogEntry) => void;
+      /**
+       * `ROUTE-PLATES-01` rule 4 — TEST-ONLY: the clock a Playout route's `LOADBG` → `PLAY` window
+       * and its reveal wait run on. Absent: the real one.
+       */
+      routeClock?: RouteClock;
+      /**
+       * `ROUTE-PLATES-01` §2 — TEST-ONLY: hands the caller the send seam itself, so a test can
+       * PLANT one line (a forbidden command, a stale-epoch route, a holder-channel target) and
+       * watch the guard refuse it before the wire. No IPC channel reaches it: only whoever
+       * constructs the runtime holds the function.
+       */
+      seamForTest?: (
+        send: (
+          line: string,
+          options?: { readonly routeEpoch?: string },
+        ) => Promise<{ ok: boolean; errorCode?: string }>,
+      ) => void;
     } = {},
   ) {
     this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
@@ -1896,6 +2039,10 @@ export class CasparRuntime {
     // one is not defaulted at construction the way its siblings below are.
     this.#lookMixerHoldMs = options.lookMixerHoldMs;
     this.#onAmcpExchange = options.onAmcpExchange;
+    this.#routeClock = options.routeClock ?? SYSTEM_ROUTE_CLOCK;
+    options.seamForTest?.((line, sendOptions = {}) =>
+      this.#send(line, this.#nextSeq(), 'urgent', sendOptions),
+    );
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
@@ -2059,6 +2206,9 @@ export class CasparRuntime {
         if (this.#adapter.currentPrimary !== label) return; // only the primary feeds the reconciler
         if (to === 'healthy') {
           this.#reconciler.setLinkDown(false);
+          // `ROUTE-PLATES-01` rule 5 — a NEW primary connection: an epoch confirmed on an earlier
+          // one proves nothing about this one (the core may have restarted in between).
+          if (from !== 'degraded') this.#amcpGeneration += 1;
           // `B-221` — FIRST, before anything else this connection is asked to carry: a batch
           // whose commit died with the previous link is committed here and the ledger's
           // geometry put back, so the orphan cannot ride on the next take instead. A no-op
@@ -2361,6 +2511,8 @@ export class CasparRuntime {
       const removeExempt = this.#removeExempt(item.itemId);
       // `FIELD-FIXES-01` B — why this row's last take was refused (see `#takeRefusals`).
       const takeRefusal = this.#takeRefusals.get(item.itemId);
+      // `ROUTE-PLATES-01` C4 — the backup carries this row without its Playout route plates.
+      const backupUnmirrored = this.#backupUnmirrored(item.itemId);
       /*
         ⚠ **EVERY OPTIONAL FIELD BELOW MUST BE NAMED IN THIS GUARD.** It is the
         "nothing to join, return the identical object" fast path, and a field it does not
@@ -2385,7 +2537,8 @@ export class CasparRuntime {
         // was added; this is that list, one entry longer, added on the day of.
         timingOverride === undefined &&
         !removeExempt &&
-        takeRefusal === undefined
+        takeRefusal === undefined &&
+        !backupUnmirrored
       )
         return item;
       return {
@@ -2398,6 +2551,7 @@ export class CasparRuntime {
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(removeExempt && { removeExempt: true }),
+        ...(backupUnmirrored && { backupUnmirrored: true }),
         /*
           `FIELD-FIXES-01` B / Decision 1 — a row whose last take was REFUSED reads ERROR, whatever
           the wire now says about its layer. The refused take took its own graphic back off that
@@ -3273,8 +3427,12 @@ export class CasparRuntime {
       { itemId: stray.itemId, templateId: stray.templateId, slot },
       async (): Promise<{ accepted: boolean; errorCode?: string }> => {
         if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
-        await this.#send(this.#builder.stop(slot), this.#nextSeq(), 'urgent');
-        const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+        await this.#send(this.#builder.stop(slot), this.#nextSeq(), 'urgent', {
+          strayTarget: slot,
+        });
+        const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent', {
+          strayTarget: slot,
+        });
         return cleared.ok
           ? { accepted: true }
           : { accepted: false, errorCode: cleared.errorCode ?? 'amcp-error' };
@@ -4031,46 +4189,71 @@ export class CasparRuntime {
       re-taking a row does not silently return it to the default look while the operator is
       watching the one they chose.
     */
-    const plan = this.#planLiveSeating(
-      itemId,
-      slot,
-      this.activeLookId(itemId),
-      'entering-look',
-      // SESSION BP — THE TAKE IS THE ONE ACTION THAT RESOLVES LEVEL 2 AFRESH, and pins what
-      // it resolved. See `LevelTwoSource`.
-      'fresh',
-    );
-    if (!plan.ok) {
+    const planTake = () =>
+      this.#planLiveSeating(
+        itemId,
+        slot,
+        this.activeLookId(itemId),
+        'entering-look',
+        // SESSION BP — THE TAKE IS THE ONE ACTION THAT RESOLVES LEVEL 2 AFRESH, and pins what
+        // it resolved. See `LevelTwoSource`.
+        'fresh',
+      );
+    const refusePlan = (refused: Extract<ReturnType<typeof planTake>, { ok: false }>) => {
       // A refused take mutates NOTHING — and the freeze below is the newest thing that would
       // break that, so it is written on the far side of this return rather than before the
       // plan (`tasks.md` 7.9's rule, met by a fourth writer).
-      process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${plan.message}\n`);
-      if (plan.refused !== undefined) {
+      process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${refused.message}\n`);
+      if (refused.refused !== undefined) {
         /*
           🔴 `PLAYOUT-SOURCES-01` §1.C — a plate bound to an entry the Playout stopped offering (or
           one that became unusable) is refused BEFORE ANY AMCP, and the row carries its own reason
           exactly as a server's refusal does (`FIELD-FIXES-01` B): one line, no banner. The binding
           is kept; a later read that lists the entry again lets the next take play.
         */
-        const { plateId, source } = plan.refused;
+        const { plateId, source } = refused.refused;
         this.#recordTakeRefusal(itemId, {
-          code: plan.errorCode,
+          code: refused.errorCode,
           plateId,
           sourceId: source.id,
           sourceName: source.name,
           ...(source.origin !== undefined ? { sourceOrigin: source.origin } : {}),
         });
         return {
-          accepted: false,
-          errorCode: plan.errorCode,
-          message: plan.message,
-          refusalOnRow: true,
+          accepted: false as const,
+          errorCode: refused.errorCode,
+          message: refused.message,
+          refusalOnRow: true as const,
         };
       }
       // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
       // two aspects disagree, are the facts that make these refusals actionable,
       // and no fixed code can carry them — see `StackTakeChannel`.
-      return { accepted: false, errorCode: plan.errorCode, message: plan.message };
+      return { accepted: false as const, errorCode: refused.errorCode, message: refused.message };
+    };
+    let plan = planTake();
+    if (!plan.ok) return refusePlan(plan);
+
+    /*
+      🔴 `ROUTE-PLATES-01` rule 5 — **A TAKE SENDS A PLAYOUT ROUTE ONLY FROM A CONFIRMED EPOCH.** The
+      catalogue's epoch, confirmed by a D10 read on the primary's current connection — one bounded
+      read if none has yet. A read that MOVED the epoch re-plans, so every `route://H-L` this take
+      sends is the fresh one; one that cannot confirm refuses the take, before any AMCP, with the
+      row's line (`waiting for the Playout's input list`). This is also the restore: after a core
+      restart PUT BACK ON AIR is a take, and it passes here.
+    */
+    const routeSeat = planSeatsPlayoutRoute(plan);
+    if (routeSeat !== undefined) {
+      const epochBefore = this.#sourceCatalog.inputsEpoch;
+      const confirmed = await this.#ensureRouteEpoch();
+      // The read is an await: re-ask what the take's first lines asked before it.
+      if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+      if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
+      if (!confirmed) return this.#refuseRouteWaiting(itemId, routeSeat);
+      if (this.#sourceCatalog.inputsEpoch !== epochBefore) {
+        plan = planTake();
+        if (!plan.ok) return refusePlan(plan);
+      }
     }
 
     /*
@@ -5684,7 +5867,10 @@ export class CasparRuntime {
     */
     const seatableCatalog: SourceCatalog = {
       ...this.#sourceCatalog,
-      sources: this.#sourceCatalog.sources.filter(sourceSeatable),
+      // `ROUTE-PLATES-01` — and only on a channel the entry may be shown on (v1.3 rule 1).
+      sources: this.#sourceCatalog.sources.filter(
+        (s) => sourceSeatable(s) && sourceShowableOn(s, slot.channel),
+      ),
     };
     const bindings = resolveLookBindings({
       templateId,
@@ -5747,6 +5933,8 @@ export class CasparRuntime {
         assignments: this.#assignmentsFor(itemId, templateId, levelTwo),
         catalog: this.#sourceCatalog,
         overrides: this.#effectiveOverridesFor(itemId, lookId),
+        // `ROUTE-PLATES-01` — so an entry this row's channel may not show is named as such.
+        channel: slot.channel,
       });
       if (!refusal.ok) {
         return {
@@ -6050,6 +6238,8 @@ export class CasparRuntime {
       };
     }
 
+    // `ROUTE-PLATES-01` rule 5 — a Playout route carries the epoch its `route://H-L` was read in.
+    const epoch = this.#sourceCatalog.inputsEpoch;
     const allocated = seated.map((s, i) => ({
       slot: { channel: slot.channel, layer: layers[i] as number },
       plateId: s.plateId,
@@ -6058,6 +6248,9 @@ export class CasparRuntime {
       source: s.source,
       fit: s.fit,
       held: s.held,
+      ...(epoch !== undefined && isPlayoutRoute({ origin: s.source.origin, producer: s.producer })
+        ? { epoch }
+        : {}),
     }));
     /*
       SPLIT AFTER ALLOCATION, and only after — a parked seat holds its layer exactly as a
@@ -7401,22 +7594,23 @@ export class CasparRuntime {
   }> {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { ok: false, errorCode: 'unknown-item' };
-    const plan = this.#planLiveSeating(
-      itemId,
-      slot,
-      opts.lookId ?? this.activeLookId(itemId),
-      opts.mode === 'take' ? 'entering-look' : 'already-live',
-      // SESSION BP — a take resolves level 2 afresh; every other reconcile reads the pin.
-      opts.mode === 'take' ? 'fresh' : 'pinned',
-    );
-    if (!plan.ok) {
+    const planReconcile = () =>
+      this.#planLiveSeating(
+        itemId,
+        slot,
+        opts.lookId ?? this.activeLookId(itemId),
+        opts.mode === 'take' ? 'entering-look' : 'already-live',
+        // SESSION BP — a take resolves level 2 afresh; every other reconcile reads the pin.
+        opts.mode === 'take' ? 'fresh' : 'pinned',
+      );
+    const refusePlan = (failed: Extract<ReturnType<typeof planReconcile>, { ok: false }>) => {
       // `PLAYOUT-SOURCES-01` — a switch into an entry the Playout stopped offering names its plate,
       // so the row says it in `FIELD-FIXES-01`'s one line (`setActiveLook`'s `onRow`).
-      const refused = plan.refused;
+      const refused = failed.refused;
       return {
-        ok: false,
-        errorCode: plan.errorCode,
-        message: plan.message,
+        ok: false as const,
+        errorCode: failed.errorCode,
+        message: failed.message,
         ...(refused !== undefined
           ? {
               refused: {
@@ -7430,6 +7624,31 @@ export class CasparRuntime {
             }
           : {}),
       };
+    };
+    let plan = planReconcile();
+    if (!plan.ok) return refusePlan(plan);
+    /*
+      🔴 `ROUTE-PLATES-01` rule 5 — as at the take: a Playout route this reconcile will seat is sent
+      only from a confirmed epoch (one bounded read if none yet; a moved epoch re-plans). And a HELD
+      route plate this reconcile shows again must be of the epoch in force — one of another epoch
+      names a holder that may no longer be its input's, so the action is refused, all or nothing,
+      and the row says the plate is waiting. A route plate left on screen as it is sends nothing.
+    */
+    const routeSeat = planSeatsPlayoutRoute(plan);
+    if (routeSeat !== undefined) {
+      const epochBefore = this.#sourceCatalog.inputsEpoch;
+      if (!(await this.#ensureRouteEpoch())) return routeWaitingRefusal(routeSeat);
+      if (this.#sourceCatalog.inputsEpoch !== epochBefore) {
+        plan = planReconcile();
+        if (!plan.ok) return refusePlan(plan);
+      }
+      const prior = new Map((this.#liveLayers.get(itemId) ?? []).map((r) => [r.producer, r]));
+      const staleReturn = plan.placements.find((p) => {
+        if (!placementIsPlayoutRoute(p)) return false;
+        const record = prior.get(p.producerArg);
+        return record?.held === true && record.epoch !== this.#sourceCatalog.inputsEpoch;
+      });
+      if (staleReturn !== undefined) return routeWaitingRefusal(staleReturn);
     }
     /*
       🔴 `LOOK-SWITCH-01` / `B-273` — A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE `beforeApply` TELLS
@@ -7693,6 +7912,8 @@ export class CasparRuntime {
   async #mixerStateOnHealthy(newConnection: boolean): Promise<void> {
     await this.#flushOrphanedStaging();
     if (newConnection) await this.#resendLiveMixerState();
+    // `ROUTE-PLATES-01` rule 5 — then D10 again, bounded, for the route plates the ledger holds.
+    if (newConnection) await this.#routeEpochAfterReconnect();
   }
 
   /**
@@ -7735,7 +7956,8 @@ export class CasparRuntime {
                 volume,
                 plateVolumeFrames(record.origin, volume),
               ),
-              this.#builder.mixerOpacity(record.slot, 1),
+              // `ROUTE-PLATES-01` — a held Playout route stays hidden; every other plate is shown.
+              this.#builder.mixerOpacity(record.slot, wireOpacityOf(record)),
             ]) {
               this.#stagedMixerChannel = channel;
               await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
@@ -7886,13 +8108,15 @@ export class CasparRuntime {
     }
     for (const r of requests) {
       const sent = await this.#startSeatProducer(r.placement);
-      const outcome = outcomeOf(sent);
+      // `ROUTE-PLATES-01` — a route names its own outcome when its `LOADBG` landed (`loaded`).
+      const outcome = sent.outcome ?? outcomeOf(sent);
       results.set(r.placement.producerArg, {
         placement: r.placement,
         outcome,
         sent: true,
         hidden: r.hide,
         ...(sent.playedArg !== undefined && { playedArg: sent.playedArg }),
+        ...(sent.routePlayedAt !== undefined && { routePlayedAt: sent.routePlayedAt }),
         ...(sent.errorCode !== undefined && { errorCode: sent.errorCode }),
         ...(sent.command !== undefined && { command: sent.command }),
       });
@@ -7908,7 +8132,7 @@ export class CasparRuntime {
       requests.filter((r) => {
         if (!mutedInPlace(r)) return false;
         const seat = results.get(r.placement.producerArg);
-        return seat === undefined || seat.outcome === 'refused';
+        return seat === undefined || foregroundUnchanged(seat.outcome);
       }),
     );
     return results;
@@ -7945,9 +8169,17 @@ export class CasparRuntime {
    * HERE and nowhere else.** It is inside the seat step, so the plate is already hidden, and a
    * refusal of either half is answered exactly like a refused `PLAY`.
    */
-  async #startSeatProducer(
-    placement: LivePlatePlacement,
-  ): Promise<{ ok: boolean; errorCode?: string; command?: string; playedArg?: string }> {
+  async #startSeatProducer(placement: LivePlatePlacement): Promise<{
+    ok: boolean;
+    errorCode?: string;
+    command?: string;
+    playedArg?: string;
+    routePlayedAt?: number;
+    /** A route's own reading of what its failure left on the layer (`loaded`); else from the reply. */
+    outcome?: SeatOutcome;
+  }> {
+    // `ROUTE-PLATES-01` — a Playout route is started by its own pair, here and nowhere else.
+    if (placementIsPlayoutRoute(placement)) return this.#startRouteProducer(placement);
     const first = await this.#send(
       this.#builder.playSource(placement.slot, placement.producer),
       this.#nextSeq(),
@@ -7981,6 +8213,86 @@ export class CasparRuntime {
     );
     // The ledger records the argument actually SENT — asked of the one formatter, never re-spelt.
     return { ...retried, playedArg: this.#builder.sourceArgument(producer) };
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` — **CONTRACT v1.3 RULE 4 (C2, as corrected): A PLAYOUT ROUTE'S `LOADBG` →
+   * `PLAY` PAIR.** Inside the seat step, so the layer is already hidden and muted, committed, `202`
+   * received — and nowhere else.
+   *
+   * - `LOADBG <ch>-<L> "route://H-L"`, then the bare `PLAY <ch>-<L>` no sooner than
+   *   {@link ROUTE_LOADBG_MIN_MS} after the `LOADBG`'s reply (the holder queues a fresh frame) and no
+   *   later than {@link ROUTE_LOADBG_MAX_MS} after the `LOADBG` left (a preloaded route holds the
+   *   frame it was loaded with, and a cold one can air one black frame). A missed window drops that
+   *   `LOADBG` — a fresh one replaces it — once; missed twice, the seat is refused like a refused
+   *   `PLAY`, and `FIELD-FIXES-01-A` decides the rest.
+   * - Both lines carry the placement's epoch to the send seam, which refuses them unless it is the
+   *   current, confirmed one (rule 5), and both reach the PRIMARY ONLY, never journaled (C4).
+   * - A CUT: no transition word, and never inside `BEGIN…COMMIT` (nothing here uses one).
+   */
+  async #startRouteProducer(placement: LivePlatePlacement): Promise<{
+    ok: boolean;
+    errorCode?: string;
+    command?: string;
+    routePlayedAt?: number;
+    outcome?: SeatOutcome;
+  }> {
+    const clock = this.#routeClock;
+    // A seat with no epoch still goes through the seam, which refuses `''` as stale: one door.
+    const routeEpoch = placement.epoch ?? '';
+    const loadLine = this.#builder.loadBackground(placement.slot, placement.producer);
+    /*
+      Once a `LOADBG` has landed, a failure after it is `loaded`, not `refused`: the foreground is as
+      it was, and a producer of THIS operation sits in the background (`refusal-cleanup.ts`). A reply
+      that never came stays `unknown` — the `PLAY` may have promoted it.
+    */
+    let backgroundLoaded = false;
+    const afterLoad = (sent: { ok: boolean; errorCode?: string }): SeatOutcome | undefined => {
+      if (!backgroundLoaded) return undefined;
+      const outcome = outcomeOf(sent);
+      return outcome === 'refused' ? 'loaded' : outcome;
+    };
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const loadedAt = clock.now();
+      const loaded = await this.#send(loadLine, this.#nextSeq(), 'urgent', { routeEpoch });
+      if (!loaded.ok) {
+        const outcome = afterLoad(loaded);
+        return outcome === undefined ? loaded : { ...loaded, outcome };
+      }
+      backgroundLoaded = true;
+      const playAt = clock.now() + ROUTE_LOADBG_MIN_MS;
+      if (playAt - loadedAt <= ROUTE_LOADBG_MAX_MS) {
+        await sleepUntil(clock, playAt);
+        // The sleep itself may have overrun the window: asked again, right before the PLAY.
+        if (clock.now() - loadedAt <= ROUTE_LOADBG_MAX_MS) {
+          const playedAt = clock.now();
+          const played = await this.#send(
+            this.#builder.playLoaded(placement.slot),
+            this.#nextSeq(),
+            'urgent',
+            { routeEpoch },
+          );
+          const outcome = played.ok ? undefined : afterLoad(played);
+          return {
+            ...played,
+            routePlayedAt: playedAt,
+            ...(outcome !== undefined && { outcome }),
+          };
+        }
+      }
+      process.stderr.write(
+        `[caspar-bridge] plate "${placement.plateId}": its route could not be played within ` +
+          `${String(ROUTE_LOADBG_MAX_MS)} ms of its LOADBG (${String(Math.round(clock.now() - loadedAt))} ms)` +
+          `${attempt === 1 ? '; a fresh LOADBG replaces it' : '; the seat is refused'}.\n`,
+      );
+    }
+    return {
+      ok: false,
+      errorCode: ROUTE_WINDOW_MISSED_CODE,
+      command: summarizeWireLine(loadLine),
+      // Both `LOADBG`s landed and no `PLAY` was sent: ours is in the background, nothing else moved.
+      outcome: 'loaded',
+    };
   }
 
   /**
@@ -8130,6 +8442,8 @@ export class CasparRuntime {
     const moved: { slot: CommandSlot; fill: NormalizedRect; clip: NormalizedRect }[] = [];
     /** Plates this action un-muted on the way out of HELD — re-muted by the same rollback. */
     const unmuted: CommandSlot[] = [];
+    /** `ROUTE-PLATES-01` — Playout routes this action un-hid on the way out of HELD — re-hidden too. */
+    const unhidden: CommandSlot[] = [];
     let failure: string | undefined;
     let failedPlate:
       | {
@@ -8212,6 +8526,20 @@ export class CasparRuntime {
         const seat = seats.get(r.placement.producerArg);
         return !r.optional && seat !== undefined && seat.outcome !== 'landed';
       });
+    /*
+      🔴 `ROUTE-PLATES-01` rule 4 (C2) — THE REVEAL GOES ONE OR TWO TICKS AFTER A ROUTE'S `PLAY`, so
+      its stale first frame and the first tick after it pass hidden. A take reveals in the very next
+      batch, so it waits here until {@link ROUTE_REVEAL_AFTER_PLAY_MS} after the latest route `PLAY`;
+      a switch's pre-seated routes already ran hidden through its preroll, and the wait is spent.
+      Nothing waits when no route was played, or when nothing will be revealed.
+    */
+    const lastRoutePlay = Math.max(
+      Number.NEGATIVE_INFINITY,
+      ...[...seats.values()].map((s) => s.routePlayedAt ?? Number.NEGATIVE_INFINITY),
+    );
+    if (!takeRefused && Number.isFinite(lastRoutePlay)) {
+      await sleepUntil(this.#routeClock, lastRoutePlay + ROUTE_REVEAL_AFTER_PLAY_MS);
+    }
 
     /**
      * `B-198` — has this batch staged anything? The `COMMIT` after the loop is sent ONLY if it
@@ -8268,6 +8596,13 @@ export class CasparRuntime {
         intendedVolume: intent[placement.plateId] ?? CREATED_MUTED_VOLUME,
         // `PLAYOUT-SOURCES-01` §1.I — a later raise reaches this layer from the record alone.
         ...(placement.source.origin !== undefined && { origin: placement.source.origin }),
+        // `ROUTE-PLATES-01` rule 5 — the epoch of the route actually running: the prior one for a
+        // seat this action does not re-`PLAY`, the placement's for one it does.
+        ...(() => {
+          if (!placementIsPlayoutRoute(placement)) return {};
+          const epoch = seatUnchanged ? prior?.epoch : placement.epoch;
+          return epoch === undefined ? {} : { epoch };
+        })(),
         /*
           🔴 A FRESH PARK STARTS `held: false` AND IS CORRECTED TO WHAT LANDED.
 
@@ -8295,6 +8630,7 @@ export class CasparRuntime {
           moved.push({ slot: placement.slot, fill: prior.fill, clip: prior.clip });
         }
         if (prior.held === true) unmuted.push(placement.slot);
+        if (prior.held === true && isPlayoutRouteRecord(prior)) unhidden.push(placement.slot);
       }
       if (seatUnchanged && prior !== undefined) {
         // 6.4 — THE FIT, RE-DERIVED PER LOOK. Emitted only when the geometry actually
@@ -8317,6 +8653,10 @@ export class CasparRuntime {
               plateVolumeFrames(record.origin, record.intendedVolume),
             ),
           );
+          // `ROUTE-PLATES-01` (C2) — a held Playout route was hidden, not only parked: showing it
+          // again is ONLY the reveal — no new `PLAY`, it never stopped playing.
+          if (isPlayoutRouteRecord(prior))
+            lines.push(this.#builder.mixerOpacity(placement.slot, 1));
         }
       }
       /*
@@ -8355,7 +8695,11 @@ export class CasparRuntime {
           */
           const revealVolume = placement.held ? CREATED_MUTED_VOLUME : record.intendedVolume;
           lines.push(
-            this.#builder.mixerOpacity(placement.slot, 1),
+            // `ROUTE-PLATES-01` (C2) — a parked Playout route stays hidden until a look shows it.
+            this.#builder.mixerOpacity(
+              placement.slot,
+              placement.held && placementIsPlayoutRoute(placement) ? 0 : 1,
+            ),
             this.#builder.mixerVolume(
               placement.slot,
               revealVolume,
@@ -8517,7 +8861,7 @@ export class CasparRuntime {
           // where one landed and was not cleared; and, where the `PLAY` was refused, whatever was
           // there before — still there, because the server did not touch the layer.
           if (cleared) ledger.delete(key(record));
-          else if (outcome !== 'refused') ledger.set(key(record), record);
+          else if (!foregroundUnchanged(outcome)) ledger.set(key(record), record);
         }
         this.registerLiveLayers(itemId, [...ledger.values()]);
         return { ok: false, errorCode: failure, ...refusalOf(failedPlate) };
@@ -8584,6 +8928,10 @@ export class CasparRuntime {
             this.#nextSeq(),
             'urgent',
           );
+        }
+        // `ROUTE-PLATES-01` (C2) — and a held Playout route goes back to hidden, as it was.
+        for (const slot of unhidden) {
+          await this.#send(this.#builder.mixerOpacity(slot, 0), this.#nextSeq(), 'urgent');
         }
         /*
           🔴 AND THE RECORDS FOLLOW THE WIRE. Not the other way round.
@@ -8723,7 +9071,10 @@ export class CasparRuntime {
       // `FIELD-FIXES-01-A` — a `PLAY` refused onto a slot nothing of ours was on leaves that slot
       // as it was: empty of ours, so the ledger must not name it (and the Rule cleared nothing).
       const nothingLanded =
-        failed !== undefined && failed.reseat && failed.outcome === 'refused' && !replacedInPlace;
+        failed !== undefined &&
+        failed.reseat &&
+        foregroundUnchanged(failed.outcome) &&
+        !replacedInPlace;
       const settledFailed =
         failed === undefined || tornDown || nothingLanded
           ? []
@@ -8908,6 +9259,20 @@ export class CasparRuntime {
           'urgent',
         );
         muted = sent.ok;
+        /*
+          🔴 `ROUTE-PLATES-01` (C2) — A HELD PLAYOUT ROUTE IS ALSO HIDDEN: `OPACITY 0`, staged with
+          the mute, and still PLAYING — never `PAUSE`, and `BLEND` is left at normal. It rides the
+          same latch as the mute, and `held` claims both landed or neither.
+        */
+        if (muted && isPlayoutRouteRecord(record)) {
+          this.#stagedMixerChannel = record.slot.channel;
+          const hidden = await this.#send(
+            this.#builder.deferMixer(this.#builder.mixerOpacity(record.slot, 0)),
+            this.#nextSeq(),
+            'urgent',
+          );
+          muted = hidden.ok;
+        }
       }
       /*
         🔴 `B-154` — AND PARK THE GEOMETRY, because muting a held plate silences it and does
@@ -9782,6 +10147,26 @@ export class CasparRuntime {
    */
   #publishLiveLayers(): void {
     this.liveLayersChanged.emit(this.#liveLayers);
+    // `ROUTE-PLATES-01` C4 — a row whose answer to "is the backup without its live boxes" moved is
+    // republished, so its line comes and goes with the seat and not with the next unrelated publish.
+    const unmirrored = new Set(
+      [...this.#liveLayers.keys()].filter((id) => this.#backupUnmirrored(id)),
+    );
+    for (const id of unmirrored) if (!this.#backupUnmirroredItems.has(id)) this.#markDirty(id);
+    for (const id of this.#backupUnmirroredItems) if (!unmirrored.has(id)) this.#markDirty(id);
+    this.#backupUnmirroredItems = unmirrored;
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — **DOES THE BACKUP CARRY THIS ROW WITHOUT ITS LIVE
+   * BOXES?** A backup is declared and the row's seats include a Playout route, which is never
+   * mirrored (`#send`'s `mirror: false`). Every other plate mirrors as it always has.
+   */
+  #backupUnmirrored(itemId: string): boolean {
+    return (
+      this.#config.servers.B !== undefined &&
+      (this.#liveLayers.get(itemId) ?? []).some(isPlayoutRouteRecord)
+    );
   }
 
   /**
@@ -12237,8 +12622,148 @@ export class CasparRuntime {
    */
   setResolvedSourceCatalog(next: SourceCatalog): void {
     if (JSON.stringify(next) === JSON.stringify(this.#sourceCatalog)) return;
+    const epochBefore = this.#sourceCatalog.inputsEpoch;
     this.#sourceCatalog = next;
     this.sourceCatalogChanged.emit(next);
+    // `ROUTE-PLATES-01` rule 5 — a read that MOVED the epoch: every route plate resolved from another
+    // one names a holder layer that may no longer be its input's.
+    if (next.inputsEpoch !== epochBefore) this.#flagStaleRoutePlates(next.inputsEpoch);
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — **THE BOUNDED D10 RE-READ, handed in by the bridge** (the Playout's
+   * reader is built after the runtime). `null` — no Playout reader — confirms nothing, so no Playout
+   * route is ever sent.
+   */
+  setInputsConfirmer(
+    confirm:
+      | ((
+          timeoutMs: number,
+        ) => Promise<{ readonly ok: true; readonly epoch?: string } | { readonly ok: false }>)
+      | null,
+  ): void {
+    this.#confirmInputs = confirm;
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — **IS `epoch` THE ONE A ROUTE MAY BE SENT FROM?** The catalogue's,
+   * confirmed by a D10 read on the primary's CURRENT connection. Anything else is stale or unknown,
+   * and a route of a stale or unknown epoch is never sent.
+   *
+   * ⚠ And only while server A is the primary (C4). The holder lives on the Playout's one core (their
+   * answer S1), which this station declares as A; `route://H-L` names a channel OF THAT CORE, so on
+   * the backup after a failover it would name the backup's own channel H — something else, or
+   * nothing. A route is never sent to the backup: not mirrored, and not as its new primary either.
+   */
+  #routeEpochIsCurrent(epoch: string | undefined): boolean {
+    const confirmed = this.#routeEpochConfirmed;
+    return (
+      epoch !== undefined &&
+      this.#adapter.currentPrimary === 'A' &&
+      confirmed !== null &&
+      confirmed.generation === this.#amcpGeneration &&
+      confirmed.epoch === epoch &&
+      this.#sourceCatalog.inputsEpoch === epoch
+    );
+  }
+
+  /** `ROUTE-PLATES-01` rule 5 — one bounded D10 read; answers whether it confirmed an epoch. */
+  async #confirmRouteEpoch(): Promise<boolean> {
+    const confirm = this.#confirmInputs;
+    if (confirm === null) return false;
+    const generation = this.#amcpGeneration;
+    const read = await confirm(ROUTE_EPOCH_READ_MS);
+    // A reconnect while the read was out: it confirms nothing about the connection now in force.
+    if (!read.ok || read.epoch === undefined || generation !== this.#amcpGeneration) return false;
+    this.#routeEpochConfirmed = { generation, epoch: read.epoch };
+    return true;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` rule 5 — before a route is seated: the epoch in force if it is already
+   * confirmed on this connection, else one bounded read to confirm it. `false` = no route may be sent.
+   */
+  async #ensureRouteEpoch(): Promise<boolean> {
+    if (this.#routeEpochIsCurrent(this.#sourceCatalog.inputsEpoch)) return true;
+    return (
+      (await this.#confirmRouteEpoch()) &&
+      this.#routeEpochIsCurrent(this.#sourceCatalog.inputsEpoch)
+    );
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — **A ROUTE PLATE OF ANOTHER EPOCH WAITS, AND SAYS SO.** It keeps its
+   * layer and nothing is sent for it — no route of a stale epoch is ever re-sent — and its row says,
+   * in `FIELD-FIXES-01`'s one line, `Bed 59 · Plate 1: waiting for the Playout's input list.` It is
+   * seated again only from a fresh D10 of the current epoch, by the restore the bridge already has:
+   * the operator's take (or PUT BACK ON AIR, which is one).
+   */
+  #flagStaleRoutePlates(epoch: string | undefined): void {
+    for (const [itemId, records] of this.#liveLayers) {
+      const stale = records.find(
+        (r) => isPlayoutRouteRecord(r) && (epoch === undefined || r.epoch !== epoch),
+      );
+      if (stale !== undefined) this.#recordRouteWaiting(itemId, stale);
+    }
+  }
+
+  /**
+   * `ROUTE-PLATES-01` §1.E — does a SEATED plate of ours sit on this layer right now? The ledger
+   * names it and no `CLEAR` of ours has landed on it since (a teardown sends its `MIXER CLEAR` only
+   * after its `CLEAR` landed, while the ledger still names the layer).
+   */
+  #holdsSeatedPlate(slot: CommandSlot): boolean {
+    const key = adoptionKey(slot);
+    if (this.#emptiedLayers.has(key)) return false;
+    for (const records of this.#liveLayers.values()) {
+      if (records.some((r) => adoptionKey(r.slot) === key)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` rule 5 — a take refused because no epoch could be confirmed for its route
+   * plate: before any AMCP, the row says it in its one line, and nothing was sent.
+   */
+  #refuseRouteWaiting(itemId: string, placement: LivePlatePlacement): TakeVerdict {
+    this.#recordTakeRefusal(itemId, {
+      code: ROUTE_WAITING_CODE,
+      plateId: placement.plateId,
+      sourceId: placement.source.id,
+      sourceName: placement.source.name,
+      sourceOrigin: 'input',
+    });
+    const message = routeWaitingMessage(placement.plateId);
+    process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${message}\n`);
+    return { accepted: false, errorCode: ROUTE_WAITING_CODE, message, refusalOnRow: true };
+  }
+
+  /** `ROUTE-PLATES-01` — the row's one line for a route plate that waits, and one log line. */
+  #recordRouteWaiting(itemId: string, record: LiveLayerRecord): void {
+    this.#recordTakeRefusal(itemId, {
+      code: ROUTE_WAITING_CODE,
+      plateId: record.sourceId,
+      sourceOrigin: 'input',
+    });
+    process.stderr.write(
+      `[caspar-bridge] ${itemId}: plate "${record.sourceId}" waits for the Playout's input list ` +
+        `(its route belongs to epoch ${record.epoch ?? 'unknown'}); nothing is sent for it.\n`,
+    );
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 (C3) — **AFTER AN AMCP RECONNECT, D10 AGAIN, BOUNDED.** Only when the
+   * ledger holds a route plate. A read that fails, or confirms another epoch, leaves each such plate
+   * waiting ({@link #flagStaleRoutePlates}); a read that confirms the plates' own epoch changes
+   * nothing — the reconnect restores them exactly as today (mixer state only, never a `PLAY`).
+   */
+  async #routeEpochAfterReconnect(): Promise<void> {
+    const anyRoute = [...this.#liveLayers.values()].some((records) =>
+      records.some(isPlayoutRouteRecord),
+    );
+    if (!anyRoute) return;
+    const confirmed = await this.#confirmRouteEpoch();
+    this.#flagStaleRoutePlates(confirmed ? this.#sourceCatalog.inputsEpoch : undefined);
   }
 
   /**
@@ -12312,6 +12837,26 @@ export class CasparRuntime {
    */
   #isDeclaredChannel(channel: number): boolean {
     return this.#declaredChannels().includes(channel);
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` §1.E — **DOES THIS STATION'S OWN CONFIG DECLARE THIS LAYER?** A bank row
+   * (the beds included — one union, `LayerManager.isFixed`), the Live Source band in force, or a
+   * dynamic policy range; on a declared channel; never a reserved (playout) layer. The send seam's
+   * guard reads it for C5's "`CLEAR <ch>-<L>` only on your own layers (50 to 99)".
+   *
+   * CONFIG, not bookkeeping — the same discipline {@link clearLayer} keeps: a stale ledger that
+   * names a layer the station no longer declares (a plate seated at 30 before the 2026-09-14
+   * re-cut) does not become "ours" by having been recorded. On every station that can boot these
+   * all lie inside 50–99, so there the rule is the contract's, word for word; a configuration built
+   * past the boot, as the suite's legacy fixtures are, keeps today's wire.
+   */
+  #isOwnConfiguredLayer(channel: number, layer: number): boolean {
+    if (!this.#isDeclaredChannel(channel) || this.#reservedSet.has(layer)) return false;
+    if (this.#layers.isFixed({ channel, layer })) return true;
+    const band = this.#sourceCatalog.layerRange;
+    if (band !== undefined && layer >= band.start && layer <= band.end) return true;
+    return Object.values(this.#layerPolicy).some(([low, high]) => layer >= low && layer <= high);
   }
 
   /** R-030 — the configured raster(s) plus what `INFO <channel>` reported. */
@@ -12681,6 +13226,23 @@ export class CasparRuntime {
       process.stderr.write(
         `[caspar-bridge] --create-missing-consumers is on, but ${kinds} on channel ` +
           `${String(channel)} is not a kind the bridge creates — reported only.\n`,
+      );
+      return;
+    }
+    /*
+      🔴 `ROUTE-PLATES-01` §1.E / §0.8 — THE SAME GUARD, on the one line the bridge sends around
+      `#send`. A consumer `ADD` on a programme channel is one of the Playout's C5 commands we never
+      send (`CG-CONTROL-REPLY-V13-STATE` §3), so while that stands this flag reports and creates
+      nothing. Whether it should be retired or excepted is the owner's decision, not this seam's.
+    */
+    const refused = amcpLineRefusal(command, {
+      isDeclaredChannel: (c) => this.#isDeclaredChannel(c),
+      seatedPlateOn: (c, l) => this.#holdsSeatedPlate({ channel: c, layer: l }),
+    });
+    if (refused !== null) {
+      record({ at, outcome: 'not-attempted', note: `not sent — ${refused.reason}` });
+      process.stderr.write(
+        `[caspar-bridge] 🔴 --create-missing-consumers: "${command}" not sent — ${refused.reason}.\n`,
       );
       return;
     }
@@ -13069,6 +13631,22 @@ export class CasparRuntime {
     line: string,
     seq: number,
     priority: 'urgent' | 'normal',
+    options: {
+      /**
+       * `ROUTE-PLATES-01` — this line is a PLAYOUT ROUTE's `LOADBG`/`PLAY`, resolved from this epoch.
+       * It is sent only while that is the current, confirmed epoch (rule 5), and to the primary
+       * only, never journaled (C4). Absent on every other line — a hand-made `route://` included.
+       */
+      readonly routeEpoch?: string;
+      /**
+       * `ROUTE-PLATES-01` §0.6 — the ONE door that addresses a channel this station does not
+       * declare: {@link takeStrayOffAir}, on our own recorded stray's exact coordinate (never in
+       * 1–49). The guard lets that coordinate through; nothing else is exempt. The prompt stopped
+       * this door's removal and left it to the owner, so it is kept — and named — rather than
+       * silently closed by the guard.
+       */
+      readonly strayTarget?: CommandSlot;
+    } = {},
   ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
     /*
       `B-198` TEST-ONLY — the fault injector. Ahead of the write, so the delay lands BETWEEN
@@ -13113,6 +13691,49 @@ export class CasparRuntime {
       }
     }
     /*
+      🔴 `ROUTE-PLATES-01` §1.E — **THE GUARD AT THE SEAM: a line this station may never send does
+      not leave the process.** Contract v1.3 rule 3 and the Playout's C5 additions, asked of the one
+      pure function (`amcp-guard.ts`): a target that is not a declared programme channel (the
+      Playout's holder and guard channels never are), a whole-channel `CLEAR`, a channel-wide `MIXER
+      CLEAR`, `SWAP`, `SET MODE`, a consumer `ADD`/`REMOVE`, a `CLEAR` outside 50–99, a `MIXER
+      CLEAR` under a seated plate, a `route://` with no layer. And rule 5: a Playout route's line is
+      sent only from the current, confirmed epoch. A refusal is answered like a refused command —
+      the caller's refusal path runs — logged, and NOTHING is sent.
+    */
+    const refusal =
+      options.routeEpoch !== undefined && !this.#routeEpochIsCurrent(options.routeEpoch)
+        ? {
+            code: ROUTE_EPOCH_STALE_CODE,
+            reason:
+              `a route of epoch ${options.routeEpoch === '' ? 'unknown' : options.routeEpoch} is ` +
+              `not the Playout's current, confirmed one (rule 5)`,
+          }
+        : amcpLineRefusal(line, {
+            isDeclaredChannel: (channel) =>
+              this.#isDeclaredChannel(channel) || channel === options.strayTarget?.channel,
+            seatedPlateOn: (channel, layer) => this.#holdsSeatedPlate({ channel, layer }),
+            isOwnLayer: (channel, layer) =>
+              this.#isOwnConfiguredLayer(channel, layer) ||
+              (channel === options.strayTarget?.channel && layer === options.strayTarget.layer),
+            playoutRoute: options.routeEpoch !== undefined,
+          });
+    if (refusal !== null) {
+      this.#clearExpiry(seq);
+      this.#reconciler.applyAck(seq, false, refusal.code);
+      process.stderr.write(
+        `[caspar-bridge] 🔴 not sent — ${refusal.reason}: ${redactUrlCredentials(summarizeWireLine(line))}\n`,
+      );
+      return {
+        ok: false,
+        onPrimary: false,
+        errorCode: refusal.code,
+        command: summarizeWireLine(line),
+      };
+    }
+    // `ROUTE-PLATES-01` — from the moment a producer command leaves, its layer may hold a producer.
+    const producerSlot = producerTargetOf(line);
+    if (producerSlot !== null) this.#emptiedLayers.delete(adoptionKey(producerSlot));
+    /*
       `B-199` TEST-ONLY — die mid-batch. Thrown BEFORE the write and before `#send`'s own
       `try`, so it escapes the way a real defect would rather than being converted into the
       `{ ok: false }` every wire failure becomes. Only a STAGED line counts, so the throw is
@@ -13134,12 +13755,21 @@ export class CasparRuntime {
       this.#lastMixerTarget = target;
     }
     try {
-      const result = await this.#adapter.send(line, { priority });
+      // `ROUTE-PLATES-01` C4 — a Playout route reaches the primary only, and is never journaled.
+      const result = await this.#adapter.send(
+        line,
+        options.routeEpoch !== undefined ? { priority, mirror: false } : { priority },
+      );
       // A response ARRIVED, so the B-044 bounded timeout no longer applies —
       // and the ack below settles the intent either way (B-070: a failed ack
       // settles too), so no expiry is needed to rescue it.
       this.#clearExpiry(seq);
       const ok = result.response.kind !== 'err';
+      // `ROUTE-PLATES-01` §1.E — a `CLEAR` that LANDED on the primary emptied its layer.
+      const clearedSlot = clearTargetOf(line);
+      if (clearedSlot !== null && ok && result.winner === this.#adapter.currentPrimary) {
+        this.#emptiedLayers.add(adoptionKey(clearedSlot));
+      }
       // B-070 — surface the REAL AMCP code so a refusal can explain itself
       // (`stack.update` used to answer a bare `{ accepted: false }`, which the
       // Inspector could only render as the generic "Not accepted.").

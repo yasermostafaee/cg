@@ -9,6 +9,7 @@ import {
   foldPlayoutInputsRead,
   mediaSourceId,
   parsePlayoutInputs,
+  parsePlayoutJson,
   parsePlayoutMediaPage,
   playoutMediaIdOf,
   toBoundMedia,
@@ -131,7 +132,12 @@ export class HttpPlayoutSources implements PlayoutSourcesProvider {
       });
       if (res.status === 304) return { kind: 'not-modified' };
       if (!res.ok) return { kind: 'failed' };
-      return { kind: 'ok', body: await res.json(), etag: res.headers.get('etag') };
+      // `ROUTE-PLATES-01` — from the TEXT, so the 64-bit `epoch` arrives digit for digit.
+      return {
+        kind: 'ok',
+        body: parsePlayoutJson(await res.text()),
+        etag: res.headers.get('etag'),
+      };
     } catch {
       return { kind: 'failed' };
     }
@@ -216,6 +222,16 @@ function loadStore<T>(
   return empty;
 }
 
+/** `promise`'s value, or `undefined` once `ms` passed first. The timer is released either way. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), ms);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /** Atomically persist (mkdir -p + tmp + rename), the store precedent. */
 function saveStore(file: string | undefined, value: unknown): void {
   if (file === undefined) return;
@@ -265,7 +281,7 @@ export class PlayoutSources {
   #catalog: SourceCatalog;
   #lastInputsReadMs = Number.NEGATIVE_INFINITY;
   #lastMediaReadMs = Number.NEGATIVE_INFINITY;
-  #inputsInFlight: Promise<void> | null = null;
+  #inputsInFlight: Promise<boolean> | null = null;
   #mediaInFlight: Promise<void> | null = null;
   #ticker: ReturnType<typeof setInterval> | null = null;
   #inputReads = 0;
@@ -352,28 +368,54 @@ export class PlayoutSources {
   }
 
   #refreshInputs(floorMs: number): Promise<void> {
-    if (this.#inputsInFlight !== null) return this.#inputsInFlight;
+    if (this.#inputsInFlight !== null) return this.#inputsInFlight.then(() => undefined);
     if (this.#now() - this.#lastInputsReadMs < floorMs) return Promise.resolve();
-    this.#lastInputsReadMs = this.#now();
-    this.#inputReads += 1;
-    this.#inputsInFlight = this.#readInputs().finally(() => {
-      this.#inputsInFlight = null;
-    });
-    return this.#inputsInFlight;
+    return this.#startInputsRead().then(() => undefined);
   }
 
-  async #readInputs(): Promise<void> {
+  /** Start one D10 read now; it is the one in flight until it settles. Answers whether it succeeded. */
+  #startInputsRead(): Promise<boolean> {
+    this.#lastInputsReadMs = this.#now();
+    this.#inputReads += 1;
+    const read: Promise<boolean> = this.#readInputs().finally(() => {
+      if (this.#inputsInFlight === read) this.#inputsInFlight = null;
+    });
+    this.#inputsInFlight = read;
+    return read;
+  }
+
+  /**
+   * 🔴 `ROUTE-PLATES-01` rule 5 — **READ D10 NOW, BOUNDED**: after an AMCP reconnect, when an epoch
+   * change is seen, and before a route plate is seated again. A read already in flight began BEFORE
+   * the question was asked, so it cannot answer it: a fresh read starts after it. Answers the
+   * catalogue's canonical epoch once a successful read (a `304` included) lands within `timeoutMs`,
+   * else `{ ok: false }` — the read itself runs on and lands whenever it lands, like every other.
+   */
+  confirmInputs(
+    timeoutMs: number = RETRY_READ_TIMEOUT_MS,
+  ): Promise<{ readonly ok: true; readonly epoch?: string } | { readonly ok: false }> {
+    if (this.#provider === null || !this.#signedIn()) return Promise.resolve({ ok: false });
+    const before = this.#inputsInFlight ?? Promise.resolve(true);
+    const read = before.then(() => this.#startInputsRead());
+    return withTimeout(read, timeoutMs).then((ok) => {
+      if (ok !== true) return { ok: false } as const;
+      const epoch = this.#catalog.inputsEpoch;
+      return epoch === undefined ? { ok: true as const } : { ok: true as const, epoch };
+    });
+  }
+
+  async #readInputs(): Promise<boolean> {
     const provider = this.#provider;
-    if (provider === null) return;
+    if (provider === null) return false;
     const held = this.#inputs.readAt === undefined ? null : this.#etag;
     const result = await provider.readInputs(held);
     const at = new Date(this.#now()).toISOString();
-    if (result.kind === 'failed') return; // A failed read changes nothing — rule 14.
+    if (result.kind === 'failed') return false; // A failed read changes nothing — rule 14.
     if (result.kind === 'not-modified') {
       this.#inputs = { ...this.#inputs, readAt: at };
     } else {
       const read = parsePlayoutInputs(result.body);
-      if (read === null) return; // A body we cannot read is a failed read.
+      if (read === null) return false; // A body we cannot read is a failed read.
       // §1.B — an unknown format is read as AUTO plus the Playout's aspect, and reported.
       const known = new Set(LIVE_SOURCE_FORMATS.map((f) => f.toLowerCase()));
       for (const input of read.inputs) {
@@ -389,6 +431,7 @@ export class PlayoutSources {
     }
     saveStore(this.#inputsPath, this.#inputs);
     this.#rebuild();
+    return true;
   }
 
   #refreshMedia(floorMs: number): Promise<void> {

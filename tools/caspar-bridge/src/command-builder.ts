@@ -413,6 +413,24 @@ export class CommandBuilder {
   }
 
   /**
+   * 🔴 `ROUTE-PLATES-01` — contract v1.3 rule 4's first half: `LOADBG <ch>-<L> "route://H-L"`. The
+   * producer goes to the layer's BACKGROUND and nothing on air changes; {@link playLoaded} promotes
+   * it. The argument is {@link sourceArgument}'s, so the ledger's `producer` and this line cannot
+   * spell one route two ways. Layer-scoped, like every seating line.
+   */
+  loadBackground(slot: CommandSlot, producer: SourceProducer): string {
+    return `LOADBG ${target(slot)} ${this.sourceArgument(producer)}`;
+  }
+
+  /**
+   * `ROUTE-PLATES-01` — rule 4's second half: the bare `PLAY <ch>-<L>`, which plays what
+   * {@link loadBackground} loaded. A CUT: no transition word is ever appended (phase A is CUT only).
+   */
+  playLoaded(slot: CommandSlot): string {
+    return `PLAY ${target(slot)}`;
+  }
+
+  /**
    * C-015 phase 6 (task 6.0) — the producer ARGUMENT alone, without the `PLAY`.
    *
    * Exposed for exactly one caller: the ledger records _"the concrete producer

@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import {
-  ROUTE_NOT_SUPPORTED_YET,
   inputSourceId,
   mediaSourceId,
   type ConnectionConfig,
@@ -590,26 +589,28 @@ describe('§1.A — a bound media item is re-read every 30 s', () => {
 
 // ── §1.H — v1.3 shapes, and what cannot be bound ────────────────────────────────────────
 
-describe('§1.H — the route gate, and unusable inputs', () => {
-  it('🔴 both v1.3 route inputs parse, carry the gate, and cannot be bound — and no `PLAY … route://` is ever sent', async () => {
+/*
+  `ROUTE-PLATES-01` §1.G — SUPERSEDED: the first case pinned `PLAYOUT-SOURCES-01`'s gate (both routes
+  `unusable`, "Not supported yet.", never bound). The gate is gone; how a route is SEATED — its
+  `LOADBG` → `PLAY` pair, its epoch, its channel — is `route-plates.integration.test.ts`'s subject.
+*/
+describe('§1.H — v1.3 shapes, and unusable inputs', () => {
+  it('🔴 both v1.3 route inputs parse and keep their channels; `ورودی ۳` binds, and `ورودی ۴` carries the Playout’s own `unavailable`', async () => {
     const { r } = await boot();
-    for (const id of [INPUT_3, INPUT_4]) {
-      const entry = r.sourceCatalog().sources.find((s) => s.id === id);
-      expect(entry, id).toMatchObject({ status: 'unusable', reason: ROUTE_NOT_SUPPORTED_YET });
-      expect(entry?.producer.kind).toBe('route');
-      expect(r.setSourceAssignments(plates(id))).toMatchObject({
-        ok: false,
-        reason: 'source-unusable',
-      });
-    }
+    const three = r.sourceCatalog().sources.find((s) => s.id === INPUT_3);
+    const four = r.sourceCatalog().sources.find((s) => s.id === INPUT_4);
+    expect(three?.producer.kind).toBe('route');
+    expect(three?.status).toBeUndefined();
+    expect(four).toMatchObject({ status: 'unavailable', reason: 'no signal' });
     // Per channel: `ورودی ۴` is for channel 1 only, `ورودی ۳` for both.
-    expect(r.sourceCatalog().sources.find((s) => s.id === INPUT_3)?.channels).toEqual([1, 2]);
-    expect(r.sourceCatalog().sources.find((s) => s.id === INPUT_4)?.channels).toEqual([1]);
+    expect(three?.channels).toEqual([1, 2]);
+    expect(four?.channels).toEqual([1]);
+    expect(r.setSourceAssignments(plates(INPUT_3))).toEqual({ ok: true });
 
-    // Control: the NDI and stream inputs bind and play.
+    // Control: the NDI and stream inputs bind and play, and nothing of a route is sent for them.
     expect(r.setSourceAssignments(plates(STUDIO_1, NEWS_CAM))).toEqual({ ok: true });
     await takeOnAir(r);
-    expect((await recvLines()).some((l) => /^PLAY \S+ "route:\/\//.test(l))).toBe(false);
+    expect((await recvLines()).some((l) => /route:\/\//.test(l))).toBe(false);
   });
 
   it('an input on a scheme this product does not accept is unusable, and not even a hand-crafted request binds it', async () => {

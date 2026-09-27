@@ -421,6 +421,12 @@ export const SourceCatalogSchema = z.object({
    * Station setup's read-only list. Absent = never read.
    */
   inputsReadAt: z.string().optional(),
+  /**
+   * `ROUTE-PLATES-01` — the `epoch` of the D10 answer this catalogue was built from, canonical
+   * ({@link canonicalPlayoutEpoch}): every `route` producer in it names a holder layer of THAT epoch
+   * (contract v1.3 rule 5). Absent = the Playout sent none (v1.2, or the holder off).
+   */
+  inputsEpoch: z.string().optional(),
 });
 export type SourceCatalog = z.infer<typeof SourceCatalogSchema>;
 

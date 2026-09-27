@@ -265,7 +265,15 @@ it('🔴 with creation OFF (the default) NO ADD is ever sent, however long the o
   expect(runtime!.health().primary.outputs?.[0]?.creation).toBeUndefined();
 }, 30000);
 
-it('with creation ON: exactly ONE ADD, the declaration’s own device and flags, and the plant’s 403 is recorded', async () => {
+/*
+  🔴 `ROUTE-PLATES-01` §1.E — SUPERSEDED: a consumer `ADD` on a programme channel is one of the
+  Playout's C5 commands this station never sends (`CG-CONTROL-REPLY-V13-STATE` §3). These two cases
+  used to pin the ADD the flag sent (the plant's 403, and a verified 202); with creation ON the
+  guard now refuses it before the wire, the check records it `not-attempted` and names why, and the
+  output stays reported MISSING. Whether `--create-missing-consumers` is retired or excepted is the
+  owner's decision (the report's open decisions), not the guard's.
+*/
+it('with creation ON: the consumer ADD is refused at the seam (C5) — recorded, never sent, and the output stays missing', async () => {
   const script = fixture();
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
@@ -292,27 +300,25 @@ it('with creation ON: exactly ONE ADD, the declaration’s own device and flags,
 
   await vi.waitFor(
     () => {
-      expect(runtime!.health().primary.outputs?.[0]?.creation).toMatchObject({
-        outcome: 'refused',
-        code: 403,
-        command: 'ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO',
-      });
+      const creation = runtime!.health().primary.outputs?.[0]?.creation;
+      expect(creation?.outcome).toBe('not-attempted');
+      expect(creation?.note).toMatch(/consumer ADD is never sent \(C5\)/);
     },
     { timeout: HEALTH_MS, interval: 25 },
   );
-  expect(adds).toEqual(['ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO']);
-  // Still missing — the server said no — and NOT retried on every re-read.
   expect(outputVerdictOf(runtime!.health().primary).kind).toBe('missing');
   await settle(150 * 4);
-  expect(adds).toHaveLength(1);
+  expect(adds, 'nothing reached the server').toEqual([]);
 }, 30000);
 
-it('with creation ON and a server that accepts: the 202 is VERIFIED by a re-read, not believed', async () => {
+it('with creation ON and a server that WOULD accept: still no ADD — the refusal is ours, not the server’s', async () => {
   const script = fixture();
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
   scriptInfo(mock, script);
-  mock.setHandler('ADD', () => {
+  const adds: string[] = [];
+  mock.setHandler('ADD', (req) => {
+    adds.push(`ADD ${req.args.join(' ')}`);
     script.running = [...WITH_DECKLINK];
     return { kind: 'ok', code: 202, verb: 'ADD' };
   });
@@ -332,13 +338,12 @@ it('with creation ON and a server that accepts: the 202 is VERIFIED by a re-read
 
   await vi.waitFor(
     () => {
-      const check = runtime!.health().primary.outputs?.[0];
-      expect(check?.creation?.outcome).toBe('created');
-      expect(check?.missing).toEqual([]);
+      expect(runtime!.health().primary.outputs?.[0]?.creation?.outcome).toBe('not-attempted');
     },
     { timeout: HEALTH_MS, interval: 25 },
   );
-  expect(outputVerdictOf(runtime!.health().primary).kind).toBe('ok');
+  expect(adds).toEqual([]);
+  expect(outputVerdictOf(runtime!.health().primary).kind).toBe('missing');
 }, 30000);
 
 it('with creation ON but only a MONITOR missing: nothing is sent and the reason is recorded', async () => {

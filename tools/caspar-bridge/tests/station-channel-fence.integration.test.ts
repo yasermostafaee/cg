@@ -76,8 +76,15 @@ import { startFakePlayout } from './support/fake-playout.js';
 const BANK: FixedLayerBank = { channel: 2, low: { start: 50, count: 9 }, start: 70, count: 4 };
 /** One reserved playout layer, channel-agnostic by the reservation's own rule. */
 const RESERVED = { ranges: [{ from: 60, to: 60 }] };
-/** An unreserved, undeclared layer where "somebody else's graphic" lives on both channels. */
-const FOREIGN_LAYER = 20;
+/**
+ * An unreserved, undeclared layer where "somebody else's graphic" lives on both channels.
+ *
+ * `ROUTE-PLATES-01` §1.E — inside CG's layers (50–99) and outside this station's bank. It was 20,
+ * and 1–49 is the Playout's span: the send seam now refuses a `CLEAR` there on EVERY channel (C5),
+ * so layer 20 could no longer carry this suite's channel-2 control. The subject here is the channel
+ * fence, and it is unchanged; the seam's own refusal of `CLEAR 2-20` is pinned in the guard's tests.
+ */
+const FOREIGN_LAYER = 90;
 const BANK_ROW = 72;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
@@ -274,7 +281,7 @@ const DOORS: readonly Door[] = [
     name: 'layers.clear',
     arrange: (rig) => seedHtml(rig, FOREIGN_LAYER),
     send: (rig, channel) => rig.client.ask(id(), 'layers.clear', { channel, layer: FOREIGN_LAYER }),
-    controlLine: /^CLEAR 2-20$/,
+    controlLine: new RegExp(`^CLEAR 2-${String(FOREIGN_LAYER)}$`),
   },
   {
     name: 'playoutLayers.clear',

@@ -1,5 +1,7 @@
 import {
+  notShowableWords,
   sourceSeatable,
+  sourceShowableOn,
   unseatableClause,
   type SourceAssignments,
   type SourceCatalog,
@@ -47,14 +49,20 @@ export const LIVE_PLATE_UNASSIGNED = 'live-source-unassigned';
  * lists it (or marks it unavailable). The take is refused before any AMCP; the binding stays.
  */
 export const LIVE_PLATE_SOURCE_UNAVAILABLE = 'source-unavailable';
-/** `PLAYOUT-SOURCES-01` — an assigned entry that became unusable (its rules, or the route gate). */
+/** `PLAYOUT-SOURCES-01` — an assigned entry that became unusable (its rules). */
 export const LIVE_PLATE_SOURCE_UNUSABLE = 'source-unusable';
+/**
+ * 🔴 `ROUTE-PLATES-01` / contract v1.3 rule 1 — the row's channel is not one the entry may be shown
+ * on (a Playout route's `compatibleChannels`). Refused before any AMCP, all or nothing.
+ */
+export const LIVE_PLATE_SOURCE_NOT_SHOWABLE = 'source-not-showable';
 
 export interface PlateAssignmentRefusal {
   readonly errorCode:
     | typeof LIVE_PLATE_UNASSIGNED
     | typeof LIVE_PLATE_SOURCE_UNAVAILABLE
-    | typeof LIVE_PLATE_SOURCE_UNUSABLE;
+    | typeof LIVE_PLATE_SOURCE_UNUSABLE
+    | typeof LIVE_PLATE_SOURCE_NOT_SHOWABLE;
   /** NAMES the plate — see the note on {@link resolvePlateAssignments}. */
   readonly message: string;
   /** The plates that could not be resolved, in declaration order. */
@@ -122,6 +130,11 @@ export function resolvePlateAssignments(input: {
    * refusal as a stale assignment, with the wording already written for it.
    */
   overrides?: Readonly<Record<string, string>> | undefined;
+  /**
+   * `ROUTE-PLATES-01` — the ROW's channel: an entry that may not be shown on it (`sourceShowableOn`,
+   * v1.3 rule 1) is refused here, after the entry's own state. Absent asks nothing about channels.
+   */
+  channel?: number | undefined;
 }): PlateAssignmentOutcome {
   const byId = new Map(input.catalog.sources.map((s) => [s.id, s] as const));
   const assigned = new Map(
@@ -139,6 +152,7 @@ export function resolvePlateAssignments(input: {
   const unassigned: string[] = [];
   const stale: string[] = [];
   const unseatable: { plateId: string; source: SourceDefinition }[] = [];
+  const notShowable: { plateId: string; source: SourceDefinition }[] = [];
 
   for (const declaration of input.declarations) {
     // The plate's operator-facing handle is its `sourceId` — the SCENE's vocabulary
@@ -163,11 +177,34 @@ export function resolvePlateAssignments(input: {
       unseatable.push({ plateId, source });
       continue;
     }
+    // `ROUTE-PLATES-01` — the fifth: usable, but not on this row's channel (v1.3 rule 1).
+    if (input.channel !== undefined && !sourceShowableOn(source, input.channel)) {
+      notShowable.push({ plateId, source });
+      continue;
+    }
     plates.push({ declaration, source });
   }
 
-  if (unassigned.length === 0 && stale.length === 0 && unseatable.length === 0) {
+  if (
+    unassigned.length === 0 &&
+    stale.length === 0 &&
+    unseatable.length === 0 &&
+    notShowable.length === 0
+  ) {
     return { ok: true, plates };
+  }
+
+  if (unassigned.length === 0 && stale.length === 0 && unseatable.length === 0) {
+    // Only the first is named: the take stops there, as for an unseatable entry.
+    const first = notShowable[0] as { plateId: string; source: SourceDefinition };
+    const words = notShowableWords(first.source.name, input.channel as number);
+    return {
+      ok: false,
+      errorCode: LIVE_PLATE_SOURCE_NOT_SHOWABLE,
+      plateIds: notShowable.map((u) => u.plateId),
+      refused: first,
+      message: `Plate "${first.plateId}": “${words.name}”${words.rest}`,
+    };
   }
 
   if (unassigned.length === 0 && stale.length === 0) {

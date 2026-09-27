@@ -81,16 +81,20 @@ test('sources: Station setup lists the Playout’s inputs, read-only, and binds 
   await expect(rows.nth(0).locator('[data-source-kind]')).toHaveText('NDI');
   await expect(rows.nth(3).locator('[data-source-kind]')).toHaveText('Stream');
   await expect(rows.nth(5).locator('[data-source-kind]')).toHaveText('SDI');
-  // Both routes are marked, with the gate's reason on hover (`ROUTE-PLATES-01` lifts it)…
+  // `ROUTE-PLATES-01` §1.G — the gate is gone: neither route is `Unusable` any more…
   for (const i of [5, 6]) {
-    await expect(rows.nth(i)).toHaveAttribute('data-source-unusable', '');
-    await expect(rows.nth(i).getByText('Unusable', { exact: true })).toHaveAttribute(
-      'title',
-      'Not supported yet.',
-    );
+    await expect(rows.nth(i)).not.toHaveAttribute('data-source-unusable', '');
   }
-  // …and control: a camera is not.
+  // …`ورودی ۳` carries no mark at all, and `ورودی ۴` only the Playout's own `Unavailable`, its
+  // reason on hover…
+  await expect(rows.nth(5).locator('.cg-source-tag')).toHaveCount(0);
+  await expect(rows.nth(6).getByText('Unavailable', { exact: true })).toHaveAttribute(
+    'title',
+    'no signal',
+  );
+  // …and control: a camera is marked neither way.
   await expect(rows.nth(0)).not.toHaveAttribute('data-source-unusable', '');
+  await expect(rows.nth(0).locator('.cg-source-tag')).toHaveCount(0);
   // When the Playout's list was last read is said.
   await expect(dialog.locator('[data-sources-read]')).toHaveText(/^Last read /);
 
