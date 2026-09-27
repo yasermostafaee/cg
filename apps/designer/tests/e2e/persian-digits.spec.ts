@@ -105,6 +105,12 @@ test('the Time (HH:MM) preset accepts a time typed in Persian or Arabic-Indic di
   await app.newProject('DigitsTime');
   await app.addTextElement();
   await app.setDataKey('azan');
+  // `TEXT-DIGITS-01` — a new field starts on Persian and would WRITE every digit typed into the
+  // preview box in Persian; this spec is about the pattern reading each digit set as typed, so the
+  // field is Keyboard (nothing here says which keyboard, so each digit stays as the key sent it).
+  await app.inspector
+    .getByRole('combobox', { name: 'digits', exact: true })
+    .selectOption('as-typed');
   await app.inspector.getByRole('combobox', { name: 'Pattern', exact: true }).selectOption('time');
   await app.openPreviewModal();
   const field = app.previewDialog.getByLabel('azan', { exact: true });

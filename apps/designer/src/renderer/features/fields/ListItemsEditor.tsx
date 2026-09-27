@@ -1,7 +1,10 @@
 import { Check, Link2 } from 'lucide-react';
-import type { ListItem } from '@cg/shared-schema';
-import { formatNumberLike, readLocalizedDuration } from '@cg/text-shaping';
+import { writeDigitsInto } from '@cg/gesture';
+import { FieldDigitsSchema, type FieldDigits, type ListItem } from '@cg/shared-schema';
+import { formatNumberLike, readLocalizedDuration, writeFieldDigits } from '@cg/text-shaping';
 import { cx } from '../../cx.js';
+import { keyboardLanguage } from '../../keyboardLanguage.js';
+import { digitsWord } from '../inspector/DigitsField.js';
 import { useTypedNumber } from '../../ui/typedNumber.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
@@ -83,6 +86,34 @@ interface Props {
    */
   appliedItems?: readonly ListItem[] | undefined;
   onUpdateItem?: ((itemId: string) => void) | undefined;
+  /**
+   * `TEXT-DIGITS-01` — the Digits the items' TEXT is typed in (a bound list field's, or the ticker's
+   * / sequence's own): each box shows its text in them and writes each digit as it is typed, the
+   * caret kept. Absent ⇒ boxes as before.
+   */
+  digits?: FieldDigits | undefined;
+  /**
+   * `TEXT-DIGITS-01` — a BOUND sequence item's own field Digits (`undefined` for an unbound item),
+   * which win over {@link digits} for that item's box; `onItemDigits` sets them from the one Digits
+   * control shown beside the item's data key.
+   */
+  itemDigits?: ((itemId: string) => FieldDigits | undefined) | undefined;
+  onItemDigits?: ((itemId: string, digits: FieldDigits) => void) | undefined;
+}
+
+/**
+ * `TEXT-DIGITS-01` — an item box's text as shown, and as typed: in `digits` (absent: untouched), each
+ * entered digit written through the one writer, the caret kept.
+ */
+function shown(text: string, digits: FieldDigits | undefined): string {
+  return digits === undefined ? text : writeFieldDigits(text, digits);
+}
+function typedInto(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  event: Event,
+  digits: FieldDigits | undefined,
+): string {
+  return digits === undefined ? el.value : writeDigitsInto(el, event, digits, keyboardLanguage);
 }
 
 /** D-083 — the item's kind ('text' default for back-compat). */
@@ -230,7 +261,12 @@ export function ListItemsEditor({
   onItemDataKey,
   appliedItems,
   onUpdateItem,
+  digits,
+  itemDigits,
+  onItemDigits,
 }: Props): JSX.Element {
+  /** The Digits an item's text box writes: its own bound field's, else the list's / element's. */
+  const digitsFor = (item: ListItem): FieldDigits | undefined => itemDigits?.(item.id) ?? digits;
   // D-106 follow-up — an item is edited-but-unapplied when its value differs from
   // the same-id on-stage item (a brand-new item, with no applied twin, is dirty).
   const itemDirty = (item: ListItem): boolean => {
@@ -366,12 +402,13 @@ export function ListItemsEditor({
                 // D-118 — a multi-line textarea (Enter inserts `\n`, does not commit), committing
                 // through the same per-change item-update path. RTL via the element's `dir`.
                 <Textarea
-                  value={textOf(item)}
+                  value={shown(textOf(item), digitsFor(item))}
                   dir={dir}
                   aria-label={`${label} item ${String(i + 1)}`}
-                  onChange={(e) =>
-                    onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
-                  }
+                  onChange={(e) => {
+                    const text = typedInto(e.currentTarget, e.nativeEvent, digitsFor(item));
+                    onChange(items.map((it, j) => (j === i ? { ...it, text } : it)));
+                  }}
                 />
               )}
               {/* D-083 follow-up — EXPLICIT per-item bind: a text item is operator-editable
@@ -401,6 +438,25 @@ export function ListItemsEditor({
                       }
                     }}
                   />
+                  {/* TEXT-DIGITS-01 — a bound item's field: its ONE Digits control, beside its key,
+                      in the same words as every other. */}
+                  {onItemDigits !== undefined && itemDigits?.(item.id) !== undefined && (
+                    <Select
+                      className={s.seqBindDigits}
+                      value={itemDigits(item.id)}
+                      title="The digits this item's field is written in"
+                      aria-label={`${label} item ${String(i + 1)} digits`}
+                      onChange={(e) =>
+                        onItemDigits(item.id, FieldDigitsSchema.parse(e.target.value))
+                      }
+                    >
+                      {FieldDigitsSchema.options.map((option) => (
+                        <option key={option} value={option}>
+                          {digitsWord(option)}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
                 </div>
               )}
             </div>
@@ -435,13 +491,12 @@ export function ListItemsEditor({
                     type="text"
                     placeholder={col.label}
                     title={col.label}
-                    value={cellOf(item, col.key)}
+                    value={shown(cellOf(item, col.key), col.digits)}
                     aria-label={`${label} item ${String(i + 1)} ${col.label}`}
-                    onChange={(e) =>
-                      onChange(
-                        items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)),
-                      )
-                    }
+                    onChange={(e) => {
+                      const text = typedInto(e.currentTarget, e.nativeEvent, col.digits);
+                      onChange(items.map((it, j) => (j === i ? withCell(it, col, text) : it)));
+                    }}
                   />
                 ),
               )
@@ -450,22 +505,24 @@ export function ListItemsEditor({
               // inserts `\n`, does not commit), same per-change item-update path. RTL via `dir`.
               <Textarea
                 className={s.itemTextArea}
-                value={textOf(item)}
+                value={shown(textOf(item), digitsFor(item))}
                 dir={dir}
                 aria-label={`${label} item ${String(i + 1)}`}
-                onChange={(e) =>
-                  onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
-                }
+                onChange={(e) => {
+                  const text = typedInto(e.currentTarget, e.nativeEvent, digitsFor(item));
+                  onChange(items.map((it, j) => (j === i ? { ...it, text } : it)));
+                }}
               />
             ) : (
               <input
                 className={s.itemInput}
                 type="text"
-                value={textOf(item)}
+                value={shown(textOf(item), digitsFor(item))}
                 aria-label={`${label} item ${String(i + 1)}`}
-                onChange={(e) =>
-                  onChange(items.map((it, j) => (j === i ? { ...it, text: e.target.value } : it)))
-                }
+                onChange={(e) => {
+                  const text = typedInto(e.currentTarget, e.nativeEvent, digitsFor(item));
+                  onChange(items.map((it, j) => (j === i ? { ...it, text } : it)));
+                }}
               />
             )}
             {dwellInput}

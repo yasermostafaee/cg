@@ -5,7 +5,15 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { formatNumberLike, readLocalizedNumber } from '@cg/text-shaping';
+import { writeDigitsInto } from '@cg/gesture';
+import type { FieldDigits } from '@cg/shared-schema';
+import {
+  formatNumberLike,
+  readLocalizedNumber,
+  writeFieldDigits,
+  type DigitSet,
+} from '@cg/text-shaping';
+import { keyboardLanguage } from '../../keyboardLanguage.js';
 import { ColorPicker } from './ColorPopover.js';
 import { cx } from '../../cx.js';
 import { normalizeHexColor } from '../../color.js';
@@ -198,6 +206,11 @@ interface NumberFieldProps {
    * impossible entry is refused in one line under the field. Chrome numbers keep the default.
    */
   digits?: 'latin' | 'as-typed' | undefined;
+  /**
+   * `TEXT-DIGITS-01` — a template value written in its FIELD's digits: the box shows the number in
+   * this set and writes each digit in it as it is typed (it is `as-typed`'s text box and one reader).
+   */
+  valueDigits?: DigitSet | undefined;
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
@@ -248,6 +261,7 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           disabled={withheld}
           title={props.withheld}
           digits={props.digits}
+          valueDigits={props.valueDigits}
           onRefusal={setRefusal}
         />
         {hasUnit && <span className="cg-unit">{props.suffix}</span>}
@@ -371,6 +385,8 @@ interface RealtimeNumberInputProps {
    * commits what `@cg/text-shaping`'s one reader says the text means. Default `latin`: unchanged.
    */
   digits?: 'latin' | 'as-typed' | undefined;
+  /** `TEXT-DIGITS-01` — see {@link NumberFieldProps.valueDigits}; implies the `as-typed` text box. */
+  valueDigits?: DigitSet | undefined;
   /** `as-typed` only: told the refusal sentence while the text can never be a number, else null. */
   onRefusal?: ((message: string | null) => void) | undefined;
 }
@@ -389,11 +405,15 @@ interface RealtimeNumberInputProps {
  * as a draggable number with an `ew-resize` cursor.
  */
 export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Element {
-  const asTyped = props.digits === 'as-typed';
+  const valueDigits = props.valueDigits;
+  const asTyped = props.digits === 'as-typed' || valueDigits !== undefined;
   // A "mixed" multi-selection field shows nothing (just the placeholder) until
   // the operator edits it — no value is coerced onto the differing elements.
   const display = props.mixed === true ? '' : formatNumberDisplay(props.value);
-  const [buf, setBuf] = useState(display);
+  /** `TEXT-DIGITS-01` — a template value's text in its field's digits (else unchanged). */
+  const inValueDigits = (text: string): string =>
+    valueDigits === undefined ? text : writeFieldDigits(text, valueDigits, 'number');
+  const [buf, setBuf] = useState(() => inValueDigits(display));
   const [editing, setEditing] = useState(false);
   const focused = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -404,8 +424,8 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
   const settled = (prev: string): string => {
     if (!asTyped || props.mixed === true) return display;
     const reading = readLocalizedNumber(prev);
-    if (reading.kind === 'number' && reading.value === props.value) return prev;
-    return formatNumberLike(Number(display), prev);
+    if (reading.kind === 'number' && reading.value === props.value) return inValueDigits(prev);
+    return inValueDigits(formatNumberLike(Number(display), prev));
   };
   const report = (text: string): void => {
     if (asTyped)
@@ -480,11 +500,22 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
         props.onCommitBoundary?.();
       }}
       onChange={(e) => {
-        setBuf(e.target.value);
+        // TEXT-DIGITS-01 — a template value's digits are written in its field's set as typed.
+        const text =
+          valueDigits === undefined
+            ? e.target.value
+            : writeDigitsInto(
+                e.currentTarget,
+                e.nativeEvent,
+                valueDigits,
+                keyboardLanguage,
+                'number',
+              );
+        setBuf(text);
         if (asTyped) {
           // The one reader; only a NUMBER commits — a half-typed or impossible text commits nothing.
-          const reading = readLocalizedNumber(e.target.value);
-          report(e.target.value);
+          const reading = readLocalizedNumber(text);
+          report(text);
           if (reading.kind === 'number' && reading.value !== props.value) {
             props.onCommit(reading.value);
           }
@@ -566,6 +597,12 @@ interface TextFieldProps {
   suggestions?: readonly string[];
   /** DOM id for the {@link suggestions} datalist. Must be unique on the page. */
   datalistId?: string;
+  /**
+   * `TEXT-DIGITS-01` — the box edits TYPED TEXT (a field's Value, a ticker's separator): it shows the
+   * text in this Digits choice and writes each digit in it as it is typed, the caret kept, so what is
+   * edited looks like what goes on air. Absent: an ordinary text box (names, titles, a regex).
+   */
+  digits?: FieldDigits | undefined;
 }
 
 export function TextField(props: TextFieldProps): JSX.Element {
@@ -573,6 +610,8 @@ export function TextField(props: TextFieldProps): JSX.Element {
     props.suggestions === undefined || props.datalistId === undefined
       ? undefined
       : props.datalistId;
+  const digits = props.digits;
+  const shown = digits === undefined ? props.value : writeFieldDigits(props.value, digits);
   return (
     <div className={s.row}>
       <span className={s.label}>{props.label}</span>
@@ -580,11 +619,23 @@ export function TextField(props: TextFieldProps): JSX.Element {
         <input
           className={s.inputInner}
           type="text"
-          defaultValue={props.value}
+          defaultValue={shown}
           aria-label={props.ariaLabel}
           list={listId}
           onFocus={(e) => e.currentTarget.select()}
-          onBlur={(e) => props.onCommit(e.target.value)}
+          onInput={
+            digits === undefined
+              ? undefined
+              : (e) => {
+                  writeDigitsInto(e.currentTarget, e.nativeEvent, digits, keyboardLanguage);
+                }
+          }
+          onBlur={(e) => {
+            // Focused and left with no edit is no edit, even when the stored text's digits differ
+            // from the choice it is shown in (`TEXT-DIGITS-01`, as the canvas's double-click edit).
+            if (digits !== undefined && e.target.value === shown) return;
+            props.onCommit(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}

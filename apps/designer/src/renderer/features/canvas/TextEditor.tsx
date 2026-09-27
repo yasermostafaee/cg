@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { writeDigitsIntoEditable } from '@cg/gesture';
 import type { TextElement } from '@cg/shared-schema';
-import { detectDirection, ZWNJ } from '@cg/text-shaping';
-import { designerStore } from '../../state/store.js';
+import { detectDirection, writeFieldDigits, ZWNJ } from '@cg/text-shaping';
+import { keyboardLanguage } from '../../keyboardLanguage.js';
+import { typedTextDigits } from '../../state/slices/fields.js';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
 import * as s from './TextEditor.css.js';
 
 interface Props {
@@ -33,6 +36,10 @@ interface Props {
 export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   const { transform, font, color, align, direction } = element;
+  // TEXT-DIGITS-01 — what is edited looks like what goes on air: the text in its Digits choice (a
+  // bound element's field's, else its own), each typed digit written in it, the caret kept.
+  const digits = useDesignerSelector((st) => typedTextDigits(st.scene, element));
+  const shownText = writeFieldDigits(element.text, digits);
   // Caret direction follows auto-detected RTL content so backspace
   // deletes the rightmost code point in Persian — but this is *not*
   // the same as the container direction the on-air runtime uses,
@@ -74,7 +81,9 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
 
   function commitText(): void {
     const next = ref.current?.innerText ?? '';
-    if (next !== element.text) {
+    // Opened and closed with no edit is no edit, even when the stored text's digits differ from the
+    // choice it is shown (and drawn) in.
+    if (next !== element.text && next !== shownText) {
       // setElementText also syncs a Data-key field's default so a bound
       // element's edit shows on the canvas instead of snapping back.
       designerStore.setElementText(element.id, next);
@@ -111,6 +120,11 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
       suppressContentEditableWarning
       onBlur={commitText}
       onKeyDown={onKeyDown}
+      onInput={(e) => {
+        if (ref.current !== null) {
+          writeDigitsIntoEditable(ref.current, e.nativeEvent, digits, keyboardLanguage);
+        }
+      }}
       dir={effectiveDir}
       className={s.editor}
       style={{
@@ -135,7 +149,7 @@ export function TextEditor({ element, scale, onCommit }: Props): JSX.Element {
           transform.rotation === 0 ? undefined : `rotate(${String(transform.rotation)}deg)`,
       }}
     >
-      {element.text}
+      {shownText}
     </div>
   );
 }

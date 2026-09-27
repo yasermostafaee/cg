@@ -10,6 +10,11 @@
 
 mod sidecar;
 
+// `TEXT-DIGITS-01` — the keyboard language the window types in: ONE source file, shared with CG
+// Designer's shell, so the two apps cannot come to read the layout two ways.
+#[path = "../../../designer/src-tauri/src/keyboard_language.rs"]
+mod keyboard_language;
+
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, RunEvent};
 
@@ -35,7 +40,8 @@ fn main() {
         // (the audit log's tools row) through `open_bridge_log`.
         .invoke_handler(tauri::generate_handler![
             sidecar::set_playout_address,
-            sidecar::open_bridge_log
+            sidecar::open_bridge_log,
+            keyboard_language::keyboard_language
         ])
         // A start failure can land before the starting page has loaded its script; replaying it
         // on every finished load is what makes the failure impossible to miss.

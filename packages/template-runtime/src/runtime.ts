@@ -18,11 +18,14 @@ import {
   type Scene,
   type ArrangementView,
   defaultLookOf,
+  elementDigitsOf,
   lookGroupOf,
   readCgControl,
   stripCgControl,
   type Look,
 } from '@cg/shared-schema';
+import { writeFieldDigits } from '@cg/text-shaping';
+import { itemsInDigits } from './typed-digits.js';
 import {
   applyAnimationAtFrame,
   entranceSettleFrame,
@@ -826,14 +829,18 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           // host-resolved `url` from `assetUrls` so the driver can set `src` on the nodes it
           // FEEDS (the one-time applyAssetUrls walk can't reach driver-created nodes). The node
           // also carries data-cg-asset-id/-source for a host re-walk when no url is known yet.
+          // `TEXT-DIGITS-01` — a text separator and the authored items in the ticker's Digits
+          // choice; a bound list's items arrive through `setItems` in the list field's.
           separator:
-            t.element.separator === undefined || typeof t.element.separator === 'string'
-              ? t.element.separator
-              : ({
-                  ...t.element.separator,
-                  url: options.assetUrls?.[t.element.separator.assetId],
-                } satisfies TickerSeparatorImage),
-          items: t.element.items,
+            t.element.separator === undefined
+              ? undefined
+              : typeof t.element.separator === 'string'
+                ? writeFieldDigits(t.element.separator, elementDigitsOf(t.element))
+                : ({
+                    ...t.element.separator,
+                    url: options.assetUrls?.[t.element.separator.assetId],
+                  } satisfies TickerSeparatorImage),
+          items: itemsInDigits(t.element.items, elementDigitsOf(t.element)),
           repeat: effRepeat,
           cycleBoundary: effBoundary,
           clock: options.clock,
@@ -1026,7 +1033,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         const driver = new SequenceDriver({
           host: s.host,
           direction: s.element.direction,
-          items: s.element.items,
+          // `TEXT-DIGITS-01` — the authored text items in the sequence's Digits choice; a bound
+          // item takes its field's (`textValueFor`), a bound list its list field's (`setItems`).
+          items: itemsInDigits(s.element.items, elementDigitsOf(s.element)),
           defaultDwellMs: s.element.defaultDwellMs,
           dwellOverrideMs: effDwellMs,
           advance: s.element.advance,

@@ -351,6 +351,10 @@ importers:
         version: 5.9.3
 
   packages/gesture:
+    dependencies:
+      '@cg/text-shaping':
+        specifier: workspace:*
+        version: link:../text-shaping
     devDependencies:
       '@cg/eslint-config':
         specifier: workspace:*

@@ -62,6 +62,8 @@ export function defaultText(id: string, x: number, y: number): TextElement {
     direction: 'auto',
     fitMode: 'fixed',
     overflow: 'clip',
+    // TEXT-DIGITS-01 — a new element's typed digits start on Persian (the owner's decision).
+    digits: 'persian',
   };
 }
 
@@ -107,6 +109,8 @@ export function defaultTicker(id: string, x: number, y: number): TickerElement {
       { id: 'item-2', text: 'Second headline — sample' },
       { id: 'item-3', text: 'Third headline — sample' },
     ],
+    // TEXT-DIGITS-01 — the authored items' and separator's digits start on Persian.
+    digits: 'persian',
   };
 }
 
@@ -187,6 +191,8 @@ export function defaultSequence(id: string, x: number, y: number): SequenceEleme
     transitionTiming: 'simultaneous',
     transitionMs: 400,
     repeat: 'infinite',
+    // TEXT-DIGITS-01 — the authored items' digits start on Persian.
+    digits: 'persian',
   };
 }
 

@@ -2,7 +2,7 @@
   "name": "@cg/gesture",
   "version": "0.0.0",
   "private": true,
-  "description": "B-140 — headless pointer-drag gesture: one hook, one teardown, and a full-window shield so a drag survives crossing an iframe. No styles, no tokens, no markup: @cg/ui stays tokens-only and components stay app-local.",
+  "description": "B-140 — headless pointer-drag gesture: one hook, one teardown, and a full-window shield so a drag survives crossing an iframe; TEXT-DIGITS-01 — the one keyboard-language detector. No styles, no tokens, no markup: @cg/ui stays tokens-only and components stay app-local.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,7 +25,9 @@
   "peerDependencies": {
     "react": "^18.3.1"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@cg/text-shaping": "workspace:*"
+  },
   "devDependencies": {
     "@cg/eslint-config": "workspace:*",
     "@types/react": "^18.3.17",

@@ -1,4 +1,4 @@
-import { persianDigits } from './digits.js';
+import { latinDigits, persianDigits } from './digits.js';
 
 /**
  * Gregorian → Jalali (Persian) calendar conversion.
@@ -55,7 +55,9 @@ function pad2(n: number): string {
 
 function asDate(d: Date | string | number): Date {
   if (d instanceof Date) return d;
-  const parsed = new Date(d);
+  // `TEXT-DIGITS-01` — a date typed in any digit set is the same date: `۲۰۲۶-۰۵-۱۹` reads as
+  // `2026-05-19`. (A field's Persian digits once reached here written into the value, and threw.)
+  const parsed = new Date(typeof d === 'string' ? latinDigits(d) : d);
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(`Invalid date input: ${String(d)}`);
   }

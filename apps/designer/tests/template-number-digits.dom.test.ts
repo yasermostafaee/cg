@@ -57,18 +57,31 @@ const alerts = (el: HTMLElement): string[] =>
   [...el.querySelectorAll('[role="alert"]')].map((n) => n.textContent ?? '');
 
 describe('the preview form’s number field', () => {
+  /*
+    `TEXT-DIGITS-01` re-expressed this block: the form now shows a number in its FIELD's digits, what
+    air draws. The reader half is `PERSIAN-DIGITS-01`'s and unchanged — Persian and Arabic-Indic
+    digits are READ, never dropped — so the Persian field keeps `۱۲٫۵`, an Arabic-Indic entry is
+    written in its Persian, and a field with no setting (Latin) writes it `12.5`, each handing on 12.5.
+  */
   const NUMBER: DynamicField = {
     id: 'score',
     label: 'score',
     required: false,
     type: 'number',
     default: 5,
+    digits: 'persian',
   };
 
-  function Harness({ onChange }: { onChange: (path: string[], v: FieldValue) => void }) {
+  function Harness({
+    onChange,
+    field = NUMBER,
+  }: {
+    onChange: (path: string[], v: FieldValue) => void;
+    field?: DynamicField;
+  }) {
     const [values, setValues] = useState<NestedFieldValues>({ score: 5 });
     return createElement(PreviewFieldForm, {
-      aggregate: { fields: [NUMBER], groups: [] },
+      aggregate: { fields: [field], groups: [] },
       values,
       onChange: (path: string[], v: FieldValue) => {
         onChange(path, v);
@@ -86,9 +99,25 @@ describe('the preview form’s number field', () => {
     expect(box.value).toBe('۱۲٫۵');
     expect(onChange).toHaveBeenLastCalledWith(['score'], 12.5);
     type(box, '١٢٫٥');
-    expect(box.value).toBe('١٢٫٥');
+    expect(box.value, 'written in the field’s Persian').toBe('۱۲٫۵');
     expect(onChange).toHaveBeenLastCalledWith(['score'], 12.5);
     expect(alerts(el)).toEqual([]);
+  });
+
+  it('a field with no setting shows the number in Latin, what air draws (the control)', () => {
+    const onChange = vi.fn();
+    const latin: DynamicField = {
+      id: 'score',
+      label: 'score',
+      required: false,
+      type: 'number',
+      default: 5,
+    };
+    const el = mount(createElement(Harness, { onChange, field: latin }));
+    const box = input(el, 'score');
+    type(box, '۱۲٫۵');
+    expect(box.value).toBe('12.5');
+    expect(onChange).toHaveBeenLastCalledWith(['score'], 12.5);
   });
 
   it('refuses `۱۲a` in one line and hands on NOTHING (the control)', () => {

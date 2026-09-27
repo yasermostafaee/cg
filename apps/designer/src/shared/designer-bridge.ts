@@ -73,6 +73,17 @@ export interface StorageState {
 export interface DesignerBridge {
   getAppInfo(): Promise<AppInfo>;
 
+  /**
+   * `TEXT-DIGITS-01` — the keyboard language the window types in, from CG Designer's shell (its one
+   * read-only command, `keyboard_language`). Where no shell can say — a browser —
+   * `reportsLanguage()` is false and the one detector (`@cg/gesture`) reads the letters typed.
+   */
+  keyboard: {
+    reportsLanguage(): boolean;
+    /** `persian`, `arabic`, `latin` or `unknown` — the shell's reply, checked by the detector. */
+    language(): Promise<unknown>;
+  };
+
   projects: {
     create(
       req: ChannelRequest<typeof ProjectsNewChannel>,

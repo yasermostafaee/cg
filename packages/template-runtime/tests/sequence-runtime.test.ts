@@ -818,3 +818,67 @@ describe('createRuntime — D-083 composition sequence items (text | composition
     expect(live).toBe(0);
   });
 });
+
+describe('createRuntime — a sequence draws in its Digits choice (TEXT-DIGITS-01)', () => {
+  const twoTimes = [
+    { id: 'a', text: 'ساعت 14' },
+    { id: 'b', text: 'ساعت 15' },
+  ];
+
+  it('the authored items draw in the element’s Digits — the static first item and the run', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      sequenceScene({
+        playout: { mode: 'manual' },
+        sequence: { advance: 'manual', repeat: 'infinite', items: twoTimes, digits: 'persian' },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    expect(visibleItems()).toEqual(['ساعت ۱۴']); // the Designer canvas, before the run
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['ساعت ۱۴']);
+    await runtime.next?.();
+    await run(clock, 400);
+    expect(visibleItems()).toEqual(['ساعت ۱۵']);
+  });
+
+  it('an old sequence — no Digits key — shows its items exactly as stored (the control)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      sequenceScene({
+        playout: { mode: 'manual' },
+        sequence: { advance: 'manual', repeat: 'infinite', items: twoTimes },
+      }),
+      { skipFontLoad: true, clock },
+    );
+    expect(visibleItems()).toEqual(['ساعت 14']);
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['ساعت 14']);
+  });
+
+  it('a list-bound sequence draws the LIST’s Digits, not the element’s', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      sequenceScene({
+        playout: { mode: 'manual' },
+        sequence: { advance: 'manual', repeat: 'infinite', items: twoTimes, digits: 'latin' },
+        fields: [
+          {
+            id: 'rundown',
+            label: 'Rundown',
+            required: false,
+            type: 'list',
+            default: [{ id: 'a', text: 'ساعت 14' }],
+            digits: 'persian',
+          },
+        ],
+        bindings: [{ fieldId: 'rundown', target: { kind: 'sequence-items', elementId: 'seq' } }],
+      }),
+      { skipFontLoad: true, clock },
+    );
+    await runtime.play({});
+    expect(visibleItems()).toEqual(['ساعت ۱۴']);
+    await runtime.update({ rundown: [{ id: 'a', text: 'ساعت 20' }] });
+    expect(visibleItems()).toEqual(['ساعت ۲۰']);
+  });
+});

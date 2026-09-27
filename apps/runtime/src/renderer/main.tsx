@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
 import { reportResyncError, withdrawCommandError } from './features/status/commandFeedback.js';
+import { startKeyboardLanguage } from './keyboardLanguage.js';
 import { applyThemeVars } from './theme.js';
 
 /**
@@ -86,6 +87,9 @@ async function boot(): Promise<void> {
     onResyncError: reportResyncError,
     onResyncResolved: withdrawCommandError,
   });
+  // TEXT-DIGITS-01 — the one keyboard-language detector, with the shell's report when there is one.
+  const keyboard = window.cg.keyboard;
+  startKeyboardLanguage(document, keyboard.reportsLanguage() ? () => keyboard.language() : null);
   window.__CG_SPLASH__?.phase('STARTING INTERFACE');
   root.render(
     <StrictMode>

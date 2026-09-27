@@ -149,6 +149,8 @@ import {
   canSetPlayoutAddress,
   openBridgeLog,
   setPlayoutAddress,
+  shellKeyboardLanguage,
+  shellReportsKeyboardLanguage,
 } from './desktop.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -1999,6 +2001,12 @@ export class WebSocketRuntime implements RuntimeBridge {
     // `FIELD-FIXES-01` G — the log folder, through CG Control's own door (never the socket).
     canOpenLogFolder: (): boolean => canOpenBridgeLog(),
     openLogFolder: () => openBridgeLog(),
+  };
+
+  /** `TEXT-DIGITS-01` — the keyboard language, from CG Control's shell (never the socket). */
+  readonly keyboard = {
+    reportsLanguage: (): boolean => shellReportsKeyboardLanguage(),
+    language: (): Promise<unknown> => shellKeyboardLanguage(),
   };
 
   readonly update = {

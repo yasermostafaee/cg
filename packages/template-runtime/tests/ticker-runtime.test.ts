@@ -651,3 +651,132 @@ describe('createRuntime — per-element ticker timing overrides (D-102 Phase 1)'
     }
   });
 });
+
+describe('createRuntime — a ticker draws in its Digits choice (TEXT-DIGITS-01)', () => {
+  /** The fixture ticker with its own items, separator and Digits (absent when undefined). */
+  function digitTicker(over: {
+    digits?: 'as-typed' | 'persian' | 'latin' | 'arabic-indic';
+    items: { id: string; text: string }[];
+    separator?: string;
+    fields?: Scene['fields'];
+    bindings?: Scene['bindings'];
+  }): Scene {
+    const base = tickerScene({ playout: { mode: 'manual' } });
+    const layer = base.layers[0];
+    const el = layer?.children[0];
+    if (layer === undefined || el === undefined || el.type !== 'ticker') {
+      throw new Error('fixture ticker missing');
+    }
+    return {
+      ...base,
+      layers: [
+        {
+          ...layer,
+          children: [
+            {
+              ...el,
+              items: over.items,
+              ...(over.digits !== undefined ? { digits: over.digits } : {}),
+              ...(over.separator !== undefined ? { separator: over.separator } : {}),
+            },
+          ],
+        },
+      ],
+      fields: over.fields ?? [],
+      bindings: over.bindings ?? [],
+    };
+  }
+
+  const staticTexts = (): string[] =>
+    [...bandEl().querySelectorAll<HTMLElement>('[data-cg-ticker-static] span')].map(
+      (n) => n.textContent ?? '',
+    );
+  const crawlTexts = (): string[] =>
+    [...bandEl().querySelectorAll<HTMLElement>('[data-cg-ticker-item]')]
+      .filter((n) => n.style.visibility !== 'hidden')
+      .map((n) => n.textContent ?? '');
+
+  it('the authored items and a text separator draw in the element’s Digits — static and crawling', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      digitTicker({
+        digits: 'persian',
+        items: [
+          { id: 'a', text: 'خبر 12' },
+          { id: 'b', text: 'خبر 34' },
+        ],
+        separator: ' 7 ',
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    // The Designer canvas's static row, before the crawl.
+    expect(staticTexts()).toEqual(['خبر ۱۲', ' ۷ ', 'خبر ۳۴']);
+    await runtime.play({});
+    await run(clock, 500);
+    const crawl = crawlTexts();
+    expect(crawl).toContain('خبر ۱۲');
+    expect(crawl).toContain('خبر ۳۴');
+    expect(crawl).toContain(' ۷ ');
+    expect(crawl.join('')).not.toMatch(/[0-9]/);
+  });
+
+  it('an old ticker — no Digits key — crawls its items exactly as stored (the control)', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      digitTicker({
+        items: [
+          { id: 'a', text: 'Score 12' },
+          { id: 'b', text: 'خبر ۳۴' },
+        ],
+        separator: ' 7 ',
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    expect(staticTexts()).toEqual(['Score 12', ' 7 ', 'خبر ۳۴']);
+    await runtime.play({});
+    await run(clock, 500);
+    const crawl = crawlTexts();
+    expect(crawl).toContain('Score 12');
+    expect(crawl).toContain('خبر ۳۴');
+    expect(crawl).toContain(' 7 ');
+  });
+
+  it('a list-bound ticker draws the LIST’s Digits; the separator stays the element’s', async () => {
+    const clock = makeClock();
+    const runtime = createRuntime(
+      digitTicker({
+        digits: 'latin', // the element's — its authored separator
+        items: [{ id: 'x', text: 'authored' }],
+        separator: ' ۷ ',
+        fields: [
+          {
+            id: 'headlines',
+            label: 'Headlines',
+            required: false,
+            type: 'list',
+            default: [{ id: 'a', text: 'خبر 12' }],
+            digits: 'persian', // the list's — every bound item
+          },
+        ],
+        bindings: [{ fieldId: 'headlines', target: { kind: 'ticker-items', elementId: 'crawl' } }],
+      }),
+      { skipFontLoad: true, clock, tickerMeasure },
+    );
+    await runtime.play({});
+    await run(clock, 500);
+    expect(crawlTexts()).toContain('خبر ۱۲');
+
+    // An update in Latin — however CG Control or a GDD client sent it — draws in the list's.
+    await runtime.update({
+      headlines: [
+        { id: 'a', text: 'خبر 12' },
+        { id: 'n', text: 'خبر 56' },
+      ],
+    });
+    await run(clock, 60_000, 5000);
+    const crawl = crawlTexts();
+    expect(crawl).toContain('خبر ۵۶');
+    expect(crawl).not.toContain('خبر 56');
+    expect(crawl).toContain(' 7 ');
+  });
+});

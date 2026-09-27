@@ -51,6 +51,21 @@ export function canOpenBridgeLog(): boolean {
   return tauri() !== null;
 }
 
+/**
+ * `TEXT-DIGITS-01` — CG Control's shell reports the keyboard language its window types in through
+ * ONE read-only command, `keyboard_language` (granted to this console page only). A browser has no
+ * shell and reports nothing; the detector then reads the letters typed instead.
+ */
+export function shellReportsKeyboardLanguage(): boolean {
+  return tauri() !== null;
+}
+
+/** The shell's answer — `unknown` where there is no shell. */
+export function shellKeyboardLanguage(): Promise<unknown> {
+  const door = tauri();
+  return door === null ? Promise.resolve('unknown') : door.invoke('keyboard_language');
+}
+
 /** Open the log folder in Explorer. Never throws: a refusal is reported, not raised. */
 export async function openBridgeLog(): Promise<{ accepted: boolean; message?: string }> {
   const door = tauri();

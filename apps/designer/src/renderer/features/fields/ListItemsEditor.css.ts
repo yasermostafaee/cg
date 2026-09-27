@@ -105,6 +105,15 @@ export const seqBindKey = style({
   outline: 'none',
 });
 
+/**
+ * `TEXT-DIGITS-01` — a bound item's Digits choice, at the end of its data-key line: sized to its
+ * words so the key keeps the rest of the line (the look is the shared `Select` primitive's).
+ */
+export const seqBindDigits = style({
+  flex: 'none',
+  width: '6.2rem',
+});
+
 export const addRow = style({
   marginTop: '0.3rem',
 });

@@ -221,7 +221,7 @@ export function NumericInput({
         }
         // …or written in its field's digit set as it is typed (`FIELD-DIGITS-01`).
         if (fieldSet) {
-          onValueChange(writeDigitsAsTyped(el, digits, kind));
+          onValueChange(writeDigitsAsTyped(el, digits, kind, e.nativeEvent));
           return;
         }
         const normalized = normalizeDigits(raw, { decimal });

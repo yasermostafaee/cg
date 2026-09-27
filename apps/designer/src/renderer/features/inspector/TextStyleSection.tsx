@@ -1,6 +1,14 @@
 import { useState } from 'react';
-import type { AnimatableProperty, Element, TextElement } from '@cg/shared-schema';
-import { designerStore } from '../../state/store.js';
+import {
+  elementDigitsOf,
+  FieldDigitsSchema,
+  type AnimatableProperty,
+  type Element,
+  type TextElement,
+} from '@cg/shared-schema';
+import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { elementDataField } from '../../state/slices/fields.js';
+import { DigitsField } from './DigitsField.js';
 import { effectiveColorAt, effectiveNumberAt } from '../timeline/keyframe-helpers.js';
 import { KeyframeDot } from './keyframe-diamond.js';
 import { applyFillModeChange } from './fill-commit.js';
@@ -49,6 +57,9 @@ export function TextStyleSection({
   selectedKeyframe = null,
 }: Props): JSX.Element {
   const id = element.id;
+  const dataBound = useDesignerSelector(
+    (st) => st.scene !== null && elementDataField(st.scene, id) !== undefined,
+  );
   const sizingValue = element.fitMode === 'fixed' ? 'fixed' : 'auto';
   // D-046 — guard the switch TO auto when the element has size keyframes (they
   // become content-driven, so they're removed on confirm). No modal otherwise.
@@ -275,6 +286,16 @@ export function TextStyleSection({
             <TextSettingsButton element={element} />
           </div>
         </div>
+        {/* TEXT-DIGITS-01 — the one Digits control, for the text typed INTO this element. While a
+            Data key binds it the text is the field's value, so the field's own control (Dynamic /
+            Data) is the one shown: one control per element or field. */}
+        {!dataBound && (
+          <DigitsField
+            value={elementDigitsOf(element)}
+            options={FieldDigitsSchema.options}
+            onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
+          />
+        )}
       </CollapseSection>
       {confirmAuto && (
         <SizingAutoConfirmModal

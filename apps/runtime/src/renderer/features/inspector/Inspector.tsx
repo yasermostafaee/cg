@@ -27,7 +27,7 @@ import { NumericInput } from '../../ui/NumericInput.js';
 import { Panel } from '../../ui/Panel.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
-import { writeDigitsAsTyped } from '../../ui/fieldDigitsInput.js';
+import { writeFieldText } from '../../ui/fieldDigitsInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import { plateLabelOf, takeRefusalLine, TakeRefusalText } from '../layers/takeRefusalLine.js';
@@ -1188,14 +1188,23 @@ function FieldControl({
       <AutoGrowTextarea
         className={dirty ? 'is-dirty' : undefined}
         value={writeFieldDigits(v, digits)}
-        onChange={(e) => onStage(writeDigitsAsTyped(e.currentTarget, digits))}
+        onChange={(e) => onStage(writeFieldText(e.currentTarget, field, e.nativeEvent))}
         aria-label={fieldId}
       />
     );
   }
   if (kind === 'list') {
-    // R-003 — the structured list editor stages its ops (no remount key).
-    return <ListFieldEditor fieldId={fieldId} value={value} onStage={onStage} footer={fromFile} />;
+    // R-003 — the structured list editor stages its ops (no remount key). `TEXT-DIGITS-01` — its
+    // cells are typed in the list field's digits.
+    return (
+      <ListFieldEditor
+        fieldId={fieldId}
+        field={field}
+        value={value}
+        onStage={onStage}
+        footer={fromFile}
+      />
+    );
   }
   // Default: text input (controlled — stages on change, no blur/Enter commit).
   const v = typeof value === 'string' ? value : value === undefined ? '' : String(value);
@@ -1208,7 +1217,7 @@ function FieldControl({
       type="text"
       dir={EDITOR_DIR}
       value={writeFieldDigits(v, digits)}
-      onChange={(e) => onStage(writeDigitsAsTyped(e.currentTarget, digits))}
+      onChange={(e) => onStage(writeFieldText(e.currentTarget, field, e.nativeEvent))}
       aria-label={fieldId}
     />
   );

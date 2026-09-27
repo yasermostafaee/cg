@@ -1,5 +1,6 @@
 import {
   fieldDigitsOf,
+  type BindingTransform,
   type DynamicField,
   type FieldBinding,
   type FieldValues,
@@ -7,6 +8,7 @@ import {
   type Scene,
 } from '@cg/shared-schema';
 import type { FieldScope } from './types.js';
+import { itemsInDigits, typedDigitsOf } from './typed-digits.js';
 import { coerceRepeaterItems, repeaterDriverFor } from './repeater-driver.js';
 import { coerceSequenceItems, sequenceDriverFor } from './sequence-driver.js';
 import { textRenderNode } from './text-render-node.js';
@@ -51,6 +53,27 @@ export function fieldValueText(raw: unknown, field: DynamicField | undefined): s
     fieldDigitsOf(field),
     field?.type === 'number' ? 'number' : 'text',
   );
+}
+
+/**
+ * `TEXT-DIGITS-01` — a bound value as the text the page draws, its binding's transform applied. A
+ * DATE transform (`date-fa`, `date-en`) is different: its digits are the DATE's, an output, not the
+ * operator's typing. So the value is handed to it as it came — `@cg/text-shaping` reads a date in any
+ * digit set — and the date is written in its field's choice; Keyboard (or no choice) keeps the
+ * transform's own, Persian for `date-fa`, exactly as before. Writing the field's digits INTO the value
+ * first handed `dateFa` `۲۰۲۶-۰۵-۱۹`, which it could not read, and the apply walk threw.
+ */
+function boundText(
+  raw: unknown,
+  field: DynamicField | undefined,
+  transform: BindingTransform | undefined,
+): string {
+  if (transform === 'date-fa' || transform === 'date-en') {
+    const date = applyTransform(stringifyValue(raw), transform);
+    const digits = fieldDigitsOf(field);
+    return digits === 'as-typed' ? date : writeFieldDigits(date, digits);
+  }
+  return applyTransform(fieldValueText(raw, field), transform);
 }
 
 /**
@@ -166,7 +189,7 @@ function applyOne(
     case 'text': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
-      let stringValue = applyTransform(fieldValueText(raw, rule?.field), binding.transform);
+      let stringValue = boundText(raw, rule?.field, binding.transform);
       // Cap to the field's maxLength by code point (so a surrogate pair or a
       // ZWNJ counts as one and isn't split); the element's own auto-size /
       // auto-squeeze then handles fit.
@@ -184,7 +207,13 @@ function applyOne(
         // every occurrence, keeps regex metacharacters in the placeholder
         // inert, and never expands `$`-patterns in the VALUE (replaceAll
         // would — an operator's literal "$&" must render exactly as typed).
-        glyph.textContent = original.split(target.placeholder).join(stringValue);
+        // `TEXT-DIGITS-01` — each part by its own rule: the author's pieces in the ELEMENT's
+        // Digits choice, the value in its field's.
+        const authorDigits = typedDigitsOf(el);
+        glyph.textContent = original
+          .split(target.placeholder)
+          .map((piece) => writeFieldDigits(piece, authorDigits))
+          .join(stringValue);
       } else {
         glyph.textContent = stringValue;
       }
@@ -273,7 +302,7 @@ function applyOne(
       const player = lottiePlayerFor(el);
       if (player === undefined) return;
       if (target.prop === 'text') {
-        let text = applyTransform(fieldValueText(raw, rule?.field), binding.transform);
+        let text = boundText(raw, rule?.field, binding.transform);
         // Same code-point cap as the `text` target — the SAME field must behave the
         // same whether it lands on a native text element or a Lottie text layer.
         if (maxLength !== undefined && [...text].length > maxLength) {
@@ -295,7 +324,10 @@ function applyOne(
       // Bare string arrays get positional ids (degraded fallback).
       const el = elementMap.get(target.elementId);
       if (!el || !Array.isArray(raw)) return;
-      tickerDriverFor(el)?.setItems(coerceTickerItems(raw));
+      // `TEXT-DIGITS-01` — a bound list's items in the LIST field's Digits choice.
+      tickerDriverFor(el)?.setItems(
+        itemsInDigits(coerceTickerItems(raw), fieldDigitsOf(rule?.field)),
+      );
       return;
     }
     case 'sequence-items': {
@@ -306,7 +338,10 @@ function applyOne(
       // stringify/transform, same as ticker-items.
       const el = elementMap.get(target.elementId);
       if (!el || !Array.isArray(raw)) return;
-      sequenceDriverFor(el)?.setItems(coerceSequenceItems(raw));
+      // `TEXT-DIGITS-01` — a bound list's items in the LIST field's Digits choice.
+      sequenceDriverFor(el)?.setItems(
+        itemsInDigits(coerceSequenceItems(raw), fieldDigitsOf(rule?.field)),
+      );
       return;
     }
     case 'sequence-item-text': {

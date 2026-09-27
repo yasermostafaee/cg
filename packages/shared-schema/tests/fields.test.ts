@@ -202,3 +202,23 @@ describe('ListField (D-028)', () => {
     expect(() => FieldValuesSchema.parse({ headlines: [{ text: 'x' }] })).toThrow();
   });
 });
+
+describe('a list field says which digits its items are written in (TEXT-DIGITS-01)', () => {
+  const list = { ...baseField, type: 'list' as const, default: [{ id: 'i1', text: 'خبر 1' }] };
+
+  it('takes all four choices and keeps them', () => {
+    for (const digits of ['as-typed', 'persian', 'latin', 'arabic-indic'] as const) {
+      expect(DynamicFieldSchema.parse({ ...list, digits })).toEqual({ ...list, digits });
+    }
+    expect(() => DynamicFieldSchema.parse({ ...list, digits: 'hindi' })).toThrow();
+  });
+
+  it('an old list carries no key and none is written on the way in', () => {
+    expect(DynamicFieldSchema.parse(list)).not.toHaveProperty('digits');
+  });
+
+  it('the effective choice: absent is Keyboard (as-typed), a choice is itself', () => {
+    expect(fieldDigitsOf(DynamicFieldSchema.parse(list))).toBe('as-typed');
+    expect(fieldDigitsOf(DynamicFieldSchema.parse({ ...list, digits: 'persian' }))).toBe('persian');
+  });
+});

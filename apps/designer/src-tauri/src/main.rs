@@ -6,8 +6,12 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// `TEXT-DIGITS-01` — the one read-only command: which keyboard language the window types in.
+mod keyboard_language;
+
 fn main() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![keyboard_language::keyboard_language])
         .run(tauri::generate_context!())
         .expect("CG Designer could not start");
 }

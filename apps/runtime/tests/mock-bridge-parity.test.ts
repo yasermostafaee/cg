@@ -94,6 +94,8 @@ const BRIDGE_SURFACE: {
 } = {
   methods: ['getAppInfo'],
   groups: {
+    // `TEXT-DIGITS-01` — the shell's keyboard language (both ask the same shell door).
+    keyboard: ['language', 'reportsLanguage'],
     // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.
     // `B-153` — `skew` names the channels the connected bridge PROCESS does not route.
     link: ['status', 'onStatusChanged', 'resyncing', 'onResyncingChanged', 'skew', 'onSkewChanged'],

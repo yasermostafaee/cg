@@ -1,10 +1,13 @@
 import {
+  elementDigitsOf,
+  fieldDigitsOf,
   fieldTakesFileSource,
   type DynamicField,
   type Element,
   type FieldBinding,
   type FieldDigits,
   type ListItem,
+  type Scene,
 } from '@cg/shared-schema';
 import { parseLocalizedNumber } from '@cg/text-shaping';
 import { current, set } from '../store-core.js';
@@ -50,11 +53,12 @@ export interface ElementFieldMetaPatch {
 }
 
 /**
- * `FIELD-DIGITS-01` — the digits a field made through a Data key starts on: Persian, the owner's
- * decision for every new text and number field. A field authored before the setting existed
- * carries none and keeps drawing as it did (`fieldDigitsOf`).
+ * `FIELD-DIGITS-01` / `TEXT-DIGITS-01` — the digits every field the Designer makes starts on
+ * (a Data key's text, number and list field, a sequence item's field): Persian, the owner's
+ * decision. A field authored before the setting existed carries none and keeps drawing as it did
+ * (`fieldDigitsOf`).
  */
-const NEW_FIELD_DIGITS = 'persian' satisfies FieldDigits;
+export const NEW_FIELD_DIGITS = 'persian' satisfies FieldDigits;
 
 /**
  * Default `maxLength` for a field created via the Data-key convenience layer —
@@ -96,7 +100,10 @@ function currentFileSourceGrant(field: DynamicField): boolean | undefined {
  * gaining a key.
  */
 function currentDigits(field: DynamicField): FieldDigits | undefined {
-  return field.type === 'text' || field.type === 'multiline' || field.type === 'number'
+  return field.type === 'text' ||
+    field.type === 'multiline' ||
+    field.type === 'number' ||
+    field.type === 'list'
     ? field.digits
     : undefined;
 }
@@ -141,7 +148,8 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
   // switching; only the base meta applies. Its default (the items) is edited
   // through the items editor (`setTickerItems`), not this meta patch.
   if (field.type === 'list') {
-    return { ...base, type: 'list', default: field.default, ...grant };
+    // `TEXT-DIGITS-01` — a list's items are typed text: its Digits choice is carried like a text's.
+    return { ...base, type: 'list', default: field.default, ...textDigits, ...grant };
   }
 
   const fieldType = patch.fieldType ?? (field.type === 'number' ? 'number' : 'text');
@@ -240,6 +248,35 @@ function isConvBinding(b: FieldBinding): boolean {
 /** The element id a convenience binding drives ('' when not a conv binding). */
 function convElementId(b: FieldBinding): string {
   return isConvBinding(b) && 'elementId' in b.target ? b.target.elementId : '';
+}
+
+/**
+ * `TEXT-DIGITS-01` — the field backing an element's Data key in the ACTIVE composition (its
+ * convenience binding: a text element's whole text, a ticker's / sequence's / repeater's items), or
+ * `undefined` while the element's content is its own.
+ */
+export function elementDataField(scene: Scene, elementId: string): DynamicField | undefined {
+  const doc = activeFieldData(scene);
+  const conv = doc.bindings.find((b) => convElementId(b) === elementId);
+  return conv === undefined ? undefined : doc.fields.find((f) => f.id === conv.fieldId);
+}
+
+/**
+ * 🔴 `TEXT-DIGITS-01` — **WHICH DIGITS THE TEXT TYPED INTO THIS ELEMENT IS WRITTEN IN**: the bound
+ * field's choice while a Data key drives the element (its text IS the field's value), otherwise the
+ * element's own. Every Designer editor that types an element's text asks this, so an editor and the
+ * canvas can never disagree about which rule applies.
+ */
+export function typedTextDigits(
+  scene: Scene | null,
+  element: {
+    readonly id: string;
+    readonly type: string;
+    readonly digits?: FieldDigits | undefined;
+  },
+): FieldDigits {
+  const field = scene === null ? undefined : elementDataField(scene, element.id);
+  return field !== undefined ? fieldDigitsOf(field) : elementDigitsOf(element);
 }
 
 export const fieldsSlice = {
@@ -420,6 +457,8 @@ export const fieldsSlice = {
               (el.type === 'ticker' || el.type === 'sequence' || el.type === 'repeater')
                 ? el.items.map((i) => ({ ...i }))
                 : [],
+            // TEXT-DIGITS-01 — a list's items are typed text; a new one starts on Persian too.
+            digits: NEW_FIELD_DIGITS,
           }
         : {
             id: trimmed,
@@ -563,9 +602,10 @@ export const fieldsSlice = {
         required: false,
         default: seedText,
         maxLength: DEFAULT_DATA_FIELD_MAX_LENGTH,
-        // FIELD-DIGITS-01 — deliberately NO `digits`: a sequence item's field has no meta
-        // surface in the Designer to change it, and a Persian start nobody can undo is a
-        // setting nobody owns. Absent draws as typed, exactly as before.
+        // TEXT-DIGITS-01 — it starts on Persian like every new field: the item's Digits control
+        // beside its data key (`ListItemsEditor`) is where it is changed. (FIELD-DIGITS-01 made it
+        // with none because that surface did not exist yet.)
+        digits: NEW_FIELD_DIGITS,
       };
       set({
         scene: withActiveFieldData(current.scene, {

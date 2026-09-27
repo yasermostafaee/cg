@@ -1,4 +1,5 @@
-import { followsComposition, pathVisualBBox } from '@cg/shared-schema';
+import { elementDigitsOf, followsComposition, pathVisualBBox } from '@cg/shared-schema';
+import { writeFieldDigits } from '@cg/text-shaping';
 import type {
   AnchorPoint,
   BoxStyle,
@@ -29,6 +30,7 @@ import { clockInitialText } from './clock-driver.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
+import { itemsInDigits, stampTypedDigits } from './typed-digits.js';
 import { assignZoneIndices, hasZonedCountdown } from './zone-css.js';
 
 /**
@@ -606,7 +608,10 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
     }
   }
   renderTextGlyphs(el, element, doc);
+  // The ORIGINAL stays as typed: a placeholder binding splits it on its marker, then writes each
+  // piece in the element's digits (`bindings.ts`), so a marker holding a digit still matches.
   textOriginals.set(element.id, element.text);
+  stampTypedDigits(el, elementDigitsOf(element));
   return el;
 }
 
@@ -623,6 +628,8 @@ function buildText(element: TextElement, ctx: BuildCtx): HTMLElement {
  *   direction / white-space) so layout — auto-size, wrap, align, RTL — is unchanged.
  */
 function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document): void {
+  // `TEXT-DIGITS-01` — the text its author typed, in the element's Digits choice.
+  const drawn = writeFieldDigits(element.text, elementDigitsOf(element));
   if (isGradientFill(element.colorFill)) {
     const inner = doc.createElement('div');
     inner.dataset[TEXT_NODE_DATASET] = '1';
@@ -638,7 +645,7 @@ function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document):
     el.style.flexDirection = 'column';
     el.style.justifyContent = vAlignToFlex(element.verticalAlign);
     el.style.alignItems = hAlignToFlex(element.align);
-    inner.textContent = element.text;
+    inner.textContent = drawn;
     el.appendChild(inner);
     return;
   }
@@ -648,7 +655,7 @@ function renderTextGlyphs(el: HTMLElement, element: TextElement, doc: Document):
     const s = element.textShadow;
     el.style.textShadow = `${s.offsetX}px ${s.offsetY}px ${s.blur}px ${s.color}`;
   }
-  el.textContent = element.text;
+  el.textContent = drawn;
 }
 
 /**
@@ -722,10 +729,15 @@ function buildTicker(element: TickerElement, ctx: BuildCtx): HTMLElement {
   // live item nodes so authoring and runtime match). Default 'middle' = the prior centring.
   staticRow.style.alignItems = vAlignToFlex(element.verticalAlign ?? 'middle');
   staticRow.style.direction = element.direction;
-  populateTickerStaticRow(staticRow, element.items, {
+  // `TEXT-DIGITS-01` — the authored items and a text separator in the ticker's Digits choice.
+  const tickerDigits = elementDigitsOf(element);
+  populateTickerStaticRow(staticRow, itemsInDigits(element.items, tickerDigits), {
     direction: element.direction,
     gap: element.gap,
-    separator: element.separator,
+    separator:
+      typeof element.separator === 'string'
+        ? writeFieldDigits(element.separator, tickerDigits)
+        : element.separator,
   });
 
   viewport.appendChild(track);
@@ -868,7 +880,8 @@ function buildSequence(element: SequenceElement, ctx: BuildCtx): HTMLElement {
       if (built !== null) el.appendChild(built.cell);
     } else {
       const node = makeSequenceItemNode(doc, element.direction, glyphGradientCss);
-      node.textContent = first.text;
+      // `TEXT-DIGITS-01` — an authored item in the sequence's Digits choice (the driver's too).
+      node.textContent = writeFieldDigits(first.text, elementDigitsOf(element));
       el.appendChild(node);
     }
   }

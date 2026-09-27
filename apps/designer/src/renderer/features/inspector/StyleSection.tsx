@@ -5,10 +5,20 @@ import type { LottieTiming } from '@cg/lottie-bridge';
 import {
   DEFAULT_LIVE_FIT_MODE,
   LIVE_FIT_MODES,
+  elementDigitsOf,
+  FieldDigitsSchema,
+  fieldDigitsOf,
   followWindowMs,
   followsComposition,
+  NumberFieldDigitsSchema,
 } from '@cg/shared-schema';
-import type { FollowAnchors, FollowWindow, LiveFitMode } from '@cg/shared-schema';
+import type {
+  DynamicField,
+  FieldDigits,
+  FollowAnchors,
+  FollowWindow,
+  LiveFitMode,
+} from '@cg/shared-schema';
 import type {
   AnimatableProperty,
   ClockElement,
@@ -52,7 +62,9 @@ import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { elementDataField, typedTextDigits } from '../../state/slices/fields.js';
 import { isAspectLocked } from '../../state/slices/view.js';
+import { DigitsField } from './DigitsField.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
 import { deriveLookSources, videoFollowClipFacts } from '@cg/shared-schema';
@@ -2141,6 +2153,11 @@ function TickerSections({
   selectedKeyframe,
 }: SectionProps<TickerElement>): JSX.Element {
   const id = element.id;
+  // TEXT-DIGITS-01 — the digits typed items are written in (a bound list's, else the ticker's own).
+  const itemDigits = useDesignerSelector((st) => typedTextDigits(st.scene, element));
+  const dataBound = useDesignerSelector(
+    (st) => st.scene !== null && elementDataField(st.scene, id) !== undefined,
+  );
   return (
     <>
       <CollapseSection title="Ticker" pinned>
@@ -2152,6 +2169,15 @@ function TickerSections({
             designerStore.updateElement(id, { direction } as Partial<Element>)
           }
         />
+        {/* TEXT-DIGITS-01 — the ticker's own Digits, for its authored items and separator; while a
+            Data key binds it the list field's control (Dynamic / Data) is the one shown. */}
+        {!dataBound && (
+          <DigitsField
+            value={elementDigitsOf(element)}
+            options={FieldDigitsSchema.options}
+            onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
+          />
+        )}
         <NumberField
           label="speed"
           value={element.speed}
@@ -2173,7 +2199,7 @@ function TickerSections({
           }
         />
         {/* D-039ext — separator is a text glyph OR an image/logo (project or shared). */}
-        <TickerSeparatorControl element={element} />
+        <TickerSeparatorControl element={element} digits={elementDigitsOf(element)} />
         {/* D-028 — the ticker's INNER repeat loop. A fresh ticker is infinite
             by design; finite passes complete cleanly (the last item fully
             exits) and signal the composition's content-driven hold. */}
@@ -2217,6 +2243,7 @@ function TickerSections({
         <ListItemsEditor
           items={element.items}
           label={element.name || 'Ticker'}
+          digits={itemDigits}
           onChange={(items) => designerStore.setTickerItems(id, items)}
         />
       </CollapseSection>
@@ -2368,10 +2395,10 @@ function ClockSections({
           Tokens: HH H hh h mm m ss s A a — other characters render literally; the largest unit
           absorbs the overflow (mm:ss shows 90:00 for a 90-minute count).
         </p>
-        <SelectField
-          label="digits"
+        {/* TEXT-DIGITS-01 — the one Digits control (the clock's own, now with the owner's words). */}
+        <DigitsField
           value={element.digits}
-          options={['persian', 'latin', 'arabic-indic'] as const}
+          options={NumberFieldDigitsSchema.options}
           onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
         />
         {/* D-084 — wall mode can render a chosen IANA zone; 'Local' clears it. The
@@ -2610,9 +2637,27 @@ function SequenceSections({
     );
     return b?.fieldId ?? '';
   };
+  // TEXT-DIGITS-01 — a bound item's text is its field's value, so it is typed in its field's
+  // Digits; an unbound item in the sequence's own (or a bound list's).
+  const docFields = scene !== null ? activeFieldData(scene).fields : [];
+  const itemDigits = (itemId: string): FieldDigits | undefined => {
+    const key = itemDataKey(itemId);
+    const field = key === '' ? undefined : docFields.find((f) => f.id === key);
+    return field === undefined ? undefined : fieldDigitsOf(field);
+  };
+  const dataBound = scene !== null && elementDataField(scene, id) !== undefined;
   return (
     <>
       <CollapseSection title="Sequence" pinned>
+        {/* TEXT-DIGITS-01 — the sequence's own Digits, for its authored text items; while a Data
+            key binds its items the list field's control (Dynamic / Data) is the one shown. */}
+        {!dataBound && (
+          <DigitsField
+            value={elementDigitsOf(element)}
+            options={FieldDigitsSchema.options}
+            onCommit={(digits) => designerStore.updateElement(id, { digits } as Partial<Element>)}
+          />
+        )}
         <SelectField
           label="transition"
           value={presetKey}
@@ -2743,9 +2788,15 @@ function SequenceSections({
           dir={element.direction}
           showDwell
           compositions={compChoicesAll}
+          digits={typedTextDigits(scene, element)}
           onChange={(items) => designerStore.setSequenceItems(id, items)}
           itemDataKey={itemDataKey}
           onItemDataKey={(itemId, key) => designerStore.setSequenceItemDataKey(id, itemId, key)}
+          itemDigits={itemDigits}
+          onItemDigits={(itemId, digits) => {
+            const key = itemDataKey(itemId);
+            if (key !== '') designerStore.updateField(key, { digits } as Partial<DynamicField>);
+          }}
         />
       </CollapseSection>
 

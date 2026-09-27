@@ -280,6 +280,18 @@ its opacity boundary live in `@cg/lottie-bridge`'s `applyOverride`.
   a `lottie-override` text layer and a bound sequence item (`textValueFor` in
   `runtime.ts`, through the same `fieldValueText`) — and BEFORE the binding's own
   transform, so a per-binding `latin-digits` still wins.
+- `TEXT-DIGITS-01` — **each text by its own rule.** The text an author typed INTO an
+  element is drawn in the ELEMENT's Digits (`@cg/shared-schema`'s `elementDigitsOf`):
+  a text element's glyphs (`renderTextGlyphs`), a ticker's authored items and text
+  separator, a sequence's authored items — at build and in their drivers. A `list`
+  value is drawn in its LIST field's digits (`itemsInDigits` on `ticker-items` /
+  `sequence-items`). A placeholder binding writes the author's pieces in the
+  element's digits and the value in its field's: the build stamps the element's
+  choice on its node as `data-cg-digits` (`typed-digits.ts`, only for a real
+  choice, so an old template's DOM is unchanged) and the apply walk reads it back.
+  A date transform (`date-fa`, `date-en`) reads its input in any digit set and
+  writes the DATE in its field's choice; Keyboard or none keeps the transform's
+  own. Keyboard (`as-typed`) is the identity everywhere on the page.
 - Nested values route by namespace: `values[instanceName]` descends into that
   child scope (D-025).
 
@@ -619,7 +631,8 @@ the ticker's self-wire pattern (lifecycle surface
 `RuntimeClock`). An rAF loop recomputes the formatted string each frame (the
 pure `clock-format.ts` engine: `HH H hh h mm m ss s A a` tokens,
 longest-token-first, literals pass through, the LARGEST unit present absorbs
-overflow, digits mapped LAST via `@cg/text-shaping`) and writes the DOM **only
+overflow, digits mapped LAST via `@cg/text-shaping`'s one writer, `writeFieldDigits`,
+since `TEXT-DIGITS-01`) and writes the DOM **only
 when it changes** — ≈1 write/second.
 
 Two time bases, chosen per mode: RELATIVE (`countup`, `countdown` with a

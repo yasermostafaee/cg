@@ -66,10 +66,11 @@ test('a new field reads persian, a number keeps it, and the preview follows the 
   await expect(app.previewElement(textId)).toHaveText('۱۲:۳۰');
   await app.previewDialog.getByRole('button', { name: 'Close' }).click();
 
-  // A number keeps the choice, and offers no `as-typed`.
+  // A number keeps the choice, and offers no Keyboard (`as-typed`) — in the owner's words
+  // (`TEXT-DIGITS-01`).
   await app.inspector.getByRole('combobox', { name: 'Field type' }).selectOption('number');
   await expect(digits).toHaveValue('persian');
-  await expect(digits.locator('option')).toHaveText(['persian', 'latin', 'arabic-indic']);
+  await expect(digits.locator('option')).toHaveText(['Persian', 'Latin', 'Arabic-Indic']);
 });
 
 test('the exported page draws a Persian number in one face; the same template without the setting renders as before', async ({
@@ -107,9 +108,10 @@ test('the exported page draws a Persian number in one face; the same template wi
   await air.close();
 
   // An OLD template: the same scene with the key it never had. Proven live by the count — both
-  // fields carried the setting, and both lose it.
+  // fields carried the setting, and so did both text elements (`TEXT-DIGITS-01`: a new element
+  // starts on Persian too); all four lose it.
   const keys = html.match(/,"digits":"persian"/g) ?? [];
-  expect(keys, 'the export carries each field’s setting').toHaveLength(2);
+  expect(keys, 'the export carries each field’s and each element’s setting').toHaveLength(4);
   const old = await onAir(page, html.replace(/,"digits":"persian"/g, ''));
   await send(old, { score: 12.5, clock: '12:30' });
   await expect(old.locator(score)).toHaveText('12.5');

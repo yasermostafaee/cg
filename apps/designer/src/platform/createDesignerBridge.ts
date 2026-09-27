@@ -195,6 +195,11 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),
 
+    keyboard: {
+      reportsLanguage: () => tauriInvoke() !== null,
+      language: () => tauriInvoke()?.('keyboard_language') ?? Promise.resolve('unknown'),
+    },
+
     projects: {
       create: (req) =>
         Promise.resolve(
@@ -547,6 +552,19 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
       reload: () => Promise.resolve(preview.reload()),
     },
   };
+}
+
+/**
+ * `TEXT-DIGITS-01` — CG Designer's shell reports the keyboard language through ONE read-only command,
+ * `keyboard_language` (`src-tauri/src/keyboard_language.rs`), reached through Tauri's IPC. A browser
+ * has no shell, so there is nothing to ask: `null`.
+ */
+function tauriInvoke(): ((command: string) => Promise<unknown>) | null {
+  const internals = (
+    globalThis as { __TAURI_INTERNALS__?: { invoke?: (command: string) => Promise<unknown> } }
+  ).__TAURI_INTERNALS__;
+  if (internals === undefined || typeof internals.invoke !== 'function') return null;
+  return (command) => internals.invoke?.(command) ?? Promise.resolve('unknown');
 }
 
 function mimeOf(kind: 'image' | 'font' | 'lottie' | 'video', filename: string): string {

@@ -15,7 +15,7 @@ import {
 } from './primitives.js';
 import { ElementAnimationSchema, FrameRangeSchema } from './animation.js';
 import { AnchorPointSchema, type AnchorPoint } from './path-points.js';
-import { ListItemSchema } from './fields.js';
+import { FieldDigitsSchema, ListItemSchema, type FieldDigits } from './fields.js';
 import { LiveFitModeSchema } from './live-fit.js';
 
 const TextDirectionSchema = z.enum(['auto', 'ltr', 'rtl']);
@@ -235,6 +235,13 @@ export const TextElementSchema = ElementBaseSchema.extend({
   wrap: z.boolean().optional(),
   /** D-010-pic-5 — vertical alignment inside the text box. */
   verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
+  /**
+   * `TEXT-DIGITS-01` — the digits the text its AUTHOR typed into this element is drawn in (a value a
+   * field binds is drawn by the field's own choice). Absent is `as-typed` — Keyboard — the identity,
+   * so a template made before this draws exactly as it did; optional, never defaulted, so parsing an
+   * old document adds no key. Read it through {@link elementDigitsOf}.
+   */
+  digits: FieldDigitsSchema.optional(),
 }).merge(BoxStyleSchema);
 export type TextElement = z.infer<typeof TextElementSchema>;
 
@@ -345,6 +352,12 @@ export const TickerElementSchema = ElementBaseSchema.extend({
    * bump. HOLD only: the ticker still STARTS and crawls regardless. Non-keyframable.
    */
   drivesHold: z.boolean().optional(),
+  /**
+   * `TEXT-DIGITS-01` — the digits the ticker's AUTHORED items and text separator are drawn in; a
+   * bound `list` field's items are drawn by the list field's own choice. Absent is `as-typed`
+   * (Keyboard), the identity. Read it through {@link elementDigitsOf}.
+   */
+  digits: FieldDigitsSchema.optional(),
 }).merge(BoxStyleSchema);
 export type TickerElement = z.infer<typeof TickerElementSchema>;
 
@@ -680,8 +693,33 @@ export const SequenceElementSchema = ElementBaseSchema.extend({
    * only: the sequence still advances/renders regardless. Non-keyframable.
    */
   drivesHold: z.boolean().optional(),
+  /**
+   * `TEXT-DIGITS-01` — the digits the sequence's AUTHORED text items are drawn in; an item bound to
+   * a field, and a bound `list` field's items, are drawn by that field's own choice. Absent is
+   * `as-typed` (Keyboard), the identity. Read it through {@link elementDigitsOf}.
+   */
+  digits: FieldDigitsSchema.optional(),
 }).merge(BoxStyleSchema);
 export type SequenceElement = z.infer<typeof SequenceElementSchema>;
+
+/**
+ * `TEXT-DIGITS-01` — THE ANSWER to "which digits is the text an author typed into this element drawn
+ * in", read by the page and the Designer alike (golden rule 6): the element's choice, absent read as
+ * `as-typed` (Keyboard) — the identity, so a template made before the setting draws unchanged.
+ */
+export function elementDigitsOf(element: {
+  readonly type: string;
+  readonly digits?: FieldDigits | undefined;
+}): FieldDigits {
+  switch (element.type) {
+    case 'text':
+    case 'ticker':
+    case 'sequence':
+      return element.digits ?? 'as-typed';
+    default:
+      return 'as-typed';
+  }
+}
 
 /**
  * Repeater / data-driven layout (D-030) — a clipped box that renders one

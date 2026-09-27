@@ -1,4 +1,4 @@
-import { arabicIndicDigits, persianDigits } from '@cg/text-shaping';
+import { writeFieldDigits } from '@cg/text-shaping';
 
 /**
  * Clock format-string engine (D-027). Pure — no DOM, no timers — so every
@@ -17,8 +17,8 @@ import { arabicIndicDigits, persianDigits } from '@cg/text-shaping';
  *   no minute token either, `ss` shows total seconds. `hh`/`h` behave as
  *   `HH`/`H` (a count has no meridiem) and `A`/`a` render empty.
  *
- * Digit mapping (`persian` / `arabic-indic` via @cg/text-shaping) happens
- * LAST, after all arithmetic and padding on Latin digits.
+ * Digit mapping (`persian` / `arabic-indic` / `latin`, through @cg/text-shaping's one writer)
+ * happens LAST, after all arithmetic and padding on Latin digits.
  */
 
 export type ClockDigits = 'latin' | 'persian' | 'arabic-indic';
@@ -53,10 +53,12 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
+/**
+ * `TEXT-DIGITS-01` — the clock's digits through THE ONE WRITER, `writeFieldDigits`, like every other
+ * text on the page; it kept a second mapper of its own until then.
+ */
 function mapDigits(s: string, digits: ClockDigits): string {
-  if (digits === 'persian') return persianDigits(s);
-  if (digits === 'arabic-indic') return arabicIndicDigits(s);
-  return s;
+  return writeFieldDigits(s, digits);
 }
 
 /**

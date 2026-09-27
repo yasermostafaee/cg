@@ -1,4 +1,4 @@
-import type { DynamicField } from '@cg/shared-schema';
+import { fieldDigitsOf, type DynamicField, type FieldDigits } from '@cg/shared-schema';
 
 /**
  * D-030 — the columned items-editor surface for a repeater: one column per
@@ -14,6 +14,8 @@ export interface ListItemColumn {
   label: string;
   /** Input flavour where the editor distinguishes; defaults to text. */
   kind?: 'text' | 'number';
+  /** `TEXT-DIGITS-01` — a text column's child-field Digits: its cells are typed in them. */
+  digits?: FieldDigits;
 }
 
 /** Derive the editor columns from a child composition's fields. */
@@ -22,5 +24,6 @@ export function columnsForFields(fields: readonly DynamicField[] | undefined): L
     key: f.id,
     label: f.label !== '' ? f.label : f.id,
     ...(f.type === 'number' ? { kind: 'number' as const } : {}),
+    ...(f.type === 'text' || f.type === 'multiline' ? { digits: fieldDigitsOf(f) } : {}),
   }));
 }

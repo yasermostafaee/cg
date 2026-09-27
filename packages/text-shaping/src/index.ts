@@ -5,5 +5,6 @@ export * from './zwnj.js';
 export * from './digits.js';
 export * from './numerals.js';
 export * from './field-digits.js';
+export * from './keyboard-digits.js';
 export * from './date.js';
 export * from './truncate.js';

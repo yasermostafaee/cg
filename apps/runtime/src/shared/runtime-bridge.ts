@@ -208,6 +208,17 @@ export type BridgeLinkStatus = 'live' | 'offline-mock' | 'disconnected';
 export interface RuntimeBridge {
   getAppInfo(): Promise<AppInfo>;
 
+  /**
+   * `TEXT-DIGITS-01` — the keyboard language CG Control's window types in, from its shell's one
+   * read-only command (`keyboard_language`). Where no shell can say — a browser, the mock —
+   * `reportsLanguage()` is false and the one detector (`@cg/gesture`) reads the letters typed.
+   */
+  keyboard: {
+    reportsLanguage(): boolean;
+    /** `persian`, `arabic`, `latin` or `unknown` — the shell's reply, checked by the detector. */
+    language(): Promise<unknown>;
+  };
+
   /** Status of the link to the local bridge (drives the connection indicator). */
   link: {
     status(): BridgeLinkStatus;

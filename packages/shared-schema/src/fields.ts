@@ -142,6 +142,11 @@ export type ListItem = z.infer<typeof ListItemSchema>;
 const ListFieldSchema = DynamicFieldBaseSchema.extend({
   type: z.literal('list'),
   default: z.array(ListItemSchema),
+  /**
+   * `TEXT-DIGITS-01` — the digits each item's text is written in, on the page and as the operator
+   * types a cell. Absent is `as-typed` (Keyboard), the identity: an old list draws unchanged.
+   */
+  digits: FieldDigitsSchema.optional(),
   ...FileSourceGrant,
 });
 
@@ -219,16 +224,18 @@ export function fieldAllowsFileSource(field: DynamicField | null | undefined): b
  * `FIELD-DIGITS-01` — THE ANSWER to "which digits is this field's value written in", read by the
  * page, CG Control's Inspector and the Designer alike (golden rule 6).
  *
- * Absent is `as-typed` on a text or multiline field and `latin` on a number field — what air drew
- * before the setting existed, so an old template renders unchanged with nothing migrated. With
- * NO field — the Inspector before its template schema resolves, or a kind that carries no
- * setting — nothing is rewritten: not knowing the author's choice is not a choice.
+ * Absent is `as-typed` (shown as Keyboard, `TEXT-DIGITS-01`) on a text, multiline or list field and
+ * `latin` on a number field — what air drew before the setting existed, so an old template renders
+ * unchanged with nothing migrated. With NO field — the Inspector before its template schema
+ * resolves, or a kind that carries no setting — nothing is rewritten: not knowing the author's
+ * choice is not a choice.
  */
 export function fieldDigitsOf(field: DynamicField | null | undefined): FieldDigits {
   if (field === null || field === undefined) return 'as-typed';
   switch (field.type) {
     case 'text':
     case 'multiline':
+    case 'list':
       return field.digits ?? 'as-typed';
     case 'number':
       return field.digits ?? 'latin';

@@ -12,9 +12,11 @@ import {
   type TextElement,
   type TickerElement,
 } from '@cg/shared-schema';
+import type { DigitSet } from '@cg/text-shaping';
 import { designerStore, type ElementFieldMetaPatch } from '../../state/store.js';
 import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';
+import { DigitsField } from './DigitsField.js';
 import {
   CUSTOM_PATTERN,
   PATTERN_PRESET_ORDER,
@@ -215,6 +217,12 @@ function FieldMeta({
           checked={field.required}
           onChange={(v) => patch({ required: v })}
         />
+        {/* TEXT-DIGITS-01 — a list's items are typed text: the one Digits control. */}
+        <DigitsField
+          value={fieldDigitsOf(field)}
+          options={FieldDigitsSchema.options}
+          onCommit={(v) => patch({ digits: v })}
+        />
         <FileSourceRow field={field} onChange={(v) => patch({ allowFileSource: v })} />
         <p className={s.hint}>
           The field’s items are the {element.type}’s Items section; operators edit them live in the
@@ -249,10 +257,9 @@ function FieldMeta({
         options={['text', 'number'] as const}
         onCommit={(v) => patch({ fieldType: v })}
       />
-      {/* FIELD-DIGITS-01 — the clock's own control and words; `as-typed` only for text, since a
-          number reaches the page as a number. Absent reads as-typed / latin (`fieldDigitsOf`). */}
-      <SelectField
-        label="digits"
+      {/* FIELD-DIGITS-01 / TEXT-DIGITS-01 — the one Digits control; Keyboard only for text, since
+          a number reaches the page as a number. Absent reads Keyboard / Latin (`fieldDigitsOf`). */}
+      <DigitsField
         value={fieldDigitsOf(field)}
         options={
           fieldType === 'number' ? NumberFieldDigitsSchema.options : FieldDigitsSchema.options
@@ -303,14 +310,18 @@ function FieldMeta({
           label="Value"
           value={field.type === 'number' ? field.default : 0}
           step={1}
-          // `PERSIAN-DIGITS-01` — a template value: the author's digits stay in the box.
+          // `PERSIAN-DIGITS-01` — a template value, read by the one reader; `TEXT-DIGITS-01` — shown
+          // and typed in the field's digits, what goes on air.
           digits="as-typed"
+          valueDigits={numberDigits(field)}
           onCommit={(n) => patch({ default: n })}
         />
       ) : (
         <TextField
           label="Value"
           value={defaultStr(field)}
+          // `TEXT-DIGITS-01` — typed in the field's digits (Keyboard: the keyboard's), what goes on air.
+          digits={fieldDigitsOf(field)}
           onCommit={(v) => patch({ default: v })}
           resetKey={element.id}
         />
@@ -444,4 +455,10 @@ function patternOf(f: DynamicField): string {
 function defaultStr(f: DynamicField): string {
   if (f.type === 'image') return '';
   return typeof f.default === 'string' ? f.default : String(f.default);
+}
+
+/** `TEXT-DIGITS-01` — a number field's digit set (a number is never Keyboard; absent reads Latin). */
+function numberDigits(f: DynamicField): DigitSet {
+  const digits = fieldDigitsOf(f);
+  return digits === 'as-typed' ? 'latin' : digits;
 }
