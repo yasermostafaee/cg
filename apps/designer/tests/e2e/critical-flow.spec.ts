@@ -23,13 +23,16 @@ test.describe('Designer critical flow', () => {
     await app.play();
     await expect(app.previewFrame.getByText('New text')).toBeVisible();
     await app.setPreviewField('headline', 'Hello E2E');
-    await expect(app.previewFrame.getByText('Hello E2E')).toBeHidden(); // pending, not applied
+    // `FIELD-DIGITS-01` — a field made through a Data key starts on Persian, so the page draws the
+    // value's one digit in Persian and nothing else: `Hello E2E` goes on air as `Hello E۲E`.
+    const drawn = 'Hello E۲E';
+    await expect(app.previewFrame.getByText(drawn)).toBeHidden(); // pending, not applied
     await app.updateAllPreviewFields();
-    await expect(app.previewFrame.getByText('Hello E2E')).toBeVisible();
+    await expect(app.previewFrame.getByText(drawn)).toBeVisible();
 
     // Stop runs the outro and settles the stage blank again.
     await app.stop();
-    await expect(app.previewFrame.getByText('Hello E2E')).toBeHidden();
+    await expect(app.previewFrame.getByText(drawn)).toBeHidden();
 
     // Close the preview and export a single-file HTML (captured via the download).
     await app.previewDialog.getByRole('button', { name: 'Close' }).click();
