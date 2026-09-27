@@ -195,6 +195,14 @@ test('G — the dot and the PROGRAM head follow `output`; the playlist is a neut
   await expect(head).toHaveCSS('color', onAir);
   await expect(dot(tab(page, 2))).toHaveCSS('background-color', onAir);
   await expect(headTags(page)).toHaveText(['Playlist stopped']);
+  // The tag sits RIGHT AFTER the word it qualifies — not spread across the head bar.
+  const gap = await page.evaluate(() => {
+    const word = document.querySelector('.cg-monitor-label--pgm')?.getBoundingClientRect();
+    const tag = document.querySelector('[data-testid="monitor-head-tag"]')?.getBoundingClientRect();
+    return word === undefined || tag === undefined ? Number.NaN : tag.left - word.right;
+  });
+  expect(gap, 'the tag drifted away from PROGRAM').toBeGreaterThanOrEqual(0);
+  expect(gap, 'the tag drifted away from PROGRAM').toBeLessThanOrEqual(16);
   await shot(page, 'g-3-multi-box-on-air-playlist-stopped');
 
   // Only the PLAYLIST changes — to a word outside the table: the tag moves, no colour does.

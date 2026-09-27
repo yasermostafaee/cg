@@ -382,6 +382,13 @@
 .cg-monitor-label--pgm[data-output='on-air'] {
   color: var(--r-onair);
 }
+/* The word and its tags are ONE group at the bar's start; the bar spreads its groups apart. */
+.cg-monitor-head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  min-width: 0;
+}
 /* The head's neutral facts — `Output unknown`, the playlist's state — in the reference's `.tag`. */
 .cg-setup-tag.cg-monitor-tag {
   margin-top: 0;
