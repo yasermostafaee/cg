@@ -17,10 +17,14 @@ test.describe('Ticker / crawler (D-028)', () => {
     await expect(app.inspector.getByText('Time-driven', { exact: false })).toBeVisible();
     await expect(app.tickerItemInput('Ticker', 3)).toBeVisible();
 
-    // Edit an authored item — the canvas preview (static authoring row) shows it.
+    // Edit an authored item — the canvas preview (static authoring row) shows it. `TEXT-DIGITS-01`
+    // — a new ticker starts on Persian, so the item's one digit is written, and drawn, in Persian:
+    // `سرخط نخست E2E` is `سرخط نخست E۲E` in the box, on the canvas and in the list it seeds.
     await app.tickerItemInput('Ticker', 1).fill('سرخط نخست E2E');
+    const drawn = 'سرخط نخست E۲E';
+    await expect(app.tickerItemInput('Ticker', 1)).toHaveValue(drawn);
     const canvasFrame = app.page.frameLocator('iframe[title="cgpreview"]');
-    await expect(canvasFrame.getByText('سرخط نخست E2E')).toBeVisible();
+    await expect(canvasFrame.getByText(drawn)).toBeVisible();
 
     // A data key seeds a LIST field from the authored items.
     await app.setDataKey('headlines');
@@ -30,9 +34,7 @@ test.describe('Ticker / crawler (D-028)', () => {
     // field, seeded from the authored items. D-087 — the stage is blank until
     // Play, so the live edits are verified on the running crawl after Play.
     await app.openPreviewModal();
-    await expect(app.tickerItemInput('headlines', 1, app.previewDialog)).toHaveValue(
-      'سرخط نخست E2E',
-    );
+    await expect(app.tickerItemInput('headlines', 1, app.previewDialog)).toHaveValue(drawn);
     await app.tickerItemInput('headlines', 1, app.previewDialog).fill('خبر فوری — Brand X');
 
     // Append an item through the preview form.
