@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { StrictMode, createElement, type ReactElement } from 'react';
+import { StrictMode, createElement, type FunctionComponent, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -15,6 +15,7 @@ import {
 import { ChannelStrip } from '../src/renderer/features/channels/ChannelStrip.js';
 import { OutputDot } from '../src/renderer/features/channels/OutputDot.js';
 import { UnlicensedLine } from '../src/renderer/features/channels/UnlicensedLine.js';
+import type { ChannelSignal } from '../src/renderer/features/channels/channelSignals.js';
 import { __resetChannelChoiceForTest } from '../src/renderer/features/channels/channelStore.js';
 import { MonitorPanel, programHeadTags } from '../src/renderer/features/monitors/MonitorPanel.js';
 import type { ProgramReturn } from '../src/renderer/hooks/useProgramReturn.js';
@@ -187,6 +188,11 @@ async function renderWith(answer: StationChannels, element: ReactElement): Promi
   return mount(element);
 }
 
+/** `ChannelStrip`'s props are an optional parameter, which `createElement` cannot infer through. */
+const StripWithSignals = ChannelStrip as FunctionComponent<{
+  signals?: ReadonlyMap<number, ChannelSignal>;
+}>;
+
 const tabs = (el: HTMLElement): HTMLButtonElement[] => [
   ...el.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="Channels"] [role="tab"]'),
 ];
@@ -195,7 +201,9 @@ describe('the strip — the dot before the name, the alarm mark after it', () =>
   it('channel 1 on air, channel 2 off: a filled dot and a ring, each BEFORE its name', async () => {
     const el = await renderWith(
       discovered({ output: 'on-air', playlist: 'playing' }, { output: 'off', playlist: 'stopped' }),
-      createElement(ChannelStrip, { signals: new Map([[2, 'warning' as const]]) }),
+      createElement(StripWithSignals, {
+        signals: new Map<number, ChannelSignal>([[2, 'warning']]),
+      }),
     );
     const [one, two] = tabs(el);
     expect(one?.querySelector('[data-output-dot]')?.getAttribute('data-output-dot')).toBe('on-air');
