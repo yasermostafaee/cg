@@ -3043,3 +3043,13 @@ the highest `B` heading under `docs/prd/` was `B-264` and the highest `R` was `R
 
 All in [bugs-runtime.md](bugs-runtime.md). Measured free before use: the highest `B` heading under
 `docs/prd/` was `B-270`, no ref and no stash claims `B-271`…`B-289`.
+
+### 2026-09-27 — `PLAYOUT-SOURCES-01` takes `B-286`
+
+- `B-286` — a backup server is sent the primary's media paths, byte for byte (§0.8; filed, not fixed).
+
+In [bugs-runtime.md](bugs-runtime.md). The change also takes `C-044` ([caspar.md](caspar.md)). Measured
+free before use: the highest `B` heading under `docs/prd/` was `B-285`, and none of the six refs
+and no stash claims `B-286`.
+
+⇒ **Next free after this session is `B-287`** and **`C-045`**.

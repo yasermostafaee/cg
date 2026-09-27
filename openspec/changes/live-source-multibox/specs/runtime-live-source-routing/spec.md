@@ -12,54 +12,49 @@ terms.
 
 ## ADDED Requirements
 
-### Requirement: The installation DEFINES its live sources, and an absent catalog fails CLOSED
+### Requirement: The station's live sources SHALL be the Playout's, and a station with none SHALL fail CLOSED
 
-The bridge SHALL persist an installation-level **CATALOG** of live sources, built with **no
-reference to any template**: each entry carries an **installation-generated id**, a **human NAME**
-the operator chose, and a concrete producer expressed as a discriminated union over `route` /
-`decklink` / `ndi` / `media`, so an unreachable producer form is refused at the boundary rather than
-at take time.
+The bridge SHALL resolve every plate against ONE catalog, built from the Playout's lists — its inputs
+and the media items bound on this station — by one builder; nothing in CG Control SHALL define, edit
+or delete an entry.
 
-Each entry SHALL carry the source's **signal FORMAT**, and MAY carry a fill/key **DEVICE PAIR** on
-the arm where such a pair can physically exist. The scene declares neither: how a source arrives at
-a plant is an installation fact.
+> ⚠ **AMENDED IN PLACE by `PLAYOUT-SOURCES-01` (2026-09-27).** This requirement made the catalog a
+> list the installation built and the operator edited in a settings surface: an installation-
+> generated id, a name the operator chose, a producer typed by hand, a fill/key device pair on the
+> entry, a product-writable IPC channel. All of that is RETIRED. Contract v1.2 gives the Playout's
+> own lists (D10 inputs, D11 media), and the Playout is now the one place a source is defined —
+> `openspec/changes/playout-sources` specifies the reads, the builder and the read-only list. What
+> still holds is stated below.
 
-The NAME SHALL be required and unique within the catalog. It is the only handle the operator ever
-sees when binding a plate, so an entry without one cannot be chosen and two entries sharing one
-leave the operator choosing blind.
+Each entry SHALL carry a stable id (`in-<id>` for an input, `md-<id>` for a media item), the NAME
+the Playout's operators gave it, and a concrete producer expressed as a discriminated union over
+`route` / `decklink` / `ndi` / `stream` / `media`, so a producer form the product cannot send is
+refused at the boundary rather than at take time: such an input is left out, and one that fails the
+catalog's rules is listed `unusable` with its reason.
 
-A generated id SHALL NEVER be reused. A retired source's id re-issued to a new entry would let a
-stale reference re-bind silently to a source nobody chose.
+A station whose Playout has shared no list SHALL have **NO SOURCES**. There SHALL be no built-in
+default: a default input definition is a guess about hardware this project cannot see, and a wrong
+guess puts the wrong source on air. The catalog file now keeps only the plate band; a file that is
+PRESENT but unusable SHALL still be a HARD startup failure, before the socket accepts clients.
 
-The catalog SHALL be **product-writable** through an IPC channel and editable by the operator in a
-Runtime settings surface. It SHALL NOT be stored in the bridge's templates directory, because the
-template registry reads every JSON file there as a template.
+#### Scenario: A station with no list reaches nothing to air
 
-An **ABSENT** catalog file SHALL mean **NO SOURCES**. There SHALL be no built-in default: a default
-layer bank is a guess about our own numbering, whereas a default input definition is a guess about
-hardware this project cannot see, and a wrong guess puts the wrong source on air. A file that is
-PRESENT but unusable SHALL be a HARD startup failure, before the socket accepts clients.
-
-#### Scenario: An absent catalog reaches nothing to air
-
-- **WHEN** the bridge starts with no catalog file **THEN** it starts normally with zero sources
+- **WHEN** the bridge starts having never read a Playout list **THEN** it starts normally with zero
+  sources
 - **WHEN** an item whose template declares a live plate is then taken **THEN** the take is refused
   with a distinct errorCode naming the plate — never a silent empty hole on air
 
-#### Scenario: A present but unusable catalog refuses to boot
+#### Scenario: A present but unusable catalog file refuses to boot
 
 - **WHEN** the catalog file exists but is unreadable, malformed or schema-invalid **THEN** startup
   fails with an error naming the file and the reason, and no client is ever served
 
-#### Scenario: The operator defines a source and the change is durable
+#### Scenario: Nothing in CG Control defines a source
 
-- **WHEN** the operator names a source and gives it a producer **THEN** the bridge validates and
-  persists it, and refuses illegibly-shaped input with a reason naming what was wrong
-- **WHEN** a second source is given a name the catalog already holds **THEN** it is refused, because
-  the name is the only handle the assignment picker shows
-- **WHEN** the bridge restarts **THEN** the catalog is still in force
-- **WHEN** the connected bridge is an older build than the page **THEN** the surface says so
-  specifically rather than reporting a generic failure
+- **WHEN** the operator opens Station setup's Live sources **THEN** the Playout's inputs are listed
+  read-only, with no Add, Edit or Remove
+- **WHEN** a console sends a catalog to `sources.set-config` **THEN** only the plate band is taken
+  from it
 
 #### Scenario: A refusal never shows a wire identifier
 
@@ -69,17 +64,16 @@ PRESENT but unusable SHALL be a HARD startup failure, before the socket accepts 
 - **WHEN** a new validator reason code is added **THEN** the operator sentence for it is derived from
   the same wire constant the code comes from, so the two cannot drift
 
-#### Scenario: One source can resolve to a fill/key device pair
+#### Scenario: A template never names a device
 
-- **WHEN** an installation defines a source as a fill/key pair **THEN** it is expressed on the
-  CATALOG ENTRY and every template that uses it is unchanged
-- **WHEN** the same template is used at a plant where that source is a single device **THEN** it
-  needs no edit
+- **WHEN** the same template is used at a plant where a source is a single device and at one where it
+  is a fill/key pair **THEN** it needs no edit — a template names plates, never devices
 
 #### Scenario: The catalog's provenance is visible at boot
 
-- **WHEN** the bridge starts **THEN** it prints which catalog is in force and where it came from, so
-  two machines running different source lists cannot disagree silently
+- **WHEN** the bridge starts **THEN** it prints where the plate band came from and how many inputs and
+  bound media are in force, with the time of the last read, so two machines running different lists
+  cannot disagree silently
 
 ### Requirement: A template's plate is ASSIGNED a source, once per template
 
@@ -115,9 +109,11 @@ in the station. A template that is not on a row cannot be bound, which is accept
 that will be used is on a declared row, and a take of an unassigned plate refuses anyway.
 
 An **ABSENT** assignments file SHALL mean **NOTHING ASSIGNED**; a PRESENT but unusable one SHALL be
-a HARD startup failure, as for the catalog. An assignment naming a source the catalog does not
-define SHALL be REFUSED at change and PRUNED, loudly, at load — a file that will not parse has no
-reading at all, while a dangling reference has a clear one: that plate is unassigned.
+a HARD startup failure, as for the catalog. A NEW assignment naming a source the catalog does
+not hold SHALL be REFUSED at change; one already in the store SHALL be KEPT at load, never pruned
+(amended by `PLAYOUT-SOURCES-01`: only an operator action removes a binding) — a file that will not
+parse has no reading at all, while a dangling reference has a clear one: that plate reads
+unassigned, or, when the Playout stopped offering its source, unavailable.
 
 One source MAY be assigned to two plates at once. That means two producers reading one input, which
 is unremarkable for a routed source and MAY be refused by a capture device; until it is measured, no
@@ -155,13 +151,13 @@ surface SHALL present it as guaranteed.
 - **WHEN** a template that declares no live plate is selected **THEN** no plate-binding section is
   shown at all
 
-#### Scenario: Deleting a source in use cascades, and says so at the moment of deletion
+#### Scenario: A source the Playout stopped offering keeps its bindings, and says so
 
-- **WHEN** the operator removes a source that plates are assigned to **THEN** the removal is
-  ALLOWED, and the surface names the templates and plates that referenced it
-- **WHEN** those plates are next inspected **THEN** they read as needing a source, and no assignment
-  anywhere points at a source that no longer exists
-- **WHEN** one of those items is taken **THEN** the take is refused for that reason
+- **WHEN** the Playout stops offering a source that plates are assigned to **THEN** the assignments
+  are kept, and every place that names the source shows its name with `Unavailable` (amended by
+  `PLAYOUT-SOURCES-01`: this scenario was the delete CASCADE of the retired catalog editor)
+- **WHEN** one of those items is taken **THEN** the take is refused before any AMCP, naming the plate
+  and the source
 
 The assignments of a template SHALL be OWNED BY ITS LIBRARY ENTRY. Deleting the entry from the
 station SHALL delete them, once the removal is confirmed and never when it is refused. Re-importing
@@ -191,10 +187,11 @@ A reason rendered behind the dialog that produced it is not a reason the operato
 - **WHEN** the re-imported version declares a plate the previous one did not **THEN** that plate
   reads as unassigned
 
-#### Scenario: A dangling assignment at boot is pruned, not fatal
+#### Scenario: A dangling assignment at boot is kept, not fatal
 
-- **WHEN** the assignments file names a source the catalog does not define **THEN** the bridge starts,
-  drops that assignment, and names it on its boot line
+- **WHEN** the assignments file names a source the catalog does not hold **THEN** the bridge starts
+  and keeps that assignment, and the plate reads unassigned (amended by `PLAYOUT-SOURCES-01`: it was
+  dropped at boot)
 - **WHEN** a client sends such an assignment **THEN** it is REFUSED, because the product's own
   surface cannot produce one
 

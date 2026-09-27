@@ -75,7 +75,7 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 
 #### Scenario: The Live sources footer tells the truth about the layer band
 
-- **WHEN** the Live sources tab is shown **THEN** its footer reads that the catalogue saves as you go and that the layer band is applied by the button in its own section, and does NOT read that there is nothing waiting to be applied
+- **WHEN** the Live sources tab is shown **THEN** its footer names the band's own `Apply band` as the one thing that applies there, and does NOT read that there is nothing waiting to be applied (amended by `PLAYOUT-SOURCES-01`, 2026-09-27: the catalogue it used to say saves as you go is the Playout's now, listed read-only)
 - **WHEN** the Text file delimiters tab is shown **THEN** its footer does read that there is nothing waiting to be applied, because that is true of every control in it
 
 > ⚠ **SUPERSEDED by `STATION-CHROME-01` §2/§4 (2026-09-07):** each TAB owns its own
@@ -165,14 +165,14 @@ Every control in Station setup that destroys or redefines something SHALL either
 
 An act that is refused because something is on air SHALL NOT be offered as a confirmation: the operator is not asked to authorise it. Both the pre-emptive refusal and the message that answers the bridge SHALL read the one exported reason, and the renderer SHALL consult the bridge's published answer rather than re-deriving the rule.
 
-Deleting a bound source SHALL NOT be refused — an installation must be able to retire a live — but SHALL be confirmed, and the confirmation SHALL name every template and plate that would be unassigned, with the count and, for a multi-box template, how many boxes bind it. Editing a bound source SHALL ask the same question, because it redefines what those plates show while removing nothing.
+> ⚠ **AMENDED IN PLACE by `PLAYOUT-SOURCES-01` (2026-09-27).** This paragraph made deleting or editing a bound source a confirmed act that named every template and plate it would unassign, and three scenarios below pinned it. All of it is RETIRED with the source catalogue editor: the station's sources are the Playout's now, listed read-only (`openspec/changes/playout-sources`), so Station setup neither deletes nor edits one — and what the Playout stops offering is KEPT, `unavailable`, never deleted (ADR 0010 rule 14). The rest of this requirement stands for the destructive acts that remain.
 
 A confirmation raised from INSIDE Station setup SHALL present its committing button in the danger treatment — a red outline at rest that fills only under the pointer — and a confirmation raised from the CONSOLE SHALL keep the solid caution fill. Neither SHALL be changed to match the other.
 
 > 🔴 **`SETTINGS-POLISH-04` §2 (2026-09-11) — TWO DESTRUCTIVE TREATMENTS, AND EACH IS RIGHT WHERE
 > IT IS.** The console's stays solid because the alternative makes `Clear all` QUIETER — an
 > outline where a fill is, on the one control that takes every graphic off air. Station setup's
-> takes the drawing's red because its destructive act is a catalogue deletion, not an air verb,
+> takes the drawing's red because its destructive acts are record deletions, not air verbs,
 > and because amber inside that dialog already means BLOCKED: spending it on a Remove as well
 > drains it where it is real. The family is decided ONCE, by the same flag that decides the
 > frame and the scrim — never per call site.
@@ -187,21 +187,6 @@ A confirmation raised from INSIDE Station setup SHALL present its committing but
 
 - **WHEN** a confirmation is raised from inside Station setup **THEN** its committing button and its emblem wear the danger ground, edge and ink, and the button's ground changes only under the pointer
 - **WHEN** a confirmation is raised from the console **THEN** its committing button keeps the solid caution fill it had
-
-#### Scenario: Deleting a source names what goes with it
-
-- **WHEN** the operator presses the bin on a source bound to three plates of a four-box template and one plate of another **THEN** a confirmation names both templates, says how many boxes the multi-box one binds, and states that anything already on air stays up and the next take is refused until a source is assigned
-- **WHEN** the operator presses the bin on a source bound to nothing **THEN** a plain confirmation is still shown
-- **WHEN** the operator declines **THEN** nothing is sent to the sources channel
-
-#### Scenario: Editing a bound source asks, and editing an unbound one does not
-
-- **WHEN** the operator saves an edit to a source that plates are bound to **THEN** a confirmation names those templates and plates before anything is sent
-- **WHEN** the source is bound to nothing, or the operator is ADDING a source **THEN** no question is asked
-
-#### Scenario: A dropped binding is visible, not blank
-
-- **WHEN** a source is deleted and a template's plate was bound to it **THEN** that plate reads as needing a source in the Inspector, and a take of that template is refused with the existing live-source-unassigned reason
 
 ### Requirement: One job, one control, one name in the dialog's footer
 

@@ -200,6 +200,19 @@ behind the bridge, and the browser talks to nothing but the bridge for control.
     The template origin keeps exactly its file routes plus `POST /complete`. An identity or control
     route appearing there is a defect, not a convenience.
 
+14. **The Playout's source lists are kept through an outage, never pruned, and never read inside a
+    verb** (`PLAYOUT-SOURCES-01`, 2026-09-27). The station's inputs (D10) and the media items it has
+    bound (D11, re-read by `ids=`) are read by the bridge at sign-in, on a 30 s cadence and when a
+    picker opens, and the last good answer of each is PERSISTED beside the station state. Unlike
+    D4's labels, a failed read or a `304` changes nothing: the lists stay in force across a Playout
+    outage and a bridge restart, for rule 5's reason — an outage never changes a verdict. What a
+    SUCCESSFUL read no longer offers becomes `unavailable` and stays in the catalogue under its
+    last-known name: a binding to it is kept and shown tagged, and a take that would seat it is
+    refused before any AMCP, because only an operator action removes a binding and nothing a Playout
+    read does may delete one. No Playout read is in a verb's path, with ONE exception: a media
+    `PLAY` answered `404` inside a take or a look switch triggers one `ids=` read, bounded at 1.5 s,
+    and at most one retry with the fresh path — on that failure path only.
+
 **Amendment — 2026-09-23 (`DESKTOP-APPS-01-A`): the issuer is LEARNED, never typed.** A client
 installs its own Playout on its own addresses, and the Playout may sign with a fixed, address-free
 `iss` (proposed `urn:apasai:playout`). So a station may be configured by the Playout's ADDRESS

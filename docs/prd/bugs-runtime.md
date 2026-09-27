@@ -12794,3 +12794,19 @@ request was made. **Fix:** the picture's layout effect sets `src` on every mount
 every unmount. And `localhost`: the dev station sends a `localhost:5174` page to `127.0.0.1:5174`,
 the origin the Playout's CORS list admits. Tests: `dev-station.spec.ts` (through Vite),
 `programPicture.dom.test.ts`, `vite-config.test.ts`, `station-plan.test.ts`.
+
+## [ ] B-286 — a backup server is sent the primary's media paths, byte for byte ⟨priority: medium⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` §0.8 · not fixed
+
+The bridge builds each AMCP line once, and `RedundancyAdapter.send` mirrors that SAME string to
+server B (`mirror-sync`, the default — `redundancy-adapter.ts:250-253`) or replays the journaled
+string at failover (`:195-199`, `:492-503`). There is one source catalogue per bridge, and a
+server's own config holds only its host and ports (`connections.ts:306-311`), so a media plate's
+`PLAY` carries server A's file path to B unchanged. A backup Playout is a separate install whose
+media paths can differ (the Playout's answer, S1), so B can be asked to play a file it does not
+have — on the failover, which is the moment the backup exists for.
+
+Found while establishing `PLAYOUT-SOURCES-01` §0.8, which makes a Playout's media (D11) bindable
+to a plate and so makes the case reachable. **Not fixed there**: a per-server path needs the
+Playout to say where each install keeps an item, which the contract does not carry yet. Anchors:
+`CasparRuntime`'s `#send` → `RedundancyAdapter.send`; `openspec/changes/playout-sources/design.md`
+§0.8.

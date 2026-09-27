@@ -2591,7 +2591,8 @@ than left open.** Both halves are recorded, because either one alone would have 
 later reader is likely to re-derive only the weaker of them.
 
 **1. THE STUDIO IS NOT SPECIAL.** A live source, to this system, is an ADDRESS mapped to a symbolic
-name. A `DECKLINK DEVICE 1`, an `NDI NAME "Baku"` and a `route://1-2` carrying the studio are the
+name. A `DECKLINK DEVICE 1`, an `NDI NAME "Baku"` (sent as `[NDI] "Baku"` since `PLAYOUT-SOURCES-01`)
+and a `route://1-2` carrying the studio are the
 same KIND of thing to every part of this design: the catalog defines them the same way, the
 assignment picker lists them the same way, `playSource` spells them from one union, and the fit
 chain reads a format off whichever it is. So 6.8c was asking the GENERAL question — _what addresses

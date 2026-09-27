@@ -1054,6 +1054,14 @@ delay is only that [[C-019]] stays blocked.
 
 ## [!] C-021 — DECKLINK, NDI and fill+key for Live Sources: the arms this installation cannot validate ⟨priority: high⟩ — walk-run 2026-08-25: arm (a) DECKLINK **UNBLOCKED, both producer spellings proven**; arm (b) NDI **still BLOCKED**; arm (c) fill+key **PARKED — no second SDI input exists on this card**
 
+⭐ **ANNOTATED 2026-09-27 by `PLAYOUT-SOURCES-01` §1.D — arm (b)'s SPELLING is now the Playout
+core's, and still unmeasured on a signal.** The bridge sent `NDI NAME "<source>"`, which our record
+called parse-verified only. The Playout team's answer (`PLAYOUT-CG-RESPONSE-INPUTS-MEDIA-v1` §1.2,
+citing `newtek_ndi_producer.cpp:289-292`) says that is the CONSUMER syntax on their core and builds
+no producer; the producer is `PLAY <ch>-<L> [NDI] "<source>"`, and that is what the bridge sends now
+(`command-builder.ts` `producerArgument`, pinned byte for byte). Arm (b) stays open: nobody has
+yet seated an NDI input on air here.
+
 **What:** the three Live Source producer arms that [[C-015]] cannot discharge on this plant, split
 out so C-015 can close on what it CAN prove. Verify, on hardware: (a) the **DECKLINK** producer form
 and a real Decklink input as a Live Source; (b) the **NDI** producer — first that it exists on the
@@ -2757,3 +2765,44 @@ and every later one waits for the administrator's approval in the Playout's app.
 
 **Acceptance (sketch):** WHEN any of these bites THEN CG Control's own check says which, in the
 operator's words, and names the in-app approval.
+
+## [~] C-044 — Sources from the Playout (D10/D11, v1.2) ⟨priority: high⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` (v5) · openspec change `playout-sources`
+
+**What.** The station's live sources come from the Playout, not from a hand-made catalogue. D10
+(`GET /api/cg/inputs`) gives the Playout's inputs (NDI, stream, and from v1.3 `route`s to its
+holder channel); D11 (`GET /api/cg/media`) its media library, searched on the Playout's side. The
+bridge reads both with the signed-in operator's bearer, keeps the LAST GOOD input list and the
+media this station BOUND on disk, and builds the one catalogue every plate resolves against. The
+console binds a plate through ONE picker (Inputs · Media) at the three places a plate is bound,
+names a bound source one way everywhere (`SourceLabel`), and Station setup lists the Playout's
+inputs read-only beside the plate band. The contract and the Playout's answers are in
+[`docs/integration/playout/`](../integration/playout/README.md).
+
+**Why.** The Playout owns the cables and the library; a second hand-kept list drifted from it and
+could name an input the Playout had already given to air (their answer §1.1: the exclusive
+inputs are not listed at all, because a second producer on them blacks the Playout's own air).
+
+**Acceptance.**
+
+- WHEN the bridge reads D10 THEN it reads at sign-in, at most every 30 s with `If-None-Match`, and
+  when a picker opens and the last read is older than 5 s; a failed read or a `304` changes
+  nothing, and the last good list is persisted and stays in force through an outage and a restart.
+- WHEN an input leaves the list, or a bound media item leaves the library, THEN its entry is kept
+  and marked unavailable, every binding to it is kept, and a take that would seat it is refused
+  before any AMCP with `source-unavailable` and one sentence naming the row, the plate and the
+  source. Nothing is ever deleted because of a Playout read.
+- WHEN a media `PLAY` is answered 404 THEN the bridge reads that item once by `ids=` (1.5 s bound)
+  and retries the `PLAY` once with a changed `clip`; otherwise the take fails all-or-nothing.
+- WHEN a plate plays a Playout NDI input THEN the wire is `PLAY <ch>-<L> [NDI] "<source>"` (the
+  core's producer spelling, [[C-021]]); every other producer's line is byte-identical to a
+  hand-made entry's.
+- WHEN a plate's source is a Playout input THEN its `VOLUME 0` is committed before its `PLAY` on
+  every seating, nothing automatic raises it, and an operator's raise ramps (`VOLUME <v> 25`).
+- WHEN a stream URL carries credentials THEN the console never shows the URL, and the AMCP log and
+  the audit write `scheme://***@`.
+- WHEN a v1.3 `route` input is listed THEN it is shown and cannot be bound or seated
+  ("Not supported yet."), until `ROUTE-PLATES-01`.
+- WHEN auth is off THEN the lists come from a test-only local provider behind the same interface,
+  and that provider is not in the installer.
+
+**Filed alongside:** [[B-286]] (a backup server is sent the primary's paths).
