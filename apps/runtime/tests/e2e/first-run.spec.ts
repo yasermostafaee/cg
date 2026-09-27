@@ -236,7 +236,9 @@ test('first-run: the address, the check, a station-admin sign-in, the channel â€
     a checkbox: the box is ticked, and the ROW wears the console's one "chosen, not on air" fill,
     `--r-look-btn-sel-bg` #2e4e67. Polled: the row transitions its background.
   */
-  const programmeRow = firstRun.locator('.cg-channel-row', { has: programme });
+  // The row by its own attribute: a `has:` locator is resolved INSIDE the row, so one rooted at the
+  // dialog (as `programme` is) matches nothing and the measure below waits out the test's timeout.
+  const programmeRow = firstRun.locator('.cg-channel-row[data-channel="1"]');
   const fill = (): Promise<string> =>
     programmeRow.evaluate((b) => getComputedStyle(b).backgroundColor);
   const PICKED = 'rgb(46, 78, 103)';
