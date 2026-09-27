@@ -595,6 +595,31 @@ describe('§1.B — a held route plate stays playing, hidden, and comes back by 
       expect(lines).toContain(`MIXER 2-${String(layerOf(r, plateId))} OPACITY 1 DEFER`);
     }
   });
+
+  it('🔴 a reconnect keeps a held route HIDDEN: the re-send carries its `OPACITY 0`; control: the shown plate gets its `OPACITY 1`', async () => {
+    const { r, mock, mark, sentSince } = await onLookThree();
+    expect(await r.setActiveLook(ROW, 'look-1')).toEqual({ ok: true });
+    const from = await mark();
+    mock.closeAllAmcpConnections();
+    await waitFor(() => r.health().primary.state !== 'healthy', 'the drop');
+    await waitFor(() => r.health().primary.state === 'healthy', 'the reconnect');
+    const shown = `2-${String(layerOf(r, 'l1'))}`;
+    // The re-send is asynchronous after `healthy`: wait for the shown plate's line (the control).
+    const deadline = Date.now() + 5_000;
+    let lines = await sentSince(from);
+    while (!lines.includes(`MIXER ${shown} OPACITY 1 DEFER`) && Date.now() < deadline) {
+      await delay(50);
+      lines = await sentSince(from);
+    }
+    expect(lines).toContain(`MIXER ${shown} OPACITY 1 DEFER`);
+    for (const plateId of ['l2', 'l3']) {
+      const target = `2-${String(layerOf(r, plateId))}`;
+      expect(lines).toContain(`MIXER ${target} OPACITY 0 DEFER`);
+      expect(lines).not.toContain(`MIXER ${target} OPACITY 1 DEFER`);
+    }
+    // …and no route was re-sent: a reconnect is mixer state only.
+    expect(routeLines(lines)).toEqual([]);
+  });
 });
 
 // ── §1.C — epoch (rule 5, C3) ────────────────────────────────────────────────────────────────
