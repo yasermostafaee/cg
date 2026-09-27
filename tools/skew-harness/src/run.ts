@@ -52,7 +52,13 @@ import {
 } from './geometry.js';
 import { buildSkewScene, LOOK_EMPTY } from './scene.js';
 import { bundleTemplateRuntime, buildTemplateHtml } from './template.js';
-import { openWireTap, sentCommands, windowContainsPlay, type WireTap } from './wire-tap.js';
+import {
+  openWireTap,
+  sentCommands,
+  switchWindow,
+  windowContainsPlay,
+  type WireTap,
+} from './wire-tap.js';
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -912,7 +918,9 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
 
   const window = tap.since(mark);
   const commands = sentCommands(window);
-  const containedPlay = windowContainsPlay(window);
+  // `LOOK-SWITCH-01` — from the page's `CG UPDATE` on (`switchWindow`): a hidden pre-seat `PLAY`
+  // sent before the page is told does not make the run `B-155`'s; one after the tell still does.
+  const containedPlay = windowContainsPlay(switchWindow(window));
   const facts = await describeRecording(file);
   const period = recordedPeriodMs(facts.frameRate);
   const expectedFrames = Math.round(windowMs / period);

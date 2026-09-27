@@ -39,7 +39,9 @@ lands in `report.json` under `consumers` and on stderr, one line per fact.
    TCP tap** (`src/wire-tap.ts`) so every run's window can be classified by its verbs.
 3. Takes the row, then per run: attaches a **file consumer** to the channel, waits a settle
    period, drives ONE look switch **through `setActiveLook`** — never hand-typed AMCP —
-   waits a tail, and detaches the consumer.
+   waits a tail, and detaches the consumer. A run whose window carries a `PLAY` is `B-155`'s
+   and is excluded from `k`; the window starts at the page's `CG UPDATE` (`LOOK-SWITCH-01`),
+   so a plate the switch seats hidden BEFORE telling the page still counts.
 4. Reads two probe regions back out of the recording by pixel comparison (`src/analyse.ts`):
    - **probe A** — inside a box that exists in BOTH looks: fires when the MIXER moves;
    - **probe B** — on the mask-hole edge over painted background: fires when the PAGE moves.

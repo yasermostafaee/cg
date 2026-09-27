@@ -130,3 +130,18 @@ export function sentCommands(window: readonly TappedLine[]): readonly string[] {
 export function windowContainsPlay(window: readonly TappedLine[]): boolean {
   return sentCommands(window).some((line) => /^\s*(PLAY|LOADBG)\b/i.test(line));
 }
+
+/**
+ * 🔴 `LOOK-SWITCH-01` — **THE SWITCH'S WINDOW STARTS AT THE PAGE's `CG … UPDATE`.**
+ *
+ * The page and the mixer share the window from the moment the page is told the new look. Since
+ * `LOOK-SWITCH-01` a switch seats the plates its look needs BEFORE that — hidden, their `PLAY`
+ * answered before the page is told anything — so a run whose only `PLAY` is that pre-seat is a
+ * `B-174` sample and must count toward `k`. A `PLAY` AFTER the tell is still inside the window,
+ * and still makes the run `B-155`'s. A run with no page tell at all (a switch refused before the
+ * page moved) has an empty window.
+ */
+export function switchWindow(window: readonly TappedLine[]): readonly TappedLine[] {
+  const tell = window.findIndex((l) => l.dir === 'send' && /^\s*CG\s+\S+\s+UPDATE\b/i.test(l.line));
+  return tell < 0 ? [] : window.slice(tell);
+}

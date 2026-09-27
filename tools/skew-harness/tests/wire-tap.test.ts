@@ -1,6 +1,12 @@
 import * as net from 'node:net';
 import { describe, expect, it } from 'vitest';
-import { openWireTap, sentCommands, windowContainsPlay, type TappedLine } from '../src/wire-tap.js';
+import {
+  openWireTap,
+  sentCommands,
+  switchWindow,
+  windowContainsPlay,
+  type TappedLine,
+} from '../src/wire-tap.js';
 
 /**
  * The tap is the instrument that separates `B-174` from `B-155` (a `PLAY` in the window),
@@ -29,6 +35,39 @@ describe('window classification', () => {
   it('sentCommands keeps only the bridge→server direction', () => {
     const window = [line('send', 'MIXER 1-30 FILL 0 0 1 1'), line('recv', '202 MIXER OK')];
     expect(sentCommands(window)).toEqual(['MIXER 1-30 FILL 0 0 1 1']);
+  });
+});
+
+describe('`LOOK-SWITCH-01` — the switch window starts at the page tell', () => {
+  const TELL = 'CG 1-9 UPDATE 0 "{\\"__cg\\":{\\"look\\":\\"look-ghab-boxes\\"}}"';
+
+  it('🔴 a hidden pre-seat PLAY, sent before the page is told, is outside the window', () => {
+    const run = [
+      line('send', 'MIXER 1-31 OPACITY 0 DEFER'),
+      line('send', 'MIXER 1 COMMIT'),
+      line('send', 'PLAY 1-31 "skew-src-2"'),
+      line('recv', '202 PLAY OK'),
+      line('send', TELL),
+      line('send', 'MIXER 1-30 FILL 0 0 0.5 1 DEFER'),
+      line('send', 'MIXER 1-31 OPACITY 1 DEFER'),
+      line('send', 'MIXER 1 COMMIT'),
+    ];
+    expect(windowContainsPlay(run)).toBe(true); // the whole run did carry one…
+    expect(windowContainsPlay(switchWindow(run))).toBe(false); // …the switch's window did not
+    expect(sentCommands(switchWindow(run))[0]).toBe(TELL);
+  });
+
+  it('CONTROL — a PLAY after the tell is still inside the window (B-155)', () => {
+    const run = [line('send', TELL), line('send', 'PLAY 1-31 "skew-src-2"')];
+    expect(windowContainsPlay(switchWindow(run))).toBe(true);
+  });
+
+  it('a run with no page tell (refused before the page moved) has an empty window', () => {
+    expect(
+      switchWindow([line('send', 'PLAY 1-31 "missing"'), line('recv', '404 PLAY FAILED')]),
+    ).toEqual([]);
+    // A tell the SERVER echoed is not a tell the bridge sent.
+    expect(switchWindow([line('recv', 'CG 1-9 UPDATE 0 "{}"')])).toEqual([]);
   });
 });
 
