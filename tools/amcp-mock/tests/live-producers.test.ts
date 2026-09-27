@@ -176,9 +176,15 @@ describe('an unrecognised producer form is REFUSED, not silently acked', () => {
     expect(m.layerState(L(28))?.volume).toBe(0.8);
   });
 
-  it('refuses a PLAY with no producer argument at all', async () => {
+  /*
+    `ROUTE-PLATES-01` — SUPERSEDED BY A MEASUREMENT: this case pinned a `402` for a `PLAY` with no
+    producer argument. On CasparCG 2.5.0 (69e8ad5 Stable) that line is the BARE `PLAY` — it promotes
+    the background, and with nothing loaded it answers `202 PLAY OK` and changes nothing. The mock
+    now answers as the core does; the forms that ARE unrecognised stay refused, above and below.
+  */
+  it('a PLAY with no producer argument is the bare PLAY: acked, and with nothing loaded it changes nothing', async () => {
     const m = await boot();
-    expect(await send(m.amcpPort, 'PLAY 1-24')).toContain('402 ERROR');
+    expect(await send(m.amcpPort, 'PLAY 1-24')).toBe('202 PLAY\r\n');
     expect(m.layerState(L(24))).toBeUndefined();
   });
 

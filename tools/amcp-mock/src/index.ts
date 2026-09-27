@@ -17,6 +17,7 @@ export type {
   MockOptions,
   OscArgValue,
   ProducerKind,
+  ReceivedCommand,
 } from './types.js';
 export { FULL_FRAME } from './types.js';
 export { renderedRect } from './mixer-rect.js';

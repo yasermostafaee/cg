@@ -15,6 +15,7 @@ import type {
   MockHandle,
   MockOptions,
   OscArgValue,
+  ReceivedCommand,
 } from './types.js';
 
 /**
@@ -74,6 +75,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     getLayer(slot: LayerSlot): LayerState {
       return registry.get(slot);
+    },
+    peekLayer(slot: LayerSlot): LayerState | undefined {
+      return registry.peek(slot);
     },
     setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void {
       registry.patch(slot, patch);
@@ -162,11 +166,19 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
       }
     : undefined;
 
-  const server = new AmcpServer(handlers, ctx, onTrace);
+  // `ROUTE-PLATES-01` — every received line, stamped with the mock's clock (the timing instrument).
+  const now = opts.now ?? ((): number => performance.now());
+  const received: ReceivedCommand[] = [];
+  const server = new AmcpServer(handlers, ctx, onTrace, (line) => {
+    received.push({ at: now(), line });
+  });
   server.setAdmission(opts.admit ?? null);
   const boundAmcp = await server.start(host, amcpPort);
 
   return {
+    receivedCommands(): readonly ReceivedCommand[] {
+      return [...received];
+    },
     setAdmission(admit: ((sourceAddress: string) => boolean) | null): void {
       server.setAdmission(admit);
     },

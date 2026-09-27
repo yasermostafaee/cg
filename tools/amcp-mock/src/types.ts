@@ -87,8 +87,15 @@ export interface LayerState {
   producer: ProducerKind;
   /** Loaded file path (URL string). Only meaningful when `producer !== 'empty'`. */
   filePath: string;
-  /** Background "next-up" producer. CasparCG emits this on every framerate tick. */
-  backgroundProducer: 'empty' | 'html';
+  /**
+   * Background "next-up" producer. CasparCG emits this on every framerate tick.
+   *
+   * `ROUTE-PLATES-01` — `LOADBG` puts a producer here (a `route://H-L` above all: contract v1.3's
+   * rule 4 is `LOADBG`, at least 40 ms, then a bare `PLAY` that promotes it). `CLEAR` empties it.
+   */
+  backgroundProducer: ProducerKind;
+  /** `ROUTE-PLATES-01` — the argument the background producer was loaded with (`''` when empty). */
+  backgroundFilePath: string;
   /** Play/pause flag — `false` means playing. */
   paused: boolean;
   /**
@@ -225,9 +232,28 @@ export interface MockOptions {
    * everyone — every mock before this one. {@link MockHandle.setAdmission} replaces it later.
    */
   admit?: (sourceAddress: string) => boolean;
+  /**
+   * `ROUTE-PLATES-01` — the clock each received command is stamped with
+   * ({@link MockHandle.receivedCommands}). Default `performance.now()`. A test that drives the
+   * bridge with a fake clock passes the SAME clock here, so the gap between two stamped lines is
+   * the gap the bridge waited.
+   */
+  now?: () => number;
+}
+
+/** `ROUTE-PLATES-01` — one AMCP line as the mock received it, and when (its `now`). */
+export interface ReceivedCommand {
+  readonly at: number;
+  readonly line: string;
 }
 
 export interface MockHandle {
+  /**
+   * `ROUTE-PLATES-01` — every AMCP line received so far, in arrival order, each stamped with the
+   * mock's clock ({@link MockOptions.now}) — the timing tests' instrument (rule 4's `LOADBG` →
+   * `PLAY` window). Recorded before the line is parsed, so a refused line is on it too.
+   */
+  receivedCommands(): readonly ReceivedCommand[];
   /**
    * `DESKTOP-APPS-01-B` — replace the admission rule ({@link MockOptions.admit}); `null` admits
    * everyone. Applies to connections made AFTER the call; an open one is left as it is, as a
@@ -342,6 +368,8 @@ export type AmcpHandler = (
 export interface HandlerContext {
   /** Get a layer's current state (creates an `'empty'` entry on first read). */
   getLayer(slot: LayerSlot): LayerState;
+  /** `ROUTE-PLATES-01` — the layer if it was ever touched, WITHOUT allocating one (a refusal must not). */
+  peekLayer(slot: LayerSlot): LayerState | undefined;
   /** Apply a partial update to a layer; emits OSC reflecting the new state. */
   setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void;
   /**

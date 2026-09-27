@@ -19,6 +19,7 @@ export class LayerRegistry {
       producer: 'empty',
       filePath: '',
       backgroundProducer: 'empty',
+      backgroundFilePath: '',
       paused: false,
       onAir: false,
       pageResolution: 'resolved',

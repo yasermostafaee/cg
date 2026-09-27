@@ -20,6 +20,8 @@ export class AmcpServer {
     private readonly handlers: Map<string, AmcpHandler>,
     private readonly ctx: HandlerContext,
     private readonly onTrace?: (entry: TraceEntry) => void,
+    /** `ROUTE-PLATES-01` — every received line, before it is parsed (the command log). */
+    private readonly onReceive?: (line: string) => void,
   ) {}
 
   setAdmission(admit: ((sourceAddress: string) => boolean) | null): void {
@@ -112,6 +114,7 @@ export class AmcpServer {
   private async dispatch(sock: net.Socket, line: string): Promise<void> {
     if (line.length === 0) return;
     if (this.onTrace) this.onTrace({ dir: 'recv', line });
+    this.onReceive?.(line);
 
     const req = parseAmcpLine(line);
     if (req === null) {

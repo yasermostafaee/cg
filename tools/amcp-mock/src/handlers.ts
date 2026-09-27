@@ -26,6 +26,7 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
   m.set('INFO', handleInfo);
   m.set('PLAY', handlePlay);
   m.set('LOAD', handleLoad);
+  m.set('LOADBG', handleLoadBg);
   m.set('CLEAR', handleClear);
   m.set('CG', handleCg);
   m.set('MIXER', handleMixer);
@@ -501,6 +502,35 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
   if (!slot) return { kind: 'err', code: 401, verb: 'PLAY' };
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'PLAY' };
+  /*
+    `ROUTE-PLATES-01` — a BARE `PLAY <ch>-<L>` promotes what `LOADBG` put in the background (contract
+    v1.3 rule 4: `LOADBG … route://H-L`, at least 40 ms, then `PLAY`).
+
+    🔴 With NOTHING in the background it is ACKED, as the real core acks it: measured on CasparCG
+    2.5.0 (69e8ad5 Stable), `PLAY 1-92` on an empty layer answered `202 PLAY OK` and left the layer
+    as it was (a paused foreground resumes). This mock refused it with a `402` at first, which was
+    stricter than the core — so a test could only have caught a defect the plant would have hidden.
+    What the bridge must never do (a bare `PLAY` with no `LOADBG` before it) is pinned on the WIRE,
+    in the bridge's tests, not by a refusal the core does not make.
+  */
+  if ((req.args[1] ?? '') === '') {
+    const layer = ctx.peekLayer(slot);
+    if (layer === undefined) return { kind: 'ok', code: 202, verb: 'PLAY' };
+    if (layer.backgroundProducer === 'empty') {
+      if (layer.paused) ctx.setLayer(slot, { paused: false });
+      return { kind: 'ok', code: 202, verb: 'PLAY' };
+    }
+    ctx.setLayer(slot, {
+      producer: layer.backgroundProducer,
+      filePath: layer.backgroundFilePath,
+      backgroundProducer: 'empty',
+      backgroundFilePath: '',
+      paused: false,
+      onAir: true,
+      pageResolution: 'resolved',
+    });
+    return { kind: 'ok', code: 202, verb: 'PLAY' };
+  }
   const verdict = classifyProducer(req.args);
   // The layer is left UNTOUCHED on a refusal — a refused PLAY that had already
   // written the producer would be the "looks acked, renders nothing" gap in
@@ -549,6 +579,27 @@ function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   return { kind: 'ok', code: 202, verb: 'LOAD' };
 }
 
+/**
+ * `ROUTE-PLATES-01` — `LOADBG <channel>-<layer> "<producer>"`: the producer goes to the layer's
+ * BACKGROUND and the foreground is untouched, as on the core — so a `route://H-L` preloaded for a
+ * hidden plate changes nothing on air until the bare `PLAY` promotes it. The same one classifier as
+ * `PLAY` and `LOAD`: an unrecognised form is refused, never silently acked.
+ */
+function handleLoadBg(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const slot = parseChannelLayer(req.args[0]);
+  if (!slot) return { kind: 'err', code: 401, verb: 'LOADBG' };
+  if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'LOADBG' };
+  const verdict = classifyProducer(req.args);
+  if (!verdict.ok) {
+    return { kind: 'err', code: verdict.code, verb: 'LOADBG', detail: verdict.detail };
+  }
+  if (missingFile(verdict, req.args, ctx)) {
+    return { kind: 'err', code: 404, verb: 'LOADBG', detail: 'File not found.' };
+  }
+  ctx.setLayer(slot, { backgroundProducer: verdict.kind, backgroundFilePath: req.args[1] ?? '' });
+  return { kind: 'ok', code: 202, verb: 'LOADBG' };
+}
+
 function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const target = req.args[0];
   if (!target) {
@@ -557,10 +608,13 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(target);
   if (slot) {
     if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CLEAR' };
-    // B-039 — CLEAR DESTROYS the producer (and takes it off air).
+    // B-039 — CLEAR DESTROYS the producer (and takes it off air). `ROUTE-PLATES-01` — and the
+    // background one with it, as on the core.
     ctx.setLayer(slot, {
       producer: 'empty',
       filePath: '',
+      backgroundProducer: 'empty',
+      backgroundFilePath: '',
       paused: false,
       onAir: false,
       pageResolution: 'resolved',
