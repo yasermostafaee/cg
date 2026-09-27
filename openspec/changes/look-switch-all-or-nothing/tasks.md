@@ -47,5 +47,5 @@ Lane: FULL (the path to air, the wire). Run overnight 2026-09-27 up to §3 only.
 
 ## Gate and discharge
 
-- [ ] Z.1 `pnpm gate` green; `pnpm openspec validate --all --strict`.
-- [ ] Z.2 CI run URL, jobs confirmed RAN.
+- [x] Z.1 `pnpm gate` green; `pnpm openspec validate --all --strict` (the pre-push gate at `89302de8`).
+- [x] Z.2 CI run URL, jobs confirmed RAN — `89302de8`: https://github.com/yasermostafaee/cg/actions/runs/36286015793 (Lint • Typecheck • Test • Build and E2E, both run, success); installers https://github.com/yasermostafaee/cg/actions/runs/36286015857 (success).
