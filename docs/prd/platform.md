@@ -3529,8 +3529,8 @@ code changed:
   decoded wrong, so no product defect was filed. Guard kept: the un-premultiply switched off → red,
   right `R` 127.
 
-**Closed in code (2026-09-28, `PLATE-BAND-01` §1)** — one flake CI met, same rule, no product code
-changed:
+**Closed in code (2026-09-28, `PLATE-BAND-01` §1)** — one flake CI met and its sibling, which the
+local gate met, same rule, no product code changed:
 
 - `tools/caspar-bridge/tests/media-plates.integration.test.ts:563` ("a held, paused clip is re-sent
   `OPACITY 0` and muted…") was red on `a802a7c0`'s CI, attempt 1 (run 36419832113:
@@ -3542,6 +3542,13 @@ changed:
   Reproduced first: a 300 ms pause planted between the two records → the OLD test red exactly as CI;
   the new one green under the same pause. Guard kept: the re-send planted to send `OPACITY 1` for
   every plate → red (`MIXER 2-61 OPACITY 0 DEFER` missing, 13 lines read).
+- `tools/caspar-bridge/tests/route-plates.integration.test.ts:617` ("a reconnect keeps a held route
+  HIDDEN…") is the same wait in a second spelling, and the pre-push gate at `1ce93cb1` met it
+  (`gate-20260928T141642Z-25016.log`: 9 lines read, `MIXER 2-61 OPACITY 0 DEFER` missing). The
+  same fix. Found by two sweeps: the drop (`closeAllAmcpConnections()`) and the wait loop on a
+  plate's line; no third test waits that way. `look-switch-all-or-nothing`'s reconnect test already
+  waited for the commit. Reproduced the same way (HEAD's test red under the 300 ms pause, the new one
+  green); guard kept (the same plant → red, 17 lines read).
 
 **Open:** the rest of `TIMING-TESTS-01` §0.2's table. In the 43 gate logs retained since 2026-09-13, no
 other wall-clock assertion failed on timing. Every other failure there came from three runs on

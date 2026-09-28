@@ -604,13 +604,21 @@ describe('§1.B — a held route plate stays playing, hidden, and comes back by 
     await waitFor(() => r.health().primary.state !== 'healthy', 'the drop');
     await waitFor(() => r.health().primary.state === 'healthy', 'the reconnect');
     const shown = `2-${String(layerOf(r, 'l1'))}`;
-    // The re-send is asynchronous after `healthy`: wait for the shown plate's line (the control).
+    /*
+      🔴 `PLATE-BAND-01` / `P-057` — WAIT FOR THE RE-SEND'S OWN END: the row's one `MIXER 2 COMMIT`,
+      which `#resendLiveMixerState` sends only once every `DEFER` line of the row has been answered
+      (one row, one channel here, as `look-switch-all-or-nothing`'s "first commit after a reconnect").
+      Waiting for the SHOWN plate's `OPACITY 1` — the first record's last line — read the held plates'
+      lines before they were sent: the local gate at `1ce93cb1` read 9 lines and missed
+      `MIXER 2-61 OPACITY 0 DEFER`, the same race `media-plates` had.
+    */
     const deadline = Date.now() + 5_000;
     let lines = await sentSince(from);
-    while (!lines.includes(`MIXER ${shown} OPACITY 1 DEFER`) && Date.now() < deadline) {
+    while (!lines.includes('MIXER 2 COMMIT') && Date.now() < deadline) {
       await delay(50);
       lines = await sentSince(from);
     }
+    expect(lines, 'the re-send reached its commit').toContain('MIXER 2 COMMIT');
     expect(lines).toContain(`MIXER ${shown} OPACITY 1 DEFER`);
     for (const plateId of ['l2', 'l3']) {
       const target = `2-${String(layerOf(r, plateId))}`;
