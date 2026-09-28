@@ -81,7 +81,7 @@ import {
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
   type SourceAssignments,
-  type SourceCatalog,
+  type ConsoleSourceCatalog,
   RehearseEnterChannel,
   RehearseExitChannel,
   RehearseStateChangedChannel,
@@ -486,7 +486,7 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   #strayIds: ReadonlySet<string> = new Set();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
-  readonly #sourceCatalogSubs = new Subs<SourceCatalog>();
+  readonly #sourceCatalogSubs = new Subs<ConsoleSourceCatalog>();
   readonly #sourceAssignmentSubs = new Subs<SourceAssignments>();
   /** R-022 — the bridge-owned rehearsing set, pushed to every client. */
   readonly #rehearseSubs = new Subs<Rehearsal[]>();
@@ -2069,7 +2069,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     config: () => this.#invoke(SourcesConfigChannel, undefined),
     setConfig: (req: ChannelRequest<typeof SourcesSetConfigChannel>) =>
       this.#invoke(SourcesSetConfigChannel, req),
-    onConfigChanged: (handler: (catalog: SourceCatalog) => void) =>
+    onConfigChanged: (handler: (catalog: ConsoleSourceCatalog) => void) =>
       this.#sourceCatalogSubs.add(handler),
     assignments: () => this.#invoke(SourcesAssignmentsChannel, undefined),
     setAssignments: (req: ChannelRequest<typeof SourcesSetAssignmentsChannel>) =>

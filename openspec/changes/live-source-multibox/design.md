@@ -242,6 +242,12 @@ SourceAssignmentsSchema = {
 }
 ```
 
+⚠ **Amended 2026-09-28 (`PLATE-BAND-01`, `openspec/changes/plate-band`).** `layerRange` is still the DECLARED
+band and the only one the file holds. But "never defaulted" no longer holds for a station linked to the
+Playout: with none declared it is given 60–79 unless its own config claims a layer there, because the
+contract fixes the plant's layers and a reservation in the band now turns the default off instead of failing
+a boot (`tasks.md` note 4's amendment). The default is computed (`plateBandInForce`) and never written.
+
 A **discriminated union on `kind`**, not a free string, so an unreachable producer form is a
 parse error at the boundary rather than an AMCP `400` at take time. `route` carries an
 optional `layer` because the measured grammar `route://(?<CHANNEL>\d+)(-(?<LAYER>\d+))?`

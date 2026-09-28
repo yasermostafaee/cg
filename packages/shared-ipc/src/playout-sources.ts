@@ -5,9 +5,11 @@ import {
   MediaWhenHiddenSchema,
   checkSourceCatalog,
   mediaPlaybackOf,
+  type ConsoleSourceCatalog,
   type LiveSourceFormat,
   type LiveSourceLayerRange,
   type MediaPlayback,
+  type PlateBandInForce,
   type SourceCatalog,
   type SourceDefinition,
   type SourceProducer,
@@ -486,6 +488,19 @@ export function redactCatalogForConsole(catalog: SourceCatalog): SourceCatalog {
         : s,
     ),
   };
+}
+
+/**
+ * 🔴 `PLATE-BAND-01` — **THE CATALOGUE AS A CONSOLE IS TOLD IT**: redacted
+ * ({@link redactCatalogForConsole}), with the plate band in force beside it. The bridge's read, its
+ * push and the offline mock's bridge all build it HERE, so a console is told the band in force one
+ * way whichever of them answers.
+ */
+export function consoleSourceCatalog(
+  catalog: SourceCatalog,
+  band: PlateBandInForce | null,
+): ConsoleSourceCatalog {
+  return { ...redactCatalogForConsole(catalog), ...(band !== null ? { plateBand: band } : {}) };
 }
 
 /**

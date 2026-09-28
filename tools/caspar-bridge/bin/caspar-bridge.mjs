@@ -602,7 +602,12 @@ function describeBoot(handle) {
       handle.runtime.fixedLayerBanks(),
     )}`,
   );
-  console.error(`[caspar-bridge] live sources: ${describeSourceCatalog(handle.sourceCatalog)}`);
+  console.error(
+    `[caspar-bridge] live sources: ${describeSourceCatalog(
+      handle.sourceCatalog,
+      handle.auth.mode === 'playout',
+    )}`,
+  );
   console.error(
     `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
   );
@@ -832,13 +837,19 @@ function describeTemplates({ loaded, skipped, dir }) {
  * en-dash as mojibake, and a line whose whole job is to be READ must not arrive
  * with garbage in the middle of a layer range.
  */
-function describeSourceCatalog({ value, source }) {
+function describeSourceCatalog({ value, source, band: inForce }, playoutLinked) {
   // PLAYOUT-SOURCES-01 — the file carries the BAND only; the sources are the Playout's. Counts,
   // never names: a Playout name is often Persian, and this line is ASCII (see above).
+  // PLATE-BAND-01 — the band IN FORCE, and why: declared, a Playout-linked station's default (which
+  // no file holds), or none. A linked station with none is one whose own config claims a layer there.
   const band =
-    value.layerRange === undefined
-      ? 'no plate band declared'
-      : `plate band ${value.layerRange.start}-${value.layerRange.end}`;
+    inForce === null
+      ? playoutLinked
+        ? "no plate band: none declared, and this station's config claims a layer in the plate band, so no default"
+        : 'no plate band declared'
+      : inForce.origin === 'default'
+        ? `plate band ${inForce.range.start}-${inForce.range.end} by default: linked to the Playout, none declared`
+        : `plate band ${inForce.range.start}-${inForce.range.end}`;
   const bandFrom =
     source === 'absent'
       ? `no file at ${sourceCatalogPath}`

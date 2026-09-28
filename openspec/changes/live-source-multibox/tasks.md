@@ -939,6 +939,15 @@ UNCHANGED:**
    upgrade. The band also carries **no channel** (a Live Source lands on whatever channel its
    template is on), so overlap is tested on layer NUMBERS across every channel — it refuses more
    than strictly necessary, which is the right direction here.
+   ⚠ **Amended 2026-09-28 by the owner (`PLATE-BAND-01`, `openspec/changes/plate-band`, `R-073`).** Both
+   reasons were answered. (1) A Playout-linked station's plant is not unseen: the contract fixes its
+   layers — the Playout owns 1–49, CG Control 50–99 (beds 50–59, plates 60–79, template rows 80–99;
+   `PLAYOUT-INTEGRATION-CONTRACT-v1.md` §7, and C5 as the Playout answered it). (2) The upgrade hazard
+   became the condition: a station linked to the Playout with no declared band uses 60–79 unless its own
+   config claims a layer there (a reserved layer, a bank row, a policy range) — then it gets no default,
+   and nothing can fail a boot, because the default is computed and never written into the config. A
+   declared band is used as declared; a station not linked keeps this note's rule. `plateBandInForce`
+   (`@cg/shared-ipc`) is the one reader.
 5. **"At change" needed NO door outside this change.** The other two layer classes are both
    immutable mid-session — `validateFixedBankChange` refuses a start/channel/count change
    (`renumber-refused` / `channel-change-refused` / `resize-refused`), and the reserved layers have

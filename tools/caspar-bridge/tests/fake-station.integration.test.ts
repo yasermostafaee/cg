@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { ConnectionHealth } from '@cg/shared-ipc';
+import { inputSourceId, type ConnectionHealth } from '@cg/shared-ipc';
 import { createBridge, realProbes, type BridgeHandle, type CheckProbes } from '../src/index.js';
 import { openClient, waitFor, type Client } from './support/auth-harness.js';
 import { startFakePgmFeed } from './support/fake-pgm-feed.js';
@@ -190,6 +190,89 @@ describe('A1 — `--fake` is a whole station', () => {
     await waitFor(() => fs.readFileSync(trace, 'utf8').includes('CG 1-99 PLAY 0'), 5000);
     const after = (await received(trace, caspar)).slice(before);
     expect(after.some((l) => l.startsWith('CG 1-99 PLAY'))).toBe(true);
+    expect(after.filter((l) => addresses(l, 2))).toEqual([]);
+  });
+
+  /*
+    🔴 `PLATE-BAND-01` — THE OWNER'S CHECK, AS `dev:station --fake` LEAVES THE STATION: no plate band
+    declared anywhere (no catalogue file — first-run writes the connection and the banks, never a
+    band), the Playout named in the auth config, and its inputs read from its own D10 at sign-in. The
+    take of a two-plate bed that was refused on 2026-09-28 now seats both plates in 60–79.
+  */
+  it('🔴 with NO band declared, a take of a two-plate bed on channel 1 seats both plates in 60–79 — the owner’s `Bed 59`', async () => {
+    const oscPort = await freeUdpPort();
+    const trace = tracePath();
+    station = await startFakeStation(
+      MODULES,
+      { amcp: 0, osc: oscPort, pgm: [0, 0] },
+      { tracePath: trace },
+    );
+    const p = station.playout;
+    const caspar = station.caspar;
+    const bridge = await stationBridge(p, caspar.amcpPort, oscPort);
+    const client = await openClient(bridge);
+    const admin = await p.issueToken({ user: 'admin' });
+    expect((await client.authenticate('a1', admin.token)).error).toBeUndefined();
+    await linkUp(client);
+    const rt = bridge.runtime;
+    expect(rt.sourceCatalog().layerRange, 'no band is declared').toBeUndefined();
+    expect(rt.plateBandInForce()).toEqual({ range: { start: 60, end: 79 }, origin: 'default' });
+
+    // The Playout's own inputs, read at the sign-in: an NDI camera and a multicast stream.
+    const studio = inputSourceId('li-studio1');
+    const multicast = inputSourceId('li-multicast');
+    await waitFor(
+      () => [studio, multicast].every((id) => rt.sourceCatalog().sources.some((s) => s.id === id)),
+      8000,
+    );
+    const rect = { x: 0, y: 0, width: 960, height: 1080 };
+    rt.templateImport(
+      {
+        templateId: 'bed-two',
+        templateType: 'custom',
+        fields: [],
+        liveSources: {
+          resolution: { width: 1920, height: 1080 },
+          defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+          sources: [
+            { elementId: 'el-1', sourceId: 'l1', rect, expectedAspect: 16 / 9, dynamic: false },
+            {
+              elementId: 'el-2',
+              sourceId: 'l2',
+              rect: { ...rect, x: 960 },
+              expectedAspect: 16 / 9,
+              dynamic: false,
+            },
+          ],
+        },
+      },
+      HTML,
+    );
+    expect(
+      rt.setSourceAssignments({
+        assignments: [
+          { channel: 1, templateId: 'bed-two', plateId: 'l1', sourceId: studio },
+          { channel: 1, templateId: 'bed-two', plateId: 'l2', sourceId: multicast },
+        ],
+      }),
+    ).toEqual({ ok: true });
+    expect(await rt.loadFixed({ channel: 1, layer: 59 }, 'bed-59', 'bed-two', {})).toEqual({
+      accepted: true,
+    });
+    const before = (await received(trace, caspar)).length;
+
+    expect(await rt.take('bed-59')).toEqual({ accepted: true });
+
+    const after = (await received(trace, caspar)).slice(before);
+    const plates = after
+      .map((l) => /^PLAY 1-(\d+) /.exec(l))
+      .filter((m): m is RegExpExecArray => m !== null)
+      .map((m) => Number(m[1]));
+    expect(plates, 'both plates reached CasparCG').toHaveLength(2);
+    for (const layer of plates) {
+      expect(layer).toBeGreaterThanOrEqual(60);
+      expect(layer).toBeLessThanOrEqual(79);
+    }
     expect(after.filter((l) => addresses(l, 2))).toEqual([]);
   });
 

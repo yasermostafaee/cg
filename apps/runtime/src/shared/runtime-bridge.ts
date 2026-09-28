@@ -97,7 +97,7 @@ import type {
   UpdateRequestChannel,
   UpdateStateChannel,
   SourceAssignments,
-  SourceCatalog,
+  ConsoleSourceCatalog,
   SourcesAssignmentsChannel,
   SourcesConfigChannel,
   SourcesMediaSearchChannel,
@@ -959,7 +959,8 @@ export interface RuntimeBridge {
     setConfig(
       req: ChannelRequest<typeof SourcesSetConfigChannel>,
     ): Promise<ChannelResponse<typeof SourcesSetConfigChannel>>;
-    onConfigChanged(handler: (catalog: SourceCatalog) => void): Unsubscribe;
+    /** `PLATE-BAND-01` — the catalogue with the plate band in force beside it. */
+    onConfigChanged(handler: (catalog: ConsoleSourceCatalog) => void): Unsubscribe;
     assignments(): Promise<ChannelResponse<typeof SourcesAssignmentsChannel>>;
     /**
      * Replace the whole assignment set. Refused when a plate is assigned twice, or when a NEW or

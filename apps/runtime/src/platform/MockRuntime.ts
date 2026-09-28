@@ -44,6 +44,7 @@ import type {
   MediaPlateState,
   MediaPlateTransportAction,
   MediaPlayback,
+  PlateBandInForce,
 } from '@cg/shared-ipc';
 // R-030 — `videoModeRaster` is the ONE video-mode → raster map, shared with the
 // bridge. The mock must never carry a second copy: a mock that disagreed with the
@@ -56,6 +57,7 @@ import {
   assignmentsOnChannel,
   copyAssignmentsToChannel,
   checkSourceCatalogAgainstBanks,
+  plateBandInForce,
   defaultFixedLayerBank,
   firstBank,
   sortBanks,
@@ -2252,6 +2254,21 @@ export class MockRuntime {
       layerRange: band,
       hostIsOurs: () => true,
       channelFor: (_host, channel) => channel,
+    });
+  }
+
+  /**
+   * 🔴 `PLATE-BAND-01` parity — **THE PLATE BAND IN FORCE, by the bridge's ONE reader**
+   * (`plateBandInForce`). The offline console is auth OFF: there is no Playout behind it (§1.G), so it
+   * is NOT linked, and its band is the declared one or none — exactly an unlinked station's. Handed
+   * to the console beside the catalogue, as the bridge hands it.
+   */
+  plateBandInForce(): PlateBandInForce | null {
+    return plateBandInForce({
+      declared: this.sourceCatalog().layerRange,
+      playoutLinked: false,
+      banks: this.#fixedBanks,
+      reservedLayers: [],
     });
   }
 

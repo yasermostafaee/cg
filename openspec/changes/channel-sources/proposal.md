@@ -43,6 +43,8 @@ The owner decided (2026-09-28):
   is recorded in `openspec/changes/live-source-multibox/tasks.md` note 4 (line 935) and `design.md:237`, and was
   re-affirmed by the 2026-09-14 re-band (`sources.ts:446`, _"offered in the editor and never applied on its
   own"_). The owner decides; until then a station with no band still refuses a take — now as one row line.
+  ⚠ **Decided 2026-09-28** (`PLATE-BAND-01`): `openspec/changes/plate-band` gives a Playout-linked station
+  with none declared 60–79, unless its own config claims a layer there.
 - The wire of a take, its order, `LOOK-SWITCH-01`'s pre-seat and `FIELD-FIXES-01-A` are unchanged. Our layers
   stay 50–99.
 - Whether the Playout assigns inputs to channels is not in this change (asked separately).

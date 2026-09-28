@@ -88,6 +88,9 @@ import {
   copyAssignmentsToChannel,
   checkSourceAssignments,
   checkSourceCatalogAgainstBanks,
+  // `PLATE-BAND-01` — the plate band in force, asked of the ONE reader.
+  plateBandInForce,
+  type PlateBandInForce,
   describeTemplateReferences,
   type TemplateReference,
   activeLookOf,
@@ -1527,6 +1530,14 @@ export class CasparRuntime {
   readonly #declaresNothingWithoutBank: boolean;
 
   /**
+   * 🔴 `PLATE-BAND-01` — **IS THIS STATION LINKED TO THE PLAYOUT?** Resolved once in `createBridge`
+   * from the auth config (`auth.mode === 'playout'`): a Playout address or issuer names one. Read by
+   * {@link plateBandInForce} alone, and fixed for the process — a new Playout address restarts the
+   * bridge (`--set-playout-address`, ADR 0011).
+   */
+  readonly #playoutLinked: boolean;
+
+  /**
    * 🔴 `DESKTOP-APPS-01-D` j — **ITEMS OF OURS ON A CHANNEL THIS STATION DOES NOT DECLARE**, keyed
    * by `adoptionKey`. Measured: the owner moved the station from channel 1 to channel 2 with a
    * logo still looping on 1-99; the channel-2 view counted it (`0 loaded · 1 on air`) and then,
@@ -2002,6 +2013,13 @@ export class CasparRuntime {
        */
       declaresNothingWithoutBank?: boolean;
       /**
+       * 🔴 `PLATE-BAND-01` — this station is LINKED TO THE PLAYOUT (its auth config names one), so
+       * with no band declared its plates go in the contract's plate band, 60–79, unless its own config
+       * claims a layer there ({@link plateBandInForce}). Absent = not linked: the band is the declared
+       * one or none, exactly as before.
+       */
+      playoutLinked?: boolean;
+      /**
        * 🔴 `FIELD-FIXES-01-A` — every AMCP command a session settles, with its reply line and the
        * server it went to: the bridge's AMCP log (`amcp-log.ts`) is the one consumer.
        *
@@ -2031,6 +2049,7 @@ export class CasparRuntime {
     } = {},
   ) {
     this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
+    this.#playoutLinked = options.playoutLinked === true;
     this.#reservedLayers = options.reservedLayers ?? [];
     this.#reservedSet = new Set(this.#reservedLayers);
     this.#layers = new LayerManager({
@@ -5311,6 +5330,7 @@ export class CasparRuntime {
     }
     const channels = new Set(next.map((bank) => bank.channel));
     const declaredBefore = this.#fixedBanks.map((bank) => bank.channel);
+    const bandBefore = JSON.stringify(this.plateBandInForce());
     /*
       🔴 `DESKTOP-APPS-01-D` e/j — **EVERY ITEM LEFT ON A CHANNEL THE SET NO LONGER DECLARES LEAVES
       THE STACK, BEFORE THE NEW ROWS ARE APPLIED** (its slot must be released while it is still a
@@ -5329,6 +5349,15 @@ export class CasparRuntime {
     this.#copyDefaultsToJoiningChannels(declaredBefore, [...channels]);
     this.fixedConfigChanged.emit(firstBank(this.#fixedBanks));
     this.fixedBanksChanged.emit(this.fixedLayerBanks());
+    /*
+      🔴 `PLATE-BAND-01` — a bank change can turn a Playout-linked station's DEFAULT band on or off
+      (a bank row in 60–79 claims the band) without the catalogue changing, so the catalogue is
+      published again: its push carries the band in force, and a console must not keep showing a band
+      the next take will not seat in. Nothing is sent to CasparCG.
+    */
+    if (JSON.stringify(this.plateBandInForce()) !== bandBefore) {
+      this.sourceCatalogChanged.emit(this.#sourceCatalog);
+    }
     // The bank changed, so the per-slot state did too — publish through the
     // same change-compare the sweep uses (never a second derivation).
     this.#publishFixedStateIfChanged();
@@ -6241,7 +6270,8 @@ export class CasparRuntime {
         fitProvenance: [...fitProvenance.values()],
       };
 
-    const range = this.#sourceCatalog.layerRange;
+    // `PLATE-BAND-01` — the band IN FORCE: declared, or a Playout-linked station's default.
+    const range = this.#plateBand();
     if (range === undefined) {
       return {
         ok: false,
@@ -6472,7 +6502,7 @@ export class CasparRuntime {
     );
     this.#applyBindingMaps(itemId, restoreOverrides, restoreBindings);
     if (!plan.ok && plan.errorCode === LIVE_PLATE_NO_LAYER) {
-      const range = this.#sourceCatalog.layerRange;
+      const range = this.#plateBand();
       return {
         reason: plan.errorCode,
         message:
@@ -13302,6 +13332,32 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `PLATE-BAND-01` — **THE PLATE BAND IN FORCE, and where it came from**: the declared band, or —
+   * on a station linked to the Playout that declares none — the plate band 60–79 unless this station's
+   * own config claims a layer there, or none. `@cg/shared-ipc`'s {@link plateBandInForce} decides, over
+   * this runtime's declared band, link, banks, reservation and policy AS THEY ARE NOW, so a bank change
+   * moves it with no second copy to update. Published beside the catalogue (`sources.config`) and read
+   * by the CLI's boot line; never written into the station's config.
+   */
+  plateBandInForce(): PlateBandInForce | null {
+    return plateBandInForce({
+      declared: this.#sourceCatalog.layerRange,
+      playoutLinked: this.#playoutLinked,
+      banks: this.#fixedBanks,
+      reservedLayers: this.#reservedLayers,
+      policyRanges: Object.values(this.#layerPolicy),
+    });
+  }
+
+  /**
+   * The band a take seats plates in — {@link plateBandInForce}'s range, or `undefined` when none is
+   * in force. The seating plan, the binding-change check and the own-layer test all read THIS.
+   */
+  #plateBand(): LiveSourceLayerRange | undefined {
+    return this.plateBandInForce()?.range;
+  }
+
+  /**
    * R-030 — the channels this install DECLARES.
    *
    * The fixed banks are the only channel authority the install has (the SPA's
@@ -13355,7 +13411,8 @@ export class CasparRuntime {
   #isOwnConfiguredLayer(channel: number, layer: number): boolean {
     if (!this.#isDeclaredChannel(channel) || this.#reservedSet.has(layer)) return false;
     if (this.#layers.isFixed({ channel, layer })) return true;
-    const band = this.#sourceCatalog.layerRange;
+    // `PLATE-BAND-01` — the band IN FORCE: a default band's plates are ours to clear like a declared one's.
+    const band = this.#plateBand();
     if (band !== undefined && layer >= band.start && layer <= band.end) return true;
     return Object.values(this.#layerPolicy).some(([low, high]) => layer >= low && layer <= high);
   }

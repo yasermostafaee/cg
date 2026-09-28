@@ -27,7 +27,9 @@ Line anchors are at the commit that carries this change.
   to boot on upgrade"_; `openspec/changes/live-source-multibox/tasks.md:935` (note 4, the same decision and the
   same reason); `design.md:237` of that change (`layerRange?: … // DECLARED, never defaulted (§4)`); and the
   2026-09-14 re-band kept it (`sources.ts:446`, _"offered in the editor and never applied on its own"_).
-  **Decision 1 is therefore STOPPED** and reported to the owner with this reason.
+  **Decision 1 is therefore STOPPED** and reported to the owner with this reason. ⚠ **Answered 2026-09-28**:
+  the owner decided it (`PLATE-BAND-01`), and `openspec/changes/plate-band` builds it — a Playout-linked
+  station with none declared is given 60–79, unless its own config claims a layer there.
 
 ### 0.2 Every place that reads the band
 
@@ -119,7 +121,7 @@ answers `refusalOnRow: true`; nothing was sent. The console's `takeRefusalLine` 
 6. `applyDraft`'s inert `sendPlateAssignments` writes per channel when the item has a `slot`, else as before.
 7. The template-delete confirmation still counts bindings station-wide: it removes them from every channel.
 8. The refusal line is the take's only; a look switch keeps its own surface (`look-switch-all-or-nothing`).
-9. Decision 1 stopped at the recorded reason; nothing of it was built, including Station setup showing an
+9. Decision 1 stopped at the recorded reason (decided since — `plate-band`); nothing of it was built here, including Station setup showing an
    "effective" band.
 10. `sources.set-assignments` keeps the station-level gate it had (`bridge.ts:3547`, `operator` / lock
     `station-admin`) and is not fenced per channel. Its channels are INSIDE the list — data about which channel
@@ -127,4 +129,5 @@ answers `refusalOnRow: true`; nothing was sent. The console's `takeRefusalLine` 
     (`station-channel-fence.integration.test.ts`, beside `fixedLayers.set-banks` and `stack.restore`). This is
     no wider than before: when defaults were station-wide, any operator allowed to write them changed every
     channel's. Whether a channel-scoped operator's write should be judged per channel is **filed for the
-    owner** — it would be a new refusal condition.
+    owner** — it would be a new refusal condition. ⚠ **Decided 2026-09-28** (`PLATE-BAND-01`): Source
+    defaults obey the channel grant — `openspec/changes/plate-band`, its task 1.3.

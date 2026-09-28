@@ -155,12 +155,14 @@ describe('the catalog file', () => {
     expect(LiveSourceLayerRangeSchema.safeParse({ start: 10, end: 10 }).success).toBe(true);
   });
 
-  it('the suggested band is the PLATE band 60-79 and is NOT applied on its own', () => {
+  it('the suggested band is the PLATE band 60-79, and the empty catalogue DECLARES none', () => {
     // `LAYER-BANDS-16` — it was 10-59 until the 2026-09-14 re-cut, which is exactly the span
     // now left free for the playout server. The value is DERIVED from `LAYER_BANDS.plate`;
     // what is pinned here is that the suggestion and the band agree.
     expect(SUGGESTED_LIVE_SOURCE_LAYER_RANGE).toEqual({ start: 60, end: 79 });
-    // The empty catalog — what a station with no file has — declares NO band.
+    // The empty catalog — what a station with no file has — declares NO band. `PLATE-BAND-01`: a
+    // Playout-linked station is then GIVEN 60–79 by `plateBandInForce` (`plate-band.test.ts`), which
+    // is computed and never written here, so this stays true of every station's catalogue.
     expect(EMPTY_SOURCE_CATALOG.layerRange).toBeUndefined();
   });
 

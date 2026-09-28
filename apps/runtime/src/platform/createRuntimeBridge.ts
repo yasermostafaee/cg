@@ -1,4 +1,4 @@
-import { redactCatalogForConsole, type StationChannel, type StationChannels } from '@cg/shared-ipc';
+import { consoleSourceCatalog, type StationChannel, type StationChannels } from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { resolveBridgeUrl } from './bridgeUrl.js';
@@ -450,12 +450,16 @@ export function createMockBridge(): RuntimeBridge {
     // operator meets here is the one the real station would give.
     sources: {
       // `PLAYOUT-SOURCES-01` §1.E — as the bridge's route hands it over: the console never shows a
-      // stream URL, and it never even HOLDS one with its password in it.
-      config: () => Promise.resolve(redactCatalogForConsole(mock.sourceCatalog())),
+      // stream URL, and it never even HOLDS one with its password in it. `PLATE-BAND-01` — with the
+      // plate band in force beside it, built by the bridge's own composition.
+      config: () =>
+        Promise.resolve(consoleSourceCatalog(mock.sourceCatalog(), mock.plateBandInForce())),
       // `PLAYOUT-SOURCES-01` §1.F — the band only.
       setConfig: (req) => Promise.resolve(mock.setSourceBand(req)),
       onConfigChanged: (handler) =>
-        mock.sourceCatalogChanged.subscribe((catalog) => handler(redactCatalogForConsole(catalog))),
+        mock.sourceCatalogChanged.subscribe((catalog) =>
+          handler(consoleSourceCatalog(catalog, mock.plateBandInForce())),
+        ),
       assignments: () => Promise.resolve(mock.sourceAssignments()),
       setAssignments: (req) => Promise.resolve(mock.setSourceAssignments(req)),
       onAssignmentsChanged: (handler) => mock.sourceAssignmentsChanged.subscribe(handler),

@@ -11,6 +11,7 @@ import {
   __resetSourcesForTest,
   commitSourceAssignments,
   commitSourceBand,
+  currentPlateBand,
   currentSourceAssignments,
   currentSourceCatalog,
   initSources,
@@ -205,8 +206,14 @@ describe('`PLAYOUT-SOURCES-01` §1.F — the band is the only catalogue fact thi
     expect(await commitSourceBand({ start: 60, end: 69 })).toBeNull();
     // Only `{ layerRange }` crossed the wire — never a source.
     expect(setConfigCalls).toEqual([{ layerRange: { start: 60, end: 69 } }]);
-    // Adopted locally once accepted, beside the sources this console did not send.
-    expect(currentSourceCatalog()).toEqual({ ...studioA, layerRange: { start: 60, end: 69 } });
+    // Adopted locally once accepted, beside the sources this console did not send — and
+    // (`PLATE-BAND-01`) in force as DECLARED, which is what an accepted band is.
+    expect(currentSourceCatalog()).toEqual({
+      ...studioA,
+      layerRange: { start: 60, end: 69 },
+      plateBand: { range: { start: 60, end: 69 }, origin: 'declared' },
+    });
+    expect(currentPlateBand()).toEqual({ range: { start: 60, end: 69 }, origin: 'declared' });
   });
 
   it('control: no band sends an empty request, which clears it', async () => {
@@ -216,5 +223,8 @@ describe('`PLAYOUT-SOURCES-01` §1.F — the band is the only catalogue fact thi
     expect(await commitSourceBand(undefined)).toBeNull();
     expect(setConfigCalls).toEqual([{}]);
     expect(currentSourceCatalog().layerRange).toBeUndefined();
+    // `PLATE-BAND-01` — a withdrawn band leaves no DECLARED band in force; what replaces it (a
+    // linked station's default, or none) is the bridge's to say, in its push.
+    expect(currentPlateBand()).toBeNull();
   });
 });

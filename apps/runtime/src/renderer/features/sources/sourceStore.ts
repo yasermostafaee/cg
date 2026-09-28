@@ -1,12 +1,14 @@
 import {
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
+  publishedPlateBand,
   type ChannelRequest,
   type ChannelResponse,
   type ConsoleMediaItem,
+  type ConsoleSourceCatalog,
   type LiveSourceLayerRange,
+  type PlateBandInForce,
   type SourceAssignments,
-  type SourceCatalog,
   type SourcesMediaSearchChannel,
 } from '@cg/shared-ipc';
 
@@ -35,7 +37,7 @@ import { sourcesReasonMessage, sourcesTransportMessage } from '../../ui/sourcesR
  * station that has never been configured.
  */
 
-let catalog: SourceCatalog = EMPTY_SOURCE_CATALOG;
+let catalog: ConsoleSourceCatalog = EMPTY_SOURCE_CATALOG;
 let assignments: SourceAssignments = EMPTY_SOURCE_ASSIGNMENTS;
 let version = 0;
 const listeners = new Set<() => void>();
@@ -71,8 +73,17 @@ function bump(): void {
 }
 
 /** The catalog in force, as the bridge last stated it. */
-export function currentSourceCatalog(): SourceCatalog {
+export function currentSourceCatalog(): ConsoleSourceCatalog {
   return catalog;
+}
+
+/**
+ * 🔴 `PLATE-BAND-01` — the plate band IN FORCE, as the bridge last stated it: the declared band, or a
+ * Playout-linked station's default, or `null` when a take with plates would be refused. Read through
+ * `@cg/shared-ipc`'s one console reader, never off `layerRange` (which is the declared band alone).
+ */
+export function currentPlateBand(): PlateBandInForce | null {
+  return publishedPlateBand(catalog);
 }
 
 /** The assignments in force, as the bridge last stated them. */
@@ -104,8 +115,8 @@ export function sourcesVersion(): number {
  */
 export function initSources(bridge: {
   sources: {
-    config: () => Promise<SourceCatalog>;
-    onConfigChanged: (handler: (catalog: SourceCatalog) => void) => () => void;
+    config: () => Promise<ConsoleSourceCatalog>;
+    onConfigChanged: (handler: (catalog: ConsoleSourceCatalog) => void) => () => void;
     assignments: () => Promise<SourceAssignments>;
     onAssignmentsChanged: (handler: (assignments: SourceAssignments) => void) => () => void;
   };
@@ -162,9 +173,19 @@ export async function commitSourceBand(
   try {
     const res = await window.cg.sources.setConfig(layerRange === undefined ? {} : { layerRange });
     if (!res.ok) return refusalOf(res);
-    const next: SourceCatalog = { ...catalog };
-    if (layerRange === undefined) delete next.layerRange;
-    else next.layerRange = layerRange;
+    const next: ConsoleSourceCatalog = { ...catalog };
+    if (layerRange === undefined) {
+      delete next.layerRange;
+      /*
+        `PLATE-BAND-01` — a band withdrawn leaves a DECLARED band in force nowhere. What takes its
+        place (a linked station's default, or none) is the bridge's to say, and its push says it.
+      */
+      if (next.plateBand?.origin === 'declared') delete next.plateBand;
+    } else {
+      next.layerRange = layerRange;
+      // A declared band is in force exactly as declared (`plateBandInForce` rule 1).
+      next.plateBand = { range: layerRange, origin: 'declared' };
+    }
     catalog = next;
     bump();
     return null;

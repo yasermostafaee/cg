@@ -140,7 +140,7 @@ import {
   firstBank,
   reservedLayerNumbers,
   sortBanks,
-  redactCatalogForConsole,
+  consoleSourceCatalog,
   migrateAssignmentsToChannels,
   validateSourceCatalogAgainstBanks,
   type AnyChannel,
@@ -151,6 +151,7 @@ import {
   type LockState,
   type PlayoutPrincipal,
   type LiveSourceLayerRange,
+  type PlateBandInForce,
   type ReservedLayers,
   type SourceAssignments,
   type SourceBandConfig,
@@ -550,8 +551,16 @@ export interface BridgeHandle {
    * `PLAYOUT-SOURCES-01` — `value` is the catalogue IN FORCE at boot (the Playout's persisted list
    * and bound media, with the band); `source` says where the BAND came from, the one catalogue fact
    * the file still carries.
+   *
+   * `PLATE-BAND-01` — `band` is the plate band IN FORCE at boot and where it came from: the declared
+   * band, or a Playout-linked station's default (never in `value`, which is what the file holds), or
+   * `null` when none is in force and a take with plates is refused.
    */
-  readonly sourceCatalog: { value: SourceCatalog; source: SourceCatalogSource };
+  readonly sourceCatalog: {
+    value: SourceCatalog;
+    source: SourceCatalogSource;
+    band: PlateBandInForce | null;
+  };
   /**
    * `PLAYOUT-SOURCES-01` — the Playout's D10/D11 reader, or `null` when this bridge was given a
    * pre-resolved catalogue (tests, embedders).
@@ -1640,10 +1649,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     explicit in-process catalogue (tests, embedders) is pre-resolved and stays in force as-is.
   */
   const explicitCatalog = options.sourceCatalog;
-  const bandInForce = sourceCatalog.value.layerRange;
+  /*
+    The DECLARED band, and only it. `PLATE-BAND-01` — the band IN FORCE may also be a Playout-linked
+    station's default, which the runtime computes (`plateBandInForce`) and nothing here holds: the
+    default is never put into the catalogue, so it can never reach the file.
+  */
+  const declaredBand = sourceCatalog.value.layerRange;
   const bootCatalog: SourceCatalog = explicitCatalog ?? {
     sources: [],
-    ...(bandInForce !== undefined ? { layerRange: bandInForce } : {}),
+    ...(declaredBand !== undefined ? { layerRange: declaredBand } : {}),
   };
   validateSourceCatalogAgainstBanks(bootCatalog, fixedBanks, reservedLayers);
   // The ASSIGNMENTS half. `PLAYOUT-SOURCES-01` §1.C — NEVER PRUNED on load any more: the catalogue is
@@ -1717,6 +1731,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       : {}),
     // `DESKTOP-APPS-01-D` j — an installed station in first-run declares nothing until its bank.
     declaresNothingWithoutBank: options.firstRun === true,
+    /*
+      🔴 `PLATE-BAND-01` — LINKED TO THE PLAYOUT is the auth config naming one (`C-037`: an address or
+      an issuer, flags > file). Such a station's layers are the contract's, so with no band declared
+      its plates go in 60–79 unless its own config claims a layer there. A local test provider with
+      auth off (`playoutSources`) is not a link: nothing about the plant is known from it.
+    */
+    playoutLinked: auth.mode === 'playout',
     fixedSlots,
     layerPolicy,
     reservedLayers,
@@ -1764,7 +1785,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
             hostIsOurs(host) && runtime.isDeclaredChannel(channel) ? channel : null,
           inputsPath: options.playoutInputsPath,
           boundMediaPath: options.boundMediaPath,
-          layerRange: bandInForce,
+          layerRange: declaredBand,
           ...(options.playoutSourcesOptions ?? {}),
         });
   if (playoutSources !== null) {
@@ -2207,7 +2228,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     fixedBankSource: { bank: firstBank(fixedBanks), source: fixedBankSource },
     templates: runtime.templateProvenance,
     amcpLog,
-    sourceCatalog: { value: runtime.sourceCatalog(), source: sourceCatalog.source },
+    sourceCatalog: {
+      value: runtime.sourceCatalog(),
+      source: sourceCatalog.source,
+      band: runtime.plateBandInForce(),
+    },
     sourceAssignments: {
       value: resolvedAssignments.value,
       source: resolvedAssignments.source,
@@ -2792,8 +2817,9 @@ export function wirePublishes(
     // D-137 / C-015 — the installation's Live Source mapping, so a second
     // console sees the binding an operator just made without reloading.
     // `PLAYOUT-SOURCES-01` §1.E — a console never holds a stream URL's credentials.
+    // `PLATE-BAND-01` — and it is told the plate band in force beside the catalogue.
     backing.sourceCatalogChanged.subscribe((c) =>
-      push(SourcesConfigChangedChannel, redactCatalogForConsole(c)),
+      push(SourcesConfigChangedChannel, consoleSourceCatalog(c, backing.plateBandInForce())),
     ),
     // …and the assignments, which a catalog DELETION changes without any
     // browser asking. A console still showing the old binding is a console
@@ -3533,7 +3559,10 @@ export function buildRoutes(
     // apply).
     // `PLAYOUT-SOURCES-01` — the catalogue in force is the PLAYOUT'S, and what a console holds of it
     // has every stream URL's credentials redacted (§1.E): the console never shows a URL at all.
-    route(SourcesConfigChannel, 'read', 'read', () => redactCatalogForConsole(b.sourceCatalog())),
+    // `PLATE-BAND-01` — with the plate band in force beside it (declared, or a linked station's default).
+    route(SourcesConfigChannel, 'read', 'read', () =>
+      consoleSourceCatalog(b.sourceCatalog(), b.plateBandInForce()),
+    ),
     // §1.F — the PLATE BAND only. It cascades nothing: no set-config can delete a binding.
     route(SourcesSetConfigChannel, 'operator', 'station-admin', (r: SourceBandConfig) => {
       const result = b.setSourceBand(r.layerRange);

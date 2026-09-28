@@ -16,7 +16,9 @@ Lane: FULL (the path to air reads the defaults; a persisted key changes shape).
 - [ ] 1.1 Decision 1 — the effective band (declared, else 60–79) and Station setup showing it: **STOPPED** at the
       prompt's hard stop. The design record says the band is DECLARED, never defaulted, with a reason
       (`packages/shared-ipc/src/channels/sources.ts:426`; `live-source-multibox/tasks.md:935` note 4). The
-      owner decides.
+      owner decides. ⚠ **Decided 2026-09-28 and built by `plate-band` (`PLATE-BAND-01`, `R-073`)**, in the
+      owner's form: a Playout-linked station only, and no default where its own config claims a layer in
+      60–79. It stays unticked here because this change did not build it.
 - [x] 1.2 Decision 2 — `TemplateSourceAssignmentSchema.channel`; `assignmentsOnChannel` as the one reader;
       every reader by the row's channel (bridge, mock, console, PVW).
 - [x] 1.3 Decision 2 — the one-time copy on the first load of the station's file, written back
@@ -31,7 +33,7 @@ Lane: FULL (the path to air reads the defaults; a persisted key changes shape).
 ## §2 Tests — each with its control
 
 - [ ] 2.1 A fresh `--fake` station seats a two-plate take in 60–79 with no band declared: **not written** —
-      decision 1 stopped.
+      decision 1 stopped. ⚠ Written by `plate-band` (its tasks 2.1 and 2.5).
 - [x] 2.2 A change on CH 2 leaves CH 1's defaults and its take unchanged; control: CH 2 uses it —
       `tools/caspar-bridge/tests/channel-source-defaults.integration.test.ts` (the wire's routes and each row's
       frozen assignment; red under a channel-blind accessor and under a channel-blind shared reader).

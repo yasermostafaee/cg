@@ -10,6 +10,7 @@ import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { colors } from '../../theme.js';
 import {
   commitSourceBand,
+  currentPlateBand,
   currentSourceCatalog,
   sourcesVersion,
   subscribeSources,
@@ -77,11 +78,19 @@ export function SourcesSection({
     report({ role: 'refusal', text });
   };
 
-  const band = catalog.layerRange;
+  /*
+    🔴 `PLATE-BAND-01` — THE BAND IN FORCE, not the declared one: a Playout-linked station with none
+    declared seats its plates in the default band, so that is what this tab shows, and it says
+    `default` when it is the computed one. The bridge decides (`plateBandInForce`); this only reads.
+  */
+  const inForce = currentPlateBand();
+  const band = inForce?.range;
 
   /*
     🔴 **WHAT THE FIELD SHOWS AND WHAT `Apply band` READS ARE ONE VALUE, READ ONCE.** An untouched
-    field is the operator accepting the band already in force, which is exactly what it shows.
+    field is the operator accepting the band already in force, which is exactly what it shows — a
+    default included: applying it untouched DECLARES it, by a station-admin's own press, and never
+    on its own.
   */
   const bandStartText = bandStart === '' && band !== undefined ? String(band.start) : bandStart;
   const bandEndText = bandEnd === '' && band !== undefined ? String(band.end) : bandEnd;
@@ -219,10 +228,10 @@ export function SourcesSection({
             </div>
           )}
           {/* What is IN FORCE right now — for a principal who cannot apply a band, it IS the band. */}
-          <p className="cg-setup-band-summary">
-            {band === undefined
+          <p className="cg-setup-band-summary" data-plate-band={inForce?.origin ?? 'none'}>
+            {inForce === null
               ? `Nothing is declared yet; ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}–${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)} is the usual choice.`
-              : `Currently ${String(band.start)}–${String(band.end)} · ${String(band.end - band.start + 1)} layers.`}
+              : `Currently ${String(inForce.range.start)}–${String(inForce.range.end)}${inForce.origin === 'default' ? ' · default' : ''} · ${String(inForce.range.end - inForce.range.start + 1)} layers.`}
           </p>
         </div>
       </section>

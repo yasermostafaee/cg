@@ -12,7 +12,7 @@ import type {
   PlayoutLayerState,
   SourceAssignments,
   SourceBandConfig,
-  SourceCatalog,
+  ConsoleSourceCatalog,
   StationStray,
   TemplateInfo,
 } from '@cg/shared-ipc';
@@ -108,7 +108,8 @@ export interface StationSetupStubOptions {
   rasterSetResult?: { ok: boolean; reason?: string; message?: string };
   stationLayers?: PlayoutLayerState[];
   liveLayers?: LiveLayerState[];
-  catalog?: SourceCatalog;
+  /** The catalogue as the bridge tells a console — `PLATE-BAND-01`: with the band in force beside it. */
+  catalog?: ConsoleSourceCatalog;
   /**
    * Replaces the default `setConfig` for sources. `PLAYOUT-SOURCES-01` §1.F — it carries the plate
    * BAND only now, and cascades nothing.

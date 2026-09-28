@@ -423,10 +423,19 @@ export const MAX_LIVE_SOURCE_LAYER = 9999;
 /**
  * The layer band the bridge places Live Source producers on, INCLUSIVE.
  *
- * DECLARED, never defaulted. {@link SUGGESTED_LIVE_SOURCE_LAYER_RANGE} carries the
- * product's PLATE band as a SUGGESTION for the editor — applying it automatically would be
- * this project choosing layer numbers for a plant it cannot see, and a station whose
- * reservation already sits inside the band would then fail to boot on upgrade.
+ * DECLARED by a station-admin — or, since 🔴 `PLATE-BAND-01` (the owner, 2026-09-28), DEFAULTED on
+ * a station LINKED TO THE PLAYOUT that declares none: {@link plateBandInForce} is the one reader.
+ *
+ * ⚠ **IT WAS "DECLARED, NEVER DEFAULTED" UNTIL THEN, FOR TWO REASONS, AND THE OWNER ANSWERED BOTH.**
+ * (1) A default would be this project choosing layer numbers for a plant it cannot see — but a
+ * Playout-linked station's plant is SEEN: the contract fixes its layers (the Playout owns 1–49,
+ * CG Control owns 50–99 — beds 50–59, plates 60–79, template rows 80–99:
+ * `docs/integration/playout/PLAYOUT-INTEGRATION-CONTRACT-v1.md` §7, and C5 as the Playout answered
+ * it, `PLAYOUT-CG-RESPONSE-V13-STATE-v1.md` §3.5). (2) A station whose reservation already sits
+ * inside the band would fail to boot on upgrade — which is now the CONDITION rather than the
+ * objection: a station whose own config claims a layer in 60–79 gets no default, and its take is
+ * refused as before. The default is COMPUTED, never written into the config, so no station's boot
+ * can depend on it. A station not linked to the Playout keeps the old rule: declared, or none.
  *
  * NO CHANNEL. A Live Source is placed on whatever channel its template is on,
  * so the band is a statement about layer NUMBERS. Disjointness is therefore
@@ -443,7 +452,9 @@ export const LiveSourceLayerRangeSchema = z
 export type LiveSourceLayerRange = z.infer<typeof LiveSourceLayerRangeSchema>;
 
 /**
- * THE PLATE band, offered in the editor and never applied on its own.
+ * THE PLATE band: what the editor offers, and — `PLATE-BAND-01` — the band a Playout-linked station
+ * with none declared is given by {@link plateBandInForce}, unless its own config claims a layer in it.
+ * It is never written into a station's config on its own.
  *
  * ⚠ **IT MOVED FROM 10-59 TO `LAYER_BANDS.plate` (60-79) on 2026-09-14**, and it is
  * DERIVED now rather than restated: the whole point of `layer-bands.ts` is that the band a
@@ -479,6 +490,49 @@ export const SourceCatalogSchema = z.object({
   inputsEpoch: z.string().optional(),
 });
 export type SourceCatalog = z.infer<typeof SourceCatalogSchema>;
+
+/**
+ * 🔴 `PLATE-BAND-01` — **WHERE THE PLATE BAND IN FORCE CAME FROM**: a station-admin DECLARED it, or
+ * it is the DEFAULT a station linked to the Playout gets ({@link plateBandInForce}).
+ */
+export const PLATE_BAND_ORIGINS = ['declared', 'default'] as const;
+export type PlateBandOrigin = (typeof PLATE_BAND_ORIGINS)[number];
+
+/** The plate band a take seats plates in right now, and where it came from. */
+export const PlateBandInForceSchema = z.object({
+  range: LiveSourceLayerRangeSchema,
+  origin: z.enum(PLATE_BAND_ORIGINS),
+});
+export type PlateBandInForce = z.infer<typeof PlateBandInForceSchema>;
+
+/**
+ * 🔴 `PLATE-BAND-01` — **THE CATALOGUE AS A CONSOLE IS TOLD IT: the catalogue in force, and the
+ * plate band in force beside it.**
+ *
+ * ⚠ **A SEPARATE SCHEMA, AND THE SEPARATION IS THE POINT.** {@link SourceCatalogSchema} is also the
+ * shape the station's file holds, and it has no field for the band in force — so the computed
+ * default can be PUBLISHED and can never be WRITTEN: no writer holds a value of the file's type that
+ * carries it, and a hand-written file that tried is stripped of it on load.
+ */
+export const ConsoleSourceCatalogSchema = SourceCatalogSchema.extend({
+  /** Absent ⇒ no band is in force, and a take of a template with plates is refused. */
+  plateBand: PlateBandInForceSchema.optional(),
+});
+export type ConsoleSourceCatalog = z.infer<typeof ConsoleSourceCatalogSchema>;
+
+/**
+ * The plate band in force as a CONSOLE reads it — the one reader on that side (Station setup).
+ *
+ * A bridge from before `PLATE-BAND-01` publishes no `plateBand`, and its band in force WAS its
+ * declared one, so that is what this answers for it: a console never shows a band a station does not
+ * seat in, and never hides one it does.
+ */
+export function publishedPlateBand(catalog: ConsoleSourceCatalog): PlateBandInForce | null {
+  if (catalog.plateBand !== undefined) return catalog.plateBand;
+  return catalog.layerRange === undefined
+    ? null
+    : { range: catalog.layerRange, origin: 'declared' };
+}
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §1.F — **WHAT `sources.set-config` STILL CARRIES: THE PLATE BAND, AND ONLY
@@ -900,6 +954,57 @@ export function checkSourceCatalogAgainstBanks(
   }
 }
 
+/** What {@link plateBandInForce} reads: the station's own config, and nothing observed. */
+export interface PlateBandStation {
+  /** The band a station-admin declared (`sources.set-config`), or `undefined`. */
+  readonly declared: LiveSourceLayerRange | undefined;
+  /** Whether this station is linked to the Playout — its auth config names one. */
+  readonly playoutLinked: boolean;
+  /** Every declared bank (none on a station still in first-run). */
+  readonly banks: readonly FixedLayerBank[];
+  /** The reserved playout layers, expanded (`reservedLayerNumbers`). */
+  readonly reservedLayers: readonly number[];
+  /** A deployment's own dynamic ranges, inclusive (`BridgeOptions.layerPolicy`); none by default. */
+  readonly policyRanges?: readonly (readonly [number, number])[];
+}
+
+/**
+ * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **THE PLATE BAND IN FORCE. The ONE reader:** the
+ * bridge's seating plan, its binding-change check, its own-layer test, the band it publishes and its
+ * boot line, and the offline mock, all ask THIS — so none of them can seat a plate in a band another
+ * does not believe in (golden rule 6).
+ *
+ *   1. A band a station-admin DECLARED is in force exactly as declared.
+ *   2. Otherwise, on a station LINKED TO THE PLAYOUT, the plate band 60–79
+ *      ({@link SUGGESTED_LIVE_SOURCE_LAYER_RANGE}, `LAYER_BANDS.plate`): the contract gives the Playout
+ *      1–49 and CG Control 50–99, so the plant's plate layers are known — UNLESS the station's own
+ *      config claims a layer in it. "Claims" is everything that config can put there: a reserved
+ *      playout layer (the owner's condition), a bank row or bed, which the validator a DECLARED band
+ *      must pass already refuses ({@link checkSourceCatalogAgainstBanks}), and a dynamic policy range,
+ *      which that validator does not read and a plate must still never share.
+ *   3. Otherwise NONE, and a take of a template with plates is refused as it always was — one line
+ *      on its row.
+ *
+ * COMPUTED, NEVER STORED. Nothing writes the default into the station's config, so a station boots
+ * whatever its config holds: a reservation that reaches into 60–79 turns the default OFF, it cannot
+ * fail a boot. A fresh object every call, for `defaultFixedLayerBank`'s reason: a shared literal
+ * handed to several readers is one mutation away from disagreeing.
+ */
+export function plateBandInForce(station: PlateBandStation): PlateBandInForce | null {
+  if (station.declared !== undefined) return { range: station.declared, origin: 'declared' };
+  if (!station.playoutLinked) return null;
+  const range: LiveSourceLayerRange = { ...SUGGESTED_LIVE_SOURCE_LAYER_RANGE };
+  const passesTheValidator = checkSourceCatalogAgainstBanks(
+    { sources: [], layerRange: range },
+    station.banks,
+    station.reservedLayers,
+  ).ok;
+  const clearOfPolicy = (station.policyRanges ?? []).every(
+    ([low, high]) => range.end < low || range.start > high,
+  );
+  return passesTheValidator && clearOfPolicy ? { range, origin: 'default' } : null;
+}
+
 /**
  * Validate an assignment set against itself and against the catalog IN FORCE.
  *
@@ -1145,8 +1250,15 @@ export function unassignedPlateIds(
   );
 }
 
-/** Read the catalog in force. An empty `sources` list = nothing is defined (see the header). */
-export const SourcesConfigChannel = defineChannel('sources.config', z.void(), SourceCatalogSchema);
+/**
+ * Read the catalog in force. An empty `sources` list = nothing is defined (see the header).
+ * `PLATE-BAND-01` — with the plate band in force beside it ({@link ConsoleSourceCatalogSchema}).
+ */
+export const SourcesConfigChannel = defineChannel(
+  'sources.config',
+  z.void(),
+  ConsoleSourceCatalogSchema,
+);
 
 /**
  * Replace the PLATE BAND in force: validate → apply → persist → publish.
@@ -1269,10 +1381,14 @@ export const SourcesSetAssignmentsChannel = defineChannel(
   }),
 );
 
-/** Pushed with the FULL catalog whenever it changes, so every browser converges. */
+/**
+ * Pushed with the FULL catalog whenever it changes, so every browser converges — and
+ * (`PLATE-BAND-01`) whenever the plate band in force changes without it, a bank change turning the
+ * default on or off.
+ */
 export const SourcesConfigChangedChannel = definePublishChannel(
   'sources.config-changed',
-  SourceCatalogSchema,
+  ConsoleSourceCatalogSchema,
 );
 
 /**

@@ -4083,7 +4083,7 @@ no number is shown. A live-input plate's hold, release and wire are byte-identic
 **The owner's decisions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change):** `Loop` stays a
 checkbox; a clip on air across the upgrade gets its transport record at its next take.
 
-## [~] R-072 — Each channel keeps its own Source defaults; a take refused for having no band is a row line ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `CHANNEL-SOURCES-01` (v1) · `openspec/changes/channel-sources` · decision 1 STOPPED
+## [~] R-072 — Each channel keeps its own Source defaults; a take refused for having no band is a row line ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `CHANNEL-SOURCES-01` (v1) · `openspec/changes/channel-sources` · decision 1 STOPPED, then decided → `R-073`
 
 **What.** (2) Source defaults are kept per channel, keyed (channel, template, plate); every reader —
 take, look switch, swap, restore, the Inspector's `Default (…)`, the Source defaults dialog, PVW —
@@ -4104,4 +4104,25 @@ design record says the band is DECLARED, never defaulted, and gives a reason —
 this project choosing layer numbers for a plant it cannot see, and a station whose reservation already
 sits inside the band would fail to boot on upgrade (`packages/shared-ipc/src/channels/sources.ts:426`,
 `openspec/changes/live-source-multibox/tasks.md:935`). The owner decides whether that reason still
-stands; until then a station with no band still refuses a take — as one row line.
+stands; until then a station with no band still refuses a take — as one row line. ⚠ **Decided
+2026-09-28 by the owner** — see [[R-073]]: a Playout-linked station with none declared is given 60–79,
+unless its own config claims a layer there.
+
+## [~] R-073 — A station linked to the Playout gets the plate band 60–79 with no hand step, unless it claims a layer there ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01` (v1) · `openspec/changes/plate-band`
+
+**What.** A station linked to the Playout (its auth config names one) that declares no plate band seats
+its plates in 60–79, unless its own config claims a layer there — a reserved playout layer, a bank row or
+bed, or a dynamic policy range — when it gets no default and a take with plates is refused as one line on
+its row, as before. A declared band is used exactly as declared; a station not linked to the Playout keeps
+the declared band or none. The default is computed and never written into the station's config, so a
+station boots whatever its config holds. Station setup → Live sources shows the band in force and says
+`default` when it is the computed one (`Currently 60–79 · default · 20 layers.`); the bridge's boot line
+names it and why. **Why.** `CHANNEL-SOURCES-01` stopped its decision 1 on the design record's two reasons
+([[R-072]]); the owner answered both (2026-09-28): the contract fixes a Playout-linked plant's layers (the
+Playout owns 1–49; CG Control 50–99 — beds 50–59, plates 60–79, template rows 80–99), and a reservation
+inside the band becomes the condition for no default rather than a boot failure. **Acceptance:** WHEN a
+linked station with no band declared and nothing of its own in 60–79 takes a two-plate template THEN both
+plates are seated in 60–79 and nothing is written to its config; WHEN 70–79 is declared THEN it is used as
+declared; WHEN its config reserves layer 65 THEN it gets no default and the row line appears; WHEN it is not
+linked THEN today's rule holds; WHEN its config reserves 60–79 THEN it boots unchanged; WHEN Station setup
+opens on the default THEN it reads `60–79 · default`.
