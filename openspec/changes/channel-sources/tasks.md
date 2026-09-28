@@ -57,7 +57,16 @@ Lane: FULL (the path to air reads the defaults; a persisted key changes shape).
 
 ## Gate and discharge
 
-- [ ] Z.1 `pnpm gate` green; `pnpm openspec validate --all --strict`.
-- [ ] Z.2 CI run URL, jobs confirmed RAN (PR workflow's `ci` and `e2e`; the installer workflow).
+- [x] Z.1 `pnpm gate` green; `pnpm openspec validate --all --strict` — the pre-push gate at `a802a7c0`:
+      96/96 tasks, 0 cached, openspec 92/92, `.gate-logs/gate-20260928T120034Z-20944.log`. (The standalone
+      gate at `4e586308` was red on the fence's census only — fixed in `a802a7c0`, task 2.7a.)
+- [x] Z.2 CI at `a802a7c0`, jobs confirmed RAN: PR
+      https://github.com/yasermostafaee/cg/actions/runs/36419832113 — COMPLETED `success` on attempt 2;
+      `E2E (Playwright)` RAN, green (runtime 301 passed, the three specs of 2.7/2.8 among them; designer 291
+      passed, 12 skipped); `Lint • Typecheck • Test • Build` RAN, green on attempt 2 — attempt 1 was red on
+      `media-plates.integration.test.ts:563` alone, a wait race in that test (it waits for the SHOWN plate's
+      re-send line, then asserts the clip's, which `#resendLiveMixerState` sends after it), not on this change.
+      Installers https://github.com/yasermostafaee/cg/actions/runs/36419832112 (`Installers (Windows)` and
+      `Installer smoke (clean Windows)`, both RAN, success).
 - [ ] Z.3 `pnpm dev:station --fake` with `Bed 59`: **not run** — its ports are held by the owner's own stack on
       this host (5250, 5174, 5280, UDP 6250); left to the owner.
