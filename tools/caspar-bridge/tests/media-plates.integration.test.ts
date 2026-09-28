@@ -9,6 +9,7 @@ import {
   AUTHZ_ROLE_REFUSAL,
   LOCK_ENGAGED_REFUSAL,
   authzChannelRefusal,
+  fixedBanksSlots,
   inputSourceId,
   mediaSourceId,
   type ConnectionConfig,
@@ -301,6 +302,26 @@ async function boot(
   }
   await r.whenServerHealthy(HEALTH_MS);
   await awaitChannelModeRead(r);
+  /*
+    ⚠ R-022's BOOT BLANKET. `#reassertDeclaredVolumes` sets every declared row to `VOLUME 1` at
+    `normal` priority once the link is up, while a take is `urgent` — so on a slow host the blanket
+    is still trickling out after the take, and a straggler (`MIXER 2-51 VOLUME 1`, a bed row: CI
+    run 36364248543) landed inside a window below and read as the press sending a second line.
+    Wait for every row's line, whatever order the queue sends them in — through the enumeration the
+    blanket itself walks. The windows' assertions stay exact.
+  */
+  const blanket = fixedBanksSlots([BANK]).map(
+    (s) => `MIXER ${String(s.channel)}-${String(s.layer)} VOLUME 1`,
+  );
+  // Not a vacuous wait: the line that landed late on CI is one of the lines waited for.
+  expect(blanket).toContain('MIXER 2-51 VOLUME 1');
+  const blanketBy = Date.now() + 10_000;
+  for (;;) {
+    const seen = new Set(await linesOf(mock, trace));
+    if (blanket.every((l) => seen.has(l))) break;
+    if (Date.now() > blanketBy) throw new Error('timed out waiting for the boot volume blanket');
+    await delay(25);
+  }
   return {
     r,
     mock,
