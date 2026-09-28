@@ -32,9 +32,13 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   const oscHost = opts.oscHost ?? '127.0.0.1';
   const oscHz = opts.disableOsc === true ? 0 : (opts.oscHz ?? 10);
   const channelCount = opts.channels ?? 1;
+  // `ROUTE-PLATES-01` — the mock's clock: it stamps every received line (the timing instrument),
+  // and `MEDIA-PLATES-01` runs each clip's clock on it.
+  const now = opts.now ?? ((): number => performance.now());
+  const clipLength = opts.clipLength ?? ((): number | undefined => undefined);
 
   const registry = new LayerRegistry();
-  const emitter = new OscEmitter(registry, channelCount, oscHz);
+  const emitter = new OscEmitter(registry, channelCount, oscHz, now);
   await emitter.start(host, oscHost, oscPort);
 
   const handlers = defaultHandlers();
@@ -70,6 +74,10 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
 
   const ctx: HandlerContext = {
     channelCount,
+    now,
+    clipLengthOf(file: string): number | undefined {
+      return clipLength(file);
+    },
     isMissingMedia(file: string): boolean {
       return missingMedia.has(file);
     },
@@ -167,7 +175,6 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     : undefined;
 
   // `ROUTE-PLATES-01` — every received line, stamped with the mock's clock (the timing instrument).
-  const now = opts.now ?? ((): number => performance.now());
   const received: ReceivedCommand[] = [];
   const server = new AmcpServer(handlers, ctx, onTrace, (line) => {
     received.push({ at: now(), line });

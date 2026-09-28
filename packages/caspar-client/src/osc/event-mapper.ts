@@ -56,6 +56,13 @@ export function messageToEvent(msg: OscMessage): OscEvent | null {
       if (paused === null) return null;
       return { kind: 'osc.layer.foreground.paused', channel, layer, paused };
     }
+    if (tail === 'foreground/file/time') {
+      // `MEDIA-PLATES-01` — (elapsed, length) in seconds; both, or it is not this address.
+      const elapsed = numericArg(msg.args[0]);
+      const total = numericArg(msg.args[1]);
+      if (elapsed === null || total === null || elapsed < 0 || total < 0) return null;
+      return { kind: 'osc.layer.foreground.time', channel, layer, elapsed, total };
+    }
     if (tail === 'background/producer') {
       const producer = stringArg(msg.args[0]);
       if (producer === null) return null;

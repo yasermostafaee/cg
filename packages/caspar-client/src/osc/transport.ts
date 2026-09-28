@@ -8,6 +8,7 @@ import { OscChangeTracker } from './change-tracker.js';
 import { OscInterestFilter } from './interest.js';
 import { OscOccupancyTap } from './occupancy-tap.js';
 import { OscChannelTickTap } from './channel-tick-tap.js';
+import { OscClipTimeTap } from './clip-time-tap.js';
 
 /**
  * OscTransport — UDP receiver for CasparCG 2.3.x's pushed OSC stream.
@@ -53,6 +54,12 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
    * other signal in this product can: every other one is about REACHABILITY.
    */
   readonly channelTicks: OscChannelTickTap;
+  /**
+   * `MEDIA-PLATES-01` — passive CLIP-TIME tap, fed at the same point: each media clip's reported
+   * clock (`file/time`, `paused`), which the console's remaining time and `Ended` read — only ever
+   * what the server reported, never an estimate.
+   */
+  readonly clipTimes: OscClipTimeTap;
   private readonly expectedSourceHost: string | undefined;
 
   constructor(options: OscTransportOptions = {}) {
@@ -62,6 +69,7 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     this.changeTracker = options.changeTracker ?? new OscChangeTracker();
     this.occupancy = options.occupancy ?? new OscOccupancyTap();
     this.channelTicks = options.channelTicks ?? new OscChannelTickTap();
+    this.clipTimes = options.clipTimes ?? new OscClipTimeTap();
     this.expectedSourceHost = options.expectedSourceHost;
     this.on('error', noop);
   }
@@ -116,6 +124,8 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     // sharper consequence: entries carried across a reconnect would report a channel
     // STOPPED whose ticks have merely not resumed yet — an alarm we manufactured.
     this.channelTicks.reset();
+    // `MEDIA-PLATES-01` — and every clip's clock: a time from before the drop is not evidence.
+    this.clipTimes.reset();
   }
 
   get port(): number {
@@ -188,6 +198,8 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
           and — worse — could never tell a slowed channel from a throttled one.
         */
         this.channelTicks.note(event, recvAt);
+        // `MEDIA-PLATES-01` — and the clip-time tap, the one reader of `file/time`.
+        this.clipTimes.note(event, recvAt);
         if (!this.interest.shouldEmit(event)) continue;
         if (!this.rateLimiter.shouldEmit(event)) continue;
         if (!this.changeTracker.shouldEmit(event)) continue;
@@ -209,6 +221,7 @@ export interface OscTransportOptions {
   changeTracker?: OscChangeTracker;
   channelTicks?: OscChannelTickTap;
   occupancy?: OscOccupancyTap;
+  clipTimes?: OscClipTimeTap;
   /**
    * The server this transport is supposed to be hearing from. When set, only OSC
    * arriving FROM that address counts as evidence that we are hearing THIS

@@ -175,6 +175,20 @@ export interface LayerState {
    * graphic invisible with nothing on the wire explaining why.
    */
   clip: MixerRect;
+  /**
+   * `MEDIA-PLATES-01` — the media clip's clock, as CasparCG 2.5.0's ffmpeg producer keeps it
+   * (measured on the owner's core, 2026-09-28): it advances while playing, stops while paused, and
+   * at the end of a clip that is not looping it FREEZES on its last frame (`file/time` stays at the
+   * length) — never empty. With `loop` it wraps. `clipLengthS` is `undefined` when the mock was not
+   * told the file's length ({@link MockOptions.clipLength}): it then reports no `file/time`, as a
+   * server that does not report one — and the console must then show no number.
+   */
+  loop: boolean;
+  clipLengthS: number | undefined;
+  /** Seconds elapsed at {@link clipRunningSince}, or while paused. */
+  clipElapsedS: number;
+  /** The mock clock's `now()` (ms) when the clip last started running; `null` while paused. */
+  clipRunningSince: number | null;
 }
 
 /** B-041 — why the mock's second-layer (html_cg_proxy → V8) emulation rejected a CG data arg. */
@@ -232,6 +246,13 @@ export interface MockOptions {
    * everyone — every mock before this one. {@link MockHandle.setAdmission} replaces it later.
    */
   admit?: (sourceAddress: string) => boolean;
+  /**
+   * `MEDIA-PLATES-01` — a media file's length in seconds, as the core would know it once it opened
+   * the file; `undefined` when unknown. A file with a length gets a clip clock and reports
+   * `foreground/file/time` over OSC; one without reports none. The fake station answers from the
+   * fake Playout's media library (`durationMs`).
+   */
+  clipLength?: (file: string) => number | undefined;
   /**
    * `ROUTE-PLATES-01` — the clock each received command is stamped with
    * ({@link MockHandle.receivedCommands}). Default `performance.now()`. A test that drives the
@@ -366,6 +387,10 @@ export type AmcpHandler = (
 ) => AmcpResponse | Promise<AmcpResponse>;
 
 export interface HandlerContext {
+  /** `MEDIA-PLATES-01` — the mock clock (ms), the one {@link MockOptions.now} names. */
+  now(): number;
+  /** `MEDIA-PLATES-01` — a media file's length in seconds, when the mock was told it. */
+  clipLengthOf(file: string): number | undefined;
   /** Get a layer's current state (creates an `'empty'` entry on first read). */
   getLayer(slot: LayerSlot): LayerState;
   /** `ROUTE-PLATES-01` — the layer if it was ever touched, WITHOUT allocating one (a refusal must not). */

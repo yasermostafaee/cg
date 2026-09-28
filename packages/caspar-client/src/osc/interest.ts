@@ -58,6 +58,13 @@ export class OscInterestFilter {
         if (this.isAllocated(event.channel, event.layer)) return true;
         this.dropped++;
         return false;
+      case 'osc.layer.foreground.time':
+        /*
+          `MEDIA-PLATES-01` — a clip's clock is never DISPATCHED: it changes every frame, and no
+          consumer of the event stream reads it. The passive clip-time tap reads it before this
+          filter (`OscTransport`). Not counted as dropped — it was never out of interest.
+        */
+        return false;
       case 'osc.health':
         return true;
     }

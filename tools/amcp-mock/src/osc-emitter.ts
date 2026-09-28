@@ -1,6 +1,6 @@
 import * as dgram from 'node:dgram';
 import { encodeBundle, type OscMessage } from './osc-encode.js';
-import type { LayerRegistry } from './layer-state.js';
+import { clipElapsedAt, type LayerRegistry } from './layer-state.js';
 import type { OscArgValue } from './types.js';
 
 /**
@@ -15,6 +15,9 @@ import type { OscArgValue } from './types.js';
  *  - `/channel/N/stage/layer/L/foreground/file/path` per allocated slot
  *  - `/channel/N/stage/layer/L/foreground/paused` per allocated slot
  *  - `/channel/N/stage/layer/L/background/producer` per allocated slot
+ *  - `MEDIA-PLATES-01` — for a media clip whose length the mock knows:
+ *    `/channel/N/stage/layer/L/foreground/file/time` (elapsed, length — seconds, as 2.5.0's
+ *    `av_producer.cpp` sends `state_["file/time"]`) and `/foreground/loop`
  *
  * No /cg.invoked or /foreground/file/frame — those don't exist in 2.3.x.
  */
@@ -28,6 +31,8 @@ export class OscEmitter {
     private readonly registry: LayerRegistry,
     private readonly channelCount: number,
     private readonly hz: number,
+    /** `MEDIA-PLATES-01` — the mock clock (ms) a clip's elapsed time is read at. */
+    private readonly now: () => number = () => performance.now(),
   ) {}
 
   async start(bindHost: string, defaultHost: string, defaultPort: number): Promise<number> {
@@ -120,6 +125,14 @@ export class OscEmitter {
           address: `${base}/foreground/paused`,
           args: [layer.paused],
         });
+        const elapsed = layer.producer === 'ffmpeg' ? clipElapsedAt(layer, this.now()) : undefined;
+        if (elapsed !== undefined && layer.clipLengthS !== undefined) {
+          messages.push({
+            address: `${base}/foreground/file/time`,
+            args: [elapsed, layer.clipLengthS],
+          });
+          messages.push({ address: `${base}/foreground/loop`, args: [layer.loop] });
+        }
       }
       messages.push({
         address: `${base}/background/producer`,

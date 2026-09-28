@@ -33,6 +33,11 @@ export class LayerRegistry {
       // made a MISSING `MIXER FILL` look like a placed box.
       fill: FULL_FRAME,
       clip: FULL_FRAME,
+      // `MEDIA-PLATES-01` — no clip, no clock.
+      loop: false,
+      clipLengthS: undefined,
+      clipElapsedS: 0,
+      clipRunningSince: null,
     };
     this.slots.set(key, fresh);
     return fresh;
@@ -58,4 +63,18 @@ export class LayerRegistry {
 
 function keyOf(slot: LayerSlot): string {
   return `${String(slot.channel)}:${String(slot.layer)}`;
+}
+
+/**
+ * `MEDIA-PLATES-01` — a clip's elapsed seconds at `now` (ms), as the core's ffmpeg producer keeps
+ * it: running time added while playing; at the end, FROZEN at the length (not looping) or wrapped
+ * (looping). `undefined` when the layer has no clip clock.
+ */
+export function clipElapsedAt(layer: LayerState, now: number): number | undefined {
+  const length = layer.clipLengthS;
+  if (length === undefined) return undefined;
+  const running = layer.clipRunningSince === null ? 0 : (now - layer.clipRunningSince) / 1000;
+  const raw = layer.clipElapsedS + Math.max(0, running);
+  if (raw < length) return raw;
+  return layer.loop && length > 0 ? raw % length : length;
 }

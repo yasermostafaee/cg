@@ -50,6 +50,7 @@ function keyOf(event: OscEvent): string {
     case 'osc.layer.foreground.producer':
     case 'osc.layer.foreground.file':
     case 'osc.layer.foreground.paused':
+    case 'osc.layer.foreground.time':
     case 'osc.layer.background.producer':
       return `${event.kind}:${String(event.channel)}:${String(event.layer)}`;
     case 'osc.health':

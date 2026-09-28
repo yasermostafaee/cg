@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { decodeCgData } from './cg-data.js';
+import { clipElapsedAt } from './layer-state.js';
 import {
   FULL_FRAME,
   type AmcpHandler,
@@ -27,6 +28,9 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
   m.set('PLAY', handlePlay);
   m.set('LOAD', handleLoad);
   m.set('LOADBG', handleLoadBg);
+  m.set('PAUSE', handlePause);
+  m.set('RESUME', handleResume);
+  m.set('CALL', handleCall);
   m.set('CLEAR', handleClear);
   m.set('CG', handleCg);
   m.set('MIXER', handleMixer);
@@ -517,7 +521,8 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     const layer = ctx.peekLayer(slot);
     if (layer === undefined) return { kind: 'ok', code: 202, verb: 'PLAY' };
     if (layer.backgroundProducer === 'empty') {
-      if (layer.paused) ctx.setLayer(slot, { paused: false });
+      // `MEDIA-PLATES-01` — and a paused clip's clock runs again (`layer::play()` un-pauses).
+      if (layer.paused) ctx.setLayer(slot, { paused: false, ...clipClockResumed(layer, ctx) });
       return { kind: 'ok', code: 202, verb: 'PLAY' };
     }
     ctx.setLayer(slot, {
@@ -528,6 +533,7 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
       paused: false,
       onAir: true,
       pageResolution: 'resolved',
+      ...clipClockAtPlay(layer.backgroundProducer, ['', layer.backgroundFilePath], ctx),
     });
     return { kind: 'ok', code: 202, verb: 'PLAY' };
   }
@@ -549,8 +555,120 @@ function handlePlay(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     paused: false,
     onAir: true,
     pageResolution: 'resolved',
+    ...clipClockAtPlay(verdict.kind, req.args, ctx),
   });
   return { kind: 'ok', code: 202, verb: 'PLAY' };
+}
+
+/** The channel's frame rate: every mock channel runs at 50 fps (its `framerate` OSC says so). */
+const CHANNEL_FPS = 50;
+
+/**
+ * `MEDIA-PLATES-01` — a media clip's clock as a `PLAY` starts it: from 0, running now, and `LOOP`
+ * read as the core reads it — a bare flag anywhere after the file (`ffmpeg_producer.cpp`'s
+ * `contains_param(L"LOOP", params)`, so even `LOOP 0` loops). A file the mock has no length for, and
+ * every other producer, gets no clock.
+ */
+function clipClockAtPlay(
+  kind: ProducerKind,
+  args: readonly string[],
+  ctx: HandlerContext,
+): Pick<LayerState, 'loop' | 'clipLengthS' | 'clipElapsedS' | 'clipRunningSince'> {
+  const loop = kind === 'ffmpeg' && args.slice(2).some((a) => a.toUpperCase() === 'LOOP');
+  const length = kind === 'ffmpeg' ? ctx.clipLengthOf(args[1] ?? '') : undefined;
+  return {
+    loop,
+    clipLengthS: length,
+    clipElapsedS: 0,
+    clipRunningSince: length === undefined ? null : ctx.now(),
+  };
+}
+
+/** `MEDIA-PLATES-01` — a paused clip's clock runs again from where it stopped. */
+function clipClockResumed(
+  layer: LayerState,
+  ctx: HandlerContext,
+): Partial<Pick<LayerState, 'clipRunningSince'>> {
+  return layer.clipLengthS === undefined || layer.clipRunningSince !== null
+    ? {}
+    : { clipRunningSince: ctx.now() };
+}
+
+/**
+ * `MEDIA-PLATES-01` — `PAUSE <ch>-<L>`: the frame on screen is held and the clip's clock stops
+ * (2.5.0 `layer.cpp`: `paused_ = true`, and `receive` is not called while paused — measured on the
+ * owner's core: `file/time` stood still for a second). Acked on any layer, as the core acks it.
+ */
+function handlePause(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const slot = parseChannelLayer(req.args[0]);
+  if (!slot) return { kind: 'err', code: 401, verb: 'PAUSE' };
+  if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'PAUSE' };
+  const layer = ctx.peekLayer(slot);
+  if (layer === undefined || layer.paused) return { kind: 'ok', code: 202, verb: 'PAUSE' };
+  const elapsed = clipElapsedAt(layer, ctx.now());
+  ctx.setLayer(slot, {
+    paused: true,
+    ...(elapsed !== undefined ? { clipElapsedS: elapsed, clipRunningSince: null } : {}),
+  });
+  return { kind: 'ok', code: 202, verb: 'PAUSE' };
+}
+
+/** `MEDIA-PLATES-01` — `RESUME <ch>-<L>`: the clip carries on from the frame after the held one. */
+function handleResume(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const slot = parseChannelLayer(req.args[0]);
+  if (!slot) return { kind: 'err', code: 401, verb: 'RESUME' };
+  if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'RESUME' };
+  const layer = ctx.peekLayer(slot);
+  if (layer === undefined || !layer.paused) return { kind: 'ok', code: 202, verb: 'RESUME' };
+  ctx.setLayer(slot, { paused: false, ...clipClockResumed(layer, ctx) });
+  return { kind: 'ok', code: 202, verb: 'RESUME' };
+}
+
+/**
+ * `MEDIA-PLATES-01` — `CALL <ch>-<L> SEEK <frames>` and `CALL <ch>-<L> LOOP [0|1]`, on a media clip,
+ * as 2.5.0's `ffmpeg_producer.cpp` `call()` answers them: `SEEK` counts channel frames and works
+ * after the clip has ended (measured: `SEEK 0` restarted an ended clip); `LOOP` with `0`/`1` switches
+ * looping on a playing clip and answers the flag, and with no value only answers it. Anything else —
+ * no clip on the layer, another sub-command, a value that is not a number or not `0`/`1` — is refused.
+ */
+function handleCall(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const slot = parseChannelLayer(req.args[0]);
+  if (!slot) return { kind: 'err', code: 401, verb: 'CALL' };
+  if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CALL' };
+  const layer = ctx.peekLayer(slot);
+  if (layer === undefined || layer.producer !== 'ffmpeg') {
+    return { kind: 'err', code: 403, verb: 'CALL', detail: 'NO CLIP ON THE LAYER' };
+  }
+  const sub = (req.args[1] ?? '').toUpperCase();
+  const now = ctx.now();
+  if (sub === 'SEEK') {
+    const frames = Number(req.args[2]);
+    if (!Number.isInteger(frames) || frames < 0) return { kind: 'err', code: 403, verb: 'CALL' };
+    const length = layer.clipLengthS;
+    const seconds = frames / CHANNEL_FPS;
+    ctx.setLayer(slot, {
+      clipElapsedS: length === undefined ? seconds : Math.min(seconds, length),
+      clipRunningSince: length === undefined || layer.paused ? null : now,
+    });
+    return { kind: 'ok-line', code: 201, verb: 'CALL', data: String(frames) };
+  }
+  if (sub === 'LOOP') {
+    const value = req.args[2];
+    if (value === undefined) {
+      return { kind: 'ok-line', code: 201, verb: 'CALL', data: layer.loop ? '1' : '0' };
+    }
+    if (value !== '0' && value !== '1') return { kind: 'err', code: 403, verb: 'CALL' };
+    // Re-based at the old flag first, so an ENDED clip told to loop starts again from 0.
+    const elapsed = clipElapsedAt(layer, now);
+    ctx.setLayer(slot, {
+      loop: value === '1',
+      ...(elapsed !== undefined
+        ? { clipElapsedS: elapsed, clipRunningSince: layer.paused ? null : now }
+        : {}),
+    });
+    return { kind: 'ok-line', code: 201, verb: 'CALL', data: value };
+  }
+  return { kind: 'err', code: 403, verb: 'CALL', detail: `UNKNOWN CALL ${sub}` };
 }
 
 function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
@@ -575,6 +693,9 @@ function handleLoad(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     paused: true,
     onAir: false,
     pageResolution: 'resolved',
+    // `MEDIA-PLATES-01` — its clock is set, and stands until the PLAY that resumes it.
+    ...clipClockAtPlay(verdict.kind, req.args, ctx),
+    clipRunningSince: null,
   });
   return { kind: 'ok', code: 202, verb: 'LOAD' };
 }
@@ -618,6 +739,11 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
       paused: false,
       onAir: false,
       pageResolution: 'resolved',
+      // `MEDIA-PLATES-01` — the clip is gone, and its clock with it.
+      loop: false,
+      clipLengthS: undefined,
+      clipElapsedS: 0,
+      clipRunningSince: null,
     });
     return { kind: 'ok', code: 202, verb: 'CLEAR' };
   }
