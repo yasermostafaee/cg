@@ -4108,7 +4108,7 @@ stands; until then a station with no band still refuses a take — as one row li
 2026-09-28 by the owner** — see [[R-073]]: a Playout-linked station with none declared is given 60–79,
 unless its own config claims a layer there.
 
-## [~] R-073 — A station linked to the Playout gets the plate band 60–79 with no hand step, unless it claims a layer there ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01` (v1) · `openspec/changes/plate-band`
+## [~] R-073 — A station linked to the Playout gets the plate band 60–79 with no hand step, unless it claims a layer there; Source defaults obey the channel grant ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01` (v1) · `openspec/changes/plate-band`
 
 **What.** A station linked to the Playout (its auth config names one) that declares no plate band seats
 its plates in 60–79, unless its own config claims a layer there — a reserved playout layer, a bank row or
@@ -4126,3 +4126,15 @@ plates are seated in 60–79 and nothing is written to its config; WHEN 70–79 
 declared; WHEN its config reserves layer 65 THEN it gets no default and the row line appears; WHEN it is not
 linked THEN today's rule holds; WHEN its config reserves 60–79 THEN it boots unchanged; WHEN Station setup
 opens on the default THEN it reads `60–79 · default`.
+
+**Source defaults obey the channel grant.** A `sources.set-assignments` is judged by the permission gate on
+the channels whose Source defaults it changes: a principal whose grant (`cg_channels`) does not hold one of
+them is refused with the gate's existing sentence (`This sign-in does not cover channel N, …`), and nothing
+changes; `"*"` holds every channel. A channel whose defaults are sent back as they were is not judged — the
+console sends the whole set. The write stays `station-admin`, so an operator-role principal is refused by
+role first, as before. A channel-scoped lock judges the same channels (flagged in the report: under a lock
+on channel 1, a channel-2 save now passes it). **Found, not changed:** "Delete from station" and a
+re-import rewrite a template's defaults on every channel, so a station-admin not holding one of them is
+refused that rewrite. **Acceptance:** WHEN a station-admin holding CH 2 only changes CH 1's defaults THEN it
+is refused and nothing changes there; WHEN it changes CH 2's THEN they change; WHEN a `"*"` station-admin
+changes both THEN both change.

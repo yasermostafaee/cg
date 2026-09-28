@@ -62,6 +62,8 @@ are at the commit that carries this change.
   nested `req.assignments[].channel` beside `fixedLayers.set-banks` in the station fence's census and filed
   the question (its `design.md` choice 10). The lock reads the same resolver (`lockRefuses`,
   `bridge.ts:809@9e6b1606`).
+- **Built:** the "existing channel-fence refusal" the owner names is therefore the permission gate's
+  `authzChannelRefusal` — the grant is the principal's, and the station fence is about the station.
 
 ### 0.4 The race in `media-plates.integration.test.ts:563` — confirmed
 
@@ -98,3 +100,22 @@ The pre-push gate at `1ce93cb1` then met the same wait in `route-plates.integrat
 8. **The race fix waits for the re-send's own end** (the row's one commit), as
    `look-switch-all-or-nothing`'s reconnect test already did — same margin, no retry. Both spellings of the
    wait were fixed (two sweeps: the drop, and the wait loop on a plate's line; no third test waits that way).
+9. **Source defaults are judged on the channels a save CHANGES, not the channels it names** — the
+   `set-banks` precedent (`bankChangeFootprint`). The console sends the whole set on every save, so judging
+   every named channel would refuse a channel-2 admin's own channel-2 save for carrying channel 1's entries
+   unchanged. "Changes" is read through `assignmentsOnChannel`, the one reader: an entry added, removed,
+   repointed or given another fit mode, and a station-wide entry on every channel it answers on. The refusal
+   is the permission gate's existing sentence; the station fence is unchanged (a Source default is data
+   about a channel, not a door onto it).
+10. **The lock reads the same footprint** — a consequence, flagged rather than chosen. `channelsForRequest` is
+    the one resolver for both gates, as for `set-banks`. Before this, a defaults save resolved to no channel,
+    which a channel-scoped lock reads as touching every channel the principal holds; now a principal holding
+    channels 1 and 2 may save channel 2's defaults under a lock covering channel 1 — as every other channel-2
+    verb under that lock already could (`lock-scope`'s `MULTI-CHANNEL-01` case) — and is still refused
+    channel 1's. An every-channel lock (auth off, or an engager holding `"*"`) refuses every save, as before.
+11. **Found, not changed: a whole-set rewrite by a channel-limited admin.** "Delete from station"
+    (`forgetTemplateAssignments`) and a re-import's reconcile (`reconcileAssignmentsForImport`) rewrite a
+    template's defaults on EVERY channel. A station-admin who does not hold one of those channels is now
+    refused that rewrite with the channel sentence, which the console shows; the template's bindings on
+    that channel then stay until someone who holds it removes them. That is the owner's rule applied as
+    written, and it is reported rather than worked around.

@@ -52,7 +52,8 @@ Lane: FULL (the path to air reads the defaults; a persisted key changes shape).
 - [x] 2.7a The fence's census (`station-channel-fence.integration.test.ts`) classifies the new nested key:
       `sources.set-assignments` → `req.assignments[].channel` (fourteen routes carry a channel key, eleven at
       the top level — the living `runtime-caspar-bridge` scenario's own count); not fenced, station-level gate
-      unchanged (`design.md` choice 10).
+      unchanged (`design.md` choice 10). ⚠ Since `plate-band` (its task 1.3) the PERMISSION gate judges it per
+      channel changed; the station fence still does not.
 - [x] 2.8 The refusal line — `live-seating.integration.test.ts` (the row's record, `refusalOnRow`, nothing
       sent), `takeRefusalLine.test.ts`, e2e `take-refusal-line.spec.ts` (row and Inspector, no banner, not on CH
       2; control: a landed take clears it).

@@ -1172,7 +1172,8 @@ export function stationChannelsFor(
  *
  *   (a) **the request SAYS so** — `layers.clear`, `playoutLayers.clear`, `fixedLayers.load`,
  *       `fixedLayers.clear-layer`, `fixedLayers.set-config`, `channelSettings.set`, and
- *       `stack.restore` (one per item, so N of them);
+ *       `stack.restore` (one per item, so N of them); and, inside a list, the channels
+ *       `fixedLayers.set-banks` and `sources.set-assignments` CHANGE (not every one they name);
  *   (b) **an `itemId` resolves through the runtime's ledgers** — every per-item verb, via
  *       {@link CasparRuntime.channelsForItem}, which unions `#slots` and `#liveLayers`;
  *   (c) **the verb's scope is the whole stack** — the bulk verbs, which union every member's
@@ -1214,6 +1215,21 @@ export function channelsForRequest(
   if (name === FixedLayersSetBanksChannel.name) {
     const banks = (req as { banks?: readonly FixedLayerBank[] } | null)?.banks ?? [];
     return runtime.bankChangeFootprint(banks);
+  }
+
+  /*
+    (a‴) 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **SOURCE DEFAULTS OBEY THE CHANNEL GRANT.**
+    `sources.set-assignments` names its channels INSIDE the list, and the ones it TOUCHES are the ones
+    whose defaults it changes (`assignmentChangeFootprint`). The console sends the whole set on every
+    save, so a channel whose defaults come back as they were is not an act on it: a station-admin
+    granted channel 2 changes channel 2's defaults on a station that also declares channel 1, and is
+    refused channel 1's with the channel sentence. The lock judges the same footprint, as it does
+    `set-banks`'s. Decided all-or-nothing by the caller.
+  */
+  if (name === SourcesSetAssignmentsChannel.name) {
+    const assignments =
+      (req as { assignments?: SourceAssignments['assignments'] } | null)?.assignments ?? [];
+    return runtime.assignmentChangeFootprint({ assignments });
   }
 
   // (a′) `stack.restore` carries N items, each with its own optional slot.

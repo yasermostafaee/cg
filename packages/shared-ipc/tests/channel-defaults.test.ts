@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assignedSourceId,
   assignmentsOnChannel,
+  channelsWhoseDefaultsDiffer,
   checkSourceAssignments,
   copyAssignmentsToChannel,
   migrateAssignmentsToChannels,
@@ -167,5 +168,69 @@ describe('the shape rule — one entry per plate PER CHANNEL', () => {
     };
     const verdict = checkSourceAssignments(twice, { catalog: null });
     expect(verdict).toMatchObject({ ok: false, reason: 'duplicate-plate' });
+  });
+});
+
+/**
+ * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **SOURCE DEFAULTS OBEY THE CHANNEL GRANT**, judged on
+ * the channels a write CHANGES: the console sends the whole set on every save, so the grant must not
+ * be asked about a channel whose defaults came back as they were.
+ */
+describe('channelsWhoseDefaultsDiffer — the channels a Source defaults write changes', () => {
+  const perChannel = migrateAssignmentsToChannels(STATION_WIDE, [1, 2]).value;
+
+  it('🔴 the dialog’s write on CH 2 changes CH 2 alone — control: the same write on CH 1 changes CH 1', () => {
+    const onTwo = withChannelDefaults(perChannel, 2, 'bed', new Map([['p1', 'studio-2']]));
+    expect(channelsWhoseDefaultsDiffer(perChannel, onTwo, [1, 2])).toEqual([2]);
+    const onOne = withChannelDefaults(perChannel, 1, 'bed', new Map([['p1', 'studio-2']]));
+    expect(channelsWhoseDefaultsDiffer(perChannel, onOne, [1, 2])).toEqual([1]);
+  });
+
+  it('the whole set sent back as it was changes no channel — whatever its order', () => {
+    const reordered: SourceAssignments = { assignments: [...perChannel.assignments].reverse() };
+    expect(channelsWhoseDefaultsDiffer(perChannel, reordered, [1, 2])).toEqual([]);
+  });
+
+  it('an entry removed is an act on its channel, and so is a fit mode changed', () => {
+    const removed = withChannelDefaults(perChannel, 1, 'bed', new Map([['p2', '']]));
+    expect(channelsWhoseDefaultsDiffer(perChannel, removed, [1, 2])).toEqual([1]);
+    const fitted: SourceAssignments = {
+      assignments: perChannel.assignments.map((a) =>
+        a.channel === 2 && a.plateId === 'p1' ? { ...a, fitMode: 'cover' } : a,
+      ),
+    };
+    expect(channelsWhoseDefaultsDiffer(perChannel, fitted, [1, 2])).toEqual([2]);
+  });
+
+  it('a STATION-WIDE entry changed is an act on every channel it answers on — and only those', () => {
+    const moved: SourceAssignments = {
+      assignments: STATION_WIDE.assignments.map((a) =>
+        a.plateId === 'p1' ? { ...a, sourceId: 'studio-9' } : a,
+      ),
+    };
+    expect(channelsWhoseDefaultsDiffer(STATION_WIDE, moved, [1, 2])).toEqual([1, 2]);
+    // Control: CH 2 holds its OWN p1, so the station-wide p1 does not answer there.
+    const ownOnTwo: SourceAssignments = {
+      assignments: [
+        ...STATION_WIDE.assignments,
+        { channel: 2, templateId: 'bed', plateId: 'p1', sourceId: 'kept' },
+      ],
+    };
+    const movedWithOwn: SourceAssignments = {
+      assignments: ownOnTwo.assignments.map((a) =>
+        a.channel === undefined && a.plateId === 'p1' ? { ...a, sourceId: 'studio-9' } : a,
+      ),
+    };
+    expect(channelsWhoseDefaultsDiffer(ownOnTwo, movedWithOwn, [1, 2])).toEqual([1]);
+  });
+
+  it('a channel the station does not declare is still a channel the write names', () => {
+    const onThree: SourceAssignments = {
+      assignments: [
+        ...perChannel.assignments,
+        { channel: 3, templateId: 'bed', plateId: 'p1', sourceId: 'x' },
+      ],
+    };
+    expect(channelsWhoseDefaultsDiffer(perChannel, onThree, [1, 2])).toEqual([3]);
   });
 });

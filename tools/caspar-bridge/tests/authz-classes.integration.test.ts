@@ -162,6 +162,7 @@ describe('C-038 — the census: every route, classified', () => {
         station-admin rung for the catalogue's reason: only choosing a channel needs to ask.
       */
       'setup.channel-occupancy',
+      // `PLATE-BAND-01` — its channel footprint is the channels whose defaults it changes.
       'sources.set-assignments',
       'sources.set-config',
       /*

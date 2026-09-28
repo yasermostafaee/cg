@@ -642,10 +642,10 @@ describe('the census: every route that names a channel, classified', () => {
       /*
         `CHANNEL-SOURCES-01` decision 2 — a Source default names the channel it BELONGS to, inside the
         list. It is data about a default, not a door onto that channel: nothing reaches a channel
-        until a take on it, which the fence judges. The write keeps the station-level gate it always
-        had (when the defaults were station-wide, any operator allowed to write them changed every
-        channel's); whether a channel-scoped operator's write should be judged per channel is filed
-        for the owner, not decided here.
+        until a take on it, which the fence judges — so the STATION fence still does not stand in its
+        way. `PLATE-BAND-01` (the owner, 2026-09-28): the PERMISSION gate does — Source defaults obey
+        the channel grant, judged on the channels the write changes (`assignmentChangeFootprint`,
+        `source-defaults-grant.integration.test.ts`).
       */
       'sources.set-assignments': ['req.assignments[].channel'],
       /*

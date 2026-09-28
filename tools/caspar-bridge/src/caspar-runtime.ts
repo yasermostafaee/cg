@@ -88,9 +88,11 @@ import {
   copyAssignmentsToChannel,
   checkSourceAssignments,
   checkSourceCatalogAgainstBanks,
-  // `PLATE-BAND-01` — the plate band in force, asked of the ONE reader.
+  // `PLATE-BAND-01` — the plate band in force, asked of the ONE reader; and which channels' Source
+  // defaults a write changes, for the channel grant.
   plateBandInForce,
   type PlateBandInForce,
+  channelsWhoseDefaultsDiffer,
   describeTemplateReferences,
   type TemplateReference,
   activeLookOf,
@@ -14549,6 +14551,18 @@ export class CasparRuntime {
       if (bankForChannel(next, before.channel) === null) touched.add(before.channel);
     }
     return [...touched].sort((a, b) => a - b);
+  }
+
+  /**
+   * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **WHICH CHANNELS A NEW SET OF SOURCE DEFAULTS WOULD
+   * CHANGE**, against the set in force: every channel whose defaults, as `assignmentsOnChannel` reads
+   * them, differ. The permission gate and the lock read this for `sources.set-assignments`
+   * (`channelsForRequest`), as they read {@link bankChangeFootprint} for `set-banks` — so Source defaults
+   * obey the channel grant, a channel's defaults sent back as they were cost it nothing (the console
+   * sends the whole set), and a principal is refused only for a channel whose defaults it changes.
+   */
+  assignmentChangeFootprint(next: SourceAssignments): readonly number[] {
+    return channelsWhoseDefaultsDiffer(this.#sourceAssignments, next, this.#declaredChannels());
   }
 
   /**

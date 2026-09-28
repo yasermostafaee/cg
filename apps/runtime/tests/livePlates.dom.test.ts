@@ -5,7 +5,12 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
-import type { SourceAssignments, SourceCatalog, TemplateInfo } from '@cg/shared-ipc';
+import {
+  authzChannelRefusal,
+  type SourceAssignments,
+  type SourceCatalog,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
 import {
@@ -92,6 +97,11 @@ let stored: SourceAssignments = { assignments: [] };
 const setCalls: SourceAssignments[] = [];
 /** §6 — set by a case that wants `sources.set-assignments` refused; reset between cases. */
 let refuse: { ok: false; reason?: string; message?: string } | null = null;
+/**
+ * `PLATE-BAND-01` — set by a case whose save the REQUEST GATE refuses: the permission gate answers
+ * before the handler, so the console's call rejects with the gate's sentence rather than resolving.
+ */
+let rejectWith: Error | null = null;
 
 beforeEach(() => {
   __resetDraftsForTest();
@@ -99,6 +109,7 @@ beforeEach(() => {
   stored = { assignments: [] };
   setCalls.length = 0;
   refuse = null;
+  rejectWith = null;
 });
 
 afterEach(() => {
@@ -142,6 +153,7 @@ function bridgeStub(templates: readonly TemplateInfo[], info: TemplateInfo | nul
           against the real return shape rather than a hand-made one. `stored` is left ALONE on
           a refusal, which is what makes "rewrites nothing" a real assertion.
         */
+        if (rejectWith !== null) return Promise.reject(rejectWith);
         if (refuse !== null) return Promise.resolve(refuse);
         stored = req;
         return Promise.resolve({ ok: true });
@@ -569,6 +581,25 @@ describe('the Inspector binds THIS template plates', () => {
       onOne,
       { channel: 2, templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-bbb' },
     ]);
+  });
+
+  it('🔴 PLATE-BAND-01 — a save the channel grant refuses shows the gate’s sentence on the dialog, keeps the edit, and rewrites nothing', async () => {
+    // The bridge's permission gate refuses a CH 1 save from a sign-in that does not hold CH 1, with
+    // its own sentence, before any handler runs.
+    rejectWith = new Error(authzChannelRefusal(1));
+    const onOne: StackItemState = {
+      ...item('item-1', 'tpl-two-box'),
+      slot: { channel: 1, layer: 71, server: 'primary' },
+    };
+    const el = await renderInspector(onOne, TWO_BOX);
+    const dialog = await pick(el, 'guest-1', 'src-aaa');
+    await saveDefaults(dialog);
+
+    expect(setCalls).toHaveLength(1);
+    expect(dialog.textContent).toContain('This sign-in does not cover channel 1');
+    // The edit is where the operator left it, and nothing was adopted.
+    expect(pickerValue(defaultsSelect(dialog, 'guest-1'))).toBe('src-aaa');
+    expect(stored).toEqual({ assignments: [] });
   });
 });
 

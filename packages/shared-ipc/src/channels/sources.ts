@@ -1135,6 +1135,37 @@ export function assignmentsOnChannel(value: SourceAssignments, channel: number):
 }
 
 /**
+ * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **THE CHANNELS WHOSE SOURCE DEFAULTS A WRITE CHANGES**, in
+ * channel order: the channels a `sources.set-assignments` is judged on by the channel grant (and by a
+ * channel-scoped lock), as `fixedLayers.set-banks` is judged by the banks it changes.
+ *
+ * A channel is touched when what {@link assignmentsOnChannel} — the ONE reader — answers for it differs
+ * between the two sets. So an entry sent back as it was costs its channel nothing (a console sends the
+ * whole set on every save); an entry added, removed or pointed elsewhere is an act on its channel; and a
+ * STATION-WIDE entry (no `channel`) changed is an act on every channel it answers on. The candidates are
+ * the declared channels and every channel either set names.
+ */
+export function channelsWhoseDefaultsDiffer(
+  before: SourceAssignments,
+  after: SourceAssignments,
+  declared: readonly number[],
+): number[] {
+  const named = (value: SourceAssignments): number[] =>
+    value.assignments.flatMap((a) => (a.channel === undefined ? [] : [a.channel]));
+  // The defaults a channel reads, as a comparable key: every field but the channel, which is the key.
+  const readOn = (value: SourceAssignments, channel: number): string =>
+    assignmentsOnChannel(value, channel)
+      .assignments.map((a) =>
+        JSON.stringify([a.templateId, a.plateId, a.sourceId, a.fitMode ?? null]),
+      )
+      .sort()
+      .join('\n');
+  return [...new Set([...declared, ...named(before), ...named(after)])]
+    .filter((channel) => readOn(before, channel) !== readOn(after, channel))
+    .sort((a, b) => a - b);
+}
+
+/**
  * 🔴 `CHANNEL-SOURCES-01` decision 2 — **THE ONE-TIME COPY.** Every station-wide entry becomes one
  * entry per declared channel that has none of its own for that plate, and the station-wide entry
  * goes. Nothing on air changes: on every channel the same source answers as before.

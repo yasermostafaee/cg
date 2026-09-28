@@ -18,7 +18,10 @@ Lane: FULL for all three items. One commit per item, each with its own pre-push 
       publishes the catalogue again; the boot line names it.
 - [x] 1.2 Station setup → Live sources shows the band in force (`ConsoleSourceCatalogSchema.plateBand`,
       `publishedPlateBand`), `default` when computed; the offline console answers as an unlinked station.
-- [ ] 1.3 The Source defaults change passes through the channel grant (next commit).
+- [x] 1.3 The Source defaults change passes through the channel grant — `channelsForRequest` resolves a
+      `sources.set-assignments` to the channels whose defaults it changes (`assignmentChangeFootprint`, over
+      `@cg/shared-ipc`'s `channelsWhoseDefaultsDiffer`), and the permission gate refuses any not granted with
+      `authzChannelRefusal`. The lock reads the same footprint (`design.md` choice 10).
 - [x] 1.4 The race — `media-plates.integration.test.ts:563` waits for the re-send's own commit (`1ce93cb1`),
       and its sibling `route-plates.integration.test.ts:617`, which the pre-push gate met (`9d732331`).
 
@@ -46,7 +49,15 @@ Lane: FULL for all three items. One commit per item, each with its own pre-push 
 - [x] 2.8 E2E `apps/runtime/tests/e2e/plate-band.spec.ts` — a real linked bridge (the CLI) and a real browser:
       `60–79 · default` and the boot line; controls: reserved 65 (the old line), declared 70–79. Local,
       Windows (non-authoritative): 3 passed; planted pane → red.
-- [ ] 2.9 Source defaults and the grant (next commit).
+- [x] 2.9 `tools/caspar-bridge/tests/source-defaults-grant.integration.test.ts`, over a real socket with real
+      tokens — a station-admin holding CH 2 only is refused on CH 1 with the channel sentence and nothing
+      changes; control: the same principal changes CH 2 and CH 1 stays; a `"*"` station-admin changes both;
+      an operator-role principal is refused by role; auth off refuses nothing; under a lock covering CH 1 a
+      CH 2 save passes and a CH 1 save is refused. Planted: the footprint empty (the code before) → the
+      refusal and the lock case red; the footprint as every NAMED channel → the CH 2 control red.
+      `channel-defaults.test.ts` (5 new): what a save changes, whole-set, order, removal, fit mode,
+      station-wide, an undeclared channel. `livePlates.dom.test.ts`: the dialog shows the gate's sentence,
+      keeps the edit, adopts nothing (planted: the sentence swallowed → red).
 - [x] 2.10 The race — reproduced red under a 300 ms pause, green with the new wait, red under a planted
       `OPACITY 1` re-send; both files 47/47 (`P-057`).
 
