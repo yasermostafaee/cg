@@ -195,7 +195,12 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
       that stays green when its surface is deleted" hazard. Found by the rule-9 sweep.
     */
     expect(dialog.textContent).toContain('No templates found');
-    expect(dialog.textContent).not.toContain('Nothing on this station yet');
+    /*
+      `CHANNEL-TEMPLATES-01` — re-pointed again, for the same reason: the empty-list sentence now
+      names the row's CHANNEL (`Nothing on CH 1 yet`), and forbidding the old spelling would be the
+      assertion no change could fail. Matched on the stem, so any channel's spelling counts.
+    */
+    expect(dialog.textContent).not.toMatch(/Nothing on (CH \d+|this station) yet/);
   });
 
   it('the kind chips split beds from graphics by the SAME predicate the bridge refuses on', async () => {

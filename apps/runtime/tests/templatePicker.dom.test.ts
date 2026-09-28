@@ -86,7 +86,8 @@ describe('§6 — LOAD opens the template picker', () => {
       rather than at the panel `R-028` deleted — and that is asserted below, harder than before:
       the control is now IN the empty state, not merely mentioned by it.
     */
-    expect(dialog?.textContent).toContain('Nothing on this station yet');
+    // `CHANNEL-TEMPLATES-01` — the list is the row's CHANNEL's, so an empty one says whose.
+    expect(dialog?.textContent).toContain('Nothing on CH 1 yet');
     expect(dialog?.textContent).not.toMatch(/library/i);
     const importFromEmpty = [...(dialog?.querySelectorAll('button') ?? [])].find((b) =>
       /Import a \.vcg/.test(b.textContent ?? ''),

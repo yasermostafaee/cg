@@ -37,6 +37,12 @@ import { fillBridgeStub } from './support/authStub.js';
  * The first test below is the REGRESSION, and it is written to fail against the
  * code that had the bug: the removal must behave identically whether or not the
  * template declares plates.
+ *
+ * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — the removal is FROM THE ROW'S CHANNEL: the
+ * icon reads `Remove <name> from CH n`, its confirm names the channel, and the call carries it.
+ * And a removal NO LONGER DELETES SOURCE DEFAULTS — it used to wipe the template's bindings on
+ * every channel in a station-wide write; they now stay where they are (nothing reads a channel's
+ * defaults for a template it does not list). Those two cases were re-decided, not relocated.
  */
 
 const PLAIN: TemplateInfo = {
@@ -74,7 +80,7 @@ let removeResult: {
   message?: string;
   references?: TemplateReference[];
 } = { ok: true };
-const removeCalls: string[] = [];
+const removeCalls: { templateId: string; channel?: number }[] = [];
 const setAssignmentCalls: SourceAssignments[] = [];
 /** `B-212` — the item removals the picker's per-reference remedy issues. */
 const stackRemoveCalls: string[] = [];
@@ -112,8 +118,8 @@ function installBridge(): void {
     },
     templates: {
       list: () => Promise.resolve(registry),
-      remove: (req: { templateId: string }) => {
-        removeCalls.push(req.templateId);
+      remove: (req: { templateId: string; channel?: number }) => {
+        removeCalls.push(req);
         if (removeResult.ok) registry = registry.filter((t) => t.templateId !== req.templateId);
         return Promise.resolve(removeResult);
       },
@@ -142,7 +148,14 @@ async function openPicker(): Promise<HTMLElement> {
   let open: (() => void) | null = null;
   function Host(): JSX.Element {
     const { pickTemplate, pickerDialog } = useTemplatePicker();
-    open = () => void pickTemplate('Load onto Layer 99', 'high');
+    // Opened from a row, as the console always opens it: channel 1's list (`CHANNEL-TEMPLATES-01`).
+    open = () =>
+      void pickTemplate('Load onto Layer 99', 'high', {
+        rowName: 'Layer 99',
+        coord: '1-99',
+        channel: 1,
+        holding: null,
+      });
     return createElement('div', null, pickerDialog);
   }
   await act(async () => {
@@ -197,32 +210,22 @@ afterEach(() => {
 });
 
 describe('a template that declares live sources removes exactly like one that does not', () => {
-  it('🔴 REGRESSION — Remove from the library deletes it, plates or no plates', async () => {
+  it('🔴 REGRESSION — Remove takes it off the row’s channel, plates or no plates', async () => {
     const dialog = await openPicker();
     expect(dialog.querySelector('[data-template-id="tpl-two-box"]')).not.toBeNull();
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
+    await press(/Remove two-box from CH 1/);
+    await press(/^Remove from CH 1$/);
 
-    expect(removeCalls).toEqual(['tpl-two-box']);
+    expect(removeCalls).toEqual([{ templateId: 'tpl-two-box', channel: 1 }]);
     expect(registry.map((t) => t.templateId)).toEqual(['tpl-plain']);
   });
 
-  it('deletes its ASSIGNMENTS with it — nothing may refer to an entry that is gone', async () => {
-    await openPicker();
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
-
-    // "Remove from this station" has to mean something: leaving the bindings
-    // behind is state on this machine with nothing left that refers to it.
-    expect(setAssignmentCalls.at(-1)).toEqual({ assignments: [] });
-    expect(currentSourceAssignments()).toEqual({ assignments: [] });
-  });
-
-  it('leaves ANOTHER template assignments alone', async () => {
+  it('🔴 CHANNEL-TEMPLATES-01 — its Source defaults are KEPT: a removal writes none', async () => {
     assignments = {
       assignments: [
-        { templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' },
-        { templateId: 'tpl-other', plateId: 'guest-1', sourceId: 'src-bbb' },
+        { channel: 1, templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' },
+        { channel: 2, templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' },
+        { channel: 1, templateId: 'tpl-other', plateId: 'guest-1', sourceId: 'src-bbb' },
       ],
     };
     __resetSourcesForTest();
@@ -231,12 +234,15 @@ describe('a template that declares live sources removes exactly like one that do
     await Promise.resolve();
 
     await openPicker();
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
+    await press(/Remove two-box from CH 1/);
+    await press(/^Remove from CH 1$/);
 
-    expect(setAssignmentCalls.at(-1)).toEqual({
-      assignments: [{ templateId: 'tpl-other', plateId: 'guest-1', sourceId: 'src-bbb' }],
-    });
+    // The removal went through (the positive control) — and not one defaults write followed it,
+    // on this channel or any other. They used to be wiped on EVERY channel at once, which is what
+    // refused a channel's own operator the removal (`PLATE-BAND-01`'s found item).
+    expect(removeCalls).toEqual([{ templateId: 'tpl-two-box', channel: 1 }]);
+    expect(setAssignmentCalls).toEqual([]);
+    expect(currentSourceAssignments().assignments).toHaveLength(3);
   });
 });
 
@@ -249,8 +255,8 @@ describe('a refusal the operator cannot see is its own defect', () => {
         "1 row still holds this template — on the row “Layer 1” (layer 99). Clear it with the row's own REMOVE first.",
     };
     const dialog = await openPicker();
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
+    await press(/Remove two-box from CH 1/);
+    await press(/^Remove from CH 1$/);
 
     // In the PICKER's own pinned message region, not a toast behind the modal:
     // this dialog is on top of everything, so a refusal routed anywhere else is
@@ -274,8 +280,8 @@ describe('a refusal the operator cannot see is its own defect', () => {
     stub.templates.remove = () => Promise.reject(new Error('bridge is down'));
 
     const dialog = await openPicker();
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
+    await press(/Remove two-box from CH 1/);
+    await press(/^Remove from CH 1$/);
 
     expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').toMatch(
       /bridge is down/,
@@ -285,8 +291,8 @@ describe('a refusal the operator cannot see is its own defect', () => {
   it('does NOT delete the assignments when the removal was refused', async () => {
     removeResult = { ok: false, reason: 'in-use', message: 'still in use' };
     await openPicker();
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
+    await press(/Remove two-box from CH 1/);
+    await press(/^Remove from CH 1$/);
 
     // The entry survives, so its bindings must too — dropping them here would
     // silently un-bind a template the operator still has.
@@ -329,8 +335,8 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
         await Promise.resolve();
         await Promise.resolve();
       });
-      await press(/Delete two-box from this station/);
-      await press(/^Delete from station$/);
+      await press(/Remove two-box from CH 1/);
+      await press(/^Remove from CH 1$/);
 
       /*
         ONE surface: the pinned message region, carrying the sentence AND the way out. There
@@ -381,8 +387,8 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
       await Promise.resolve();
       await Promise.resolve();
     });
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
+    await press(/Remove two-box from CH 1/);
+    await press(/^Remove from CH 1$/);
 
     const region = dialog.querySelector('[data-modal-message]');
     expect(region?.textContent).toContain(
@@ -407,9 +413,9 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
     // The remedy is gone with the item it removed, and the operator is told the next step.
     expect(dialog.querySelector('[data-notice-remedies]')).toBeNull();
     expect(dialog.querySelector('[data-modal-message]')?.textContent).toContain(
-      // `MODAL-CHROME-10` §2(c) — the row button is called `Delete` now, and this
-      // sentence quotes it by name.
-      'Press Delete again',
+      // The sentence quotes the control by the name it has: `Remove <name> from CH n`
+      // (`CHANNEL-TEMPLATES-01`).
+      'Press Remove again',
     );
   });
 
@@ -425,44 +431,41 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
       await Promise.resolve();
       await Promise.resolve();
     });
-    await press(/Delete two-box from this station/);
-    await press(/^Delete from station$/);
+    await press(/Remove two-box from CH 1/);
+    await press(/^Remove from CH 1$/);
     await press(/^Remove the item on CasparCG layer 60/);
     await press('Cancel');
     expect(stackRemoveCalls).toEqual([]);
   });
 });
 
-describe('the two verbs no longer share one word', () => {
-  it('names the LIBRARY one for what it does, and its confirm names the fallout', async () => {
+describe('the channel removal is named for what it does, and apart from the row’s REMOVE', () => {
+  it('names its CHANNEL, and its confirm names the channel and the fallout', async () => {
     const dialog = await openPicker();
     /*
-      The station-wide deletion's WORDS are not on the list: the row carries an ICON whose long
-      form is its accessible name (`UI-POLISH-01` C), so the two verbs still cannot be confused
-      by what the operator reads.
+      The removal's WORDS are not on the list: the row carries an ICON whose long form is its
+      accessible name (`UI-POLISH-01` C), so nothing the operator READS on the list can be taken
+      for the row's REMOVE.
     */
-    expect(dialog.textContent).not.toContain('Delete from station');
+    expect(dialog.textContent).not.toContain('Remove');
     /*
-      The row's verb takes a template off THAT ROW; this one deletes it from the station, for
-      every row, undoable only by re-importing the file.
-
-      ⚠ `MODAL-CHROME-10` §2(c) shortened the LABEL to `Delete`, so the assertion moved to
-      where the long form still lives — the ACCESSIBLE NAME, which is what a screen reader
-      announces and what every finder addresses this button by. Asserting the visible text
-      would now be asserting the short word, which is the weaker of the two claims: the point
-      of this case is that the two verbs do not share one word, and it is the accessible name
-      that has to keep them apart.
+      🔴 `CHANNEL-TEMPLATES-01` — the owner named it `Remove <name> from CH n`. It shares the row's
+      verb and not its object: the row's REMOVE takes a template off THAT ROW ("Remove “X” from
+      Layer 95?"), this one takes it off the CHANNEL's list. The accessible name is where that is
+      said, so it is what is asserted.
     */
     const wide = [...dialog.querySelectorAll('button')].map(
       (b) => b.getAttribute('aria-label') ?? '',
     );
-    expect(wide.some((n) => /^Delete .* from this station$/.test(n))).toBe(true);
-    expect(dialog.textContent).not.toContain('Remove');
+    expect(wide.some((n) => /^Remove .* from CH 1$/.test(n))).toBe(true);
+    expect(wide.some((n) => /from this station$/.test(n))).toBe(false);
 
-    await press(/Delete two-box from this station/);
+    await press(/Remove two-box from CH 1/);
     const confirmText = document.body.textContent ?? '';
-    expect(confirmText).toMatch(/every browser|this station/i);
-    expect(confirmText).toMatch(/1 plate/);
+    expect(confirmText).toContain('Remove “two-box” from CH 1?');
+    expect(confirmText).toMatch(/every browser/i);
     expect(confirmText).toMatch(/re-import/i);
+    // The Source defaults are kept now, so the confirm no longer says they go.
+    expect(confirmText).not.toMatch(/plate binding/i);
   });
 });

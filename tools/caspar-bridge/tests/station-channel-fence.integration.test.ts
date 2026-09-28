@@ -612,7 +612,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('fourteen routes carry a channel key; eleven carry it at the top level, where the fence reads', () => {
+  it('eighteen routes carry a channel key; fifteen carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -660,6 +660,17 @@ describe('the census: every route that names a channel, classified', () => {
       'stack.silence-channel-live-plates': ['req.channel'],
       'stack.snapshot': ['req.channel'],
       'stack.stop-all': ['req.channel'],
+      /*
+        🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — each channel has its own template list,
+        and every template request names the channel whose list it reads or changes. At the top
+        level, so the fence refuses a channel this station does not declare; the permission gate
+        and the lock judge an import or a removal on exactly that channel (a read is `read` class
+        for everybody — a read-only channel still names its rows).
+      */
+      'templates.get': ['req.channel'],
+      'templates.import': ['req.channel'],
+      'templates.list': ['req.channel'],
+      'templates.remove': ['req.channel'],
     });
   });
 
@@ -690,6 +701,11 @@ describe('the census: every route that names a channel, classified', () => {
       'stack.silence-channel-live-plates',
       'stack.snapshot',
       'stack.stop-all',
+      // `CHANNEL-TEMPLATES-01` — a channel's template list.
+      'templates.get',
+      'templates.import',
+      'templates.list',
+      'templates.remove',
     ]);
     for (const [name, route] of fenced) {
       expect(stationRefusal(route, { channel: 1, layer: 72 }, r), name).toBe(

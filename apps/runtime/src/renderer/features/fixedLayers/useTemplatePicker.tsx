@@ -38,7 +38,6 @@ import { requestRowFocus } from '../layers/rowFocus.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
 import {
   currentSourceAssignments,
-  forgetTemplateAssignments,
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
@@ -74,9 +73,14 @@ import { Tag } from '../../ui/Tag.js';
  * (open the OS chooser), a DROPPED file, or a dismissal — and the caller owns the
  * import chain exactly as before.
  *
- * The list is pulled at OPEN time rather than subscribed: it is browser-local
- * (B-085) and the dialog is short-lived, so a snapshot taken when it opens is
- * exactly what the operator is choosing from.
+ * The list is pulled at OPEN time rather than subscribed: the dialog is short-lived,
+ * so a snapshot taken when it opens is exactly what the operator is choosing from.
+ *
+ * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — **IT IS THE ROW'S CHANNEL'S LIST.** Each
+ * channel has its own template list: the picker shows the destination row's channel's list only,
+ * `Import a .vcg` (or a dropped `.vcg`) adds to that channel only, and the row's delete icon
+ * removes from that channel only (`Remove <name> from CH n`). Nothing here reaches another
+ * channel, so a channel's operator needs no other channel in the grant.
  *
  * A dismissal (Cancel / Escape / backdrop, all of which route through the
  * Modal's safe path) resolves `null`, which the caller reports as the
@@ -160,14 +164,15 @@ import { Tag } from '../../ui/Tag.js';
  *
  * ── A9 — AND THE TWO VERBS NO LONGER SHARE ONE WORD ────────────────────────
  *
- * The ROW's `REMOVE` takes a template off THAT ROW; this one deletes it from the
+ * The ROW's `REMOVE` takes a template off THAT ROW; this one deleted it from the
  * STATION'S library, for every row, undoable only by re-importing the file. This
- * one is renamed, because it is the one whose meaning surprises — the row's verb
+ * one was renamed, because it was the one whose meaning surprised — the row's verb
  * is accurate for what it does and its own confirm already names the row it acts
- * on (`LayerRow.tsx`, "Remove “X” from Layer 95?"). Renaming the row's word as
- * well would churn the layer table's fixed verb column (sized to "REMOVE",
- * `layerTable.ts:41`) and every spec that presses it, for no additional clarity
- * once the pair reads differently.
+ * on (`LayerRow.tsx`, "Remove “X” from Layer 95?").
+ *
+ * 🔴 `CHANNEL-TEMPLATES-01` — the owner named this one `Remove <name> from CH n`: it now takes the
+ * template off ONE channel's list, and the channel in its name is what tells it from the row's
+ * REMOVE, the way the row's layer in "Remove “X” from Layer 95?" does.
  */
 
 /*
@@ -293,6 +298,19 @@ function kindOf(template: TemplateInfo): 'graphic' | 'bed' {
 }
 
 /**
+ * `CHANNEL-TEMPLATES-01` — WHOSE list the picker holds, in the operator's words: `CH n`, the
+ * row's channel. A pick that names no row has no channel and reads the station-wide list.
+ */
+function listScope(channel: number | undefined): string {
+  return channel === undefined ? 'this station' : `CH ${String(channel)}`;
+}
+
+/** The `templates.list` request for a channel's list — or the station-wide one. */
+function listRequest(channel: number | undefined): { channel: number } | undefined {
+  return channel === undefined ? undefined : { channel };
+}
+
+/**
  * `RUNTIME-REPAIR-04` — WHERE this pick is going, for the aside's destination card.
  *
  * The reference draws `Destination · Layer 5` over `Graphic row · Empty` at the top of its
@@ -310,6 +328,9 @@ export interface PickDestination {
    * the `Needs a source` caution reads the defaults of the channel the template would land on. It
    * travels with the request rather than being subscribed here, because this hook is mounted by
    * every `LayerRow` (see `bank` below).
+   *
+   * 🔴 `CHANNEL-TEMPLATES-01` — and the channel whose TEMPLATE LIST the picker shows, imports into
+   * and removes from.
    */
   channel: number;
   /** The template the row holds today, if any. Its NAME, never its id. */
@@ -476,22 +497,28 @@ export function useTemplatePicker(): {
    *
    * A failure to read the stack is NOT a failure: the count is a courtesy line in the details,
    * and an unknown count simply does not claim a number.
+   *
+   * `CHANNEL-TEMPLATES-01` — the rows ON `channel`: a removal from this channel's list is refused
+   * by this channel's rows alone, so they are the ones worth counting.
    */
-  const readUsage = useCallback(async (): Promise<void> => {
+  const readUsage = useCallback(async (onChannel: number | undefined): Promise<void> => {
     /*
       ⚠ `try`, not `.catch` — a bridge whose `stack` has no `snapshot` at all throws
       SYNCHRONOUSLY, and a rejection handler never sees it. That is not hypothetical here: this
       hook is mounted by every `LayerRow`, so it meets every stub any row suite installs, and an
       earlier cut of this file took seven unrelated suites red by assuming a channel was there.
     */
-    let items: readonly { templateId: string }[] = [];
+    let items: readonly { templateId: string; slot?: { channel: number } | undefined }[] = [];
     try {
       items = await window.cg.stack.snapshot();
     } catch {
       items = [];
     }
     const counts = new Map<string, number>();
-    for (const item of items) counts.set(item.templateId, (counts.get(item.templateId) ?? 0) + 1);
+    for (const item of items) {
+      if (onChannel !== undefined && item.slot?.channel !== onChannel) continue;
+      counts.set(item.templateId, (counts.get(item.templateId) ?? 0) + 1);
+    }
     setUsage(counts);
   }, []);
 
@@ -501,7 +528,8 @@ export function useTemplatePicker(): {
       accepts: 'low' | 'high',
       destination?: PickDestination,
     ): Promise<TemplateChoice> => {
-      const templates = await window.cg.templates.list();
+      // `CHANNEL-TEMPLATES-01` — the destination row's channel's list, and no other.
+      const templates = await window.cg.templates.list(listRequest(destination?.channel));
       return new Promise<TemplateChoice>((resolve) => {
         resolver.current = resolve;
         setQuery('');
@@ -511,7 +539,7 @@ export function useTemplatePicker(): {
         // A selection is per-opening: the row that asked last time is not this row.
         setSelected(null);
         setRequest({ title, templates, accepts, destination: destination ?? null });
-        void readUsage();
+        void readUsage(destination?.channel);
       });
     },
     [readUsage],
@@ -521,15 +549,18 @@ export function useTemplatePicker(): {
    * R-005, re-homed. The BRIDGE decides whether a removal is allowed (it
    * refuses while any row still references the template) and supplies the
    * operator-facing reason; this only asks, then re-lists.
+   *
+   * 🔴 `CHANNEL-TEMPLATES-01` — FROM THE ROW'S CHANNEL ONLY: the template leaves this channel's
+   * list, refused while a row on this channel holds it; every other channel keeps it, and its
+   * stored file stays while any channel lists it. Its Source defaults on this channel are kept —
+   * nothing reads them while the channel does not list it, and a later import finds them again.
    */
   const deleteTemplate = useCallback(
-    async (template: TemplateInfo): Promise<void> => {
+    async (template: TemplateInfo, onChannel: number | undefined): Promise<void> => {
       const label = templateDisplayName(template);
-      const bound = currentSourceAssignments().assignments.filter(
-        (a) => a.templateId === template.templateId,
-      ).length;
+      const scope = listScope(onChannel);
       const ok = await confirm({
-        title: `Delete “${label}” from this station?`,
+        title: `Remove “${label}” from ${scope}?`,
         /*
           🔴 `MODAL-CHROME-10` ADDENDUM D §D3(a) — THE DESTRUCTIVE MARK. It is the default now
           (see `ConfirmRequest.destructive`); this line is not needed and is not written. What
@@ -537,11 +568,12 @@ export function useTemplatePicker(): {
         */
         // §6 — the word "library" named a panel that no longer exists. What is
         // true, and what the operator needs to know, is the SCOPE: this is not a
-        // local tidy-up, it deletes the template everywhere.
+        // local tidy-up — and since `CHANNEL-TEMPLATES-01` the scope is the CHANNEL,
+        // named in the title, the question and the commit alike.
         //
-        // A9 — …and the FALLOUT, named rather than discovered: the plate bindings
-        // go with it, because an assignment to an entry that no longer exists is
-        // state with nothing left that refers to it.
+        // ~~A9 — …and the FALLOUT: the plate bindings go with it.~~ They no longer do:
+        // a channel's Source defaults are never deleted by a template action (the
+        // owner, 2026-09-28), so the clause that said so is gone rather than reworded.
         /*
           🔴 ADDENDUM D §D3(b) — **THE TWO-PART SHAPE, WHICH THE SUB-FAMILY ALREADY HAD.** Station
           setup's destructive confirms state the ACT as a short question naming the thing, and
@@ -560,36 +592,36 @@ export function useTemplatePicker(): {
         body: (
           <>
             <p className="cg-confirm-copy">
-              Delete{' '}
+              Remove{' '}
               <strong>
                 <bdi>{label}</bdi>
               </strong>{' '}
-              from this station?
+              from {scope}?
             </p>
             <p className="cg-confirm-copy">
-              “{label}” is deleted for every browser. This cannot be undone — the .vcg must be
-              re-imported.
-              {bound > 0
-                ? ` Its ${String(bound)} plate binding${bound === 1 ? '' : 's'} ${bound === 1 ? 'is' : 'are'} deleted with it.`
-                : ''}{' '}
-              A row still holding it must be cleared with the row&apos;s own REMOVE first.
+              “{label}” is removed from {scope} for every browser. This cannot be undone — the .vcg
+              must be re-imported. A row still holding it must be cleared with the row&apos;s own
+              REMOVE first.
             </p>
           </>
         ),
-        confirmLabel: 'Delete from station',
+        confirmLabel: `Remove from ${scope}`,
         tone: 'remove',
       });
       if (!ok) return;
       setMessage(null);
       setReferences([]);
       try {
-        const res = await window.cg.templates.remove({ templateId: template.templateId });
+        const res = await window.cg.templates.remove({
+          templateId: template.templateId,
+          ...(onChannel !== undefined && { channel: onChannel }),
+        });
         if (!res.ok) {
           // IN THE DIALOG, not the toast. The entry is still listed, because it
           // is still there — the two together are the honest report.
           setMessage({
             role: 'refusal',
-            text: res.message ?? 'The template could not be deleted.',
+            text: res.message ?? 'The template could not be removed.',
           });
           // `B-212` — and the places, each with its remedy, under the list. The bank is
           // read now, for these names; see the note at `bank`.
@@ -597,24 +629,13 @@ export function useTemplatePicker(): {
           setReferences(res.references ?? []);
           return;
         }
-        // The bindings go ONLY after the owner confirmed the removal. A refused
-        // deletion must leave them exactly where they were.
-        const refusal = await forgetTemplateAssignments(template.templateId);
-        reportCommandSuccess(`Deleted · ${label}`);
-        if (refusal !== null) {
-          // A5 — one line. Its second used to be the refusal's own sentence, the bridge's words
-          // whenever the refusal carried no code; why the bindings stayed is the record's to keep.
-          setMessage({
-            role: 'notice',
-            text: `“${label}” was deleted, but its plate bindings could not be cleared.`,
-          });
-        }
-        const templates = await window.cg.templates.list();
+        reportCommandSuccess(`Removed · ${label}`);
+        const templates = await window.cg.templates.list(listRequest(onChannel));
         setRequest((current) => (current === null ? null : { ...current, templates }));
       } catch (err) {
         setMessage({
           role: 'refusal',
-          text: err instanceof Error ? err.message : 'The template could not be deleted.',
+          text: err instanceof Error ? err.message : 'The template could not be removed.',
         });
       }
     },
@@ -671,12 +692,12 @@ export function useTemplatePicker(): {
         }
         setReferences((current) => current.filter((r) => r.itemId !== reference.itemId));
         // The count in the aside changed with it.
-        void readUsage();
+        void readUsage(channel);
         setMessage({
           role: 'notice',
-          // The label this sentence quotes is now just `Delete` (§2(c)); a message that names
-          // a control has to name the control that is actually there.
-          text: `Removed the item ${place}. Press Delete again to delete the template.`,
+          // A message that names a control has to name the control that is actually there:
+          // the row's icon is `Remove <name> from CH n` (`CHANNEL-TEMPLATES-01`).
+          text: `Removed the item ${place}. Press Remove again to remove the template.`,
         });
       } catch (err) {
         setMessage({
@@ -685,7 +706,7 @@ export function useTemplatePicker(): {
         });
       }
     },
-    [bank, confirm, readUsage],
+    [bank, channel, confirm, readUsage],
   );
 
   /*
@@ -765,32 +786,36 @@ export function useTemplatePicker(): {
    * On success the new template is SELECTED on the list, so the next press is the load: the
    * import is over, and what happens to a row is still the operator's separate decision.
    */
-  const runImport = useCallback(async (pick: () => Promise<File | null>): Promise<void> => {
-    setImportBusy(true);
-    setMessage(null);
-    setReferences([]);
-    try {
-      const template = await importVcgToStation(pick);
-      // The operator dismissed the OS dialog: their own "no", not a failure.
-      if (template === null) return;
-      const templates = await window.cg.templates.list();
-      setRequest((current) => (current === null ? null : { ...current, templates }));
-      setSelected(template);
-    } catch (err) {
-      /*
-        IN THE PICKER'S OWN MESSAGE REGION — one line. `importVcgFile` throws the operator-facing
-        sentence naming the file (`“x.vcg” failed verification…`); reporting it to the command
-        toast would render it UNDER this dialog's backdrop, which is the A9 defect one surface
-        over. The package registered nothing, so the list is still true.
-      */
-      setMessage({
-        role: 'refusal',
-        text: err instanceof Error ? err.message : 'The package could not be imported.',
-      });
-    } finally {
-      setImportBusy(false);
-    }
-  }, []);
+  const runImport = useCallback(
+    async (pick: () => Promise<File | null>): Promise<void> => {
+      setImportBusy(true);
+      setMessage(null);
+      setReferences([]);
+      try {
+        // `CHANNEL-TEMPLATES-01` — onto the row's channel's list, and no other.
+        const template = await importVcgToStation(pick, channel);
+        // The operator dismissed the OS dialog: their own "no", not a failure.
+        if (template === null) return;
+        const templates = await window.cg.templates.list(listRequest(channel));
+        setRequest((current) => (current === null ? null : { ...current, templates }));
+        setSelected(template);
+      } catch (err) {
+        /*
+          IN THE PICKER'S OWN MESSAGE REGION — one line. `importVcgFile` throws the operator-facing
+          sentence naming the file (`“x.vcg” failed verification…`); reporting it to the command
+          toast would render it UNDER this dialog's backdrop, which is the A9 defect one surface
+          over. The package registered nothing, so the list is still true.
+        */
+        setMessage({
+          role: 'refusal',
+          text: err instanceof Error ? err.message : 'The package could not be imported.',
+        });
+      } finally {
+        setImportBusy(false);
+      }
+    },
+    [channel],
+  );
 
   /** `Import a .vcg`'s own press: the OS file chooser, directly — no dialog of ours between. */
   const openImport = useCallback((): void => {
@@ -959,6 +984,7 @@ export function useTemplatePicker(): {
         >
           {/*
             🔴 `MODAL-CHROME-10` ADDENDUM D §D1 — **ONE TOOLS ROW, IN THE DIALOG'S CHROME.**
+            (`CHANNEL-TEMPLATES-01` — every door on it acts on the row's channel's list.)
 
             Import was reachable from both views and sat in a different PLACE in each: measured
             in Chromium, x 710.8 in selection and x 1160.5 in Manage — a 450 px jump on a view
@@ -1015,7 +1041,7 @@ export function useTemplatePicker(): {
                     panel that no longer exists (§6).
                   */
                   <div className="cg-tpl-empty" data-template-empty="">
-                    <h3>Nothing on this station yet</h3>
+                    <h3>Nothing on {listScope(channel)} yet</h3>
                     <p>Import a .vcg package to begin.</p>
                     <Button variant="primary" disabled={importBusy} onClick={openImport}>
                       <Icon icon={FileUp} size={14} />
@@ -1032,7 +1058,7 @@ export function useTemplatePicker(): {
                     selected={selected}
                     onSelect={setSelected}
                     onCommit={commit}
-                    onDelete={(t) => void deleteTemplate(t)}
+                    onDelete={(t) => void deleteTemplate(t, channel)}
                     onKeyDown={onListKeyDown}
                   />
                 )}
@@ -1262,6 +1288,7 @@ function PickerList({
               key={t.templateId}
               template={t}
               accepts={request.accepts}
+              scope={listScope(request.destination?.channel)}
               unassigned={unassigned(t)}
               isSelected={selected?.templateId === t.templateId}
               onSelect={() => onSelect(t)}
@@ -1278,6 +1305,7 @@ function PickerList({
 function PickerRow({
   template: t,
   accepts,
+  scope,
   unassigned: needsSource,
   isSelected,
   onSelect,
@@ -1286,6 +1314,8 @@ function PickerRow({
 }: {
   template: TemplateInfo;
   accepts: 'low' | 'high';
+  /** `CHANNEL-TEMPLATES-01` — whose list the delete icon removes from (`CH n`). */
+  scope: string;
   unassigned: string[];
   isSelected: boolean;
   onSelect: () => void;
@@ -1398,12 +1428,15 @@ function PickerRow({
         same refusal. NEUTRAL at rest: red's home is the confirm's commit (`design.md` §29.2),
         not a control repeated down a list. The accessible name is the long form every finder
         already addresses it by.
+
+        🔴 `CHANNEL-TEMPLATES-01` — the owner's words: `Remove <name> from CH n`. It takes the
+        template off the row's CHANNEL's list, and the name says which.
       */}
       <Button
         variant="icon"
         className="cg-tpl-row__delete"
-        aria-label={`Delete ${label} from this station`}
-        title={`Delete ${label} from this station`}
+        aria-label={`Remove ${label} from ${scope}`}
+        title={`Remove ${label} from ${scope}`}
         data-template-delete={t.templateId}
         onClick={onDelete}
       >

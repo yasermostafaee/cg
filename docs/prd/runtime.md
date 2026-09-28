@@ -4138,3 +4138,28 @@ re-import rewrite a template's defaults on every channel, so a station-admin not
 refused that rewrite. **Acceptance:** WHEN a station-admin holding CH 2 only changes CH 1's defaults THEN it
 is refused and nothing changes there; WHEN it changes CH 2's THEN they change; WHEN a `"*"` station-admin
 changes both THEN both change.
+
+## [~] R-074 — Each channel has its own template list: import, delete and re-import act on the current channel only ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `CHANNEL-TEMPLATES-01` (v1) · `openspec/changes/channel-templates`
+
+**What.** Each CasparCG channel keeps its own template list over one shared store of versions. The picker
+shows the current channel's list; `Import a .vcg` (or a dropped `.vcg`) adds to it only; the row's delete
+icon — `Remove <name> from CH n`, its confirm naming the channel — removes from it only, refused while a row
+on that channel holds the template. A re-import moves the current channel alone to the new version; other
+channels keep theirs until they re-import. One stored file per version, however many channels list it; a
+version's file goes only when no channel lists it and no row holds it, and a page on air keeps its file and
+its serve path. Every action is judged on the current channel alone (fence, grant, lock). No template action
+writes Source defaults: a re-import keeps the channel's defaults for plates that still exist, and a default
+for a plate that is gone is ignored, never deleted. On the first load every declared channel lists the
+station's library; a channel added later starts empty. **Why.** `PLATE-BAND-01` found that "Delete from
+station" and a re-import rewrote a template's defaults on every channel, so a channel's own operator was
+refused them ([[R-073]]); the owner's model (2026-09-28) is one programme and one operator per channel.
+**Acceptance:** WHEN an operator holding CH 2 only imports, re-imports and removes on CH 2 THEN none is
+refused and CH 1's list, rows, defaults and on-air page are unchanged, while the same acts on CH 1 are
+refused by the grant; WHEN the same `.vcg` is imported on CH 1 and CH 2 THEN one file is stored, and a
+re-import on CH 2 gives CH 2 the new version while CH 1 keeps the old, both served; WHEN a template is
+removed from CH 2 while CH 1 lists it THEN the file stays, and from the last channel with no row holding it
+THEN the file goes; WHEN a row on CH 2 holds it THEN its removal on CH 2 is refused; WHEN the station first
+loads THEN every declared channel lists today's library once; WHEN a page is on air on CH 1 THEN every act on
+CH 2 leaves its serve path byte for byte. **Open for the owner:** a "Change channel…" move starts the new
+channel empty (the old list stays dormant); template audit rows name no channel; same-channel re-delivery is
+still local-wins (`B-085`).

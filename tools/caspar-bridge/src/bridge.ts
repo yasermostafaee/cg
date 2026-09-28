@@ -829,9 +829,19 @@ export function lockRefuses(
     if (!isReconnectMachinery(route, req) || route.lock !== 'operator-unless-redelivery') {
       return false;
     }
-    const r = req as { template?: TemplateInfo; html?: string } | null;
+    const r = req as { template?: TemplateInfo; html?: string; channel?: number } | null;
     if (r?.template === undefined || r.html === undefined) return false;
-    return reaches() && runtime.templateRedeliveryChange(r.template, r.html) === 'replace';
+    /*
+      `CHANNEL-TEMPLATES-01` — "would it overwrite" is asked of the channel it names, and a
+      covered-set lock judges that channel as it judges every other channel-bearing intent: a
+      re-delivery repairing a channel the lock does not cover (or covers but this principal does
+      not hold) is not stopped by it.
+    */
+    if (runtime.templateRedeliveryChange(r.template, r.html, r.channel) !== 'replace') return false;
+    if (lock.channels !== undefined && r.channel !== undefined) {
+      return coveredChannelsHeld(lock.channels, principal, runtime).includes(r.channel);
+    }
+    return reaches();
   }
 
   if (lock.channels === undefined) return true;
@@ -1200,9 +1210,40 @@ export function channelsForRequest(
   // 🔴 A16 — unscoped, deliberately. Named FIRST so it cannot be reached by a later branch.
   if (name === StackSilenceAllLivePlatesChannel.name) return [];
 
+  /*
+    🔴 `CHANNEL-TEMPLATES-01` — A TEMPLATE LIST IS READ, NOT ACTED ON. `templates.list` and
+    `templates.get` name a channel (the list they read), and a read-only channel still needs its
+    rows NAMED: the strip shows a bank channel the principal does not hold (`R-066` bullet 3), and
+    its rows resolve their templates through that channel's list. So the grant does not judge a
+    read — it is `read` class for everybody. The station fence still refuses a channel this
+    station does not declare, because it reads the coordinate itself (`stationRefusal`).
+  */
+  if (name === TemplatesListChannel.name || name === TemplatesGetChannel.name) return [];
+
   // (a) the request carries the coordinate itself.
   const explicit = explicitChannel(req);
   if (explicit !== undefined) return [explicit];
+
+  /*
+    (a⁗) 🔴 `CHANNEL-TEMPLATES-01` decision 4 — **AN IMPORT OR A REMOVAL THAT NAMES NO CHANNEL IS
+    JUDGED ON EVERY CHANNEL IT CHANGES.** The console names its channel (case (a) above), so a
+    channel-2 operator imports, re-imports and removes on channel 2 needing nothing else. A request
+    without one is the station-wide act it always was — every declared channel for an import, every
+    channel listing it for a removal, and for a re-delivery only the channels it would restore it
+    onto — so a principal who does not hold one of them is refused, never let through a door that
+    names nothing.
+  */
+  if (name === TemplatesImportChannel.name || name === TemplatesRemoveChannel.name) {
+    return runtime.templateActionFootprint(
+      name === TemplatesImportChannel.name ? 'import' : 'remove',
+      (req ?? {}) as {
+        templateId?: string;
+        template?: TemplateInfo;
+        html?: string;
+        redelivery?: boolean;
+      },
+    );
+  }
 
   /*
     (a″) 🔴 `MULTI-CHANNEL-01` — `fixedLayers.set-banks` names its channels INSIDE the list, and
@@ -3444,22 +3485,29 @@ export function buildRoutes(
     route(LockReleaseChannel, 'unlock', 'operator', (r: { pin: string }) => b.release(r.pin)),
     route(LockStateChannel, 'read', 'read', () => b.lockState()),
 
-    route(TemplatesGetChannel, 'read', 'read', (r: { templateId: string }) =>
-      b.templateGet(r.templateId),
+    // `CHANNEL-TEMPLATES-01` — each channel has its own template list; every template request
+    // names the channel it reads or changes (absent = the station-wide reading it always was).
+    route(TemplatesGetChannel, 'read', 'read', (r: { templateId: string; channel?: number }) =>
+      b.templateGet(r.templateId, r.channel),
     ),
-    route(TemplatesListChannel, 'read', 'read', () => b.templateList()),
+    route(TemplatesListChannel, 'read', 'read', (r: { channel?: number } | undefined) =>
+      b.templateList(r?.channel),
+    ),
     // B-038 Phase 2 — retain the browser-produced self-contained HTML alongside
     // the TemplateInfo (held, not served yet).
     route(
       TemplatesImportChannel,
       'operator-unless-redelivery',
       'operator',
-      (r: { template: never; html: string; redelivery?: boolean }) =>
-        b.templateImport(r.template, r.html, r.redelivery ?? false),
+      (r: { template: never; html: string; redelivery?: boolean; channel?: number }) =>
+        b.templateImport(r.template, r.html, r.redelivery ?? false, r.channel),
     ),
     // R-005 — the bridge is authoritative for the refusal (refuse-while-referenced).
-    route(TemplatesRemoveChannel, 'operator', 'operator', (r: { templateId: string }) =>
-      b.templateRemove(r.templateId),
+    route(
+      TemplatesRemoveChannel,
+      'operator',
+      'operator',
+      (r: { templateId: string; channel?: number }) => b.templateRemove(r.templateId, r.channel),
     ),
 
     route(

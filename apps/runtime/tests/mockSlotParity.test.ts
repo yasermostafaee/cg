@@ -25,6 +25,21 @@ async function bridgeWithBank(): Promise<{
   return { bridge, templateId: template.templateId };
 }
 
+/**
+ * `CHANNEL-TEMPLATES-01` — each channel has its own template list, and a channel declared after
+ * the library was copied starts with an empty one: the template is imported on it, as its
+ * operator would, before a row there can take it.
+ */
+async function importOn(
+  bridge: ReturnType<typeof createMockBridge>,
+  templateId: string,
+  channel: number,
+): Promise<void> {
+  const template = await bridge.templates.get({ templateId, channel: 1 });
+  if (template === null) throw new Error('channel 1 lists the seeded template');
+  await bridge.templates.import({ template, html: '', channel });
+}
+
 describe('§1.3 — a row-bound item publishes its slot, exactly as the bridge does', () => {
   it('an exact-slot load publishes `{ channel, layer, server }` — control: a dynamic load publishes none', async () => {
     const { bridge, templateId } = await bridgeWithBank();
@@ -82,6 +97,7 @@ describe('§1.3 — a row-bound item publishes its slot, exactly as the bridge d
     const second = { ...BANK, channel: 2 };
     expect((await bridge.fixedLayers.setBanks({ banks: [BANK, second] })).ok).toBe(true);
     expect((await bridge.fixedLayers.banks()).map((b) => b.channel)).toEqual([1, 2]);
+    await importOn(bridge, templateId, 2);
     for (const channel of [1, 2]) {
       const res = await bridge.fixedLayers.load({
         channel,
@@ -107,13 +123,19 @@ describe('§1.3 — a row-bound item publishes its slot, exactly as the bridge d
     const { bridge, templateId } = await bridgeWithBank();
     const second = { ...BANK, channel: 2 };
     await bridge.fixedLayers.setBanks({ banks: [BANK, second] });
-    await bridge.fixedLayers.load({
-      channel: 2,
-      layer: 99,
-      itemId: 'on-2',
-      templateId,
-      fields: {},
-    });
+    await importOn(bridge, templateId, 2);
+    expect(
+      (
+        await bridge.fixedLayers.load({
+          channel: 2,
+          layer: 99,
+          itemId: 'on-2',
+          templateId,
+          fields: {},
+        })
+      ).accepted,
+      'the positive control: channel 2 takes its own copy',
+    ).toBe(true);
     await bridge.stack.take({ itemId: 'on-2' });
     const refused = await bridge.fixedLayers.setBanks({ banks: [BANK] });
     expect(refused).toEqual({

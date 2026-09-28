@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { mismatchedChannels, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { useTemplateIndex } from './hooks/useTemplateIndex.js';
+import { boundChannelOf } from './features/channels/itemChannel.js';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
@@ -110,9 +111,14 @@ export function App(): JSX.Element {
     press may send depends on the template's stated mode, and `applyDraft` is deliberately free
     of stores; the index is held here, beside the stack it is keyed on.
   */
-  const templates = useTemplateIndex(items.map((i) => i.templateId));
+  // `FIELD-FIXES-01` B — a mock item carries no `slot`; the bank row it is bound to says its channel.
+  const fixedSlots = useFixedSlots();
+  // `CHANNEL-TEMPLATES-01` — each row's template as ITS channel lists it.
+  const templates = useTemplateIndex(
+    items.map((i) => ({ templateId: i.templateId, channel: boundChannelOf(i, fixedSlots) })),
+  );
   const playoutOfItem = (item: StackItemState): TemplateInfo['playout'] | undefined =>
-    templates.get(item.templateId)?.playout;
+    templates.get(item.templateId, boundChannelOf(item, fixedSlots))?.playout;
   // B-156 — read ONCE here and threaded to both the layer table and the Inspector.
   const rehearsals = useRehearse();
   const lock = useLock();
@@ -128,8 +134,6 @@ export function App(): JSX.Element {
   const foreignDismissals = useForeignDismissals();
   const ownedOccupancy = useOwnedOccupancy();
   const emptiedAir = useEmptiedAir();
-  // `FIELD-FIXES-01` B — a mock item carries no `slot`; the bank row it is bound to says its channel.
-  const fixedSlots = useFixedSlots();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();

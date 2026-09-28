@@ -418,15 +418,32 @@ export function requiredBankFor(template: Pick<TemplateInfo, 'liveSources'>): 'l
   return liveSourceCarrierState(template) === 'declared' ? 'low' : 'high';
 }
 
+/**
+ * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — **EACH CHANNEL HAS ITS OWN TEMPLATE LIST.**
+ *
+ * The four template requests below carry an optional top-level `channel`: the CasparCG channel
+ * whose list they read or change. With it, a read answers that channel's list (a template at the
+ * version THAT channel lists), an import lists the template there and nowhere else, and a removal
+ * takes it off that channel only. Because the key is top-level, the bridge's station fence, its
+ * channel grant and a channel-scoped lock judge an import or a removal on exactly that channel —
+ * nothing on one channel ever needs another.
+ *
+ * ABSENT is the station-wide reading every request had before the lists existed: a read answers
+ * every listed template once (the version on the lowest channel listing it), an import lists it
+ * on every declared channel and a removal takes it off every channel — each judged, by the grant,
+ * on every channel it changes.
+ */
+const TemplateChannelSchema = z.number().int().positive();
+
 export const TemplatesGetChannel = defineChannel(
   'templates.get',
-  z.object({ templateId: IdSchema }),
+  z.object({ templateId: IdSchema, channel: TemplateChannelSchema.optional() }),
   z.union([TemplateInfoSchema, z.null()]),
 );
 
 export const TemplatesListChannel = defineChannel(
   'templates.list',
-  z.void(),
+  z.object({ channel: TemplateChannelSchema.optional() }).optional(),
   z.array(TemplateInfoSchema),
 );
 
@@ -462,6 +479,14 @@ export const TemplatesImportChannel = defineChannel(
      * two it is; the bridge decides what that means.
      */
     redelivery: z.boolean().optional(),
+    /**
+     * `CHANNEL-TEMPLATES-01` — the channel to list it on (see {@link TemplateChannelSchema}'s
+     * note). A RE-IMPORT is the same request: the channel's list moves to the new version and
+     * every other channel keeps the version it lists. A re-delivery with a channel restores or
+     * repairs that channel's entry only; one without restores a template no channel lists and
+     * never replaces a version a channel holds.
+     */
+    channel: TemplateChannelSchema.optional(),
   }),
   z.object({
     registered: z.boolean(),
@@ -619,7 +644,13 @@ export function referenceRowName(reference: TemplateReference, bank: BankSet): s
 
 export const TemplatesRemoveChannel = defineChannel(
   'templates.remove',
-  z.object({ templateId: IdSchema }),
+  /*
+    `CHANNEL-TEMPLATES-01` — with a `channel`, the template leaves THAT channel's list, refused while
+    a row on that channel holds it (the in-use gate, per channel); its stored version goes only when
+    no channel lists it and no row holds it. Without one, it leaves every channel, refused while any
+    row holds it — the station-wide removal it always was.
+  */
+  z.object({ templateId: IdSchema, channel: TemplateChannelSchema.optional() }),
   z.object({
     ok: z.boolean(),
     reason: z.enum(['in-use', 'unknown-template']).optional(),
@@ -639,6 +670,10 @@ export const TemplatesRemoveChannel = defineChannel(
  * browser converges on the same library without polling: operator B's Library
  * re-lists the moment operator A imports. Full snapshot, not deltas — the
  * `stack.state-changed` precedent, and what makes a missed frame harmless.
+ *
+ * `CHANNEL-TEMPLATES-01` — the payload is the STATION-WIDE reading (`templates.list` with no
+ * channel). A console that reads per channel treats the push as "something changed" and re-reads
+ * the channels it shows; the shape is unchanged, so nothing that reads it had to learn the lists.
  */
 export const TemplatesChangedChannel = definePublishChannel(
   'templates.changed',

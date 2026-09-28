@@ -3,7 +3,7 @@ import { importTemplateFromBytes } from './templateDelivery.js';
 import { notifyLibraryChanged } from './libraryChanged.js';
 import { recordDefaultPosition } from '../stack/defaultPositionStore.js';
 import { recordListFieldTargets } from '../inspector/fieldTargetStore.js';
-import { reconcileAssignmentsForImport } from '../sources/sourceStore.js';
+import { noteAssignmentsCarriedOver } from '../sources/sourceStore.js';
 import type { ListFieldTargets } from '../inspector/listFieldTargets.js';
 // B-038 Phase 3 — the bundled app @font-face CSS (Vazirmatn / Exo 2) as a raw
 // string. Passed to the single-file export so the bundled faces inline as base64
@@ -36,14 +36,14 @@ export interface ImportedVcg {
   listFieldTargets: ListFieldTargets;
   /** A9 — the plate ids this version declares (empty for a template with none). */
   declaredPlateIds: readonly string[];
-  /**
-   * A9 — plate ids whose binding this import DROPPED, because the new version no
-   * longer declares them. Empty is the ordinary case.
-   */
-  droppedPlateIds: readonly string[];
 }
 
-export async function importVcgFile(file: File): Promise<ImportedVcg> {
+/**
+ * `CHANNEL-TEMPLATES-01` — `channel` is the channel whose list the package joins (the picker's
+ * row's); no other channel's list changes. Absent, the station-wide import a caller that names no
+ * channel always made.
+ */
+export async function importVcgFile(file: File, channel?: number): Promise<ImportedVcg> {
   let bytes: Uint8Array;
   try {
     bytes = new Uint8Array(await file.arrayBuffer());
@@ -53,7 +53,7 @@ export async function importVcgFile(file: File): Promise<ImportedVcg> {
     );
   }
 
-  let imported: Omit<ImportedVcg, 'droppedPlateIds'>;
+  let imported: ImportedVcg;
   try {
     // B-038 Phase 2 — produce the self-contained standalone HTML from the
     // unpacked `.vcg` and deliver it with the `TemplateInfo` over
@@ -65,6 +65,7 @@ export async function importVcgFile(file: File): Promise<ImportedVcg> {
     imported = await importTemplateFromBytes(window.cg, bytes, {
       fontsCss: appFontsCss,
       sourceFileName: file.name,
+      ...(channel !== undefined && { channel }),
     });
   } catch (err) {
     throw new Error(`“${file.name}” ${err instanceof Error ? err.message : String(err)}`);
@@ -76,31 +77,19 @@ export async function importVcgFile(file: File): Promise<ImportedVcg> {
   // R-018 — record each list field's consuming element kind (same one moment)
   // so the from-file control can default SPLIT per target.
   recordListFieldTargets(imported.templateId, imported.listFieldTargets);
-  // A9 / D-137 — reconcile the template's plate bindings against the plate set
-  // THIS version declares. A re-import KEEPS its bindings (the useful case is an
-  // author fixing something and re-exporting, with the operator not re-binding
-  // every plate) — but a binding for a plate id the new version no longer
-  // declares is DROPPED, because a dangling record can later match a plate it
-  // was never meant for.
-  const droppedPlateIds = await reconcileAssignmentsForImport(
-    imported.templateId,
-    imported.declaredPlateIds,
-  );
+  // A9 / D-137 — a re-import KEEPS this channel's Source defaults for every plate that still
+  // exists, and one for a plate the new version no longer declares is ignored, never deleted
+  // (`CHANNEL-TEMPLATES-01` decision 2): nothing is written. What is noted is whether any were
+  // carried over, so the Inspector can say so.
+  noteAssignmentsCarriedOver(imported.templateId, imported.declaredPlateIds, channel);
   // The library gained a template — whichever entry point ran. Emitted HERE so
   // every import path announces it, never only the one that remembered to.
   notifyLibraryChanged();
-  return { ...imported, droppedPlateIds };
+  return imported;
 }
 
 /** The success wording for an import, shared so both entry points say the same thing. */
 export function importSuccessMessage(imported: ImportedVcg): string {
-  // A9 — a DROPPED binding is said in the same breath as the import. The
-  // operator did not ask for it and would otherwise find the plate unassigned
-  // with nothing to say why.
-  const dropped =
-    imported.droppedPlateIds.length > 0
-      ? ` · binding for ${imported.droppedPlateIds.join(', ')} dropped, this version has no such plate`
-      : '';
   /*
     🔴 `CONSOLE-LOOK-06` DELTA D3 — THE SUBJECT AND ITS VALUE, and the reference's own
     separator. Its example toast is three words (`Channel 2 · Sports`) and this one used to
@@ -116,5 +105,5 @@ export function importSuccessMessage(imported: ImportedVcg): string {
     imported.warnings.length > 0
       ? ` · ${String(imported.warnings.length)} warning${imported.warnings.length === 1 ? '' : 's'}`
       : '';
-  return `Imported · ${imported.displayName}${warned}${dropped}`;
+  return `Imported · ${imported.displayName}${warned}`;
 }

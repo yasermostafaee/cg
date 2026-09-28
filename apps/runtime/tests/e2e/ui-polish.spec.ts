@@ -158,22 +158,22 @@ test.describe('C — delete is on the row; `Manage` is retired', () => {
     // Selecting a row opens no confirm and deletes nothing.
     const before = await app.templateCount();
     await picker.getByRole('button', { name: 'Select Zzfree 1' }).click();
-    await expect(page.getByRole('dialog', { name: /from this station\?$/ })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: /from CH \d+\?$/ })).toHaveCount(0);
     expect(await app.templateCount()).toBe(before);
 
-    // An UNUSED template: the existing confirm, then gone.
+    // An UNUSED template: the existing confirm — naming the channel (`CHANNEL-TEMPLATES-01`) — then gone.
     await icon.click();
-    const confirm = page.getByRole('dialog', { name: /^Delete .* from this station\?$/ });
+    const confirm = page.getByRole('dialog', { name: /^Remove .* from CH 1\?$/ });
     await expect(confirm).toContainText('every browser');
-    await confirm.getByRole('button', { name: 'Delete from station', exact: true }).click();
+    await confirm.getByRole('button', { name: 'Remove from CH 1', exact: true }).click();
     await expect(app.templateRow('Zzfree-1')).toHaveCount(0);
     expect(await app.templateCount()).toBe(before - 1);
 
     // THE CONTROL — a template a row holds: refused, with the existing line, and still listed.
-    await picker.getByRole('button', { name: /^Delete held from this station$/ }).click();
+    await picker.getByRole('button', { name: /^Remove held from CH 1$/ }).click();
     await page
-      .getByRole('dialog', { name: /^Delete .* from this station\?$/ })
-      .getByRole('button', { name: 'Delete from station', exact: true })
+      .getByRole('dialog', { name: /^Remove .* from CH 1\?$/ })
+      .getByRole('button', { name: 'Remove from CH 1', exact: true })
       .click();
     await expect(picker.locator('[data-modal-message]')).toContainText(
       '1 row still holds this template',

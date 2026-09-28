@@ -300,7 +300,7 @@ test.describe('an input the Playout stopped offering', () => {
   });
 });
 
-test('library: DELETE FROM STATION is a different verb from the row REMOVE, and it takes the bindings with it', async ({
+test('library: REMOVE FROM CH n is a different act from the row REMOVE, and it keeps the channel’s Source defaults', async ({
   app,
 }) => {
   const page = app.page;
@@ -313,12 +313,16 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   await app.selectLayerRow(layer);
   await app.setTemplateDefault('guest-1', 'Studio 1');
 
-  // ── THE REPORTED BUG: while a row still holds it, the deletion is REFUSED …
+  // ── THE REPORTED BUG: while a row still holds it, the removal is REFUSED …
   await app.openTemplatePicker();
   const picker = app.templatePicker;
-  // `UI-POLISH-01` C — the station-wide deletion is the row's own icon (`Manage` is retired).
-  await picker.getByRole('button', { name: /Delete two box from this station/ }).click();
-  await page.getByRole('button', { name: 'Delete from station', exact: true }).click();
+  /*
+    `UI-POLISH-01` C — the removal is the row's own icon (`Manage` is retired). 🔴
+    `CHANNEL-TEMPLATES-01` — it takes the template off the picker's row's CHANNEL (the probe row is
+    on channel 1), and the owner named it for that: `Remove <name> from CH n`.
+  */
+  await picker.getByRole('button', { name: /^Remove two box from CH 1$/ }).click();
+  await page.getByRole('button', { name: 'Remove from CH 1', exact: true }).click();
   // … and the reason is IN THE DIALOG. It used to go to the command toast, which
   // is rendered under the modal's backdrop — pressing the button did nothing and
   // said nothing.
@@ -357,13 +361,31 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   await app.openTemplatePicker();
   await expect(app.templateRow(TWO_BOX)).toBeVisible();
 
-  // ── Now the library deletion goes through, and its confirm names the fallout.
-  await picker.getByRole('button', { name: /Delete two box from this station/ }).click();
-  const confirm = page.getByRole('dialog', { name: /Delete .* from this station\?/ });
+  // ── Now the removal goes through, and its confirm names the channel and the fallout.
+  await picker.getByRole('button', { name: /^Remove two box from CH 1$/ }).click();
+  const confirm = page.getByRole('dialog', { name: /^Remove .* from CH 1\?$/ });
   await expect(confirm).toContainText('every browser');
-  await expect(confirm).toContainText('1 plate binding');
-  await confirm.getByRole('button', { name: 'Delete from station', exact: true }).click();
+  // 🔴 The channel's Source defaults are KEPT now, so the confirm no longer says they go…
+  await expect(confirm).not.toContainText(/plate binding/i);
+  await confirm.getByRole('button', { name: 'Remove from CH 1', exact: true }).click();
 
   await expect(app.templateRow(TWO_BOX)).toHaveCount(0);
   await app.closeTemplatePicker();
+  // …and they are still there: nothing reads them while CH 1 does not list the template, and a
+  // later import on CH 1 finds them again (the owner, 2026-09-28: "ignored, never deleted").
+  const kept = await page.evaluate(async (templateId) => {
+    const w = window as unknown as {
+      cg: {
+        sources: {
+          assignments: () => Promise<{
+            assignments: { templateId: string; plateId: string; sourceId: string }[];
+          }>;
+        };
+      };
+    };
+    return (await w.cg.sources.assignments()).assignments.filter(
+      (a) => a.templateId === templateId,
+    );
+  }, TWO_BOX);
+  expect(kept.map((a) => [a.plateId, a.sourceId])).toEqual([['guest-1', 'in-studio-1']]);
 });

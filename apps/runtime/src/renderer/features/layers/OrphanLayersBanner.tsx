@@ -183,8 +183,12 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
   // `MULTI-CHANNEL-01` — every declared bank: an owner is named from ITS channel's bank, which
   // needs the list and not the selection.
   const bank = useFixedBanks();
-  const templateIds = useMemo(() => items.map((i) => i.templateId), [items]);
-  const templates = useTemplateIndex(templateIds);
+  // `CHANNEL-TEMPLATES-01` — each item's template as its own channel lists it.
+  const templateRefs = useMemo(
+    () => items.map((i) => ({ templateId: i.templateId, channel: i.slot?.channel })),
+    [items],
+  );
+  const templates = useTemplateIndex(templateRefs);
   /*
     🔴 **NO `slot` IS PASSED, AND `B-232`'s NOTE IS WHY.** It warned that naming this owner by
     its LAYER "would just repeat the coordinate the sentence has already printed two words

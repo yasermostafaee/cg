@@ -85,6 +85,11 @@ export interface ProduceOptions {
    * bundled starter or a byte-only import (those keep their manifest name).
    */
   sourceFileName?: string;
+  /**
+   * `CHANNEL-TEMPLATES-01` — the channel whose list the template joins; no other channel's list
+   * changes. Omitted, the station-wide import (every declared channel).
+   */
+  channel?: number;
 }
 
 /** The minimal `window.cg` surface this module needs (the extended import channel). */
@@ -304,15 +309,19 @@ export async function importTemplateFromBytes(
   defaultPosition?: Position;
   listFieldTargets: ListFieldTargets;
   /**
-   * A9 / D-137 — the plate ids THIS version declares, so the caller can
-   * reconcile the template's existing assignments against them. Empty for a
-   * template with no live plates, which is a real answer and not an absence.
+   * A9 / D-137 — the plate ids THIS version declares, so the caller can say whether the
+   * template's existing defaults were carried over. Empty for a template with no live plates,
+   * which is a real answer and not an absence.
    */
   declaredPlateIds: readonly string[];
 }> {
   const { template, html, warnings, defaultPosition, listFieldTargets } =
     await produceTemplateDelivery(bytes, opts);
-  await bridge.templates.import({ template, html });
+  await bridge.templates.import({
+    template,
+    html,
+    ...(opts.channel !== undefined && { channel: opts.channel }),
+  });
   return {
     templateId: template.templateId,
     displayName: templateDisplayName(template),

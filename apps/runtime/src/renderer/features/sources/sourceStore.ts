@@ -2,6 +2,7 @@ import {
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
   publishedPlateBand,
+  unassignedPlateIds,
   type ChannelRequest,
   type ChannelResponse,
   type ConsoleMediaItem,
@@ -254,24 +255,7 @@ export function __resetSourcesForTest(): void {
 }
 
 /**
- * A9 — ASSIGNMENTS ARE OWNED BY THE LIBRARY ENTRY.
- *
- * Deleting a template from this station deletes its plate bindings with it. That
- * is what makes "delete from this station" mean something: without it there is
- * state on this machine with nothing left that refers to it, and a later import
- * of the same id would silently inherit bindings nobody chose to keep.
- *
- * Called ONLY after the removal is CONFIRMED by its owner. A refused removal must
- * leave the bindings exactly where they were — the template is still there.
- */
-export async function forgetTemplateAssignments(templateId: string): Promise<CommitRefusal | null> {
-  const kept = assignments.assignments.filter((a) => a.templateId !== templateId);
-  if (kept.length === assignments.assignments.length) return null;
-  return commitSourceAssignments({ assignments: kept });
-}
-
-/**
- * A9 — the templates whose bindings SURVIVED a re-import in this session.
+ * A9 — the templates whose bindings SURVIVED a re-import in this session, per channel.
  *
  * A re-import KEEPS its assignments: the useful case is an author fixing
  * something and re-exporting, with the operator not re-binding every plate. But
@@ -280,51 +264,50 @@ export async function forgetTemplateAssignments(templateId: string): Promise<Com
  *
  * Session-local on purpose: it is a statement about what just happened in front
  * of this operator, not a durable property of the template.
+ *
+ * `CHANNEL-TEMPLATES-01` — keyed by the CHANNEL too: a re-import acts on one channel's list, and
+ * the defaults it carries over are that channel's.
  */
 const carriedOver = new Set<string>();
 
-/** True iff this template's bindings were carried over by an import this session. */
-export function assignmentsWereCarriedOver(templateId: string): boolean {
-  return carriedOver.has(templateId);
+const carriedKey = (templateId: string, channel: number | undefined): string =>
+  `${String(channel ?? '*')}\u0000${templateId}`;
+
+/** True iff this template's bindings on `channel` were carried over by an import this session. */
+export function assignmentsWereCarriedOver(templateId: string, channel?: number): boolean {
+  return carriedOver.has(carriedKey(templateId, channel));
 }
 
 /**
- * A9 — reconcile a template's assignments against the plate set it NOW declares,
- * at import.
+ * A9 — note, at import, whether a template's Source defaults on `channel` were carried over.
  *
- * 🔴 **A PLATE ID THE NEW VERSION NO LONGER DECLARES IS DROPPED.** A dangling
- * record can later match a plate it was never meant for — the author re-uses
- * `guest-1` for a different box, and a binding nobody made comes back to life on
- * air. Plates the new version declares and the old did not simply read as
- * unassigned, which is the ordinary state of a plate nobody has bound.
+ * 🔴 `CHANNEL-TEMPLATES-01` decision 2 (the owner, 2026-09-28) — **NOTHING IS WRITTEN.** A re-import
+ * keeps the channel's defaults for every plate that still exists, and a default for a plate the new
+ * version no longer declares is IGNORED, never deleted: every reader asks for the plates the
+ * template declares (`assignedSourceId` / `unassignedPlateIds`), so a default for a plate that is
+ * gone answers nothing. This used to drop such defaults — on every channel at once, in a
+ * station-wide write — which is what refused a channel's own operator the re-import of a template
+ * another channel also used (`PLATE-BAND-01`'s found item).
  *
- * Returns the plate ids it dropped, so the caller can say so.
+ * What is left is the notice: anything that answers for a declared plate on this channel was
+ * carried over from a previous import, and the operator did nothing to produce it.
  */
-export async function reconcileAssignmentsForImport(
+export function noteAssignmentsCarriedOver(
   templateId: string,
   declaredPlateIds: readonly string[],
-): Promise<readonly string[]> {
-  const declared = new Set(declaredPlateIds);
-  const mine = assignments.assignments.filter((a) => a.templateId === templateId);
-  if (mine.length === 0) {
-    carriedOver.delete(templateId);
-    return [];
-  }
-  const dropped = mine.filter((a) => !declared.has(a.plateId));
-  if (dropped.length > 0) {
-    await commitSourceAssignments({
-      assignments: assignments.assignments.filter(
-        (a) => a.templateId !== templateId || declared.has(a.plateId),
-      ),
-    });
-  }
-  // Anything that survived was carried over from the previous import, and the
-  // operator has to be told: they did nothing to produce it.
-  if (mine.length > dropped.length) carriedOver.add(templateId);
-  else carriedOver.delete(templateId);
+  channel?: number,
+): void {
+  const key = carriedKey(templateId, channel);
+  const carried =
+    channel === undefined
+      ? assignments.assignments.some(
+          (a) => a.templateId === templateId && declaredPlateIds.includes(a.plateId),
+        )
+      : unassignedPlateIds(assignments, channel, templateId, declaredPlateIds).length <
+        declaredPlateIds.length;
+  if (carried) carriedOver.add(key);
+  else carriedOver.delete(key);
   bump();
-  // `CHANNEL-SOURCES-01` — one plate is named once, however many channels held a default for it.
-  return [...new Set(dropped.map((a) => a.plateId))];
 }
 
 /** Test seam — forget the carried-over marks. */

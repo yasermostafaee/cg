@@ -682,23 +682,30 @@ export interface RuntimeBridge {
     onMediaStateChanged(handler: (state: MediaPlateState[]) => void): Unsubscribe;
   };
 
+  /**
+   * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — **EACH CHANNEL HAS ITS OWN TEMPLATE LIST.**
+   * Every call below names the channel whose list it reads or changes; with none, the station-wide
+   * reading (every listed template once), which is what a surface that shows no channel wants.
+   */
   templates: {
     get(
       req: ChannelRequest<typeof TemplatesGetChannel>,
     ): Promise<ChannelResponse<typeof TemplatesGetChannel>>;
-    list(): Promise<ChannelResponse<typeof TemplatesListChannel>>;
+    list(
+      req?: ChannelRequest<typeof TemplatesListChannel>,
+    ): Promise<ChannelResponse<typeof TemplatesListChannel>>;
     /**
      * Register a verified `.vcg` template (R-001). The renderer verifies +
      * unpacks the upload first; this call adds the parsed template to the
-     * registry so `list` / `get` see it.
+     * registry so `list` / `get` see it — on `req.channel`'s list, and no other.
      */
     import(
       req: ChannelRequest<typeof TemplatesImportChannel>,
     ): Promise<ChannelResponse<typeof TemplatesImportChannel>>;
     /**
-     * Remove a template from the library (R-005). The bridge is authoritative: it refuses
-     * while any stack item references the template and returns the operator-facing reason.
-     * A confirmed removal also prunes the reconnect-reconciliation retention, so the
+     * Remove a template from `req.channel`'s list (R-005). The bridge is authoritative: it
+     * refuses while a row ON THAT CHANNEL holds the template and returns the operator-facing
+     * reason. A confirmed removal also prunes the reconnect-reconciliation retention, so the
      * template does not come back on the next bridge blip.
      */
     remove(
@@ -723,8 +730,11 @@ export interface RuntimeBridge {
      * `null` is the honest "not in this browser": a template imported on another
      * machine has metadata from the bridge's catalogue but no local page here, and
      * the rehearsal panel says so instead of showing a blank box.
+     *
+     * `CHANNEL-TEMPLATES-01` — the page this browser imported ON `channel`, so a row
+     * rehearses the version its own channel lists.
      */
-    html(templateId: string): Promise<string | null>;
+    html(templateId: string, channel?: number): Promise<string | null>;
   };
 
   /**

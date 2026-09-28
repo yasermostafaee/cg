@@ -1,31 +1,27 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { SourceAssignments } from '@cg/shared-ipc';
+import { unassignedPlateIds, type SourceAssignments } from '@cg/shared-ipc';
 import {
   __resetCarriedOverForTest,
   __resetSourcesForTest,
   assignmentsWereCarriedOver,
   currentSourceAssignments,
-  forgetTemplateAssignments,
   initSources,
-  reconcileAssignmentsForImport,
+  noteAssignmentsCarriedOver,
 } from '../src/renderer/features/sources/sourceStore.js';
 
 /**
- * A9 — ASSIGNMENTS ARE OWNED BY THE LIBRARY ENTRY.
+ * A9 — a re-import KEEPS its bindings — the useful case is an author fixing something and
+ * re-exporting, with the operator not re-binding every plate — **but it must SAY so.** The owner
+ * met it as a silent restore, which is indistinguishable from the product having invented them.
  *
- * Three rules, and each exists because the state it prevents is invisible:
- *
- *  1. **Deleting the entry deletes its bindings.** Otherwise there is state on
- *     this machine with nothing left that refers to it, and a later import of the
- *     same id silently inherits bindings nobody chose to keep.
- *  2. **A re-import KEEPS its bindings** — the useful case is an author fixing
- *     something and re-exporting, with the operator not re-binding every plate —
- *     **but it must SAY so.** The owner met it as a silent restore, which is
- *     indistinguishable from the product having invented the bindings.
- *  3. 🔴 **A plate id the new version no longer declares is DROPPED.** A dangling
- *     record can later match a plate it was never meant for — the author re-uses
- *     `guest-1` for a different box and a binding nobody made comes back on air.
+ * 🔴 `CHANNEL-TEMPLATES-01` decision 2 (the owner, 2026-09-28) — **A TEMPLATE ACTION NEVER WRITES
+ * SOURCE DEFAULTS.** A re-import keeps a channel's defaults for every plate that still exists, and a
+ * default for a plate the new version no longer declares is IGNORED, never deleted; removing a
+ * template from a channel leaves its defaults where they are. These used to be station-wide
+ * `sources.set-assignments` writes — dropping a gone plate's default, and wiping a deleted
+ * template's, on every channel at once — which is what refused a channel's own operator a
+ * re-import or a removal of a template another channel also used (`PLATE-BAND-01`'s found item).
  */
 
 let stored: SourceAssignments = { assignments: [] };
@@ -64,90 +60,69 @@ beforeEach(async () => {
   await seed([]);
 });
 
-describe('a re-import keeps its bindings, and says that it did', () => {
-  it('keeps every binding whose plate the new version still declares', async () => {
+describe('a re-import keeps its channel’s defaults, writes nothing, and says what it carried over', () => {
+  it('keeps every default whose plate the new version still declares — and is told so', async () => {
     await seed([
-      { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
-      { templateId: 'tpl-1', plateId: 'guest-2', sourceId: 'src-bbb' },
+      { channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
+      { channel: 2, templateId: 'tpl-1', plateId: 'guest-2', sourceId: 'src-bbb' },
     ]);
 
-    const dropped = await reconcileAssignmentsForImport('tpl-1', ['guest-1', 'guest-2']);
+    noteAssignmentsCarriedOver('tpl-1', ['guest-1', 'guest-2'], 2);
 
-    expect(dropped).toEqual([]);
-    // Nothing written: there was nothing to change, and a no-op write would be a
-    // push every other console has to process for no reason.
+    // Nothing written: a no-op write would be a push every other console has to process.
     expect(setCalls).toEqual([]);
     expect(currentSourceAssignments().assignments).toHaveLength(2);
-    // …and the operator is TOLD, because they did nothing to produce it.
-    expect(assignmentsWereCarriedOver('tpl-1')).toBe(true);
+    // …and the operator is TOLD, on the channel it happened on.
+    expect(assignmentsWereCarriedOver('tpl-1', 2)).toBe(true);
+    // Control: another channel's import carried nothing over.
+    expect(assignmentsWereCarriedOver('tpl-1', 1)).toBe(false);
   });
 
   it('says nothing for a FIRST import — there is nothing carried over', async () => {
-    const dropped = await reconcileAssignmentsForImport('tpl-1', ['guest-1']);
-    expect(dropped).toEqual([]);
-    expect(assignmentsWereCarriedOver('tpl-1')).toBe(false);
+    noteAssignmentsCarriedOver('tpl-1', ['guest-1'], 2);
+    expect(setCalls).toEqual([]);
+    expect(assignmentsWereCarriedOver('tpl-1', 2)).toBe(false);
   });
 
-  it('🔴 DROPS a binding for a plate the new version no longer declares', async () => {
-    await seed([
-      { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
-      { templateId: 'tpl-1', plateId: 'guest-3', sourceId: 'src-bbb' },
-    ]);
+  it('🔴 a default for a plate the new version no longer declares is IGNORED, never deleted', async () => {
+    const start: SourceAssignments['assignments'] = [
+      { channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
+      { channel: 2, templateId: 'tpl-1', plateId: 'guest-3', sourceId: 'src-bbb' },
+    ];
+    await seed(start);
 
     // The re-exported template dropped `guest-3` and gained `guest-2`.
-    const dropped = await reconcileAssignmentsForImport('tpl-1', ['guest-1', 'guest-2']);
+    noteAssignmentsCarriedOver('tpl-1', ['guest-1', 'guest-2'], 2);
 
-    expect(dropped).toEqual(['guest-3']);
-    expect(currentSourceAssignments().assignments).toEqual([
-      { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
-    ]);
-    // A plate the new version declares and the old did not simply reads as
-    // unassigned — which is the ordinary state of a plate nobody has bound.
-    expect(currentSourceAssignments().assignments.some((a) => a.plateId === 'guest-2')).toBe(false);
-    // Something survived, so it is still a carry-over.
-    expect(assignmentsWereCarriedOver('tpl-1')).toBe(true);
-  });
-
-  it('drops EVERY binding when the new version declares no plates at all', async () => {
-    await seed([{ templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' }]);
-    const dropped = await reconcileAssignmentsForImport('tpl-1', []);
-    expect(dropped).toEqual(['guest-1']);
-    expect(currentSourceAssignments().assignments).toEqual([]);
-    // Nothing survived, so there is nothing to announce as carried over.
-    expect(assignmentsWereCarriedOver('tpl-1')).toBe(false);
-  });
-
-  it('never touches ANOTHER template bindings', async () => {
-    await seed([
-      { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
-      { templateId: 'tpl-2', plateId: 'guest-1', sourceId: 'src-bbb' },
-    ]);
-    await reconcileAssignmentsForImport('tpl-1', []);
-    expect(currentSourceAssignments().assignments).toEqual([
-      { templateId: 'tpl-2', plateId: 'guest-1', sourceId: 'src-bbb' },
-    ]);
-    expect(assignmentsWereCarriedOver('tpl-2')).toBe(false);
-  });
-});
-
-describe('deleting the library entry deletes its bindings', () => {
-  it('drops exactly that template bindings, and writes once', async () => {
-    await seed([
-      { templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
-      { templateId: 'tpl-2', plateId: 'guest-1', sourceId: 'src-bbb' },
-    ]);
-
-    const refusal = await forgetTemplateAssignments('tpl-1');
-
-    expect(refusal).toBeNull();
-    expect(setCalls).toEqual([
-      { assignments: [{ templateId: 'tpl-2', plateId: 'guest-1', sourceId: 'src-bbb' }] },
-    ]);
-  });
-
-  it('writes NOTHING when the template had no bindings', async () => {
-    await seed([{ templateId: 'tpl-2', plateId: 'guest-1', sourceId: 'src-bbb' }]);
-    expect(await forgetTemplateAssignments('tpl-1')).toBeNull();
+    // NOTHING is written — the gone plate's default stays exactly where it was…
     expect(setCalls).toEqual([]);
+    expect(currentSourceAssignments().assignments).toEqual(start);
+    // …and nothing reads it: the readers ask for the plates the template DECLARES, so the new
+    // plate reads unassigned and the gone one is simply not asked about.
+    expect(
+      unassignedPlateIds(currentSourceAssignments(), 2, 'tpl-1', ['guest-1', 'guest-2']),
+    ).toEqual(['guest-2']);
+    // Something survived, so it is still a carry-over.
+    expect(assignmentsWereCarriedOver('tpl-1', 2)).toBe(true);
+  });
+
+  it('declaring no plates at all carries nothing over — and still writes nothing', async () => {
+    await seed([{ channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' }]);
+    noteAssignmentsCarriedOver('tpl-1', [], 2);
+    expect(setCalls).toEqual([]);
+    expect(currentSourceAssignments().assignments).toHaveLength(1);
+    expect(assignmentsWereCarriedOver('tpl-1', 2)).toBe(false);
+  });
+
+  it('another channel’s defaults for the same template are never touched, and never carried', async () => {
+    const start: SourceAssignments['assignments'] = [
+      { channel: 1, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
+    ];
+    await seed(start);
+    noteAssignmentsCarriedOver('tpl-1', ['guest-1'], 2);
+    expect(setCalls).toEqual([]);
+    expect(currentSourceAssignments().assignments).toEqual(start);
+    // CH 2 has none of its own for the plate, so nothing was carried over THERE.
+    expect(assignmentsWereCarriedOver('tpl-1', 2)).toBe(false);
   });
 });

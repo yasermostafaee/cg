@@ -207,7 +207,7 @@ import {
   releaseLivePlate,
   type LivePlateRelease,
 } from './live-plate-release.js';
-import { TemplateRegistry } from './template-registry.js';
+import { TemplateRegistry, templateVersionId } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
   TemplateHttpServer,
@@ -1613,11 +1613,14 @@ export class CasparRuntime {
 
   // ── non-playout stub state ──────────────────────────────────────────
   // B-038 Phase 2 — holds each imported template's info + the browser-produced
-  // self-contained HTML, keyed by id. B-038 Phase 3 — the HTTP server serves that
-  // HTML at `/template/<id>`, so `CG ADD` can reference a real, loadable URL.
+  // self-contained HTML. B-038 Phase 3 — the HTTP server serves that HTML at
+  // `/template/<key>`, so `CG ADD` can reference a real, loadable URL.
   // R-028 (o1) — persisted to disk when a templates dir is configured, and
   // hydrated in the constructor so the registry is complete before the
   // WebSocket ever answers a `templates.list`.
+  // 🔴 `CHANNEL-TEMPLATES-01` — PER CHANNEL: each channel lists its own
+  // `(template, version)` over one shared store of versions. A row resolves its
+  // template through ITS OWN channel's list (`#templateOn`), never another's.
   readonly #templates: TemplateRegistry;
   /**
    * `C-031` — what the registry's boot hydration found: how many persisted templates
@@ -1770,8 +1773,11 @@ export class CasparRuntime {
    * it is indistinguishable from one that was never imported — at which point a
    * browser's re-delivery is the desired REPAIR rather than a resurrection. The
    * tombstone only needs to outlive the reconnects of the session that removed.
+   *
+   * `CHANNEL-TEMPLATES-01` — PER CHANNEL: a removal is an act on one channel's
+   * list, so it guards that list and no other. channel → ids removed there.
    */
-  readonly #removedTemplateIds = new Set<string>();
+  readonly #removedTemplates = new Map<number, Set<string>>();
   readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
@@ -2071,6 +2077,18 @@ export class CasparRuntime {
       ...this.#templates.loadPersisted(),
       dir: options.templatesDir ?? null,
     };
+    /*
+      🔴 `CHANNEL-TEMPLATES-01` decision 5 — THE ONE-TIME COPY: a library written before the
+      per-channel lists is listed on every declared channel, at the version it has. A second load
+      copies nothing; a station in first-run (nothing declared) is copied when it declares.
+    */
+    this.#templates.migrate(this.#declaredChannels());
+    /*
+      A row that leaves the stack HOLDS nothing any more, so the version its last page was served
+      from may now be collected. Subscribed HERE rather than in `start()`: the hold is written by
+      the first `CG ADD`, which a runtime that is never started can still reach in a unit test.
+    */
+    this.#reconciler.on('item-removed', (info) => this.#templates.release(info.itemId));
     // R-034 — same shape, same reason: the delimiter list is read from disk
     // before the WebSocket can answer a `delimiters.list`, so a bridge restart
     // never hands a browser the defaults over the operator's own list.
@@ -2118,7 +2136,9 @@ export class CasparRuntime {
     this.#templateServer =
       options.templateServer ??
       new TemplateHttpServer(
-        (id) => this.#templates.html(id),
+        // `CHANNEL-TEMPLATES-01` — the path segment is a VERSION's serve key: the bare
+        // template id for a template with one version, qualified only beside a second.
+        (key) => this.#templates.htmlForServeKey(key),
         // `SELF-STOP-24` — the completion route's decision. Bound here rather than passed down
         // because the server holds no take state: this is the only object that can answer it.
         (take) => this.#onTemplateComplete(take),
@@ -2432,9 +2452,20 @@ export class CasparRuntime {
       : null;
   }
 
-  /** The served URL for a template id (the `CG ADD` arg), or null if not serving. */
-  templateServeUrl(templateId: string): string | null {
-    return this.#templateServer.listening ? this.#templateServer.urlFor(templateId) : null;
+  /**
+   * The served URL for a template (the `CG ADD` arg), or null if not serving or not listed.
+   *
+   * `CHANNEL-TEMPLATES-01` — the URL of the version `channel` lists; with no channel, of the
+   * version the station-wide reading answers.
+   */
+  templateServeUrl(templateId: string, channel?: number): string | null {
+    if (!this.#templateServer.listening) return null;
+    const versionId =
+      channel === undefined
+        ? this.#templates.versionAny(templateId)
+        : this.#templates.versionOn(channel, templateId);
+    const key = versionId === null ? null : this.#templates.serveKeyOf(versionId);
+    return key === null ? null : this.#templateServer.urlFor(key);
   }
 
   async stop(): Promise<void> {
@@ -2687,7 +2718,7 @@ export class CasparRuntime {
     // an unregistered template is a visible failed load. (Real CasparCG would
     // 202 the ADD without fetching and CEF-load the 404 page — a silent blank
     // on air; the guard is what makes the failure loud.)
-    if (!this.#templates.has(templateId)) {
+    if (!this.#templates.hasAny(templateId)) {
       this.#reconciler.applyAck(seq, false, 'unknown-template');
       return { accepted: false, errorCode: 'unknown-template' };
     }
@@ -2706,6 +2737,13 @@ export class CasparRuntime {
       const code = foreignBlocked ? 'no-layer-foreign-occupied' : 'no-layer';
       this.#reconciler.applyAck(seq, false, code);
       return { accepted: false, errorCode: code };
+    }
+    // `CHANNEL-TEMPLATES-01` — the layer's channel must LIST the template: a row takes its own
+    // channel's version, never another channel's. Checked once the channel is known.
+    if (!this.#templates.hasOn(slot.channel, templateId)) {
+      this.#releaseSlot(slot);
+      this.#reconciler.applyAck(seq, false, 'unknown-template');
+      return { accepted: false, errorCode: 'unknown-template' };
     }
 
     // The layer is only known HERE, after allocation — the refusals above it
@@ -2762,7 +2800,14 @@ export class CasparRuntime {
     this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
 
     // Same guard, same code as `load()`: never blind-ADD a URL we cannot serve.
-    if (!this.#templates.has(templateId)) {
+    // `CHANNEL-TEMPLATES-01` — on THE ROW'S channel: a template another channel lists is not
+    // this row's to take (the picker offers only its own channel's list). A coordinate that is
+    // not a row keeps the station-wide check, so it is refused `not-fixed` just below, exactly
+    // as before: its channel's list is not the thing that is wrong with it.
+    const listed = this.#layers.isFixed(slot)
+      ? this.#templates.hasOn(slot.channel, templateId)
+      : this.#templates.hasAny(templateId);
+    if (!listed) {
       this.#reconciler.applyAck(seq, false, 'unknown-template');
       return { accepted: false, errorCode: 'unknown-template' };
     }
@@ -2794,7 +2839,7 @@ export class CasparRuntime {
     */
     const declaredBank = this.#bankFor(slot.channel);
     if (declaredBank !== null) {
-      const info = this.#templates.get(templateId);
+      const info = this.#templates.getOn(slot.channel, templateId);
       const wanted = info === null ? 'high' : requiredBankFor(info);
       const actual = isLowBankLayer(declaredBank, slot.layer) ? 'low' : 'high';
       if (wanted !== actual) {
@@ -2822,7 +2867,8 @@ export class CasparRuntime {
     // The registry's OWN templateType — the LayerManager records what is bound,
     // and the per-slot publish reads it straight back out, so the row names the
     // template kind the operator recognises rather than an internal id.
-    const templateType = this.#templates.get(templateId)?.templateType ?? templateId;
+    const templateType =
+      this.#templates.getOn(slot.channel, templateId)?.templateType ?? templateId;
     /**
      * `slot-bound` NOW REFUSES ON OCCUPANCY, NOT ON THE BINDING.
      *
@@ -3064,7 +3110,19 @@ export class CasparRuntime {
         skipped.push({ itemId: item.itemId, reason: 'already-held', ...restoreSkipNaming(item) });
         continue;
       }
-      if (!this.#templates.has(item.templateId)) {
+      /*
+        `CHANNEL-TEMPLATES-01` — the row comes back on its own channel, so it is that channel's list
+        that must hold its template. A coordinate on a channel this station does not declare is left
+        to `#slotForRestore`'s fence, which reports it (and notes a stray) as what it is; a row with
+        no coordinate holds nothing on any channel and asks only that the station still has it.
+      */
+      const retainedChannel = item.slot?.channel;
+      const listed =
+        retainedChannel === undefined
+          ? this.#templates.hasAny(item.templateId)
+          : !this.#isDeclaredChannel(retainedChannel) ||
+            this.#templates.hasOn(retainedChannel, item.templateId);
+      if (!listed) {
         skipped.push({
           itemId: item.itemId,
           reason: 'unknown-template',
@@ -3172,7 +3230,7 @@ export class CasparRuntime {
           that just came back. That is the same reasoning `multibox-already-on-air` is at
           both doors for: restore never passes through `take()`.
         */
-        const noLooksRestore = this.#refuseNoLooksAuthored(item.templateId);
+        const noLooksRestore = this.#refuseNoLooksAuthored(slot.channel, item.templateId);
         if (noLooksRestore !== null) {
           // B-114 — release by the SAME door the slot was taken through.
           if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
@@ -3453,7 +3511,9 @@ export class CasparRuntime {
     const out: StationStray[] = [];
     for (const [key, stray] of this.#strays) {
       if (observed !== null && observed.get(key) !== 'html') continue;
-      const name = this.#templates.get(stray.templateId)?.name;
+      // A stray sits on a channel this station does not declare, so no list of ours names it:
+      // the station-wide reading is the only name there is.
+      const name = this.#templates.getAny(stray.templateId)?.name;
       out.push({
         itemId: stray.itemId,
         templateId: stray.templateId,
@@ -3690,7 +3750,8 @@ export class CasparRuntime {
       // surface, and the row refusing a fresh LOAD because its occupancy reads
       // `unknown` until OSC arrives.
       if (this.#layers.isFixed(slot)) {
-        const templateType = this.#templates.get(item.templateId)?.templateType ?? item.templateId;
+        const templateType =
+          this.#templates.getOn(slot.channel, item.templateId)?.templateType ?? item.templateId;
         // The `false` case is a row ANOTHER restored item already bound. It is
         // returned as a skip and NOT allocated elsewhere — see the method's note.
         return this.#layers.bindFixed(slot, templateType) ? { slot } : { skip: 'fixed-slot-taken' };
@@ -3769,7 +3830,7 @@ export class CasparRuntime {
     if (bank === null) return null;
     if (!this.#layers.isFixed(slot)) return null;
     if (isLowBankLayer(bank, slot.layer)) return null;
-    const info = this.#templates.get(item.templateId);
+    const info = this.#templates.getOn(slot.channel, item.templateId);
     // ONE predicate, the same one the load refusal and the picker read (golden rule 6).
     if (info === null || requiredBankFor(info) !== 'low') return null;
     const templateType = info.templateType;
@@ -4011,7 +4072,11 @@ export class CasparRuntime {
     // traffic (the R-011 refusal predicate and the AMCP path are untouched).
     this.#markDirty(itemId);
     const slot = this.#slots.get(itemId);
-    if (slot !== undefined && this.#loaded.has(itemId) && this.#templates.has(item.templateId)) {
+    if (
+      slot !== undefined &&
+      this.#loaded.has(itemId) &&
+      this.#templates.hasOn(slot.channel, item.templateId)
+    ) {
       await this.#sendAdd(itemId, slot, item.templateId, item.fields, this.#nextSeq());
     }
     return { ok: true };
@@ -4238,7 +4303,10 @@ export class CasparRuntime {
       reaches the wire. AFTER exclusivity, because that one is about the on-air SET while
       this is about THIS template — the narrower answer must not mask the broader one.
     */
-    const noLooks = this.#refuseNoLooksAuthored(this.#reconciler.get(itemId)?.templateId ?? itemId);
+    const noLooks = this.#refuseNoLooksAuthored(
+      slot.channel,
+      this.#reconciler.get(itemId)?.templateId ?? itemId,
+    );
     if (noLooks !== null) {
       process.stderr.write(
         `[caspar-bridge] take refused for ${itemId}: ${noLooks.message}
@@ -4392,7 +4460,8 @@ export class CasparRuntime {
       const templateId = item?.templateId ?? itemId;
       // Reconnect-reconciliation — the re-ADD is a fresh load: the same
       // unknown-template guard applies (never blind-ADD an unservable URL).
-      if (!this.#templates.has(templateId)) {
+      // `CHANNEL-TEMPLATES-01` — against the row's OWN channel's list.
+      if (!this.#templates.hasOn(slot.channel, templateId)) {
         this.#reconciler.applyAck(seq, false, 'unknown-template');
         return { accepted: false, errorCode: 'unknown-template' };
       }
@@ -5349,6 +5418,16 @@ export class CasparRuntime {
     this.#layers.applyFixed(slots);
     this.#fixedBanks = sortBanks(next);
     this.#copyDefaultsToJoiningChannels(declaredBefore, [...channels]);
+    /*
+      🔴 `CHANNEL-TEMPLATES-01` decision 5 — a library written before the per-channel lists and not
+      yet copied (a station that upgraded while in first-run) is copied the moment it has channels
+      to copy to. Once copied, a channel JOINING the set starts with an empty template list: unlike
+      Source defaults, nothing is carried to it (the owner's rule). A channel leaving keeps its list,
+      dormant, and finds it again if it is declared again. Nothing is sent to CasparCG.
+    */
+    if (this.#templates.migrate(this.#declaredChannels()) > 0) {
+      this.templatesChanged.emit(this.#templates.listAll());
+    }
     this.fixedConfigChanged.emit(firstBank(this.#fixedBanks));
     this.fixedBanksChanged.emit(this.fixedLayerBanks());
     /*
@@ -5520,7 +5599,8 @@ export class CasparRuntime {
             // resolves the display label with its ONE canonical rule
             // (`templateDisplayName`: file name first); resolving here would
             // be the second copy of that rule.
-            const info = this.#templates.get(templateId);
+            // `CHANNEL-TEMPLATES-01` — the name THIS row's channel lists it under.
+            const info = this.#templates.getOn(slot.channel, templateId);
             identity = {
               templateId,
               ...(info?.name !== undefined && info.name !== '' ? { templateName: info.name } : {}),
@@ -5748,7 +5828,7 @@ export class CasparRuntime {
       if (item.itemId === exceptItemId) continue;
       if (!isOnAirStatus(item)) continue;
       if (this.#slots.get(item.itemId)?.channel !== channel) continue;
-      const boxes = this.#multiBoxCount(item.templateId);
+      const boxes = this.#multiBoxCount(channel, item.templateId);
       if (boxes > 1) return { itemId: item.itemId, templateId: item.templateId, boxes };
     }
     return null;
@@ -5785,9 +5865,10 @@ export class CasparRuntime {
     with both templates already playing. Exclusivity is a property of what a template CAN put
     on the channel, which is its declaration, and a look switch must never change the answer.
   */
-  #multiBoxCount(templateId: string): number {
-    const template = this.#templates.get(templateId);
-    if (template === null || template === undefined) return 0;
+  #multiBoxCount(channel: number, templateId: string): number {
+    // `CHANNEL-TEMPLATES-01` — the declaration of the version `channel` lists.
+    const template = this.#templates.getOn(channel, templateId);
+    if (template === null) return 0;
     if (liveSourceCarrierState(template) !== 'declared') return 0;
     return template.liveSources?.sources.length ?? 0;
   }
@@ -5825,8 +5906,11 @@ export class CasparRuntime {
    * broken for the identical reason, and a `> 1` test would make the refusal depend on a
    * fact that has nothing to do with why it refuses.
    */
-  #refuseNoLooksAuthored(templateId: string): { errorCode: string; message: string } | null {
-    const looks = this.#templates.get(templateId)?.liveSources?.looks;
+  #refuseNoLooksAuthored(
+    channel: number,
+    templateId: string,
+  ): { errorCode: string; message: string } | null {
+    const looks = this.#templates.getOn(channel, templateId)?.liveSources?.looks;
     if (looks === undefined || looks.length > 0) return null;
     return {
       errorCode: 'looks-none-authored',
@@ -5849,7 +5933,7 @@ export class CasparRuntime {
     // restore door asks this question BEFORE the item exists there. A lookup would answer
     // `undefined` at that site and silently let every restore through — the refusal would
     // be present, wired, and dead on the door that has no other cover.
-    if (this.#multiBoxCount(templateId) <= 1) return null;
+    if (this.#multiBoxCount(channel, templateId) <= 1) return null;
     const incumbent = this.#multiBoxItemOnAirOnChannel(channel, itemId);
     if (incumbent === null) return null;
     return {
@@ -5937,7 +6021,8 @@ export class CasparRuntime {
     levelTwo: LevelTwoSource,
   ): LiveSeatingPlan {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
-    const template = this.#templates.get(templateId);
+    // `CHANNEL-TEMPLATES-01` — the carrier of the version the row's channel lists.
+    const template = this.#templates.getOn(slot.channel, templateId);
     const carrier = template === null ? undefined : template.liveSources;
     if (
       template === null ||
@@ -6464,7 +6549,7 @@ export class CasparRuntime {
     },
   ): { reason: string; message: string } | null {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
-    const template = this.#templates.get(templateId);
+    const template = this.#templates.getOn(slot.channel, templateId);
     const carrier = template === null ? undefined : template.liveSources;
     if (template === null || carrier === undefined) return null;
 
@@ -6838,7 +6923,7 @@ export class CasparRuntime {
    */
   #activeLookOf(itemId: string): TemplateLook | undefined {
     const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
-    const carrier = this.#templates.get(templateId)?.liveSources;
+    const carrier = this.#templateOfItem(itemId, templateId)?.liveSources;
     if (carrier === undefined) return undefined;
     /*
       🔴 `B-151` — THE FALLBACK CHAIN MOVED TO `@cg/shared-ipc`'s `activeLookOf`, and this
@@ -7173,7 +7258,7 @@ export class CasparRuntime {
       — a refusal here would put a sentence on the surface for a control the operator can no
       longer even see.
     */
-    if (!this.#ownsLiveSeats(itemId) || !this.#admitsPassTiming(item?.templateId)) {
+    if (!this.#ownsLiveSeats(itemId) || !this.#admitsPassTiming(itemId, item?.templateId)) {
       this.#passTimings.set(itemId, next);
       this.#markDirty(itemId);
       // An accepted set that reached no wire is still a set: the next take carries it, so the
@@ -7215,7 +7300,7 @@ export class CasparRuntime {
     if (templateId === undefined || slot === undefined) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
-    const looks = this.#templates.get(templateId)?.liveSources?.looks ?? [];
+    const looks = this.#templates.getOn(slot.channel, templateId)?.liveSources?.looks ?? [];
     const look = looks.find((l) => l.id === lookId);
     if (look === undefined) {
       return {
@@ -9680,7 +9765,7 @@ export class CasparRuntime {
     if (templateId === undefined || itemSlot === undefined) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
-    const template = this.#templates.get(templateId);
+    const template = this.#templates.getOn(itemSlot.channel, templateId);
     const declaration = template?.liveSources?.sources.find((s) => s.sourceId === plateId);
     if (declaration === undefined) {
       return {
@@ -9937,7 +10022,8 @@ export class CasparRuntime {
       records intent and emits nothing.
     */
     const templateId = this.#reconciler.get(itemId)?.templateId;
-    const declared = templateId === undefined ? undefined : this.#templates.get(templateId);
+    const declared =
+      templateId === undefined ? undefined : this.#templateOfItem(itemId, templateId);
     const plate = declared?.liveSources?.sources.find((x) => x.sourceId === plateId);
     const seated = (this.#liveLayers.get(itemId) ?? []).some((r) => r.sourceId === plateId);
     if (plate === undefined && !seated) return { ok: false, reason: 'unknown-plate' };
@@ -11059,7 +11145,7 @@ export class CasparRuntime {
         results.push({ itemId, ok: false, reason: 'unknown-item' });
         continue;
       }
-      if (!this.#templates.has(item.templateId)) {
+      if (this.#templateOfItem(itemId, item.templateId) === null) {
         results.push({ itemId, ok: false, reason: 'unknown-template' });
         continue;
       }
@@ -12527,39 +12613,45 @@ export class CasparRuntime {
     return { ok: true };
   }
 
-  templateGet(templateId: string): TemplateInfo | null {
-    return this.#templates.get(templateId);
-  }
-  templateList(): TemplateInfo[] {
-    return this.#templates.list();
-  }
   /**
-   * B-038 Phase 2 — register a template AND retain its browser-produced
-   * self-contained HTML, keyed by id. Re-import replaces both. The HTML is held,
-   * not served yet (Phase 3 serves it over HTTP; Phase 4 `CG ADD`s its URL).
+   * 🔴 `CHANNEL-TEMPLATES-01` — a template as `channel` lists it. With no channel, the
+   * station-wide reading: every listed template once, at the version the lowest channel listing
+   * it has (what a caller that names no channel always saw).
    */
+  templateGet(templateId: string, channel?: number): TemplateInfo | null {
+    return channel === undefined
+      ? this.#templates.getAny(templateId)
+      : this.#templates.getOn(channel, templateId);
+  }
+  /** `channel`'s template list, in list order; with no channel, the station-wide reading. */
+  templateList(channel?: number): TemplateInfo[] {
+    return channel === undefined ? this.#templates.listAll() : this.#templates.listOn(channel);
+  }
   /**
-   * R-028 part B — the reconciliation policy, enforced here because this is
-   * where a removal actually happens.
+   * B-038 Phase 2 — register a template AND retain its browser-produced self-contained HTML.
    *
-   * An operator's import (no `redelivery` flag) always wins and clears the
-   * tombstone. A reconnect RE-DELIVERY is ignored when the id is either:
+   * 🔴 `CHANNEL-TEMPLATES-01` — ON ONE CHANNEL. An import lists the template on `channel` and on
+   * no other; a RE-IMPORT (the same id, new content) moves `channel`'s list to the new version
+   * and every other channel keeps the version it lists. The version is stored once however many
+   * channels list it. With no channel (a caller that predates the lists), every declared channel.
    *
-   *   - deliberately REMOVED — otherwise any browser still holding a local copy
-   *     resurrects it on its next reconnect, and a page reload is enough. The
-   *     removal was an operator decision on the catalogue of record; a stale
-   *     browser must not undo it;
-   *   - ALREADY HELD — the bridge's copy is the catalogue of record and may be
-   *     newer than the re-delivering browser's, so an older local copy must not
-   *     overwrite it.
+   * R-028 part B — the reconciliation policy, enforced here because this is where a removal
+   * actually happens. An operator's import (no `redelivery` flag) always wins and clears the
+   * channel's tombstone. A reconnect RE-DELIVERY:
    *
-   * Both cases answer `registered: true` (the template IS available, which is
-   * all the caller needs) with `skipped: true` for honesty.
+   *   - WITH a channel restores that channel's entry, or repairs it (`B-085`'s local-wins, on
+   *     that one channel) — and is ignored when the template was deliberately REMOVED there;
+   *   - WITHOUT one cannot say which channel's version it means, so it only RESTORES a template
+   *     no channel lists (onto every declared channel it was not removed from) and never
+   *     replaces a version a channel holds.
+   *
+   * An ignored re-delivery answers `skipped: true`, for honesty.
    */
   templateImport(
     template: TemplateInfo,
     html: string,
     redelivery = false,
+    channel?: number,
   ): { registered: boolean; templateId: string; skipped?: boolean } {
     /*
       B-141 — THE FIFTEENTH ACTION, and the one the change's own bookkeeping had
@@ -12591,8 +12683,8 @@ export class CasparRuntime {
         Classified BEFORE the import, because afterwards the held copy is the new one and
         every re-delivery would read as unchanged.
       */
-      const change = this.templateRedeliveryChange(template, html);
-      const result = this.#templateImportImpl(template, html, true);
+      const change = this.templateRedeliveryChange(template, html, channel);
+      const result = this.#templateImportImpl(template, html, true, channel);
       if (change === 'register' || change === 'replace') {
         this.#recordOutcome(
           'template-redeliver',
@@ -12607,7 +12699,7 @@ export class CasparRuntime {
     const detail: AuditDetail = { templateId: template.templateId };
     let result: { registered: boolean; templateId: string; skipped?: boolean };
     try {
-      result = this.#templateImportImpl(template, html, false);
+      result = this.#templateImportImpl(template, html, false, channel);
     } catch (err) {
       this.#recordOutcome('import', detail, { outcome: 'failed', errorCode: 'internal-error' });
       throw err;
@@ -12620,32 +12712,59 @@ export class CasparRuntime {
     template: TemplateInfo,
     html: string,
     redelivery: boolean,
+    channel: number | undefined,
   ): { registered: boolean; templateId: string; skipped?: boolean } {
+    const templateId = template.templateId;
+    let targets: readonly number[];
     if (redelivery) {
-      if (this.#removedTemplateIds.has(template.templateId)) {
-        return { registered: false, templateId: template.templateId, skipped: true };
+      const change = this.templateRedeliveryChange(template, html, channel);
+      if (change === 'tombstoned') return { registered: false, templateId, skipped: true };
+      if (channel === undefined && this.#templates.hasAny(templateId)) {
+        /*
+          A re-delivery that names no channel of a template some channel lists. It cannot say
+          whose version it would repair, so it repairs none: the template IS available, which
+          is all the caller needs. Skipped when its copy differs — for honesty.
+        */
+        const same = this.#templates.versionAny(templateId) === templateVersionId(template, html);
+        return same
+          ? { registered: true, templateId }
+          : { registered: true, templateId, skipped: true };
       }
-      // NOTE — an id the bridge ALREADY holds is deliberately NOT skipped.
+      // NOTE — an id the channel ALREADY lists is deliberately NOT skipped.
       //
       // An earlier draft kept the bridge's copy ("the catalogue of record is
       // newer"), which quietly REVERSED B-085's documented local-wins policy:
       // a browser that fixed a template while offline would reconnect, be
       // ignored, and the STALE html would keep going to air with no signal
       // that the correction never landed. Nothing here can tell which copy is
-      // newer — `TemplateInfo` carries no version — so the safe direction is
-      // the documented one, and the tombstone above is the narrower fix that
-      // part A actually asked for (stop RESURRECTION, not stop repair).
+      // newer, so the safe direction is the documented one — now on the ONE
+      // channel the re-delivery names — and the tombstone above is the narrower
+      // fix part A actually asked for (stop RESURRECTION, not stop repair).
+      targets = channel === undefined ? this.#redeliveryRestoreTargets(templateId) : [channel];
     } else {
-      // An operator re-importing a previously removed template revives it.
-      this.#removedTemplateIds.delete(template.templateId);
+      targets = channel === undefined ? this.#declaredChannels() : [channel];
+      // An operator re-importing a previously removed template revives it — on those channels.
+      for (const target of targets) this.#removedTemplates.get(target)?.delete(templateId);
     }
-    const result = this.#templates.import(template, html);
-    // R-028 (o1) — every browser converges on the same catalogue.
-    this.templatesChanged.emit(this.#templates.list());
-    // A re-import can change the template's display name — the rows naming it
-    // must follow (published through the same change-compare as always).
-    this.#publishFixedStateIfChanged();
-    return result;
+    const { changed } = this.#templates.importOn(targets, template, html);
+    if (changed.length > 0) {
+      // R-028 (o1) — every browser converges on the same catalogue.
+      this.templatesChanged.emit(this.#templates.listAll());
+      // A re-import can change the template's display name — the rows naming it
+      // must follow (published through the same change-compare as always).
+      this.#publishFixedStateIfChanged();
+    }
+    return { registered: targets.length > 0, templateId };
+  }
+
+  /**
+   * The channels a re-delivery that names NO channel restores a template onto: every declared
+   * channel it was not deliberately removed from. Asked only for a template no channel lists.
+   */
+  #redeliveryRestoreTargets(templateId: string): number[] {
+    return this.#declaredChannels().filter(
+      (channel) => this.#removedTemplates.get(channel)?.has(templateId) !== true,
+    );
   }
 
   /**
@@ -12659,25 +12778,78 @@ export class CasparRuntime {
    *
    * Two readers, one answer: `templateImport` writes its row from it, and the bridge's lock
    * gate refuses a `replace` under a lock — so "would this overwrite?" cannot be answered two
-   * ways. Both sides of the comparison have been through the same `TemplateInfoSchema` parse
-   * (the wire's and the registry's load), so their key order is the schema's.
+   * ways.
+   *
+   * `CHANNEL-TEMPLATES-01` — asked of the ONE channel the re-delivery names, whose list holds a
+   * copy when it holds the id; "exactly this" is the same VERSION (`templateVersionId`: the
+   * content, canonical). A re-delivery that names no channel never replaces: it answers `none`
+   * for a template some channel lists, and otherwise `register` — or `tombstoned` when every
+   * declared channel removed it.
    */
   templateRedeliveryChange(
     template: TemplateInfo,
     html: string,
+    channel?: number,
   ): 'tombstoned' | 'register' | 'replace' | 'none' {
-    if (this.#removedTemplateIds.has(template.templateId)) return 'tombstoned';
-    const held = this.#templates.get(template.templateId);
+    const templateId = template.templateId;
+    if (channel === undefined) {
+      if (this.#templates.hasAny(templateId)) return 'none';
+      const declared = this.#declaredChannels();
+      if (declared.length === 0) return 'none';
+      return this.#redeliveryRestoreTargets(templateId).length === 0 ? 'tombstoned' : 'register';
+    }
+    if (this.#removedTemplates.get(channel)?.has(templateId) === true) return 'tombstoned';
+    const held = this.#templates.versionOn(channel, templateId);
     if (held === null) return 'register';
-    const same =
-      this.#templates.html(template.templateId) === html &&
-      JSON.stringify(held) === JSON.stringify(template);
-    return same ? 'none' : 'replace';
+    return held === templateVersionId(template, html) ? 'none' : 'replace';
   }
 
-  /** The retained HTML for a template id, or `null` (the Phase 3 serve seam). */
-  templateHtml(templateId: string): string | null {
-    return this.#templates.html(templateId);
+  /**
+   * The retained HTML for a template, or `null` — of the version `channel` lists; with no
+   * channel, of the station-wide reading's version.
+   */
+  templateHtml(templateId: string, channel?: number): string | null {
+    const versionId =
+      channel === undefined
+        ? this.#templates.versionAny(templateId)
+        : this.#templates.versionOn(channel, templateId);
+    return versionId === null ? null : this.#templates.htmlOf(versionId);
+  }
+
+  /**
+   * 🔴 `CHANNEL-TEMPLATES-01` decision 4 — **THE CHANNELS A TEMPLATE REQUEST THAT NAMES NO CHANNEL
+   * WOULD CHANGE**, for the permission gate and a channel-scoped lock: an import lists the
+   * template on every declared channel; a re-delivery changes only the channels it would restore
+   * it onto (none, while any channel lists it); a removal takes it off every channel listing it.
+   * A request that NAMES its channel is judged on that one, like every other channel-bearing
+   * request (`channelsForRequest`'s case (a)).
+   */
+  templateActionFootprint(
+    action: 'import' | 'remove',
+    req: { templateId?: string; template?: TemplateInfo; html?: string; redelivery?: boolean },
+  ): readonly number[] {
+    if (action === 'remove') {
+      return req.templateId === undefined ? [] : this.#templates.channelsListing(req.templateId);
+    }
+    const template = req.template;
+    if (template === undefined) return [];
+    if (req.redelivery !== true) return this.#declaredChannels();
+    return this.#templates.hasAny(template.templateId)
+      ? []
+      : this.#redeliveryRestoreTargets(template.templateId);
+  }
+
+  /**
+   * 🔴 `CHANNEL-TEMPLATES-01` — **THE TEMPLATE A ROW USES: the version ITS channel lists.** The
+   * one item-keyed door onto the per-channel lists, for every reader that holds an item rather
+   * than a slot. A row with no layer sits on no channel, so it reads the station-wide entry —
+   * which is what it would be loaded from again, on whichever row names it.
+   */
+  #templateOfItem(itemId: string, templateId: string): TemplateInfo | null {
+    const channel = this.#slots.get(itemId)?.channel;
+    return channel === undefined
+      ? this.#templates.getAny(templateId)
+      : this.#templates.getOn(channel, templateId);
   }
 
   /**
@@ -12696,7 +12868,7 @@ export class CasparRuntime {
    * The predicate is deliberately "any reference", not "any ON-AIR reference" (the R-010
    * gate's shape). Removal never takes a graphic off air — CasparCG already pulled the
    * self-contained HTML into CEF — so the damage is invisible at the click and deferred:
-   * `load()` and `take()`'s B-039 re-ADD both guard on `#templates.has(...)` and would
+   * `load()` and `take()`'s B-039 re-ADD both guard on the row's channel listing it and would
    * refuse with `unknown-template` forever, and `setPosition`'s re-ADD would silently stop
    * re-ADDing. An `idle`/`loaded` row is poisoned exactly as badly as an on-air one, so
    * both block. Removing the referencing items (`stack.remove`, or the picker's per-item
@@ -12706,8 +12878,18 @@ export class CasparRuntime {
    * rewording it: R-010's remedy is now CLEAR-ALL, which leaves every row on the stack, so
    * every reference survives it and this refusal would repeat forever. The two paths are
    * genuinely different now. See the same note on `TemplateReferenceSchema`.
+   *
+   * 🔴 `CHANNEL-TEMPLATES-01` — **ON ONE CHANNEL.** With a `channel`, the template leaves that
+   * channel's list and no other, refused while a row ON THAT CHANNEL holds it (the gate, per
+   * channel: a row on another channel resolves through its own channel's list and is not
+   * poisoned by this one's). Its stored version is removed only when no channel lists it and no
+   * row holds it. With no channel, it leaves every channel, refused while ANY row holds it — the
+   * station-wide removal it always was.
    */
-  templateRemove(templateId: string): {
+  templateRemove(
+    templateId: string,
+    channel?: number,
+  ): {
     ok: boolean;
     reason?: 'in-use' | 'unknown-template';
     message?: string;
@@ -12719,7 +12901,7 @@ export class CasparRuntime {
       could not say who emptied the catalogue. A refused removal is recorded too, with its
       reason, as the other operator verbs' refusals are.
     */
-    const verdict = this.#templateRemoveImpl(templateId);
+    const verdict = this.#templateRemoveImpl(templateId, channel);
     this.#recordOutcome(
       'template-remove',
       { templateId },
@@ -12730,17 +12912,29 @@ export class CasparRuntime {
     return verdict;
   }
 
-  #templateRemoveImpl(templateId: string): {
+  #templateRemoveImpl(
+    templateId: string,
+    channel: number | undefined,
+  ): {
     ok: boolean;
     reason?: 'in-use' | 'unknown-template';
     message?: string;
     references?: TemplateReference[];
   } {
-    if (!this.#templates.has(templateId)) {
+    const targets =
+      channel === undefined
+        ? this.#templates.channelsListing(templateId)
+        : this.#templates.hasOn(channel, templateId)
+          ? [channel]
+          : [];
+    if (targets.length === 0) {
       return {
         ok: false,
         reason: 'unknown-template',
-        message: `Template “${templateId}” is not registered.`,
+        message:
+          channel === undefined
+            ? `Template “${templateId}” is not registered.`
+            : `Template “${templateId}” is not on CH ${String(channel)}.`,
       };
     }
 
@@ -12748,19 +12942,26 @@ export class CasparRuntime {
       `B-212` — WHERE each referencing item is, not merely how many there are. The layer
       is read from `#slots` (the bridge's own binding, the same map `#itemDetail` reads
       for the audit record); an item with no slot is reported as such rather than
-      dropped, because it blocks the removal exactly as much as one on a layer does.
-      The wording is the ONE shared spelling in `@cg/shared-ipc`, resolved against this
-      bridge's bank so a row is named as the operator's table names it.
+      dropped, because it blocks the station-wide removal exactly as much as one on a
+      layer does. The wording is the ONE shared spelling in `@cg/shared-ipc`, resolved
+      against this bridge's bank so a row is named as the operator's table names it.
+
+      `CHANNEL-TEMPLATES-01` — a removal from ONE channel is refused by that channel's rows
+      only. An item with no layer sits on no channel: it takes its template from whichever
+      row next names it, whose own channel's list is checked then.
     */
     const references: TemplateReference[] = this.#reconciler
       .snapshot()
       .filter((i) => i.templateId === templateId)
-      .map((i) => {
+      .flatMap((i) => {
         const slot = this.#slots.get(i.itemId);
-        return {
-          itemId: i.itemId,
-          ...(slot !== undefined && { slot: { channel: slot.channel, layer: slot.layer } }),
-        };
+        if (channel !== undefined && slot?.channel !== channel) return [];
+        return [
+          {
+            itemId: i.itemId,
+            ...(slot !== undefined && { slot: { channel: slot.channel, layer: slot.layer } }),
+          },
+        ];
       });
     if (references.length > 0) {
       return {
@@ -12772,12 +12973,19 @@ export class CasparRuntime {
       };
     }
 
-    this.#templates.remove(templateId);
+    this.#templates.removeFrom(targets, templateId);
     // R-028 part B — remember the removal, so a browser that still holds a
     // local copy cannot resurrect it by reconnecting (see `templateImport`).
-    this.#removedTemplateIds.add(templateId);
+    for (const target of targets) {
+      let removed = this.#removedTemplates.get(target);
+      if (removed === undefined) {
+        removed = new Set();
+        this.#removedTemplates.set(target, removed);
+      }
+      removed.add(templateId);
+    }
     // R-028 (o1) — every browser converges on the same catalogue.
-    this.templatesChanged.emit(this.#templates.list());
+    this.templatesChanged.emit(this.#templates.listAll());
     return { ok: true };
   }
 
@@ -14297,8 +14505,49 @@ export class CasparRuntime {
       this.#reconciler.applyAck(seq, false, 'template-serve-down');
       return { ok: false, errorCode: 'template-serve-down' };
     }
+    /*
+      🔴 `CHANNEL-TEMPLATES-01` — **THE VERSION THE ROW'S CHANNEL LISTS, AT ITS OWN SERVE KEY.**
+
+      Every door into this chokepoint has already checked the row's channel lists the template;
+      this refuses rather than guess if one ever has not, because the only other answer is a
+      version ANOTHER channel lists. The key is the bare template id for a template with one
+      version — every station on the day of the upgrade — so the `CG ADD` line is exactly the one
+      it always was; only a second version alive beside the first is served at `<id>~<version>`.
+
+      ⚠ **PINNED WHILE THE ADD IS IN FLIGHT, HELD ONCE IT LANDS.** CasparCG fetches the page after
+      the command, so a re-import on this channel mid-take must not collect the version being
+      fetched (the pin, in memory); and a page on air keeps its record and its path whatever any
+      list does afterwards, until the row's next ADD of another version or its removal from the
+      stack (the hold, persisted). A refused ADD moves no hold: whatever is on the layer is what
+      the row held before.
+    */
+    const versionId = this.#templates.versionOn(slot.channel, templateId);
+    const serveKey = versionId === null ? null : this.#templates.serveKeyOf(versionId);
+    if (versionId === null || serveKey === null) {
+      this.#reconciler.applyAck(seq, false, 'unknown-template');
+      return { ok: false, errorCode: 'unknown-template' };
+    }
+    this.#templates.pin(versionId);
+    try {
+      const sent = await this.#sendAddServed(itemId, slot, templateId, fields, seq, serveKey);
+      if (sent.ok) this.#templates.hold(itemId, versionId);
+      return sent;
+    } finally {
+      this.#templates.unpin(versionId);
+    }
+  }
+
+  /** {@link #sendAdd}'s wire half, for a version already resolved and pinned. */
+  async #sendAddServed(
+    itemId: string,
+    slot: CommandSlot,
+    templateId: string,
+    fields: FieldValues,
+    seq: number,
+    serveKey: string,
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     let templateArg = this.#templateServer.listening
-      ? this.#templateServer.urlFor(templateId)
+      ? this.#templateServer.urlFor(serveKey)
       : templateId;
     // R-011 — a stored operator position rides the RESOLVED served URL's
     // query (the single permitted touch in the B-064 serve path: the guard
@@ -14448,7 +14697,7 @@ export class CasparRuntime {
     const activeLook = this.#activeLookOf(itemId);
     // `PASSES-CYCLE-ONLY-26` — a recorded count crosses only for a template whose stated mode
     // is `loop-cycle`. See `#admitsPassTiming`: the record keeps it either way.
-    const passTiming = this.#admitsPassTiming(templateId)
+    const passTiming = this.#admitsPassTiming(itemId, templateId)
       ? this.#passTimings.get(itemId)
       : undefined;
     const control: CgControl = {
@@ -14590,9 +14839,9 @@ export class CasparRuntime {
    * ⚠ The predicate itself is `templateAdmitsPassTiming` in `@cg/shared-ipc`, shared with the
    * console's Inspector and its press/PVW builder. Three machines, one spelling (golden rule 6).
    */
-  #admitsPassTiming(templateId: string | undefined): boolean {
+  #admitsPassTiming(itemId: string, templateId: string | undefined): boolean {
     if (templateId === undefined) return false;
-    return templateAdmitsPassTiming(this.#templates.get(templateId)?.playout);
+    return templateAdmitsPassTiming(this.#templateOfItem(itemId, templateId)?.playout);
   }
 
   #mintTakeToken(itemId: string): string {

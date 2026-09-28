@@ -1085,12 +1085,24 @@ export class WebSocketRuntime implements RuntimeBridge {
     // synchronous registration guarantee an operator load issued right after
     // connect resolves against a populated registry. Awaiting a round-trip
     // first would open exactly that window.
-    const redeliveries = this.#library.entries().map(async (req) => {
+    /*
+      🔴 `CHANNEL-TEMPLATES-01` — each record goes back to the channel it was imported on, and to
+      no other; a record written before the per-channel lists names none, which the bridge reads
+      as "restore it if no channel lists it" and never as a replacement. A record for a channel
+      this sign-in does not hold is not sent: the bridge would refuse it, and one banner per such
+      template is noise about somebody else's channel.
+    */
+    const permitted = gate.kind === 'signed-in' ? new Set(gate.permittedChannels) : null;
+    const deliverable = this.#library
+      .entries()
+      .filter((e) => e.channel === undefined || permitted === null || permitted.has(e.channel));
+    const redeliveries = deliverable.map(async (req) => {
       try {
         await this.#invoke(TemplatesImportChannel, {
           template: req.template,
           html: req.html,
           redelivery: true,
+          ...(req.channel !== undefined && { channel: req.channel }),
         });
         // A3 — delivered: whatever this console said about its failure is no longer true.
         this.#resyncSucceeded(`template:${req.template.templateId}`);
@@ -1795,13 +1807,17 @@ export class WebSocketRuntime implements RuntimeBridge {
    * the item id and the layer it held (absent when it held none). The offline refusal
    * names these; the bridge's own answer names them the same way while live.
    */
-  #references(templateId: string): TemplateReference[] {
-    return this.#lastStack
-      .filter((i) => i.templateId === templateId)
-      .map((i) => ({
-        itemId: i.itemId,
-        ...(i.slot !== undefined && { slot: { channel: i.slot.channel, layer: i.slot.layer } }),
-      }));
+  #references(templateId: string, channel?: number): TemplateReference[] {
+    return (
+      this.#lastStack
+        .filter((i) => i.templateId === templateId)
+        // `CHANNEL-TEMPLATES-01` — a removal from one channel is refused by that channel's rows only.
+        .filter((i) => channel === undefined || i.slot?.channel === channel)
+        .map((i) => ({
+          itemId: i.itemId,
+          ...(i.slot !== undefined && { slot: { channel: i.slot.channel, layer: i.slot.layer } }),
+        }))
+    );
   }
 
   // `DESKTOP-APPS-01` — first-run and the station's own check. The Playout address goes through
@@ -1964,26 +1980,28 @@ export class WebSocketRuntime implements RuntimeBridge {
           /* mid-flight drop — answer from the retained copy below */
         }
       }
-      return this.#library.get(req.templateId);
+      return this.#library.get(req.templateId, req.channel);
     },
-    list: async () => {
+    // `CHANNEL-TEMPLATES-01` — a channel's own list when one is named; the station-wide one when not.
+    list: async (req?: ChannelRequest<typeof TemplatesListChannel>) => {
       if (this.#status === 'live') {
         try {
-          return await this.#invoke(TemplatesListChannel, undefined);
+          return await this.#invoke(TemplatesListChannel, req);
         } catch {
           /* mid-flight drop — answer from the retained copy below */
         }
       }
-      return this.#library.list();
+      return this.#library.list(req?.channel);
     },
     // R-022 — a LOCAL read. The page is already here; never a bridge round trip.
-    html: (templateId: string) => Promise.resolve(this.#library.html(templateId)),
+    html: (templateId: string, channel?: number) =>
+      Promise.resolve(this.#library.html(templateId, channel)),
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
       // Register LOCALLY first (the source of truth) — this is what makes import
       // succeed offline. Then, when live, deliver to the bridge so it can serve
       // the HTML to CasparCG. A non-disconnect delivery failure is swallowed: the
       // template is retained in `#library` and re-delivered by the next `#resync`.
-      const res = await this.#library.import(req.template, req.html);
+      const res = await this.#library.import(req.template, req.html, req.channel);
       if (this.#status === 'live') {
         try {
           await this.#invoke(TemplatesImportChannel, req);
@@ -1998,12 +2016,18 @@ export class WebSocketRuntime implements RuntimeBridge {
       // true stack). On a confirmed removal, drop it from the local store too.
       if (this.#status === 'live') {
         const res = await this.#invoke(TemplatesRemoveChannel, req);
-        if (res.ok) await this.#library.delete(req.templateId);
+        if (res.ok) await this.#library.delete(req.templateId, req.channel);
         return res;
       }
       // Disconnected: the removal is local. Enforce R-005 against the last-known
-      // stack (exact while disconnected — the bridge cannot mutate it).
-      return this.#library.remove(req.templateId, this.#references(req.templateId));
+      // stack (exact while disconnected — the bridge cannot mutate it), on the
+      // channel the removal names.
+      return this.#library.remove(
+        req.templateId,
+        this.#references(req.templateId, req.channel),
+        null,
+        req.channel,
+      );
     },
     // R-028 (o1) — the bridge pushes the full catalogue on every change, so
     // operator B's Library re-lists the moment operator A imports.

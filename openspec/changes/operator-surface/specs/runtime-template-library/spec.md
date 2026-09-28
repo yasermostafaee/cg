@@ -8,6 +8,14 @@ the package must be re-imported). A removed template SHALL disappear from the Li
 `templates.list`, its registry entry (metadata AND retained HTML) SHALL be dropped, and its served
 `GET /template/<id>` endpoint SHALL stop resolving.
 
+> 🔴 **AMENDED by `CHANNEL-TEMPLATES-01` (2026-09-29), in place — its own delta would collide with this
+> one's header at archive.** Each channel has its own template list (`channel-templates`, "Each channel
+> has its own template list"), so the removal is FROM THE CHANNEL of the row the picker was opened from:
+> the template leaves that channel's list and that channel's `templates.list`; its stored version
+> (metadata AND retained HTML) is dropped, and its served path stops resolving, only once no channel
+> lists it and no row holds it. The refusal below is per channel too: "any stack item" reads "any row on
+> that channel" for a removal that names its channel, and stays "any stack item" for one that names none.
+
 > 🔴 **CORRECTED by `STALE-CLAIMS-02` §2 (2026-09-07) — the previous text named Remove-All as an
 > unblock path, and TWO separate decisions had already falsified it.** `B-212` (2026-09-04) rebuilt
 > this refusal so that **Remove-All is not mentioned at all**: the wording is one function
@@ -72,8 +80,8 @@ identically with and without a live bridge.
 #### Scenario: An unreferenced template is removed
 
 - **WHEN** the operator removes a template that no stack item references **THEN** it disappears
-  from the Library and from `templates.list`, and its retained HTML and served `/template/<id>`
-  endpoint no longer resolve
+  from the Library and from `templates.list`, and — once no channel lists it — its retained HTML and
+  served `/template/<id>` endpoint no longer resolve
 
 #### Scenario: Removing a referenced template is refused with a reason
 

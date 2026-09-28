@@ -214,11 +214,12 @@ test('§2(a)/§3 — a selected chip is the console selected BLUE, and the confi
   // …and the violet may never come back to this surface.
   expect(chipPaint.border, 'the PVW violet is back on a filter chip').not.toBe('rgb(124, 58, 237)');
 
+  // `CHANNEL-TEMPLATES-01` — the row's removal is from the picker's row's channel (CH 1 here).
   await page
-    .getByRole('button', { name: /^Delete .* from this station$/ })
+    .getByRole('button', { name: /^Remove .* from CH 1$/ })
     .first()
     .click();
-  const commit = page.getByRole('button', { name: 'Delete from station', exact: true });
+  const commit = page.getByRole('button', { name: 'Remove from CH 1', exact: true });
   await expect(commit).toBeVisible();
   await transitionsEnded(commit);
   const paint = await commit.evaluate((b) => {

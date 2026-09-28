@@ -56,8 +56,8 @@ function get(url: string): Promise<HttpResult> {
 describe('TemplateHttpServer', () => {
   it('serves the stored HTML for a known id and 404s an unknown id', async () => {
     const reg = new TemplateRegistry();
-    reg.import(info('t1'), '<!doctype html><html><body>v1</body></html>');
-    server = new TemplateHttpServer((id) => reg.html(id));
+    reg.importOn([1], info('t1'), '<!doctype html><html><body>v1</body></html>');
+    server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
     const known = await get(server.urlFor('t1'));
@@ -74,13 +74,34 @@ describe('TemplateHttpServer', () => {
 
   it('serves the replacement HTML after a re-import (reads the live registry)', async () => {
     const reg = new TemplateRegistry();
-    reg.import(info('t1'), '<html><body>v1</body></html>');
-    server = new TemplateHttpServer((id) => reg.html(id));
+    reg.importOn([1], info('t1'), '<html><body>v1</body></html>');
+    server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
     expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v1</body></html>');
-    reg.import(info('t1'), '<html><body>v2</body></html>');
+    // Nothing holds v1, so the re-import releases it — and its bare path goes to v2.
+    reg.importOn([1], info('t1'), '<html><body>v2</body></html>');
     expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v2</body></html>');
+  });
+
+  it('🔴 CHANNEL-TEMPLATES-01 — a HELD version keeps its path; the new one is served beside it', async () => {
+    const reg = new TemplateRegistry();
+    const v1 = reg.importOn([1, 2], info('t1'), '<html><body>v1</body></html>').versionId;
+    // A row on channel 1 took v1: its page was served from the bare path.
+    reg.hold('row-on-ch1', v1);
+    server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
+    await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
+
+    const v2 = reg.importOn([2], info('t1'), '<html><body>v2</body></html>').versionId;
+    // v1's path is untouched, byte for byte…
+    expect(reg.serveKeyOf(v1)).toBe('t1');
+    expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v1</body></html>');
+    // …and v2 is served at its own, qualified path.
+    const key2 = reg.serveKeyOf(v2) ?? '';
+    expect(key2).toBe(`t1~${v2}`);
+    expect((await get(server.urlFor(key2))).body).toBe('<html><body>v2</body></html>');
+    // Control: the qualified path of a version that does not exist is a 404.
+    expect((await get(server.urlFor('t1~0000000000000000'))).status).toBe(404);
   });
 
   it('builds a /template/<id> URL on the configured serve host + bound port', async () => {

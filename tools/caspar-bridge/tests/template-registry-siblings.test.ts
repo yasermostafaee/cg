@@ -80,20 +80,21 @@ describe('B-116 — sibling config files beside the templates are not templates'
   });
 
   it('the registry still loads its OWN records from the same directory', () => {
-    new TemplateRegistry(dir).import(INFO, HTML);
-    // …beside the sibling files.
+    new TemplateRegistry(dir).importOn([1], INFO, HTML);
+    // …beside the sibling files — its own list index (`template-channels.json`) among them.
     new DelimiterStore(dir).set([{ id: 'pipe', label: 'pipe', value: '|' }]);
+    expect(fs.existsSync(path.join(dir, 'template-channels.json'))).toBe(true);
 
     const fresh = new TemplateRegistry(dir);
     expect(fresh.loadPersisted()).toEqual({ loaded: 1, skipped: 0 });
-    expect(fresh.get('lower-third')).toEqual(INFO);
-    expect(fresh.html('lower-third')).toBe(HTML);
+    expect(fresh.getOn(1, 'lower-third')).toEqual(INFO);
+    expect(fresh.htmlForServeKey('lower-third')).toBe(HTML);
     expect(templateWarnings()).toEqual([]);
   });
 
   it('POSITIVE CONTROL: a GENUINELY unusable record — named as the registry names them — still warns with the same message', () => {
     // Take a real record's name from a real import, then corrupt its contents.
-    new TemplateRegistry(dir).import(INFO, HTML);
+    new TemplateRegistry(dir).importOn([1], INFO, HTML);
     const [record] = fs.readdirSync(dir).filter(isRegistryRecordName);
     expect(record).toBeDefined();
     fs.writeFileSync(path.join(dir, record ?? ''), '{"info": "not a template"}\n');
@@ -108,6 +109,7 @@ describe('B-116 — sibling config files beside the templates are not templates'
     expect(isRegistryRecordName('lower-third-0123456789ab.json')).toBe(true);
     expect(isRegistryRecordName('delimiters.json')).toBe(false);
     expect(isRegistryRecordName('channel-settings.json')).toBe(false);
+    expect(isRegistryRecordName('template-channels.json')).toBe(false);
     expect(isRegistryRecordName('bridge-source-catalog.json')).toBe(false);
     // A record name with the wrong hash width, or a tmp file mid-rename, is not a record.
     expect(isRegistryRecordName('lower-third-0123.json')).toBe(false);

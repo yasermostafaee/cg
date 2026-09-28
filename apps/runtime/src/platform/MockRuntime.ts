@@ -375,12 +375,21 @@ export class MockRuntime {
     // §14.5 Stage E — the look-bearing row (e2e-armed only).
     ...seedLooksStackItem(),
   ];
-  #templates = new Map<string, TemplateInfo>(
-    // §14.5 Stage E — the look-bearing template joins the starters when armed.
-    [...seedTemplates(), ...seedLooksTemplate()].map((t) => [t.templateId, t]),
-  );
-  /** R-028 part B parity — ids removed here, so a re-delivery cannot revive them. */
-  readonly #removedTemplateIds = new Set<string>();
+  /**
+   * 🔴 `CHANNEL-TEMPLATES-01` parity — EACH CHANNEL'S OWN LIST: channel → templateId → the template
+   * AS THAT CHANNEL LISTS IT. The mock keeps no HTML, so a channel's "version" is the info it was
+   * imported with; a re-import on one channel replaces that channel's entry and no other.
+   */
+  readonly #templateLists = new Map<number, Map<string, TemplateInfo>>();
+  /**
+   * The seed library — §14.5 Stage E's look-bearing template joins the starters when armed —
+   * listed on every channel declared the FIRST time a list is read: the bridge's one-time copy,
+   * made lazily because the banks are not seeded yet when this field is. A channel declared after
+   * that starts with an empty list, as on the bridge.
+   */
+  #unlistedSeeds: TemplateInfo[] | null = [...seedTemplates(), ...seedLooksTemplate()];
+  /** R-028 part B parity — per channel: ids removed there, so a re-delivery cannot revive them. */
+  readonly #removedTemplates = new Map<number, Set<string>>();
   #config: ConnectionConfig = seedConfig();
   #health: ConnectionHealth = seedHealth('A');
   #lock: LockState = { engaged: false };
@@ -976,7 +985,7 @@ export class MockRuntime {
   resolvedActiveLook(itemId: string): string | undefined {
     const item = this.#find(itemId);
     if (item === null) return undefined;
-    const live = this.#templates.get(item.templateId)?.liveSources;
+    const live = this.#templateOfItem(itemId, item.templateId)?.liveSources;
     const looks = live?.looks ?? [];
     if (looks.length === 0) return undefined;
     const wanted = this.#activeLooks.get(itemId);
@@ -1028,7 +1037,7 @@ export class MockRuntime {
     if (item === null) {
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
-    const looks = this.#templates.get(item.templateId)?.liveSources?.looks ?? [];
+    const looks = this.#templateOfItem(itemId, item.templateId)?.liveSources?.looks ?? [];
     if (!looks.some((l) => l.id === lookId)) {
       return {
         ok: false,
@@ -1643,14 +1652,16 @@ export class MockRuntime {
     templateId: string,
     fields: FieldValues,
   ): { accepted: boolean; errorCode?: string } {
-    const template = this.#templates.get(templateId);
-    if (template === undefined) return { accepted: false, errorCode: 'unknown-template' };
     // `MULTI-CHANNEL-01` — the bank of THIS channel; a coordinate on an undeclared channel has none.
     const bank = this.#bankFor(channel);
     // `B-201` — BOTH halves. This read `layer < bank.start + bank.count`, the operator half
     // alone, so every bed row answered `not-fixed` — and a bed row is exactly where a
     // plate-declaring package is the ONLY thing the picker will let an operator put.
     const inBank = bank !== null && isFixedBankLayer(bank, channel, layer);
+    // `CHANNEL-TEMPLATES-01` parity — a row takes the template ITS channel lists; a coordinate
+    // that is not a row keeps the station-wide check and is refused `not-fixed`, as on the bridge.
+    const template = inBank ? this.templateGet(templateId, channel) : this.templateGet(templateId);
+    if (template === null) return { accepted: false, errorCode: 'unknown-template' };
     if (!inBank) return { accepted: false, errorCode: 'not-fixed' };
     const key = coordinateKey(channel, layer);
     const bound = this.#fixedBindings.get(key);
@@ -1778,7 +1789,10 @@ export class MockRuntime {
       // R-028 (3.1) parity — the binding carries WHICH template is on the row
       // as RAW naming facts (id + name + file name), the same join the bridge
       // does with its registry; the renderer resolves the label canonically.
-      const boundInfo = bound !== undefined ? this.#templates.get(bound.templateId) : undefined;
+      const boundInfo =
+        bound !== undefined
+          ? (this.templateGet(bound.templateId, channel) ?? undefined)
+          : undefined;
       out.push({
         channel,
         layer,
@@ -2121,39 +2135,69 @@ export class MockRuntime {
   }
 
   // ── templates ───────────────────────────────────────────────────────
-  templateGet(templateId: string): TemplateInfo | null {
-    return this.#templates.get(templateId) ?? null;
+  /**
+   * `CHANNEL-TEMPLATES-01` parity — a template as `channel` lists it; with no channel, the
+   * station-wide reading (each template once, as the lowest channel listing it has it).
+   */
+  templateGet(templateId: string, channel?: number): TemplateInfo | null {
+    if (channel !== undefined) return this.#lists().get(channel)?.get(templateId) ?? null;
+    return this.#stationWideTemplates().get(templateId) ?? null;
   }
 
-  templateList(): TemplateInfo[] {
-    return [...this.#templates.values()];
+  /** `channel`'s list, in list order; with no channel, the station-wide reading. */
+  templateList(channel?: number): TemplateInfo[] {
+    if (channel !== undefined) return [...(this.#lists().get(channel)?.values() ?? [])];
+    return [...this.#stationWideTemplates().values()];
   }
 
   /**
    * Register a verified template (R-001). The renderer has already run
    * `@cg/vcg-format.verify` + `unpack` on the uploaded `.vcg`; we just extend
    * the in-memory registry so `templateGet` / `templateList` surface it (and the
-   * Inspector picks up its field schema). A re-imported id overwrites the prior
-   * entry. No persistence — the registry resets on reload (see design.md).
+   * Inspector picks up its field schema). No persistence — the registry resets on
+   * reload (see design.md).
+   *
+   * 🔴 `CHANNEL-TEMPLATES-01` parity — ON `channel`, and no other: a re-import replaces that
+   * channel's entry and every other channel keeps its own. With no channel, every declared
+   * channel. A re-delivery naming a channel restores or repairs that channel's entry (and is
+   * ignored where the template was removed); one naming none only restores a template no channel
+   * lists — the bridge's one rule.
    */
   templateImport(
     template: TemplateInfo,
     redelivery = false,
+    channel?: number,
   ): { registered: boolean; templateId: string; skipped?: boolean } {
-    // R-028 part B parity — the same reconciliation rule as the bridge: a
-    // re-delivery never resurrects a removal and never overwrites what is held.
+    const templateId = template.templateId;
+    const removedOn = (c: number): boolean =>
+      this.#removedTemplates.get(c)?.has(templateId) === true;
+    let targets: number[];
     if (redelivery) {
-      if (this.#removedTemplateIds.has(template.templateId)) {
-        return { registered: false, templateId: template.templateId, skipped: true };
+      if (channel !== undefined) {
+        if (removedOn(channel)) return { registered: false, templateId, skipped: true };
+        targets = [channel];
+      } else {
+        if (this.#stationWideTemplates().has(templateId)) return { registered: true, templateId };
+        targets = this.#declaredTemplateChannels().filter((c) => !removedOn(c));
+        if (targets.length === 0) return { registered: false, templateId, skipped: true };
       }
     } else {
-      this.#removedTemplateIds.delete(template.templateId);
+      targets = channel !== undefined ? [channel] : this.#declaredTemplateChannels();
+      for (const c of targets) this.#removedTemplates.get(c)?.delete(templateId);
     }
-    this.#templates.set(template.templateId, template);
+    const lists = this.#lists();
+    for (const c of targets) {
+      let list = lists.get(c);
+      if (list === undefined) {
+        list = new Map();
+        lists.set(c, list);
+      }
+      list.set(templateId, template);
+    }
     // R-028 (o1) parity — the catalogue push every browser converges on.
     this.templatesChanged.emit(this.templateList());
     this.fixedStateChanged.emit(this.fixedLayersState());
-    return { registered: true, templateId: template.templateId };
+    return { registered: targets.length > 0, templateId };
   }
 
   /**
@@ -2161,18 +2205,31 @@ export class MockRuntime {
    * against the mock's OWN stack, so offline behaves exactly like a live bridge (the B-074
    * parity guard exists because a drifted mock is how a UI ships against a contract the
    * bridge never honors).
+   *
+   * `CHANNEL-TEMPLATES-01` parity — from `channel` only, refused by that channel's rows only;
+   * with no channel, from every channel, refused by any row.
    */
-  templateRemove(templateId: string): {
+  templateRemove(
+    templateId: string,
+    channel?: number,
+  ): {
     ok: boolean;
     reason?: 'in-use' | 'unknown-template';
     message?: string;
     references?: TemplateReference[];
   } {
-    if (!this.#templates.has(templateId)) {
+    const lists = this.#lists();
+    const targets = [...lists.entries()]
+      .filter(([c, list]) => list.has(templateId) && (channel === undefined || c === channel))
+      .map(([c]) => c);
+    if (targets.length === 0) {
       return {
         ok: false,
         reason: 'unknown-template',
-        message: `Template “${templateId}” is not registered.`,
+        message:
+          channel === undefined
+            ? `Template “${templateId}” is not registered.`
+            : `Template “${templateId}” is not on CH ${String(channel)}.`,
       };
     }
 
@@ -2181,9 +2238,10 @@ export class MockRuntime {
     // sentence the real station no longer says.
     const references: TemplateReference[] = this.#stack
       .filter((i) => i.templateId === templateId)
-      .map((i) => {
+      .flatMap((i) => {
         const slot = this.#slotFor(i.itemId);
-        return { itemId: i.itemId, ...(slot !== null && { slot }) };
+        if (channel !== undefined && slot?.channel !== channel) return [];
+        return [{ itemId: i.itemId, ...(slot !== null && { slot }) }];
       });
     if (references.length > 0) {
       return {
@@ -2194,11 +2252,53 @@ export class MockRuntime {
       };
     }
 
-    this.#templates.delete(templateId);
-    this.#removedTemplateIds.add(templateId);
+    for (const c of targets) {
+      lists.get(c)?.delete(templateId);
+      let removed = this.#removedTemplates.get(c);
+      if (removed === undefined) {
+        removed = new Set();
+        this.#removedTemplates.set(c, removed);
+      }
+      removed.add(templateId);
+    }
     // R-028 (o1) parity — the catalogue push every browser converges on.
     this.templatesChanged.emit(this.templateList());
     return { ok: true };
+  }
+
+  /** The channels a list may be copied to: the declared banks', else the mock's one channel. */
+  #declaredTemplateChannels(): number[] {
+    return this.#fixedBanks.length > 0 ? this.#fixedBanks.map((b) => b.channel) : [MOCK_CHANNEL];
+  }
+
+  /** The lists, with the seed library copied onto every declared channel the first time. */
+  #lists(): Map<number, Map<string, TemplateInfo>> {
+    const seeds = this.#unlistedSeeds;
+    if (seeds !== null) {
+      this.#unlistedSeeds = null;
+      for (const channel of this.#declaredTemplateChannels()) {
+        this.#templateLists.set(channel, new Map(seeds.map((t) => [t.templateId, t])));
+      }
+    }
+    return this.#templateLists;
+  }
+
+  /** Each listed template once, as the lowest channel listing it has it. */
+  #stationWideTemplates(): Map<string, TemplateInfo> {
+    const out = new Map<string, TemplateInfo>();
+    const lists = this.#lists();
+    for (const channel of [...lists.keys()].sort((a, b) => a - b)) {
+      for (const [id, t] of lists.get(channel) ?? []) if (!out.has(id)) out.set(id, t);
+    }
+    return out;
+  }
+
+  /** The template a row uses: its channel's version; a row with no layer reads the station's. */
+  #templateOfItem(itemId: string, templateId: string): TemplateInfo | null {
+    const channel = this.#slotFor(itemId)?.channel;
+    return channel === undefined
+      ? this.templateGet(templateId)
+      : this.templateGet(templateId, channel);
   }
 
   // ── audit ───────────────────────────────────────────────────────────

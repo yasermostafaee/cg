@@ -446,11 +446,13 @@ describe('B-260 — every template mutation writes a row; a lock refuses an over
   it('(a) a re-delivery that changes the catalogue writes a row; one that changes nothing does not', async () => {
     handle = await createBridge({ port: 0, connection: deadConnection() });
     const c = await openClient(handle);
+    // `CHANNEL-TEMPLATES-01` — a console re-delivers each record to the channel it was imported on.
     const redeliver = (id: string, html: string) =>
       c.ask(`r-${id}-${String(Math.random())}`, 'templates.import', {
         template: { ...other, templateId: id },
         html,
         redelivery: true,
+        channel: 1,
       });
 
     expect((await redeliver('other', 'v1')).error).toBe(undefined); // registers
@@ -482,6 +484,7 @@ describe('B-260 — every template mutation writes a row; a lock refuses an over
       template: other,
       html: 'v2-under-lock',
       redelivery: true,
+      channel: 1,
     });
     expectRefusedWith(
       overwrite.error,
@@ -496,14 +499,29 @@ describe('B-260 — every template mutation writes a row; a lock refuses an over
       template: other,
       html: 'v1',
       redelivery: true,
+      channel: 1,
     });
     expect(same.error, 'an identical re-delivery was refused under the lock').toBe(undefined);
     const fresh = await c.ask('f', 'templates.import', {
       template: { ...other, templateId: 'fresh' },
       html: 'f1',
       redelivery: true,
+      channel: 1,
     });
     expect(fresh.error, 'a re-delivery restoring a missing template was refused').toBe(undefined);
     expect(handle.runtime.templateHtml('fresh')).toBe('f1');
+
+    /*
+      `CHANNEL-TEMPLATES-01` — a re-delivery that names NO channel cannot say whose version it
+      repairs, so it never replaces one: it passes the lock because it overwrites nothing, and the
+      held HTML stays exactly where it was.
+    */
+    const unnamed = await c.ask('u', 'templates.import', {
+      template: other,
+      html: 'v3-no-channel',
+      redelivery: true,
+    });
+    expect(unnamed.error, 'a channel-less re-delivery was refused').toBe(undefined);
+    expect(handle.runtime.templateHtml('other'), 'a channel-less re-delivery replaced').toBe('v1');
   });
 });

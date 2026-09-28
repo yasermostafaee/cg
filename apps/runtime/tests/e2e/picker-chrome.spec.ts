@@ -56,11 +56,14 @@ test('§C4 — an in-use deletion is refused ONCE, in one place, with its way ou
   await app.importVcg('held.vcg', await buildValidVcg('tpl-held'), 83);
   await app.openTemplatePicker();
 
-  // `UI-POLISH-01` C — the delete is the row's own icon; its accessible name is unchanged.
-  const held = page.getByRole('button', { name: /^Delete held from this station$/ });
+  /*
+    `UI-POLISH-01` C — the removal is the row's own icon. `CHANNEL-TEMPLATES-01` — it removes from
+    the picker's row's channel (CH 1 here), and its accessible name says so.
+  */
+  const held = page.getByRole('button', { name: /^Remove held from CH 1$/ });
   await expect(held).toHaveCount(1);
   await held.click();
-  await page.getByRole('button', { name: 'Delete from station', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove from CH 1', exact: true }).click();
 
   // ── (a) ONE refusal. The pinned region is the one that survived; the loose block is gone.
   const region = page.locator('[data-modal-message]');
@@ -196,11 +199,12 @@ test('§D3 — the delete confirm has the family’s mark, shape and red', async
   await page.setViewportSize({ width: 1400, height: 900 });
   await app.openTemplatePicker();
   await page
-    .getByRole('button', { name: /^Delete .* from this station$/ })
+    .getByRole('button', { name: /^Remove .* from CH 1$/ })
     .first()
     .click();
 
-  const confirm = page.getByRole('dialog', { name: /^Delete .* from this station\?$/ });
+  // `CHANNEL-TEMPLATES-01` — the confirm names the channel it removes from.
+  const confirm = page.getByRole('dialog', { name: /^Remove .* from CH 1\?$/ });
   await expect(confirm).toBeVisible();
 
   // (a) THE MARK. It is the default for every confirm now, not a per-call flag.
@@ -232,7 +236,7 @@ test('§D3 — the delete confirm has the family’s mark, shape and red', async
     ⚠ Still FILLED and still 700 — a darker fill, never an outline. Asserted from the tokens
     so this stays a claim about identity with that family rather than three hexes typed twice.
   */
-  const commit = confirm.getByRole('button', { name: 'Delete from station', exact: true });
+  const commit = confirm.getByRole('button', { name: 'Remove from CH 1', exact: true });
   await expect(commit).toHaveCSS(
     'background-color',
     await cssColour(page, 'var(--r-setup-danger-bg)'),

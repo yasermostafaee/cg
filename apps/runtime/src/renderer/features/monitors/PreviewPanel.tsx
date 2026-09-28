@@ -20,6 +20,7 @@ import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { useChannelBankState } from '../channels/useSelectedChannel.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
+import { boundChannelOf } from '../channels/itemChannel.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { plateAudioState } from '../layers/plateAudio.js';
 import {
@@ -142,7 +143,10 @@ export function PreviewPanel(): JSX.Element {
    * makes ANOTHER console's rebinding repaint this one's PVW, since the bridge
    * owns the assignments and pushes them.
    */
-  const templates = useTemplateIndex(items.map((i) => i.templateId));
+  // `CHANNEL-TEMPLATES-01` — each row's template as ITS channel lists it.
+  const templates = useTemplateIndex(
+    items.map((i) => ({ templateId: i.templateId, channel: boundChannelOf(i, slots) })),
+  );
   const sourceVersion = useSyncExternalStore(subscribeSources, sourcesVersion, sourcesVersion);
   const catalog = currentSourceCatalog();
   /*
@@ -163,7 +167,7 @@ export function PreviewPanel(): JSX.Element {
           const item = items.find((i) => i.itemId === r.itemId);
           if (item === undefined) return null;
           const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
-          const info = templates.get(item.templateId) ?? null;
+          const info = templates.get(item.templateId, r.channel) ?? null;
           const live = info?.liveSources;
           return {
             itemId: r.itemId,
@@ -337,6 +341,8 @@ export function PreviewPanel(): JSX.Element {
       subjects.map((s) => ({
         itemId: s.itemId,
         templateId: items.find((i) => i.itemId === s.itemId)?.templateId ?? null,
+        // `CHANNEL-TEMPLATES-01` — the page this browser imported on the row's channel.
+        channel: s.channel,
       })),
     [subjects, items],
   );
@@ -344,10 +350,15 @@ export function PreviewPanel(): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
-    const wanted = JSON.parse(pageKeysJson) as { itemId: string; templateId: string | null }[];
+    const wanted = JSON.parse(pageKeysJson) as {
+      itemId: string;
+      templateId: string | null;
+      channel: number;
+    }[];
     void Promise.all(
-      wanted.map(async ({ itemId, templateId }) => {
-        const html = templateId === null ? null : await window.cg.templates.html(templateId);
+      wanted.map(async ({ itemId, templateId, channel }) => {
+        const html =
+          templateId === null ? null : await window.cg.templates.html(templateId, channel);
         return [itemId, html] as const;
       }),
     ).then((entries) => {

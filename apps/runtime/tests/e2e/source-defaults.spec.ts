@@ -30,41 +30,54 @@ import { E2E_PLAYOUT, chooseSource, expect, test } from './fixtures/runtime.js';
  */
 test.use({ playoutSources: E2E_PLAYOUT });
 
-/** A template with two plates and one look, registered as an import would leave it. */
-async function registerTwoBox(page: Page, templateId: string): Promise<void> {
-  await page.evaluate(async (id) => {
-    const w = window as unknown as {
-      cg: { templates: { import: (r: { template: unknown; html: string }) => Promise<unknown> } };
-    };
-    const rect = { x: 0, y: 0, width: 640, height: 360 };
-    const sources = [
-      { elementId: 'el-1', sourceId: 'guest-1', rect, dynamic: false },
-      { elementId: 'el-2', sourceId: 'guest-2', rect, dynamic: false },
-    ];
-    await w.cg.templates.import({
-      template: {
-        templateId: id,
-        name: id,
-        sourceFileName: `${id}.vcg`,
-        templateType: 'lower-third',
-        fields: [],
-        liveSources: {
-          resolution: { width: 1920, height: 1080 },
-          defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
-          sources,
-          defaultLookId: 'both',
-          looks: [
-            {
-              id: 'both',
-              name: 'Both',
-              rects: { 'guest-1': rect, 'guest-2': rect },
-            },
-          ],
+/**
+ * A template with two plates and one look, registered as an import would leave it.
+ *
+ * `CHANNEL-TEMPLATES-01` — on `channel`'s list when one is named (an import on that channel, as its
+ * picker makes it); with none, on every channel declared at the time.
+ */
+async function registerTwoBox(page: Page, templateId: string, channel?: number): Promise<void> {
+  await page.evaluate(
+    async ([id, ch]) => {
+      const w = window as unknown as {
+        cg: {
+          templates: {
+            import: (r: { template: unknown; html: string; channel?: number }) => Promise<unknown>;
+          };
+        };
+      };
+      const rect = { x: 0, y: 0, width: 640, height: 360 };
+      const sources = [
+        { elementId: 'el-1', sourceId: 'guest-1', rect, dynamic: false },
+        { elementId: 'el-2', sourceId: 'guest-2', rect, dynamic: false },
+      ];
+      await w.cg.templates.import({
+        template: {
+          templateId: id,
+          name: id,
+          sourceFileName: `${id}.vcg`,
+          templateType: 'lower-third',
+          fields: [],
+          liveSources: {
+            resolution: { width: 1920, height: 1080 },
+            defaultPosition: { anchor: 'center', dx: 0, dy: 0 },
+            sources,
+            defaultLookId: 'both',
+            looks: [
+              {
+                id: 'both',
+                name: 'Both',
+                rects: { 'guest-1': rect, 'guest-2': rect },
+              },
+            ],
+          },
         },
-      },
-      html: '<!doctype html><html><body>two-box</body></html>',
-    });
-  }, templateId);
+        html: '<!doctype html><html><body>two-box</body></html>',
+        ...(ch !== null ? { channel: ch } : {}),
+      });
+    },
+    [templateId, channel ?? null] as const,
+  );
 }
 
 /** Open the defaults dialog, set one plate, and save. */
@@ -261,8 +274,9 @@ test('🔴 a default set on CH 2 stays on CH 2 — CH 1 keeps its own', async ({
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 900 });
   const templateId = 'tpl-defaults-channels';
-  await registerTwoBox(page, templateId);
   await declareSecondChannel(page);
+  // `CHANNEL-TEMPLATES-01` — imported once both channels exist, naming none: on both lists.
+  await registerTwoBox(page, templateId);
 
   // CH 1 — guest-1 defaults to Studio 1.
   const row = await app.loadTemplate(templateId);
@@ -312,6 +326,12 @@ test('🔴 a channel declared after the defaults were set starts from a copy of 
   await setDefault(app, 'guest-1', 'Studio 1');
 
   await declareSecondChannel(page);
+  /*
+    `CHANNEL-TEMPLATES-01` — a channel declared later starts with an EMPTY template list (the owner,
+    2026-09-28), so CH 2's operator imports the template on CH 2. Its Source defaults were copied
+    when the channel was declared (`CHANNEL-SOURCES-01`), and the import keeps them.
+  */
+  await registerTwoBox(page, templateId, 2);
   await strip(page)
     .getByRole('tab', { name: /^CHANNEL 2/ })
     .click();

@@ -84,9 +84,14 @@ export function loadTemplateOntoFixedSlot(
  * The success is reported as it happens because it is a real, separately-durable
  * outcome: the template is in the library for reuse whatever the operator does
  * next — including closing the dialog without loading anything.
+ *
+ * 🔴 `CHANNEL-TEMPLATES-01` — ON `channel`, the channel of the row whose picker it came from:
+ * each channel has its own list, and importing on one adds to no other. A re-import is the same
+ * act and moves that channel alone to the new version.
  */
 export async function importVcgToStation(
   pick: () => Promise<File | null>,
+  channel?: number,
 ): Promise<TemplateInfo | null> {
   const file = await pick();
   // The operator dismissed the OS file dialog — their own "no".
@@ -94,14 +99,17 @@ export async function importVcgToStation(
 
   // Throws the operator-facing message (naming the file) and registers nothing
   // on a bad package — the R-001 invariant, inherited from the shared flow.
-  const imported = await importVcgFile(file);
+  const imported = await importVcgFile(file, channel);
   reportCommandSuccess(importSuccessMessage(imported));
 
   // The registry is the authority on the registered template's shape; read the
   // seed from THERE rather than from anything reconstructed here, so an import
   // and a re-use of an existing template seed identical fields for identical
-  // bytes.
-  const template = await window.cg.templates.get({ templateId: imported.templateId });
+  // bytes — as the channel it was imported on lists it.
+  const template = await window.cg.templates.get({
+    templateId: imported.templateId,
+    ...(channel !== undefined && { channel }),
+  });
   if (template === null) {
     // §6 — no "library": it named a deleted panel, and worse, the remedy it gave
     // pointed at that panel. The import DID land, so the honest remedy is to pick

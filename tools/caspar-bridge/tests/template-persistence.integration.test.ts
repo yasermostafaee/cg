@@ -357,16 +357,21 @@ it('R-028 part B — a RE-DELIVERY never resurrects a REMOVED template (but may 
 
   // A re-delivery of an id the bridge ALREADY holds is NOT skipped — B-085's
   // local-wins stands. An adversarial review caught the first draft keeping the
-  // bridge's copy: nothing here can tell which copy is newer (`TemplateInfo`
-  // carries no version), so preferring the bridge's would silently discard a
-  // template a browser had CORRECTED while offline, and the stale HTML would
-  // keep going to air with no signal that the fix never landed. The tombstone
-  // above is the narrower fix part A actually asked for — stop RESURRECTION,
-  // not stop repair.
+  // bridge's copy: nothing here can tell which copy is newer, so preferring the
+  // bridge's would silently discard a template a browser had CORRECTED while
+  // offline, and the stale HTML would keep going to air with no signal that the
+  // fix never landed. The tombstone above is the narrower fix part A actually
+  // asked for — stop RESURRECTION, not stop repair.
+  //
+  // `CHANNEL-TEMPLATES-01` — the repair lands on the ONE channel the re-delivery names. One
+  // that names no channel cannot say whose version it repairs, and repairs none.
   r.templateImport(info('tpl-b', 'bridge copy'), HTML);
-  const corrected = r.templateImport(info('tpl-b', 'corrected browser copy'), HTML, true);
+  const unnamed = r.templateImport(info('tpl-b', 'a copy naming no channel'), HTML, true);
+  expect(unnamed).toEqual({ registered: true, templateId: 'tpl-b', skipped: true });
+  expect(r.templateGet('tpl-b', 1)?.name).toBe('bridge copy');
+  const corrected = r.templateImport(info('tpl-b', 'corrected browser copy'), HTML, true, 1);
   expect(corrected.skipped).toBeUndefined();
-  expect(r.templateGet('tpl-b')?.name).toBe('corrected browser copy');
+  expect(r.templateGet('tpl-b', 1)?.name).toBe('corrected browser copy');
 
   // An OPERATOR import (no flag) always wins and revives a removed template.
   const reimport = r.templateImport(info('tpl-a', 'deliberately re-imported'), HTML);

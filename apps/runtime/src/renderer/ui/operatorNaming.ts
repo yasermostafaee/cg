@@ -102,13 +102,27 @@ export function placeName<S extends NameableSlot>(
   return `layer ${channel}${String(slot.layer)} (not a row)`;
 }
 
-/** The template's display name — the one rule every surface uses — or null when unknown. */
+/**
+ * 🔴 `CHANNEL-TEMPLATES-01` — **WHERE A TEMPLATE'S NAME IS READ**: as a channel lists it (each
+ * channel has its own list, and two may list one template at two versions), or — `channel`
+ * undefined — station-wide. `useTemplateIndex` is one; an id-keyed `ReadonlyMap` of a station-wide
+ * list (the audit panel's) is another, and answers the same for every channel.
+ */
+export interface TemplateLookup {
+  get(templateId: string, channel: number | undefined): TemplateInfo | undefined;
+}
+
+/**
+ * The template's display name — the one rule every surface uses — or null when unknown.
+ * `channel` is the channel of the row that holds it: a name is read from that channel's list.
+ */
 export function templateName(
   templateId: string | undefined,
-  templates: ReadonlyMap<string, TemplateInfo>,
+  templates: TemplateLookup,
+  channel?: number,
 ): string | null {
   if (templateId === undefined) return null;
-  const info = templates.get(templateId);
+  const info = templates.get(templateId, channel);
   return info === undefined ? null : templateDisplayName(info);
 }
 
@@ -165,10 +179,11 @@ export function operatorRowName(
   ref: NameableRef,
   /** `MULTI-CHANNEL-01` — one bank, the station's list, or none (see {@link placeName}). */
   bank: BankSet,
-  templates: ReadonlyMap<string, TemplateInfo>,
+  templates: TemplateLookup,
 ): OperatorRowName {
   const place = placeName(ref.slot, bank);
-  const template = templateName(ref.templateId, templates);
+  // `CHANNEL-TEMPLATES-01` — the name the row's own channel lists the template under.
+  const template = templateName(ref.templateId, templates, ref.slot?.channel);
   const names = [place, template].filter((n): n is string => n !== null);
 
   /*

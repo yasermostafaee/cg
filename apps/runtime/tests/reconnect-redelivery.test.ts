@@ -104,6 +104,41 @@ it('re-delivers the retained (latest) payload across a REAL bridge restart — n
   expect(h.runtime.templateList().map((t) => t.templateId)).toContain('lower-third');
 });
 
+it('🔴 CHANNEL-TEMPLATES-01 — each record is re-delivered to the channel it was imported on, and no other', async () => {
+  const banks = [1, 2].map((channel) => ({
+    channel,
+    start: 80,
+    count: 20,
+    low: { start: 50, count: 10 },
+  }));
+  handle = await createBridge({ port: 0, connection: ephemeralConnection(), fixedLayers: banks });
+  const port = handle.port;
+  runtime = new WebSocketRuntime(handle.url, { createWebSocket: wsFactory });
+  await runtime.whenReady();
+
+  // The same template, a version per channel — imported on each channel's own list.
+  await runtime.templates.import({ template: TEMPLATE, html: '<html>ch1</html>', channel: 1 });
+  await runtime.templates.import({ template: TEMPLATE, html: '<html>ch2</html>', channel: 2 });
+  expect(handle.runtime.templateHtml('lower-third', 1)).toBe('<html>ch1</html>');
+  expect(handle.runtime.templateHtml('lower-third', 2)).toBe('<html>ch2</html>');
+
+  // The bridge dies and comes back with an EMPTY registry…
+  await handle.close();
+  handle = null;
+  await awaitStatus(runtime, 'disconnected');
+  handle = await createBridge({ port, connection: ephemeralConnection(), fixedLayers: banks });
+  expect(handle.runtime.templateList(1)).toEqual([]);
+
+  // …and each channel gets back ITS version, not the other channel's.
+  await awaitStatus(runtime, 'live');
+  const h = handle;
+  await waitFor(
+    () =>
+      h.runtime.templateHtml('lower-third', 1) === '<html>ch1</html>' &&
+      h.runtime.templateHtml('lower-third', 2) === '<html>ch2</html>',
+  );
+});
+
 // ── deterministic ordering + failure isolation (scripted fake WebSocket) ──
 
 interface SentFrame {

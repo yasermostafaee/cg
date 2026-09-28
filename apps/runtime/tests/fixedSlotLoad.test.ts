@@ -31,21 +31,38 @@ import { buildValidVcg } from './e2e/fixtures/runtime.js';
 
 interface FakeBridge {
   imported: { templateId: string; templateType: string }[];
+  /** `CHANNEL-TEMPLATES-01` — the channel each import named (absent: none). */
+  importChannels: (number | undefined)[];
+  /** `CHANNEL-TEMPLATES-01` — the channel each read-back named. */
+  getChannels: (number | undefined)[];
   loads: unknown[];
   stackLoads: unknown[];
 }
 
 function fakeBridge(): FakeBridge {
-  const state: FakeBridge = { imported: [], loads: [], stackLoads: [] };
+  const state: FakeBridge = {
+    imported: [],
+    importChannels: [],
+    getChannels: [],
+    loads: [],
+    stackLoads: [],
+  };
   const registry = new Map<string, { templateId: string; templateType: string; fields: never[] }>();
   const cg = {
     templates: {
-      import: (req: { template: { templateId: string; templateType: string } }) => {
+      import: (req: {
+        template: { templateId: string; templateType: string };
+        channel?: number;
+      }) => {
         registry.set(req.template.templateId, { ...req.template, fields: [] });
         state.imported.push(req.template);
+        state.importChannels.push(req.channel);
         return Promise.resolve({ registered: true, templateId: req.template.templateId });
       },
-      get: (req: { templateId: string }) => Promise.resolve(registry.get(req.templateId) ?? null),
+      get: (req: { templateId: string; channel?: number }) => {
+        state.getChannels.push(req.channel);
+        return Promise.resolve(registry.get(req.templateId) ?? null);
+      },
       list: () => Promise.resolve([...registry.values()]),
     },
     fixedLayers: {
@@ -90,6 +107,31 @@ describe('importing is a STATION act, and it binds no row', () => {
     */
     expect(bridge.loads).toEqual([]);
     expect(bridge.stackLoads).toEqual([]);
+  });
+
+  it('🔴 CHANNEL-TEMPLATES-01 — an import from a CH 2 row is an import ON CH 2, and reads back CH 2’s copy', async () => {
+    const bridge = fakeBridge();
+    const bytes = await buildValidVcg('tpl-on-two');
+    const file = new File([new Uint8Array(bytes)], 'two.vcg');
+
+    const template = await importVcgToStation(() => Promise.resolve(file), 2);
+
+    expect(template?.templateId).toBe('tpl-on-two');
+    // The import names channel 2 and nothing else — no other channel's list is asked to change.
+    expect(bridge.importChannels).toEqual([2]);
+    // The registered shape is read back as CHANNEL 2 lists it.
+    expect(bridge.getChannels).toEqual([2]);
+    expect(bridge.loads).toEqual([]);
+  });
+
+  it('control — an import that names no channel sends none (the station-wide import)', async () => {
+    const bridge = fakeBridge();
+    const bytes = await buildValidVcg('tpl-unnamed');
+    await importVcgToStation(() =>
+      Promise.resolve(new File([new Uint8Array(bytes)], 'unnamed.vcg')),
+    );
+    expect(bridge.importChannels).toEqual([undefined]);
+    expect(bridge.getChannels).toEqual([undefined]);
   });
 
   it('a dismissed file picker is the operator’s own “no” — nothing imported, nothing loaded', async () => {

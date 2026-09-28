@@ -84,16 +84,6 @@ async function boot(channels: readonly number[], seeded = true): Promise<void> {
   storage = installMemoryStorage();
   cg = createMockBridge();
   window.cg = cg;
-  await cg.templates.import({
-    template: {
-      templateId: 'tpl-sw',
-      name: 'switch fixture',
-      sourceFileName: 'sw.vcg',
-      templateType: 'lower-third',
-      fields: [{ id: 'anchor', label: 'Anchor', type: 'text', required: false, default: '' }],
-    },
-    html: '<!doctype html><html><body>fixture</body></html>',
-  });
   const [armed] = await cg.fixedLayers.banks();
   expect(armed !== undefined, 'the seed is armed exactly when asked').toBe(seeded);
   const seed = armed ?? defaultFixedLayerBank();
@@ -105,6 +95,21 @@ async function boot(channels: readonly number[], seeded = true): Promise<void> {
     banks: channels.map((c) => bankOn(seed, c, names.get(c) ?? `row on ${String(c)}`)),
   });
   expect(res.ok, 'the banks were declared').toBe(true);
+  /*
+    `CHANNEL-TEMPLATES-01` — each channel has its own template list, and a channel declared after
+    an import starts with an empty one. So the fixture is imported once the channels exist, naming
+    none — which lists it on every declared channel.
+  */
+  await cg.templates.import({
+    template: {
+      templateId: 'tpl-sw',
+      name: 'switch fixture',
+      sourceFileName: 'sw.vcg',
+      templateType: 'lower-third',
+      fields: [{ id: 'anchor', label: 'Anchor', type: 'text', required: false, default: '' }],
+    },
+    html: '<!doctype html><html><body>fixture</body></html>',
+  });
   for (const channel of channels) {
     const load = await cg.fixedLayers.load({
       channel,

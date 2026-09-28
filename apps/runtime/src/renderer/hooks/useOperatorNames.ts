@@ -1,7 +1,7 @@
-import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
+import type { FixedLayerBank } from '@cg/shared-ipc';
 import { operatorRowName, type NameableRef, type OperatorRowName } from '../ui/operatorNaming.js';
 import { useFixedBanks } from './useFixedLayers.js';
-import { useTemplateIndex } from './useTemplateIndex.js';
+import { useTemplateIndex, type TemplateIndex } from './useTemplateIndex.js';
 
 /**
  * `B-232` — the two snapshots an operator-facing surface needs before it can name a row,
@@ -25,8 +25,13 @@ export function useOperatorNames(
   refs: readonly NameableRef[],
 ): (ref: NameableRef) => OperatorRowName {
   const banks: readonly FixedLayerBank[] = useFixedBanks();
-  const templates: ReadonlyMap<string, TemplateInfo> = useTemplateIndex(
-    refs.map((r) => r.templateId ?? '').filter((id) => id !== ''),
+  // `CHANNEL-TEMPLATES-01` — each ref's template as the channel of its slot lists it.
+  const templates: TemplateIndex = useTemplateIndex(
+    refs.flatMap((r) =>
+      r.templateId === undefined || r.templateId === ''
+        ? []
+        : [{ templateId: r.templateId, channel: r.slot?.channel }],
+    ),
   );
   return (ref) => operatorRowName(ref, banks, templates);
 }

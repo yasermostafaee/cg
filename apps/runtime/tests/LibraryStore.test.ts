@@ -130,3 +130,97 @@ describe('LibraryStore', () => {
     expect(reloaded.list()).toEqual([TEMPLATE]);
   });
 });
+
+/**
+ * 🔴 `CHANNEL-TEMPLATES-01` — THIS BROWSER'S COPY, PER CHANNEL. Each channel has its own list, so
+ * an import records the channel it was made on and is re-delivered there only; a record written
+ * before the lists answers for any channel that has none of its own.
+ */
+describe('LibraryStore — per channel', () => {
+  const V2: TemplateInfo = { ...TEMPLATE, name: 'Lower Third v2' };
+
+  it('an import on CH 2 is CH 2’s: CH 1 does not list it — and each channel keeps its own version', async () => {
+    const store = new LibraryStore(new MemoryWorkspace());
+    await store.import(TEMPLATE, '<html>v1</html>', 1);
+    await store.import(V2, '<html>v2</html>', 2);
+
+    expect(store.get('lower-third', 1)?.name).toBe('Lower Third');
+    expect(store.get('lower-third', 2)?.name).toBe('Lower Third v2');
+    expect(store.html('lower-third', 1)).toBe('<html>v1</html>');
+    expect(store.html('lower-third', 2)).toBe('<html>v2</html>');
+    // Re-delivery names each record's channel.
+    expect(
+      store
+        .entries()
+        .map((e) => [e.channel, e.html])
+        .sort(),
+    ).toEqual([
+      [1, '<html>v1</html>'],
+      [2, '<html>v2</html>'],
+    ]);
+    // Control: a channel neither import named lists nothing.
+    expect(store.list(3)).toEqual([]);
+  });
+
+  it('a pre-channel record answers for every channel with none of its own, and survives a reload', async () => {
+    const ws = new MemoryWorkspace();
+    // Written exactly as a store from before the lists wrote it: no channel.
+    await ws.writeJson('library/lower-third.json', {
+      template: TEMPLATE,
+      html: '<html>old</html>',
+    });
+    await ws.writeJson('library/2@lower-third.json', {
+      template: V2,
+      html: '<html>v2</html>',
+      channel: 2,
+    });
+    const store = new LibraryStore(ws);
+    await store.hydrate();
+
+    expect(store.html('lower-third', 1)).toBe('<html>old</html>');
+    expect(store.html('lower-third', 2)).toBe('<html>v2</html>');
+    // The pre-channel record re-delivers naming no channel.
+    expect(store.entries().find((e) => e.channel === undefined)?.html).toBe('<html>old</html>');
+  });
+
+  it('a removal from CH 2 leaves CH 1’s record — and takes the pre-channel record with it', async () => {
+    const ws = new MemoryWorkspace();
+    await ws.writeJson('library/lower-third.json', {
+      template: TEMPLATE,
+      html: '<html>old</html>',
+    });
+    const store = new LibraryStore(ws);
+    await store.hydrate();
+    await store.import(TEMPLATE, '<html>v1</html>', 1);
+    await store.import(V2, '<html>v2</html>', 2);
+
+    expect(await store.remove('lower-third', [], null, 2)).toEqual({ ok: true });
+    expect(store.has('lower-third', 2)).toBe(false);
+    expect(store.html('lower-third', 1)).toBe('<html>v1</html>');
+    // The pre-channel record answered for EVERY channel, so it would have put the template back
+    // on CH 2's list offline and re-delivered it — it goes with the removal.
+    expect(store.entries().some((e) => e.channel === undefined)).toBe(false);
+    const reloaded = new LibraryStore(ws);
+    await reloaded.hydrate();
+    expect(reloaded.has('lower-third', 2)).toBe(false);
+    expect(reloaded.has('lower-third', 1)).toBe(true);
+  });
+
+  it('the offline refusal counts the references it is handed — the caller passes that channel’s', async () => {
+    const store = new LibraryStore(new MemoryWorkspace());
+    await store.import(TEMPLATE, '<html>v1</html>', 2);
+    const refused = await store.remove(
+      'lower-third',
+      [{ itemId: 'i-2', slot: { channel: 2, layer: 90 } }],
+      null,
+      2,
+    );
+    expect(refused).toMatchObject({ ok: false, reason: 'in-use' });
+    expect(store.has('lower-third', 2)).toBe(true);
+    // A channel that does not list it is refused as not being there, naming the channel.
+    expect(await store.remove('lower-third', [], null, 1)).toMatchObject({
+      ok: false,
+      reason: 'unknown-template',
+    });
+  });
+});

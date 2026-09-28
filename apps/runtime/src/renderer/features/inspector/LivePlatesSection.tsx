@@ -181,7 +181,8 @@ export function LivePlatesSection({
     door and every fresh row starts unbound with its take refused.
   */
   if (hasLooks) return null;
-  const carried = assignmentsWereCarriedOver(item.templateId);
+  // `CHANNEL-TEMPLATES-01` — carried over by an import on THIS row's channel.
+  const carried = assignmentsWereCarriedOver(item.templateId, channel);
 
   /*
     🔴 **SESSION BP — WHY THIS EDITOR IS STILL HERE, AND WHY THAT IS NOW SAFE.**

@@ -72,7 +72,7 @@ import {
 } from '../../hooks/useRestoreSkips.js';
 import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
-import { itemChannelOf } from '../channels/itemChannel.js';
+import { boundChannelOf, itemChannelOf } from '../channels/itemChannel.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { usePlateReleases } from '../../hooks/usePlateReleases.js';
@@ -504,9 +504,16 @@ export function LayersPanel({
     `useTemplateIndex` keys its effect on the SET's identity (a sorted joined string), so a
     skip arriving and clearing does not re-fetch on every stack publish.
   */
+  /*
+    `CHANNEL-TEMPLATES-01` — each on the channel it belongs to: a row's template is read from ITS
+    channel's list (two channels may list one template at two versions), a skip's from the channel
+    its report names.
+  */
   const templates = useTemplateIndex([
-    ...items.map((i) => i.templateId),
-    ...restoreSkips.map((s) => s.templateId).filter((id): id is string => id !== undefined),
+    ...items.map((i) => ({ templateId: i.templateId, channel: boundChannelOf(i, slots) })),
+    ...restoreSkips.flatMap((s) =>
+      s.templateId === undefined ? [] : [{ templateId: s.templateId, channel: s.slot?.channel }],
+    ),
   ]);
 
   /*
@@ -996,7 +1003,8 @@ export function LayersPanel({
       filtered — the tab is exactly what it was.
     */
     scopeChannel === null ? live : live.filter((l) => l.channel === scopeChannel),
-    ownerLabelFor(items, (id) => templates.get(id)?.name, liveRowName),
+    // `CHANNEL-TEMPLATES-01` — the tab's channel's list names its rows' templates.
+    ownerLabelFor(items, (id) => templates.get(id, scopeChannel ?? undefined)?.name, liveRowName),
     /*
       🔴 BOTH facts, through the ONE precedence helper. `stackReady` is not optional
       here and not belt-and-braces: STRANDED is decided by an item being ABSENT from
@@ -1026,9 +1034,13 @@ export function LayersPanel({
     ...declaredFrameRows(
       liveRows,
       (itemId) => {
-        const templateId = items.find((i) => i.itemId === itemId)?.templateId;
-        if (templateId === undefined) return [];
-        return templates.get(templateId)?.liveSources?.sources.map((p) => p.sourceId) ?? [];
+        const item = items.find((i) => i.itemId === itemId);
+        if (item === undefined) return [];
+        return (
+          templates
+            .get(item.templateId, boundChannelOf(item, slots))
+            ?.liveSources?.sources.map((p) => p.sourceId) ?? []
+        );
       },
       plateVolumeFor(items),
       liveSourceName,
@@ -1764,7 +1776,9 @@ export function LayersPanel({
                     after the state cell had stopped.
                   */
                   const item = binding.kind === 'bound' ? binding.item : null;
-                  const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
+                  // `CHANNEL-TEMPLATES-01` — the row's own channel's version.
+                  const template =
+                    item !== null ? (templates.get(item.templateId, slot.channel) ?? null) : null;
                   /*
                     `single-clock-look-switch` — THE GROUP BREAK, drawn once, at the first
                     bed row.
@@ -1978,7 +1992,10 @@ export function LayersPanel({
         (() => {
           const audioItem = itemById.get(plateAudioFor.itemId);
           if (audioItem === undefined) return null;
-          const audioTemplate = templates.get(audioItem.templateId);
+          const audioTemplate = templates.get(
+            audioItem.templateId,
+            boundChannelOf(audioItem, slots),
+          );
           if (audioTemplate === undefined) return null;
           return (
             <LivePlateAudioDialog
