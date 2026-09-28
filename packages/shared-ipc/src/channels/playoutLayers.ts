@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+import { FIRST_ALLOCATABLE_LAYER } from '../layer-bands.js';
 import { FixedSlotObservationSchema } from './fixedLayers.js';
 
 /**
@@ -125,12 +126,18 @@ export const PLAYOUT_CLEAR_REASONS = [
  * calls to THIS channel over the html-only subset, so the gate is enforced
  * bridge-side exactly once and a bulk action can never clear something the
  * single action would have refused.
+ *
+ * 🔴 `FOLLOWUPS-01` B (the owner, 2026-09-28) — **the layer is 50 or up, or the request is not a
+ * request.** Rule 3 (C5): nothing of ours touches layers 1–49, the Playout's span, so a reserved
+ * layer there is listed on the tab and never cleared from it. The send seam already refused the
+ * `CLEAR`; this closes the door itself, so a hand-made request meets the shape error before any
+ * gate runs, and there is no reason word for it because the console never offers it.
  */
 export const PlayoutLayersClearChannel = defineChannel(
   'playoutLayers.clear',
   z.object({
     channel: z.number().int().positive(),
-    layer: z.number().int().nonnegative(),
+    layer: z.number().int().min(FIRST_ALLOCATABLE_LAYER),
   }),
   z.object({
     ok: z.boolean(),

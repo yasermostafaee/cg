@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+import { FIRST_ALLOCATABLE_LAYER } from '../layer-bands.js';
 
 /**
  * Layer-occupancy channels (R-009) — orphaned/unknown on-air layers.
@@ -95,12 +96,17 @@ export type LayerClearReason = (typeof LAYER_CLEAR_REASONS)[number];
  *
  * C-015 phase 5 (R-015) — refused with `reason: 'live-source'` for a layer in
  * the bridge's own Live Source ledger. See {@link LAYER_CLEAR_REASONS}.
+ *
+ * 🔴 `FOLLOWUPS-01` B (the owner, 2026-09-28) — the layer is 50 or up (`FIRST_ALLOCATABLE_LAYER`).
+ * Below it another system's producer is the Playout's and NORMAL (`FIELD-FIXES-01` L), the notice
+ * never offers a Clear there, and rule 3 (C5) forbids ours. A request below 50 is refused as a
+ * request, before any gate — deliberately NOT a new reason word (`ROUTE-PLATES-01` §5.5).
  */
 export const LayersClearChannel = defineChannel(
   'layers.clear',
   z.object({
     channel: z.number().int().positive(),
-    layer: z.number().int().nonnegative(),
+    layer: z.number().int().min(FIRST_ALLOCATABLE_LAYER),
   }),
   z.object({
     ok: z.boolean(),

@@ -56,3 +56,16 @@
     `Installer smoke (clean Windows)` success
 - [x] 4.3 Follow-up `829b7b42` — a reconnect keeps a held route hidden (the re-send's `OPACITY 0`), a test
       only; carried by the push after `cdc3c03b`
+
+## 5. `FOLLOWUPS-01` — the owner's decisions (2026-09-28; `design.md`, last section)
+
+- [x] 5.1 A — `C-029`'s consumer `ADD` retired (`--create-missing-consumers`, `#createMissingConsumer`, the
+      `creation` record); `pgm-output-alarm`'s pending delta amended in place
+- [x] 5.2 B — no console or IPC path asks for a `CLEAR` below 50: both clear doors' request schemas take
+      50 and up; the Station layers tab offers no CLEAR below 50, nor counts it in CLEAR ALL
+      (`low-layer-clear.integration.test.ts`, `stationLayersPanel.dom.test.ts`, `runtime-channels.test.ts`;
+      each planted red, removed green)
+- [x] 5.3 C — `SendOptions.target` deleted, `B-287` closed (the filing's "nothing passes it" corrected: three
+      `INFO` reads did, wire byte-identical)
+- [x] 5.4 D — recorded: the stray door's exemption stays; a moved holder's row waits until a re-take
+- [ ] 5.5 Gate and CI — recorded by `FOLLOWUPS-01`

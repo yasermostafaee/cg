@@ -82,8 +82,14 @@ const CH1 = [{ host: HOST, channel: 1 }] as const;
 /** Beds 50-58 < band 60-69 < reservation 70-79 < operator rows 80-99 — the boot suite's S6 layout. */
 const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 80, count: 20 };
 const BED_ROW = 58;
-/** A layer outside every range this station declares, on either channel. */
-const FREE = 40;
+/**
+ * A layer outside every range this station declares, on either channel.
+ *
+ * `FOLLOWUPS-01` B — inside CG's layers (the one gap between the beds and the band). It was 40, and
+ * a clear request below 50 is no longer a valid request at all: it would meet the shape error
+ * before the station fence, the lock or the permission gate this spec is about.
+ */
+const FREE = 59;
 
 const TEMPLATE: TemplateInfo = {
   templateId: 'two-box',
@@ -195,7 +201,8 @@ const C: IssueTokenOptions = { user: 'longName', cgChannels: CH1 };
  * does — somebody else's graphic, on a channel this station does not declare.
  *
  * ⚠ It stays, although B's CLEAR on channel 2 no longer reaches it: this is the producer the
- * spec's `CLEAR 2-40` used to land on before `CHANNEL-AUTHORITY-01`. With it present, a CLEAR the
+ * spec's channel-2 CLEAR (then `CLEAR 2-40`; `FREE` is 59 now) used to land on before
+ * `CHANNEL-AUTHORITY-01`. With it present, a CLEAR the
  * fence failed to stop WOULD reach the wire (`clearLayer` clears an observed html producer), so
  * "nothing addressed channel 2" measures the fence and not an empty layer.
  */
@@ -206,7 +213,7 @@ async function foreignHtmlOnChannelTwo(): Promise<void> {
   await new CommandQueue(foreign).enqueue(`PLAY 2-${String(FREE)} "foreign" HTML`);
 }
 
-/** Every line whose target is channel 2, in both spellings (`CLEAR 2-40`, `CLEAR 2`). */
+/** Every line whose target is channel 2, in both spellings (`CLEAR 2-59`, `CLEAR 2`). */
 const onChannelTwo = (lines: readonly string[]): string[] =>
   lines.filter((l) => /^[A-Z][A-Z ]*?\s2(?:-\d+)?(?:\s|$)/.test(l));
 

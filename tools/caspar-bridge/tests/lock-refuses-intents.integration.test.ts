@@ -148,14 +148,15 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
 
     // Each with its OWN request payload: the bulk verbs take none by design (`B-122` — an
     // emergency control must not be handed a browser-resolved scope), and sending the
-    // wrong shape would be refused as `invalid request` and read as a pass.
+    // wrong shape would be refused as `invalid request` and read as a pass. (`FOLLOWUPS-01` B:
+    // the two clears take a layer from 50 up, so theirs sit at 59.)
     const emergency: readonly [string, unknown][] = [
       ['stack.clear-all', undefined],
       ['stack.stop-all', undefined],
       ['stack.remove-all', undefined],
       ['stack.silence-all-live-plates', undefined],
-      ['layers.clear', { channel: 1, layer: 10 }],
-      ['playoutLayers.clear', { channel: 1, layer: 10 }],
+      ['layers.clear', { channel: 1, layer: 59 }],
+      ['playoutLayers.clear', { channel: 1, layer: 59 }],
     ];
     for (const [i, [channel, payload]] of emergency.entries()) {
       const res = await ask(ws, frames, `e${String(i)}`, channel, payload);

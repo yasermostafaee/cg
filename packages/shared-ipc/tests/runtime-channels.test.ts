@@ -6,7 +6,9 @@ import {
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
   ConnectionsSetConfigChannel,
+  FIRST_ALLOCATABLE_LAYER,
   LayersClearChannel,
+  PlayoutLayersClearChannel,
   LayersOrphansChangedChannel,
   LayersOrphansChannel,
   LayersOwnedOccupancyChangedChannel,
@@ -260,6 +262,22 @@ describe('layers.* channel schemas (R-009)', () => {
       reason: 'owned',
     });
     expect(() => LayersClearChannel.response.parse({ ok: false, reason: 'nope' })).toThrow();
+  });
+
+  /**
+   * 🔴 `FOLLOWUPS-01` B — neither clear door can carry a layer below 50 (rule 3, C5). The boundary
+   * is `FIRST_ALLOCATABLE_LAYER` itself: 50 is ours, 49 is the Playout's.
+   */
+  it('🔴 layers.clear and playoutLayers.clear refuse a layer below 50, and take 50', () => {
+    for (const door of [LayersClearChannel, PlayoutLayersClearChannel]) {
+      expect(door.request.parse({ channel: 1, layer: FIRST_ALLOCATABLE_LAYER })).toEqual({
+        channel: 1,
+        layer: 50,
+      });
+      expect(() => door.request.parse({ channel: 1, layer: 49 })).toThrow();
+      expect(() => door.request.parse({ channel: 1, layer: 1 })).toThrow();
+      expect(() => door.request.parse({ channel: 1, layer: 0 })).toThrow();
+    }
   });
 });
 

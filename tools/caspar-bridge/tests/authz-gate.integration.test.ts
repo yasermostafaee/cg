@@ -105,6 +105,10 @@ describe('C-038 — the ROLE gate', () => {
   });
 });
 
+/*
+  `FOLLOWUPS-01` B — every `layers.clear` below names layer 59: a clear request below 50 is not a
+  valid request any more, and would meet the shape error before the gates this file is about.
+*/
 describe('C-038 — the CHANNEL gate', () => {
   /**
    * 🔴 **THE PROPERTY THE HOST RULE EXISTS FOR, asserted at the wire.**
@@ -116,7 +120,7 @@ describe('C-038 — the CHANNEL gate', () => {
   it("an operator of ANOTHER station is refused this station's channel", async () => {
     const { ask } = await signedInAs('otherStation');
 
-    const res = await ask('c1', 'layers.clear', { channel: 1, layer: 10 });
+    const res = await ask('c1', 'layers.clear', { channel: 1, layer: 59 });
     expectRefusedWith(
       res.error,
       authzChannelRefusal(1),
@@ -126,7 +130,7 @@ describe('C-038 — the CHANNEL gate', () => {
 
   it('an operator of THIS station reaches the channel they are granted', async () => {
     const { ask } = await signedInAs('operator');
-    const res = await ask('c2', 'layers.clear', { channel: 1, layer: 10 });
+    const res = await ask('c2', 'layers.clear', { channel: 1, layer: 59 });
     expect(res.error, 'the granted channel was refused').toBe(undefined);
   });
 
@@ -146,7 +150,7 @@ describe('C-038 — the CHANNEL gate', () => {
     const { ask } = await signedInAs('operator', {
       fixedLayers: { channel: 7, low: { start: 50, count: 9 }, start: 80, count: 4 },
     });
-    const res = await ask('c3', 'layers.clear', { channel: 7, layer: 10 });
+    const res = await ask('c3', 'layers.clear', { channel: 7, layer: 59 });
     expectRefusedWith(res.error, authzChannelRefusal(7), 'an ungranted channel was cleared');
     expect(res.error).toContain('7');
   });
@@ -160,7 +164,7 @@ describe('C-038 — the CHANNEL gate', () => {
    */
   it('a viewer on an ungranted channel hears the ROLE sentence, not the channel one', async () => {
     const { ask } = await signedInAs('viewer');
-    const res = await ask('c4', 'layers.clear', { channel: 1, layer: 10 });
+    const res = await ask('c4', 'layers.clear', { channel: 1, layer: 59 });
     expectRefusedWith(res.error, AUTHZ_ROLE_REFUSAL, 'a viewer got the wrong refusal');
   });
 });
@@ -225,7 +229,7 @@ describe('C-038 — the refusal is RECORDED, with the verified actor', () => {
       'the log already held a refusal — the instrument is not clean',
     ).toHaveLength(0);
 
-    await client.ask('c1', 'layers.clear', { channel: 1, layer: 10 });
+    await client.ask('c1', 'layers.clear', { channel: 1, layer: 59 });
 
     const rows = (await started.handle.runtime.auditRecent(200)).filter(
       (r) => r.action === 'refused',

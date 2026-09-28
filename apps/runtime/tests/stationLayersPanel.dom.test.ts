@@ -54,6 +54,12 @@ const VIDEO_LAYER: PlayoutLayerState = {
 };
 const UNKNOWN_LAYER: PlayoutLayerState = { channel: 1, layer: 62, observed: { kind: 'unknown' } };
 const EMPTY_LAYER: PlayoutLayerState = { channel: 1, layer: 63, observed: { kind: 'empty' } };
+/** `FOLLOWUPS-01` B — the Playout's own graphics layer, below 50. */
+const LOW_HTML_LAYER: PlayoutLayerState = {
+  channel: 1,
+  layer: 30,
+  observed: { kind: 'producer', producer: 'html' },
+};
 
 function stubBridge(
   link: 'live' | 'disconnected',
@@ -150,6 +156,37 @@ describe('the playout tab offers CLEAR for exactly one occupant kind', () => {
     const { el } = await render([EMPTY_LAYER]);
     expect(clearButtonFor(el, 63)).toBeUndefined();
     expect(el.querySelector('[data-playout-layer="63"]')?.textContent).toContain('Empty');
+  });
+
+  /**
+   * 🔴 `FOLLOWUPS-01` B — a reserved html layer BELOW 50 is the Playout's span (rule 3, C5): the row
+   * says what is there, offers no control, and CLEAR ALL does not reach it. The html row at 60 in the
+   * same render is the positive control: the same kind, in our span, still offers both.
+   */
+  it('🔴 an html graphic on a reserved layer BELOW 50 offers no CLEAR, and CLEAR ALL leaves it out', async () => {
+    const { el, clear } = await render([LOW_HTML_LAYER, HTML_LAYER]);
+    expect(clearButtonFor(el, 30)).toBeUndefined();
+    const row = el.querySelector('[data-playout-layer="30"]');
+    expect(row?.textContent).toContain('Graphic on air');
+    expect(row?.textContent).toContain('only the playout side can clear it');
+    // Positive control: the html row in our span is still clearable.
+    expect(clearButtonFor(el, 60)).toBeDefined();
+
+    const all = [...el.querySelectorAll('button')].find((b) => b.textContent === 'CLEAR ALL');
+    await act(async () => {
+      all?.click();
+      await Promise.resolve();
+    });
+    const confirmBtn = [...(openDialog()?.querySelectorAll('button') ?? [])].find((b) =>
+      b.textContent?.startsWith('Clear 1 layer'),
+    );
+    expect(confirmBtn, 'CLEAR ALL counted the layer below 50').toBeDefined();
+    await act(async () => {
+      confirmBtn?.click();
+      await Promise.resolve();
+    });
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith({ channel: 1, layer: 60 });
   });
 
   it('with the bridge DOWN every layer reads unknown and nothing is clearable', async () => {
@@ -315,6 +352,10 @@ describe('the pure gate (stationLayerOccupancy) — the safety boundary, without
     expect(stationLayerOccupancy(EMPTY_LAYER, false).clearable).toBe(false);
     // Link down masks everything, including the html case.
     expect(stationLayerOccupancy(HTML_LAYER, true).clearable).toBe(false);
+    // `FOLLOWUPS-01` B — never below 50, whatever is on it; 50 itself is ours.
+    expect(stationLayerOccupancy(LOW_HTML_LAYER, false).clearable).toBe(false);
+    expect(stationLayerOccupancy({ ...LOW_HTML_LAYER, layer: 49 }, false).clearable).toBe(false);
+    expect(stationLayerOccupancy({ ...LOW_HTML_LAYER, layer: 50 }, false).clearable).toBe(true);
   });
 
   it('any producer kind other than exactly "html" fails safe', () => {

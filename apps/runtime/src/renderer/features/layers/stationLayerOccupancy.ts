@@ -1,4 +1,4 @@
-import type { PlayoutLayerState } from '@cg/shared-ipc';
+import { isInCgBands, type PlayoutLayerState } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 
 /**
@@ -9,10 +9,14 @@ import { colors } from '../../theme.js';
  * exhaustively unit-testable without a DOM, and it must be readable in one
  * screen by whoever audits it later.
  *
- * THE RULE, in one sentence: a clear is offered ONLY for a layer whose observed
- * producer kind is exactly `html`, on a live link. Everything else — a video or
- * any other kind, an unverifiable occupancy, a dead link, an empty layer — gets
- * no control, and a sentence saying why.
+ * THE RULE, in one sentence: a clear is offered ONLY for a layer of 50 or up whose
+ * observed producer kind is exactly `html`, on a live link. Everything else — a
+ * layer below 50, a video or any other kind, an unverifiable occupancy, a dead
+ * link, an empty layer — gets no control, and a sentence saying why.
+ *
+ * 🔴 `FOLLOWUPS-01` B (the owner, 2026-09-28) — below 50 is the Playout's span, where nothing of
+ * ours may send a `CLEAR` (rule 3, C5). The row still says what is on the layer; it never offers
+ * the control, and `playoutLayers.clear` refuses such a layer as a request.
  *
  * The renderer's gate is the SECOND of two. The bridge refuses the same cases
  * independently (`playoutLayers.clear`), so hiding the control is the courtesy
@@ -78,6 +82,14 @@ export function stationLayerOccupancy(
         `layers protects against, even if the playout system put it here by mistake.`,
       clearable: false,
       tone: colors.offline,
+    };
+  }
+  if (!isInCgBands(layer.layer)) {
+    return {
+      occupant: 'Graphic on air (html)',
+      detail: 'The playout system’s own layer (below 50) — only the playout side can clear it.',
+      clearable: false,
+      tone: colors.onAir,
     };
   }
   return {

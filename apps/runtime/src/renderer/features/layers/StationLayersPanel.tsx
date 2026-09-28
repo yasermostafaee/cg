@@ -130,6 +130,9 @@ export function describeLayerRanges(layers: readonly number[]): string {
  *     clear control at all, and the bridge refuses them independently.
  *  3. UNKNOWN IS NOT EMPTY. A layer whose occupancy cannot be verified reads as
  *     unknown in its own right — never as "nothing here" — and offers no clear.
+ *  4. NEVER BELOW 50 (`FOLLOWUPS-01` B). Layers 1–49 are the Playout's span, where
+ *     nothing of ours may send a CLEAR (rule 3, C5): such a row is listed, and offers
+ *     no clear, and the channel refuses the layer as a request.
  *
  * What the html gate does NOT promise, stated so the wording never oversells
  * it: "html" means "not a video feed". It does not mean "unimportant" — an html

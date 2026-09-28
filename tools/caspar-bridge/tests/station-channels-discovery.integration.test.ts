@@ -223,7 +223,7 @@ describe('D4 is read at most every 5 s, with ETag, and fails to ABSENT', () => {
     expect(absent.channels[0]).not.toHaveProperty('playlist');
     // Never a gate on a verb: the same console's clear on its own channel meets exactly what it met
     // before — the handler's own answer (nothing is heard on a dead connection), not a refusal.
-    const clear = await client.ask(id(), 'layers.clear', { channel: 2, layer: 20 });
+    const clear = await client.ask(id(), 'layers.clear', { channel: 2, layer: 59 });
     expect(clear.error).toBeUndefined();
     expect(clear.payload).toEqual({ ok: false, reason: 'foreign' });
   }, 20_000);

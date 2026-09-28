@@ -2858,3 +2858,11 @@ rule closes one of those, and the seam's guard keeps a stray command off the Pla
 
 **Filed alongside:** [[B-287]] (`SendOptions.target` is read by nothing) — closed 2026-09-28 by
 `FOLLOWUPS-01` C, deleted.
+
+**The owner's decisions on this item's open questions (`FOLLOWUPS-01`, 2026-09-28):** [[C-029]]'s
+consumer `ADD` is retired (A); no console or IPC path can ask for a `CLEAR` below 50 — both clear
+doors take a layer from 50 up and the Station layers tab offers none there, with no new reason word
+([[R-028]], B); `B-287` deleted (C). Recorded with no code change (D): `takeStrayOffAir` keeps its
+narrow seam exemption — our own stray, on an operator's request; a holder moved while the core runs
+leaves the row saying it waits, until a re-take. Detail: `openspec/changes/route-plates/design.md`,
+last section.

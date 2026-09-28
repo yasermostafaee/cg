@@ -36,7 +36,8 @@ nothing until an operator acts.
 
 **§0.5 — backup mirroring.** Under `mirror-sync` (the default) every line the primary gets, server B gets
 too; `journal-replay` and `mirror-async` journal lines and replay them to B at a failover. `SendOptions.target`
-is documented as an override and read by nothing — filed as `B-287`, not fixed here.
+is documented as an override and read by nothing — filed as `B-287`, not fixed here. (Deleted by
+`FOLLOWUPS-01` C, 2026-09-28 — see the last section.)
 
 **§0.6 — global commands and undeclared targets.** No `CLEAR` without a layer, `CLEAR ALL` or `CHANNEL_GRID`
 exists. Two paths can address a channel this station does not declare: `takeStrayOffAir` (RT:3412), BY
@@ -55,7 +56,8 @@ is fixed by the prompt: kept playing, hidden by `OPACITY 0`, never `PAUSE`, `BLE
 RT:13204), off by default. A `CLEAR <ch>-<L>` below 50 is reachable through `playoutClear` (RT:10924, a
 reserved layer), `clearLayer` (RT:11149, a foreign html layer on a declared channel), a stale ledger, or a
 restore. `MIXER <ch>-<L> CLEAR` is sent only after a `CLEAR` that landed on the primary. The guard now refuses
-the consumer `ADD` and every `CLEAR` outside our own layers; each is reported to the owner.
+the consumer `ADD` and every `CLEAR` outside our own layers; each is reported to the owner. (The consumer
+`ADD` and both clear doors below 50 were retired by `FOLLOWUPS-01` A and B — see the last section.)
 
 ## Decisions
 
@@ -93,3 +95,25 @@ the consumer `ADD` and every `CLEAR` outside our own layers; each is reported to
    foreground, and a bare `PLAY` with nothing loaded → `202` with the layer unchanged. The mock had refused
    the last with `402`; it now acks it. That the bridge never sends a bare `PLAY` without its `LOADBG` is
    pinned on the bridge's wire.
+
+## `FOLLOWUPS-01` — the owner's decisions on this change's open questions (2026-09-28)
+
+The report's §5 left eight decisions to the owner. Those he took, and what became of each:
+
+- **§5.3 — `C-029`'s consumer `ADD`: RETIRED** (`FOLLOWUPS-01` A). `--create-missing-consumers` and
+  `#createMissingConsumer` are gone; a missing output is reported, never created, and the flag, if passed,
+  boots with a one-line "retired and ignored". The pending `pgm-output-alarm` delta carries the replacement
+  requirement.
+- **§5.4 / §5.5 — a `CLEAR` below 50: NO PATH ASKS FOR ONE** (`FOLLOWUPS-01` B). `playoutLayers.clear` and
+  `layers.clear` take a layer from 50 up, so a request below it meets the socket's shape error before any
+  gate — no new reason word, because the console never offers it — and the Station layers tab offers no
+  CLEAR on a reserved row below 50 (nor counts it in CLEAR ALL). A `CLEAR` of our own layers 50–99 stays.
+  The seam guard's `CLEAR` rule (decision 4) is unchanged; it is now the backstop behind a door that no
+  longer opens.
+- **§5.8 — `B-287`: `SendOptions.target` DELETED** (`FOLLOWUPS-01` C). `mirror: false` (decision 5) is the
+  one exception a caller may ask for. The three `INFO` reads that passed `target: 'primary'` keep a
+  byte-identical wire; the adapter never read it.
+- **§5.1 — the stray door keeps its narrow seam exemption** (recorded, no change): `takeStrayOffAir` takes
+  our own recorded stray off air on an operator's request, never in 1–49.
+- **§5.6 — a holder moved while the core runs: the row says it waits, until a re-take** (recorded, no
+  change — decision 3's last sentence stands).
