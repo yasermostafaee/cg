@@ -5,6 +5,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
+import { MediaPlaybackControl } from '../sources/MediaPlayback.js';
 import {
   commitSourceAssignments,
   currentSourceAssignments,
@@ -240,14 +241,18 @@ export function TemplateDefaultsDialog({
                   dialog's own model is unchanged — the choice is staged, and `Save defaults`
                   commits it. Template-wide, so no channel gates the inputs here.
                 */}
-                <SourcePicker
-                  id={`plate-default-${plate.sourceId}`}
-                  aria-label={`Default source for ${plate.sourceId}`}
-                  data={{ 'data-defaults-select': plate.sourceId }}
-                  value={valueOf(plate.sourceId)}
-                  onChange={(sourceId) => stage(plate.sourceId, sourceId)}
-                  choices={[{ value: '', label: 'None' }]}
-                />
+                <span className="cg-source-field">
+                  <SourcePicker
+                    id={`plate-default-${plate.sourceId}`}
+                    aria-label={`Default source for ${plate.sourceId}`}
+                    data={{ 'data-defaults-select': plate.sourceId }}
+                    value={valueOf(plate.sourceId)}
+                    onChange={(sourceId) => stage(plate.sourceId, sourceId)}
+                    choices={[{ value: '', label: 'None' }]}
+                  />
+                  {/* `MEDIA-PLATES-01` §2 — a bound clip's Playback, the clip's own and station-wide. */}
+                  <MediaPlaybackControl sourceId={valueOf(plate.sourceId)} />
+                </span>
               </div>
             ))}
             {/*

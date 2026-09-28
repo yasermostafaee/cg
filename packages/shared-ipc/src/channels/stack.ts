@@ -379,6 +379,40 @@ export const StackSetPlateVolumeChannel = defineChannel(
   z.object({ ok: z.boolean(), reason: z.string().optional() }),
 );
 
+/** `MEDIA-PLATES-01` — the operator's transport for a media plate on air. */
+export const MEDIA_PLATE_TRANSPORT_ACTIONS = ['play', 'pause', 'restart'] as const;
+export type MediaPlateTransportAction = (typeof MEDIA_PLATE_TRANSPORT_ACTIONS)[number];
+
+/** `MEDIA-PLATES-01` — why a transport press did nothing (nothing was sent). */
+export const MEDIA_PLATE_TRANSPORT_REFUSALS = [
+  'not-media',
+  'not-seated',
+  'not-on-air',
+  'amcp-error',
+] as const;
+
+/**
+ * 🔴 `MEDIA-PLATES-01` §1.D — **PLAY/PAUSE AND RESTART FOR ONE MEDIA PLATE OF AN ON-AIR ROW.**
+ * `play` resumes the clip (`RESUME`), `pause` holds its frame (`PAUSE`), `restart` plays it again
+ * from the beginning (`CALL <ch>-<L> SEEK 0`, then `RESUME` — 2.5.0 seeks an ended clip too).
+ * Operator class, channel-scoped by the row, behind the lock gate, audited. Refused with NOTHING
+ * sent for a plate whose source is not media, a plate that is not seated, or a row not on air.
+ */
+export const StackMediaPlateTransportChannel = defineChannel(
+  'stack.media-plate-transport',
+  z.object({
+    itemId: IdSchema,
+    /** The SCENE's handle for the hole (`guest-1`), never a catalog id. */
+    plateId: z.string().min(1),
+    action: z.enum(MEDIA_PLATE_TRANSPORT_ACTIONS),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(MEDIA_PLATE_TRANSPORT_REFUSALS).optional(),
+    message: z.string().optional(),
+  }),
+);
+
 /**
  * `add-multibox-audio` — **A MAP OF PLATE VOLUMES FOR ONE ROW, APPLIED AS ONE ACTION.**
  *

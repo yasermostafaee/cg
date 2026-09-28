@@ -5,6 +5,7 @@ import {
   EMPTY_PLAYOUT_INPUTS,
   LIVE_SOURCE_FORMATS,
   PlayoutInputsStateSchema,
+  boundMediaPlayback,
   buildPlayoutSourceCatalog,
   foldPlayoutInputsRead,
   mediaSourceId,
@@ -16,6 +17,7 @@ import {
   type BoundMediaItem,
   type ConsoleMediaItem,
   type LiveSourceLayerRange,
+  type MediaPlayback,
   type MediaSearchFailure,
   type PlayoutInputsState,
   type PlayoutMediaItem,
@@ -474,7 +476,7 @@ export class PlayoutSources {
         const next =
           fresh === undefined
             ? { ...held, unavailable: true as const }
-            : toBoundMedia(fresh, held.lastBoundAt);
+            : toBoundMedia(fresh, held.lastBoundAt, boundMediaPlayback(held));
         if (JSON.stringify(next) !== JSON.stringify(held)) {
           this.#media.set(id, next);
           changed = true;
@@ -594,6 +596,25 @@ export class PlayoutSources {
     return after !== undefined && after.unavailable !== true && after.clip !== played
       ? after.clip
       : null;
+  }
+
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.A — **SET A BOUND CLIP'S TWO PLAYBACK SETTINGS, STATION-WIDE.** Stored on
+   * its bound-media reference, persisted, and carried on the catalogue (so every console and the
+   * bridge's own doors read them through `mediaPlaybackOf`). Answers the clip's NAME for the audit
+   * row, or `null` when `sourceId` names no bound clip — nothing is changed then.
+   */
+  setMediaPlayback(sourceId: string, playback: MediaPlayback): { readonly name: string } | null {
+    const playoutId = playoutMediaIdOf(sourceId);
+    const held = playoutId === null ? undefined : this.#media.get(playoutId);
+    if (playoutId === null || held === undefined) return null;
+    const next: BoundMediaItem = { ...held, loop: playback.loop, whenHidden: playback.whenHidden };
+    if (JSON.stringify(next) !== JSON.stringify(held)) {
+      this.#media.set(playoutId, next);
+      this.#saveMedia();
+      this.#rebuild();
+    }
+    return { name: held.name };
   }
 
   #saveMedia(): void {

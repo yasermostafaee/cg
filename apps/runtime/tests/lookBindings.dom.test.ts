@@ -13,6 +13,7 @@ import {
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
 import { itemWith, templateWith } from './support/layerRow.js';
 import { choosePickerOption, pickerValue } from './support/sourcePicker.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * ⭐ **SESSION BM-2 §2 / §3 — THE PER-LOOK INPUT LIST, AND THE HAZARD IT MUST NOT SHIP.**
@@ -83,6 +84,8 @@ afterEach(() => {
   __resetSourcesForTest();
   __resetDraftsForTest();
   vi.restoreAllMocks();
+  // A spec's own bridge (the §6.4 swap) must not leak into the next spec's render.
+  delete (globalThis as unknown as { window: { cg?: object } }).window.cg;
 });
 
 async function render(
@@ -100,6 +103,13 @@ async function render(
   await act(async () => {
     await Promise.resolve();
   });
+  /*
+    `MEDIA-PLATES-01` — the section reads each seated clip's transport state (through the link), so
+    the bridge it renders against is COMPLETED with the quiet answers: no clips, a live link. A
+    spec's own members (the §6.4 swap) are kept — `fillBridgeStub` fills only what is absent.
+  */
+  const w = globalThis as unknown as { window: { cg?: object } };
+  w.window.cg = fillBridgeStub(w.window.cg ?? {});
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);

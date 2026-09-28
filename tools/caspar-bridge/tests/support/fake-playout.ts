@@ -1020,6 +1020,12 @@ export interface FakePlayout {
   simulateCoreRestart(options?: { readonly dropAmcp?: () => void }): number | string;
   /** One media item as the library holds it now, or `undefined`. */
   mediaItem(id: string): FakeMediaItem | undefined;
+  /**
+   * `MEDIA-PLATES-01` — the length in SECONDS of the library item whose `clip` is exactly `clip`, or
+   * `undefined`. The fake station hands this to the AMCP mock, so a clip it plays runs for its real
+   * length and reports it over OSC (`file/time`), as a 2.5.0 core does.
+   */
+  clipLengthS(clip: string): number | undefined;
   /** Take one media item out of the library ("not playable now"); answers whether it was there. */
   removeMedia(id: string): boolean;
   /** Put a removed media item back. */
@@ -1390,6 +1396,13 @@ class FakePlayoutServer implements FakePlayout {
 
   mediaItem(id: string): FakeMediaItem | undefined {
     return this.#library.get(id);
+  }
+
+  clipLengthS(clip: string): number | undefined {
+    for (const item of this.#library.values()) {
+      if (item.clip === clip) return item.durationMs / 1000;
+    }
+    return undefined;
   }
 
   removeMedia(id: string): boolean {

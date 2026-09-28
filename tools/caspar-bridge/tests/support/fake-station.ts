@@ -103,6 +103,8 @@ export async function startFakeStation(
       oscPort: ports.osc,
       channels: FAKE_STATION_CHANNELS,
       admit: (ip) => playout.isTrusted(ip),
+      // `MEDIA-PLATES-01` — a clip the library holds runs for its real length and reports it over OSC.
+      clipLength: (file) => playout.clipLengthS(file),
       ...(options.tracePath !== undefined ? { tracePath: options.tracePath } : {}),
     });
   } catch (err) {

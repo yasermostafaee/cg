@@ -25,7 +25,9 @@ import { FIRST_ALLOCATABLE_LAYER, LAYER_BANDS } from '@cg/shared-ipc';
  *   CONFIG declares that layer ({@link AmcpGuardContext.isOwnLayer});
  * - `MIXER <ch>-<L> CLEAR` on a layer that holds a SEATED plate (the same next-tick reveal, one
  *   layer at a time);
- * - a PLAYOUT route (`route://H`) with no layer (rule 3: it stacks every held input).
+ * - a PLAYOUT route (`route://H`) with no layer (rule 3: it stacks every held input);
+ * - `MEDIA-PLATES-01` — `PAUSE`, `RESUME` or `CALL` to any coordinate but a seated CLIP of ours
+ *   ({@link AmcpGuardContext.clipOn}).
  *
  * `INFO` is read-only and names what it reads; it is not a target in rule 3's sense and is left alone.
  */
@@ -50,7 +52,18 @@ export interface AmcpGuardContext {
    * wire (`ROUTE-PLATES-01`'s hard stop: byte-identical for every plate not bound to D10).
    */
   readonly playoutRoute?: boolean;
+  /**
+   * 🔴 `MEDIA-PLATES-01` — does the ledger hold a media CLIP of ours on this coordinate? `PAUSE`,
+   * `RESUME` and `CALL` are only ever meant for one. On the Playout's core a `CALL` to anything but a
+   * file producer (DeckLink, NDI, a route) gets NO reply and holds every channel's AMCP for 5 s, and a
+   * `SEEK` can freeze a live stream for good (`PLAYOUT-DESIGN-INPUT-HOLDER-v1.md` §8 #2); a route is
+   * never paused (contract v1.3). Absent: this rule is not asked (a context without a ledger).
+   */
+  readonly clipOn?: (channel: number, layer: number) => boolean;
 }
+
+/** `MEDIA-PLATES-01` — the transport verbs, which only a seated clip of ours may receive. */
+const CLIP_ONLY_VERBS = new Set(['PAUSE', 'RESUME', 'CALL']);
 
 export interface AmcpGuardRefusal {
   /** `amcp-guard-<what>`, for the log and the refusal's code. */
@@ -150,6 +163,16 @@ export function amcpLineRefusal(line: string, context: AmcpGuardContext): AmcpGu
         reason:
           `CLEAR ${String(target.channel)}-${String(target.layer)} is outside CG's layers ` +
           `${String(FIRST_ALLOCATABLE_LAYER)}-${String(LAST_CG_LAYER)}`,
+      };
+    }
+  }
+  if (CLIP_ONLY_VERBS.has(verb) && context.clipOn !== undefined) {
+    if (target.layer === undefined || !context.clipOn(target.channel, target.layer)) {
+      return {
+        code: 'amcp-guard-not-a-clip',
+        reason:
+          `${verb} ${String(target.channel)}${target.layer === undefined ? '' : `-${String(target.layer)}`} ` +
+          `is for a seated clip of ours, and none is there`,
       };
     }
   }

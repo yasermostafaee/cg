@@ -309,6 +309,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'fixedLayers.state',
         'layers.orphans',
         'layers.owned-occupancy',
+        // `MEDIA-PLATES-01` — a read: each seated clip's clock. Its two acts are refused locked.
+        'liveLayers.media-state',
         'liveLayers.state',
         // The way out. A lock that refused this would need a bridge restart to escape.
         'lock.release',

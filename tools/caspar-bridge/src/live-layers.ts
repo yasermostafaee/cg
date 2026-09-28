@@ -137,6 +137,26 @@ export interface LiveLayerRecord {
    * Additive: absent is every plate that is not a Playout route, and every plate before this field.
    */
   readonly epoch?: string | undefined;
+  /**
+   * 🔴 `MEDIA-PLATES-01` — **THIS LAYER CARRIES A MEDIA CLIP**, a producer with a timeline: present
+   * for every seat whose source is a `media` entry, absent for every live input. What it records is
+   * what was SENT, like the rest of the ledger:
+   *
+   * - `loop` — the clip was played with `LOOP` (or a `CALL … LOOP 1` landed since);
+   * - `paused` — WHO paused it: `hidden` when a look hid a `pause` clip (a look showing it again
+   *   `RESUME`s it), `operator` when the operator pressed Pause (it stays paused until they press
+   *   Play or Restart, whatever the looks do). Absent = playing, or frozen on its last frame.
+   *
+   * Additive: absent is every plate seated before this field, and every live-input plate.
+   *
+   * ⚠ Named `transport`, never `clip`: {@link clip} is the `MIXER CLIP` mask above.
+   */
+  readonly transport?:
+    | {
+        readonly loop: boolean;
+        readonly paused?: 'hidden' | 'operator' | undefined;
+      }
+    | undefined;
 }
 
 /**
@@ -179,6 +199,10 @@ const LiveLayerRecordSchema = z.object({
   origin: z.enum(['input', 'media']).optional(),
   // Additive — see {@link LiveLayerRecord.epoch}. A decimal string, never a number (64-bit).
   epoch: z.string().optional(),
+  // Additive — see {@link LiveLayerRecord.transport}. Absent is every live input, and today's plate.
+  transport: z
+    .object({ loop: z.boolean(), paused: z.enum(['hidden', 'operator']).optional() })
+    .optional(),
 });
 
 export const PersistedLiveLayersSchema = z.array(

@@ -20,10 +20,14 @@ import {
   sourceShowableOn,
   unseatableClause,
   unseatableWords,
+  boundMediaPlayback,
+  toBoundMedia,
   type BoundMediaItem,
   type PlayoutCatalogInput,
   type PlayoutInput,
+  type PlayoutMediaItem,
 } from '../src/playout-sources.js';
+import { MEDIA_PLAYBACK_DEFAULTS, mediaPlaybackOf } from '../src/channels/sources.js';
 
 /** `PLAYOUT-SOURCES-01` — the fake station: server `127.0.0.1`, channels 1 and 2 declared. */
 const station = {
@@ -256,6 +260,54 @@ describe('buildPlayoutSourceCatalog (§1.B)', () => {
       departed: true,
       reason: MEDIA_GONE_REASON,
     });
+  });
+
+  it('🔴 `MEDIA-PLATES-01` — a clip’s two settings ride its entry; one without them reads as the defaults', () => {
+    const base: BoundMediaItem = {
+      id: 'm-promo',
+      name: 'پرومو',
+      clip: 'C:/Media/promo.mp4',
+      type: 'video',
+      lastBoundAt: '2026-09-28T08:00:00Z',
+    };
+    const [set, legacy] = catalogOf(
+      [],
+      [
+        { ...base, loop: true, whenHidden: 'continue' },
+        { ...base, id: 'm-legacy' },
+      ],
+    ).sources;
+    expect(set?.media).toMatchObject({ loop: true, whenHidden: 'continue' });
+    expect(mediaPlaybackOf(set ?? { media: undefined })).toEqual({
+      loop: true,
+      whenHidden: 'continue',
+    });
+    // Control: a reference persisted before the settings existed carries neither, and the ONE
+    // reader answers the defaults for it — no other place spells them.
+    expect(legacy?.media).not.toHaveProperty('loop');
+    expect(legacy?.media).not.toHaveProperty('whenHidden');
+    expect(mediaPlaybackOf(legacy ?? { media: undefined })).toEqual(MEDIA_PLAYBACK_DEFAULTS);
+    expect(MEDIA_PLAYBACK_DEFAULTS).toEqual({ loop: false, whenHidden: 'pause' });
+  });
+
+  it('🔴 `MEDIA-PLATES-01` — a NEW reference is written with the defaults; a re-read keeps what the station set', () => {
+    const read: PlayoutMediaItem = {
+      id: 'm-promo',
+      name: 'پرومو',
+      clip: 'C:/Media/promo.mp4',
+      type: 'video',
+      durationMs: 30_000,
+    };
+    const bound = toBoundMedia(read, '2026-09-28T08:00:00Z');
+    expect(bound).toMatchObject({ loop: false, whenHidden: 'pause' });
+    const set: BoundMediaItem = { ...bound, loop: true, whenHidden: 'restart' };
+    // The Playout moved the clip: the re-read refreshes the PATH and keeps the settings.
+    const moved = toBoundMedia(
+      { ...read, clip: 'C:/Cache/promo.mpg' },
+      set.lastBoundAt,
+      boundMediaPlayback(set),
+    );
+    expect(moved).toMatchObject({ clip: 'C:/Cache/promo.mpg', loop: true, whenHidden: 'restart' });
   });
 
   it('redacts stream credentials for the console, and only there', () => {

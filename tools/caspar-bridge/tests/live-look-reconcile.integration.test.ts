@@ -219,12 +219,17 @@ function catalog(over: Partial<SourceCatalog> = {}): SourceCatalog {
         format: '1080i5000' as const,
         producer: { kind: 'route' as const, channel: i + 2 },
       })),
-      // A CLIP — the one producer form that cannot be held idle (§12.4's named fallback).
+      /*
+        A CLIP — the one producer form with a timeline. `MEDIA-PLATES-01`: what it does when a look
+        hides it is its own `whenHidden`; this fixture's is `restart`, the one that keeps §12.4's
+        named teardown fallback (the held `pause`/`continue` clips are `media-plates`' suite).
+      */
       {
         id: 'src-clip',
         name: 'Sting',
         format: '1080i5000',
         producer: { kind: 'media' as const, file: 'sting.mov' },
+        media: { whenHidden: 'restart' as const },
       },
       // A 4:3 feed, so a swap changes the CROP visibly.
       {
@@ -647,9 +652,16 @@ it('§12.4 — a HOLD is announced with its reason, and holds only what can be h
   }
 });
 
-it('🔴 §12.4 fallback — a MEDIA clip cannot be held idle, so it is torn down BY NAME', async () => {
+it('🔴 §12.4 fallback — a MEDIA clip set to RESTART is torn down BY NAME', async () => {
+  /*
+    `MEDIA-PLATES-01` — RE-EXPRESSED. This test read "a MEDIA clip cannot be held idle", on the
+    premise that a held clip "would run to its end and come back black". Both halves are gone: a
+    2.5.0 clip freezes on its last frame at its end, and a clip is now held by default (`pause`).
+    The teardown it pins is what `whenHidden: 'restart'` CHOOSES — the fixture's `src-clip` — and
+    it is byte for byte what every clip did before the setting existed.
+  */
   const r = await boot({
-    // `live-2` is a clip: held across a look it would run to its end and come back black.
+    // `live-2` is a clip set to restart when hidden.
     assignments: assign([
       ['live-1', 'src-1'],
       ['live-2', 'src-clip'],
@@ -667,8 +679,8 @@ it('🔴 §12.4 fallback — a MEDIA clip cannot be held idle, so it is torn dow
 
   const lines = await since(before);
   const clipRelease = seen.find((e) => e.plateId === 'live-2');
-  expect(clipRelease?.disposition, 'a clip cannot be held').toBe('torn-down');
-  expect(clipRelease?.reason).toContain('media clip');
+  expect(clipRelease?.disposition, 'a restart clip is not held').toBe('torn-down');
+  expect(clipRelease?.reason).toContain('media clip set to restart when hidden');
   // Torn down means actually cleared, and dropped from the ledger…
   expect(lines).toContain(`CLEAR 1-${String(clipLayer)}`);
   expect(lines).toContain(`MIXER 1-${String(clipLayer)} CLEAR`);

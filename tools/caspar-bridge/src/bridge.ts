@@ -78,6 +78,13 @@ import {
   LiveLayersStateChangedChannel,
   LiveLayersStateChannel,
   LivePlateReleasedChannel,
+  // `MEDIA-PLATES-01` — a clip's settings, its transport on air, and its clock.
+  LiveLayersMediaStateChangedChannel,
+  LiveLayersMediaStateChannel,
+  SourcesSetMediaPlaybackChannel,
+  StackMediaPlateTransportChannel,
+  type MediaPlateTransportAction,
+  type MediaWhenHidden,
   StackLoadChannel,
   StackNextChannel,
   BridgeCapabilitiesChannel,
@@ -1749,6 +1756,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     runtime.setMediaFreshener((sourceId, played) => playoutSources.freshClipFor(sourceId, played));
     // `ROUTE-PLATES-01` rule 5 — the bounded D10 re-read a Playout route waits on (1.5 s).
     runtime.setInputsConfirmer((timeoutMs) => playoutSources.confirmInputs(timeoutMs));
+    // `MEDIA-PLATES-01` §1.A — a clip's two playback settings live on its bound-media reference.
+    runtime.setMediaPlaybackWriter((sourceId, playback) =>
+      playoutSources.setMediaPlayback(sourceId, playback),
+    );
     playoutSources.start();
     // A local provider can answer before anybody signs in; the Playout's first read is at sign-in.
     if (options.playoutSources !== undefined) void playoutSources.refresh(0);
@@ -2787,6 +2798,8 @@ export function wirePublishes(
       reads the ledger on this event sees the state the sentence describes.
     */
     backing.livePlateReleased.subscribe((r) => push(LivePlateReleasedChannel, r)),
+    // `MEDIA-PLATES-01` §1.E — the clips' clock, pushed when what a console shows would change.
+    backing.mediaStateChanged.subscribe((s) => push(LiveLayersMediaStateChangedChannel, s)),
   ];
 }
 
@@ -3164,6 +3177,18 @@ export function buildRoutes(
       (r: { itemId: string; plateId: string; volume: number }) =>
         b.setLivePlateVolume(r.itemId, r.plateId, r.volume),
     ),
+    /*
+      `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for one media plate of an on-air row. It names
+      its row, so the station fence, the principal's grant on that row's channel and a lock covering
+      it all judge it (`channelsForRequest` case (b)); audited by the runtime with the clip's name.
+    */
+    route(
+      StackMediaPlateTransportChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; plateId: string; action: MediaPlateTransportAction }) =>
+        b.mediaPlateTransport(r.itemId, r.plateId, r.action),
+    ),
     // `add-multibox-audio` — the same intent for SEVERAL plates as ONE action, which is what
     // SOLO and PANIC are. It composes the writer above rather than duplicating it, and holds
     // the item's live-seat lock so a look switch cannot interleave into the middle of a SOLO.
@@ -3328,6 +3353,8 @@ export function buildRoutes(
     // a live-source coordinate BY NAME. This channel exists so the operator can
     // SEE which row owns a lit layer, never to add a fourth way to cut one.
     route(LiveLayersStateChannel, 'read', 'read', () => b.liveLayersState()),
+    // `MEDIA-PLATES-01` §1.E — each seated clip's remaining time (from OSC only), pause and end.
+    route(LiveLayersMediaStateChannel, 'read', 'read', () => b.mediaPlateStates()),
 
     /*
       🔴 `B-257` — the engage CAPTURES the engager's channels. `lockScopeAtEngage` answers
@@ -3511,6 +3538,19 @@ export function buildRoutes(
       void playoutSources?.refresh(PICKER_FRESH_MS);
       return { ok: true as const };
     }),
+    /*
+      `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, STATION-WIDE: the operator's, not
+      the station admin's (it is how a clip plays, like a volume). It names no channel, so the grant
+      is the role alone and a channel-scoped lock refuses it. Audited by the runtime with the clip's
+      name; a Loop change reaches that clip on air at once.
+    */
+    route(
+      SourcesSetMediaPlaybackChannel,
+      'operator',
+      'operator',
+      (r: { mediaId: string; loop: boolean; whenHidden: MediaWhenHidden }) =>
+        b.setMediaPlayback(r.mediaId, { loop: r.loop, whenHidden: r.whenHidden }),
+    ),
 
     // R-022 — REHEARSE. Bridge-owned so several browsers agree about which rows
     // are interlocked, and every guard (on-air, not-loaded, mute-failed) lives

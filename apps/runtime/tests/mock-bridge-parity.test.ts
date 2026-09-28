@@ -137,6 +137,8 @@ const BRIDGE_SURFACE: {
       // `PLAYOUT-SOURCES-01` — the picker's two reads, on both backends.
       'mediaSearch',
       'refresh',
+      // `MEDIA-PLATES-01` — a bound clip's Loop and When hidden, on the bound-media reference.
+      'setMediaPlayback',
     ],
     stack: [
       'load',
@@ -175,6 +177,9 @@ const BRIDGE_SURFACE: {
       'silenceAllLivePlates',
       // `MULTI-CHANNEL-01` §2 C — PANIC for one channel, a new verb beside the one above.
       'silenceChannelLivePlates',
+      // `MEDIA-PLATES-01` — Play/Pause and Restart on a clip of an on-air row. The mock answers
+      // from its seeded clips (`CG_E2E_MEDIA_STATE`) with the bridge's refusals.
+      'mediaPlateTransport',
       'removeAll',
       'clearAll',
       'stopAll',
@@ -248,7 +253,8 @@ const BRIDGE_SURFACE: {
       backend and not the other and go unnoticed until the plant — which is what happened to
       the emitter behind it for the whole life of `multibox-layout-switch`.
     */
-    liveLayers: ['state', 'onStateChanged', 'onPlateReleased'],
+    // `MEDIA-PLATES-01` — and each seated clip's transport state, pulled and pushed.
+    liveLayers: ['state', 'onStateChanged', 'onPlateReleased', 'mediaState', 'onMediaStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
     // R-022 — `html` is the RETAINED self-contained page for a template, read from

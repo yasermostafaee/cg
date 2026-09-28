@@ -408,8 +408,51 @@ export class CommandBuilder {
    * method ever disagree again, `apps/runtime/tests/decklinkKeyDeviceHonesty.dom.test.ts`
    * is the test that fails: it asserts BOTH halves against the SAME value.
    */
-  playSource(slot: CommandSlot, producer: SourceProducer): string {
-    return `PLAY ${target(slot)} ${this.sourceArgument(producer)}`;
+  playSource(
+    slot: CommandSlot,
+    producer: SourceProducer,
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.B — a CLIP whose Loop setting is on is played with `LOOP`, a bare
+     * flag (2.5.0's `ffmpeg_producer.cpp` tests for the word; `LOOP 0` would loop too, so a value is
+     * never written). Asked of a `media` producer only; every other form, and a clip without it, is
+     * today's line byte for byte. The ARGUMENT is unchanged either way — {@link sourceArgument} is
+     * what the ledger records, and a seat's identity does not depend on whether it loops.
+     */
+    options: { readonly loop?: boolean } = {},
+  ): string {
+    const loop = producer.kind === 'media' && options.loop === true ? ' LOOP' : '';
+    return `PLAY ${target(slot)} ${this.sourceArgument(producer)}${loop}`;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` — hold a clip's frame: `PAUSE <ch>-<layer>`. A FILE only: the Playout's "never
+   * `PAUSE`" rule (contract v1.3) is for a route, and nothing calls this for one. Layer-scoped.
+   */
+  pause(slot: CommandSlot): string {
+    return `PAUSE ${target(slot)}`;
+  }
+
+  /** `MEDIA-PLATES-01` — continue a paused clip from the frame it holds: `RESUME <ch>-<layer>`. */
+  resume(slot: CommandSlot): string {
+    return `RESUME ${target(slot)}`;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` — move a clip to a FRAME: `CALL <ch>-<layer> SEEK <frame>`, in the channel's
+   * field rate (2.5.0 `ffmpeg_producer.cpp`). `0` is its beginning — the Restart; it works on a clip
+   * frozen at its end too (measured: `201 CALL OK`, then it plays again).
+   */
+  seekFrame(slot: CommandSlot, frame: number): string {
+    return `CALL ${target(slot)} SEEK ${String(frame)}`;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` §1.A — switch looping on a clip that is ALREADY playing: `CALL <ch>-<layer>
+   * LOOP 1|0` (2.5.0 `ffmpeg_producer.cpp`: `LOOP` with a value sets it). Measured on the owner's
+   * core: `201 CALL OK`, and a looping clip seeked past its end was then at `0.70/4.00`.
+   */
+  setLoop(slot: CommandSlot, loop: boolean): string {
+    return `CALL ${target(slot)} LOOP ${loop ? '1' : '0'}`;
   }
 
   /**

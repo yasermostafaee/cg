@@ -98,6 +98,15 @@ const NON_VERB_ACTIONS = [
   */
   'template-redeliver',
   'template-remove',
+  /*
+    `MEDIA-PLATES-01` — a clip's station-wide settings (a CONFIGURATION verb that names no row, so
+    `CONFIG_VERBS` — per ITEM — does not fit it) and the operator's transport on a media plate on air
+    (it names a PLATE's layer, not the row's template slot, and is none of the seven). Driven by
+    `tests/media-plates.integration.test.ts`, which asserts one row per press, the clip's NAME in
+    `media`, and each refusal's code.
+  */
+  'set-media-playback',
+  'media-transport',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {

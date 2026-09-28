@@ -86,6 +86,13 @@ export const AuditEntrySchema = z.object({
     */
     'template-redeliver',
     'template-remove',
+    /*
+      `MEDIA-PLATES-01` — a clip's two playback settings were set (a CONFIGURATION verb, station-wide:
+      it seats nothing), and the operator's transport on a media plate on air. Both carry the clip's
+      NAME in `media` — a clip is named by what the operator reads, never by its id.
+    */
+    'set-media-playback',
+    'media-transport',
   ]),
   /**
    * 🔴 `C-037` / ADR 0010 rule 3 — the token's `sub`: an opaque, stable user id, kept
@@ -173,6 +180,20 @@ export const AuditEntrySchema = z.object({
       passes: z.union([z.number().int().min(0), z.literal('infinite')]).optional(),
       /** The gap BETWEEN passes, ms, as asked. `0` is legal and means no gap. */
       delayMs: z.number().min(0).optional(),
+    })
+    .optional(),
+  /**
+   * `MEDIA-PLATES-01` — WHAT a `set-media-playback` or `media-transport` row carried: the clip's
+   * name, and what was ASKED — the settings as set, or the transport action and its plate. Absent on
+   * every other action.
+   */
+  media: z
+    .object({
+      name: z.string().min(1),
+      loop: z.boolean().optional(),
+      whenHidden: z.enum(['pause', 'restart', 'continue']).optional(),
+      transport: z.enum(['play', 'pause', 'restart']).optional(),
+      plateId: z.string().min(1).optional(),
     })
     .optional(),
 });

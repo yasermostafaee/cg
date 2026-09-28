@@ -494,9 +494,8 @@ describe('the WIRE — the channel a browser actually reads', () => {
       plateId: 'guest-2',
       disposition: 'torn-down' as const,
       reason:
-        'plate "guest-2" is a media clip, which cannot be held idle — a clip held across a ' +
-        'look runs to its end and comes back black, so it was cleared and will be re-seated ' +
-        'when a look shows it again',
+        'plate "guest-2" is a media clip set to restart when hidden, so it was cleared and ' +
+        'will play from the beginning when a look shows it again',
     };
     handle.runtime.livePlateReleased.emit(release);
 

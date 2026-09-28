@@ -104,6 +104,11 @@ import type {
   SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
+  // `MEDIA-PLATES-01` — a clip's settings, its transport on air, and its clock.
+  LiveLayersMediaStateChannel,
+  MediaPlateState,
+  SourcesSetMediaPlaybackChannel,
+  StackMediaPlateTransportChannel,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 
@@ -355,6 +360,14 @@ export interface RuntimeBridge {
     setPlateVolumes(
       req: ChannelRequest<typeof StackSetPlateVolumesChannel>,
     ): Promise<ChannelResponse<typeof StackSetPlateVolumesChannel>>;
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for ONE media plate of an on-air row.
+     * Refused with nothing sent for a live-input plate, a plate that is not seated, or a row that
+     * is not on air; the permission, the row's channel and the lock are the bridge's gate.
+     */
+    mediaPlateTransport(
+      req: ChannelRequest<typeof StackMediaPlateTransportChannel>,
+    ): Promise<ChannelResponse<typeof StackMediaPlateTransportChannel>>;
     /**
      * 🔴 **PANIC — silence every live plate the BRIDGE holds a seat for.**
      *
@@ -660,6 +673,13 @@ export interface RuntimeBridge {
      * exactly that reason.
      */
     onPlateReleased(release: (event: LivePlateReleaseState) => void): Unsubscribe;
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.E — every seated media plate's transport state: the remaining time
+     * (ABSENT unless the server reported the clip's time — never estimated), paused, ended and
+     * loop. Standing state, pulled on connect and pushed when what a console shows would change.
+     */
+    mediaState(): Promise<ChannelResponse<typeof LiveLayersMediaStateChannel>>;
+    onMediaStateChanged(handler: (state: MediaPlateState[]) => void): Unsubscribe;
   };
 
   templates: {
@@ -961,6 +981,14 @@ export interface RuntimeBridge {
      * older than 5 s. Answers at once; what changes arrives on {@link onConfigChanged}.
      */
     refresh(): Promise<ChannelResponse<typeof SourcesRefreshChannel>>;
+    /**
+     * 🔴 `MEDIA-PLATES-01` §1.A — a bound clip's two playback settings, STATION-WIDE: Loop, and what
+     * it does when a look hides it. Operator class, audited with the clip's name; the new catalogue
+     * (carrying them) arrives on {@link onConfigChanged}.
+     */
+    setMediaPlayback(
+      req: ChannelRequest<typeof SourcesSetMediaPlaybackChannel>,
+    ): Promise<ChannelResponse<typeof SourcesSetMediaPlaybackChannel>>;
   };
 
   delimiters: {

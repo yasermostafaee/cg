@@ -321,6 +321,14 @@ const HARNESS_BANK = {
 /** The bed row the measured template is taken onto — `Bed 1`, the top of the bed group. */
 const BED_LAYER = 9;
 
+/**
+ * `MEDIA-PLATES-01` — the harness's clips are `restart` when hidden: torn down as a look hides them
+ * and played afresh when one shows them, which is what every clip did when this harness's evidence
+ * was recorded. A clip is held by default now (`pause`); pinning the old behaviour keeps a new run
+ * measuring the same switch as the reports under `evidence/`.
+ */
+const HARNESS_CLIP_PLAYBACK = { whenHidden: 'restart' } as const;
+
 function catalog(): unknown {
   return {
     layerRange: { start: 30, end: 39 },
@@ -328,6 +336,7 @@ function catalog(): unknown {
       id: `src-${String(i + 1)}`,
       name: clip,
       producer: { kind: 'media', file: clip },
+      media: HARNESS_CLIP_PLAYBACK,
     })),
   };
 }
@@ -683,11 +692,17 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       const catalogPointing = (file: string): unknown => ({
         layerRange: { start: 30, end: 39 },
         sources: [
-          { id: 'src-1', name: file, producer: { kind: 'media', file } },
+          {
+            id: 'src-1',
+            name: file,
+            producer: { kind: 'media', file },
+            media: HARNESS_CLIP_PLAYBACK,
+          },
           {
             id: 'src-2',
             name: SOURCE_CLIPS[1],
             producer: { kind: 'media', file: SOURCE_CLIPS[1] },
+            media: HARNESS_CLIP_PLAYBACK,
           },
         ],
       });

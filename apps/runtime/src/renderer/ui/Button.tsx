@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cssVars } from '../theme.js';
 
 /**
@@ -117,14 +117,31 @@ export function buttonClass(variant: ButtonVariant = 'default', extra = ''): str
  * R-007 — a plain styled button for PURE-LOCAL actions (no bridge round-trip):
  * hover / active-pressed / focus-visible / disabled via `controls.css`. For a
  * bridge round-trip use `AsyncButton` instead (busy / success / error).
+ *
+ * The ref reaches the `<button>` itself (`MEDIA-PLATES-01`): an anchored panel (`Popover`) hangs from
+ * the control that opened it and gives focus back to it on close — the same forwarding `ComboField`
+ * and `TextInput` do.
  */
-export function Button({
-  variant = 'default',
-  active,
-  className,
-  children,
-  ...rest
-}: {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = 'default', active, className, children, ...rest },
+  ref,
+): JSX.Element {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={buttonClass(
+        variant,
+        [active === true ? 'is-on' : '', className].filter(Boolean).join(' '),
+      )}
+      {...rest}
+    >
+      {children}
+    </button>
+  );
+});
+
+type ButtonProps = {
   variant?: ButtonVariant;
   /**
    * This control is a TOGGLE and it is currently ENGAGED — paints the `.is-on`
@@ -143,17 +160,4 @@ export function Button({
    */
   active?: boolean;
   children: ReactNode;
-} & ButtonHTMLAttributes<HTMLButtonElement>): JSX.Element {
-  return (
-    <button
-      type="button"
-      className={buttonClass(
-        variant,
-        [active === true ? 'is-on' : '', className].filter(Boolean).join(' '),
-      )}
-      {...rest}
-    >
-      {children}
-    </button>
-  );
-}
+} & ButtonHTMLAttributes<HTMLButtonElement>;

@@ -238,6 +238,9 @@ export function createMockBridge(): RuntimeBridge {
         Promise.resolve(mock.setPlateVolume(req.itemId, req.plateId, req.volume)),
       // `add-multibox-audio` — the MAP door (FADER / ON-OFF / SOLO).
       setPlateVolumes: (req) => Promise.resolve(mock.setPlateVolumes(req.itemId, req.volumes)),
+      // `MEDIA-PLATES-01` §1.D — the transport on a seeded clip, with the bridge's refusals.
+      mediaPlateTransport: (req) =>
+        Promise.resolve(mock.mediaPlateTransport(req.itemId, req.plateId, req.action)),
       // PANIC — no arguments: the scope is the LEDGER's, not the caller's.
       silenceAllLivePlates: () => Promise.resolve(mock.silenceAllLivePlates()),
       // `MULTI-CHANNEL-01` §2 C — PANIC for one channel, from the same mock ledger.
@@ -390,6 +393,9 @@ export function createMockBridge(): RuntimeBridge {
       // `B-247` — declared so the SPA can subscribe on either backend; never fired offline,
       // for the reason the emitter's own note gives (the mock has no look reconcile).
       onPlateReleased: (handler) => mock.livePlateReleased.subscribe(handler),
+      // `MEDIA-PLATES-01` §1.E — the seeded clips' transport state (`CG_E2E_MEDIA_STATE`).
+      mediaState: () => Promise.resolve(mock.mediaPlateStates()),
+      onMediaStateChanged: (handler) => mock.mediaStateChanged.subscribe(handler),
     },
 
     lock: {
@@ -456,6 +462,11 @@ export function createMockBridge(): RuntimeBridge {
       mediaSearch: (req) => Promise.resolve(mock.searchMedia(req)),
       // Nothing to read again offline: the seeded lists are all there is.
       refresh: () => Promise.resolve({ ok: true as const }),
+      // `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, on the mock's bound media.
+      setMediaPlayback: (req) =>
+        Promise.resolve(
+          mock.setMediaPlayback(req.mediaId, { loop: req.loop, whenHidden: req.whenHidden }),
+        ),
     },
 
     delimiters: {

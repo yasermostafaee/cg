@@ -41,6 +41,9 @@ import type {
   ConsoleMediaItem,
   PlayoutInputsState,
   PlayoutMediaItem,
+  MediaPlateState,
+  MediaPlateTransportAction,
+  MediaPlayback,
 } from '@cg/shared-ipc';
 // R-030 — `videoModeRaster` is the ONE video-mode → raster map, shared with the
 // bridge. The mock must never carry a second copy: a mock that disagreed with the
@@ -139,6 +142,48 @@ function readPlayoutSeed(): PlayoutSeed {
     unavailable: ids(raw['unavailable']),
     down: raw['down'] === true,
   };
+}
+
+/**
+ * 🔴 `MEDIA-PLATES-01` parity — **THE OFFLINE CONSOLE'S CLIPS ON AIR, ARMED BY A TEST AND BY NOTHING
+ * ELSE.** The mock seats nothing on its own (see `seedLiveLayers`), so which plate carries a clip —
+ * the bridge's `liveLayers.media-state` — is seeded: `window.CG_E2E_MEDIA_STATE`, one entry per
+ * `(templateId, plateId)`, shown for every ON-AIR row of that template. `lengthMs` is what Restart
+ * rewinds to; `remainingMs` absent is a server that reported no time. Without the flag no plate is a
+ * clip, which is the true state of a console with no bridge.
+ */
+interface MediaStateSeed {
+  readonly templateId: string;
+  readonly plateId: string;
+  readonly lengthMs: number;
+  readonly remainingMs?: number;
+  readonly paused?: boolean;
+  readonly ended?: boolean;
+  readonly loop?: boolean;
+  /** The clip's catalogue id (`md-…`) — its name for the audit, and which clip a Loop change reaches. */
+  readonly sourceId?: string;
+  readonly layer?: number;
+}
+
+function readMediaStateSeed(): readonly MediaStateSeed[] {
+  const raw = (globalThis as { CG_E2E_MEDIA_STATE?: unknown }).CG_E2E_MEDIA_STATE;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (s): s is MediaStateSeed =>
+      typeof s === 'object' &&
+      s !== null &&
+      typeof (s as MediaStateSeed).templateId === 'string' &&
+      typeof (s as MediaStateSeed).plateId === 'string' &&
+      typeof (s as MediaStateSeed).lengthMs === 'number',
+  );
+}
+
+/** `MEDIA-PLATES-01` parity — one clip's transport as the mock's verbs have left it. */
+interface MockClipTransport {
+  readonly remainingMs: number | undefined;
+  readonly paused: boolean;
+  readonly ended: boolean;
+  readonly loop: boolean;
 }
 
 /**
@@ -299,6 +344,14 @@ export class MockRuntime {
    * whose absence from the renderer is the entire reason this channel exists.
    */
   readonly livePlateReleased = new Emitter<LivePlateReleaseState>();
+  /**
+   * `MEDIA-PLATES-01` parity — each seeded clip's transport state, pushed whenever it or the stack
+   * changes (a row going on or off air is what makes a seeded clip appear or go).
+   */
+  readonly mediaStateChanged = new Emitter<MediaPlateState[]>();
+  readonly #mediaSeed = readMediaStateSeed();
+  /** `(itemId, plateId)` → what the transport verbs have done to that clip since the seed. */
+  readonly #mediaTransport = new Map<string, MockClipTransport>();
   // R-034 parity — the shared delimiter list.
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
   // D-137 / C-015 parity — the installation's Live Source mapping.
@@ -1063,6 +1116,151 @@ export class MockRuntime {
       };
     });
     return { ok: results.every((r) => r.ok), results };
+  }
+
+  /** `(itemId, plateId)` as one key — the pair encoded, so no separator is reserved. */
+  static #clipKey(itemId: string, plateId: string): string {
+    return JSON.stringify([itemId, plateId]);
+  }
+
+  /** A seeded clip's transport now: the seed, as the transport verbs have since left it. */
+  #clipTransport(itemId: string, seed: MediaStateSeed): MockClipTransport {
+    return (
+      this.#mediaTransport.get(MockRuntime.#clipKey(itemId, seed.plateId)) ?? {
+        remainingMs: seed.remainingMs,
+        paused: seed.paused === true,
+        ended: seed.ended === true,
+        loop: seed.loop === true,
+      }
+    );
+  }
+
+  /**
+   * `MEDIA-PLATES-01` §1.E parity — every seated clip's transport state, from the seed: one entry per
+   * seeded `(templateId, plateId)` on every ON-AIR row of that template. `remainingMs` is the seed's
+   * and does not count down — the mock has no server reporting a clock.
+   */
+  mediaPlateStates(): MediaPlateState[] {
+    const out: MediaPlateState[] = [];
+    for (const item of this.#stack) {
+      if (!isOnAirStatus(item)) continue;
+      for (const seed of this.#mediaSeed) {
+        if (seed.templateId !== item.templateId) continue;
+        const now = this.#clipTransport(item.itemId, seed);
+        out.push({
+          itemId: item.itemId,
+          plateId: seed.plateId,
+          channel: this.#slotFor(item.itemId)?.channel ?? MOCK_CHANNEL,
+          layer: seed.layer ?? SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start,
+          ...(now.remainingMs !== undefined && { remainingMs: now.remainingMs }),
+          paused: now.paused,
+          ended: now.ended,
+          loop: now.loop,
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` §1.D parity — the bridge's transport verb and its refusals: a row not on air,
+   * then a plate that carries no clip (the mock seats only what is seeded, so an unseeded plate is
+   * one with nothing seated). Audited with the clip's name, as the bridge does.
+   */
+  mediaPlateTransport(
+    itemId: string,
+    plateId: string,
+    action: MediaPlateTransportAction,
+  ): { ok: boolean; reason?: 'not-media' | 'not-seated' | 'not-on-air'; message?: string } {
+    const item = this.#find(itemId);
+    if (item === null || !isOnAirStatus(item)) {
+      return {
+        ok: false,
+        reason: 'not-on-air',
+        message: 'This row is not on air. Nothing was sent.',
+      };
+    }
+    const seed = this.#mediaSeed.find(
+      (s) => s.templateId === item.templateId && s.plateId === plateId,
+    );
+    if (seed === undefined) {
+      return {
+        ok: false,
+        reason: 'not-seated',
+        message: 'Nothing is seated here. Nothing was sent.',
+      };
+    }
+    const now = this.#clipTransport(itemId, seed);
+    const next: MockClipTransport =
+      action === 'pause'
+        ? { ...now, paused: true }
+        : action === 'play'
+          ? { ...now, paused: false }
+          : { ...now, paused: false, ended: false, remainingMs: seed.lengthMs };
+    this.#mediaTransport.set(MockRuntime.#clipKey(itemId, plateId), next);
+    const name =
+      seed.sourceId === undefined
+        ? undefined
+        : this.sourceCatalog().sources.find((s) => s.id === seed.sourceId)?.name;
+    this.#audit.unshift(
+      auditEntry('media-transport', {
+        ...this.#auditItem(itemId, item.templateId),
+        media: { name: name ?? plateId, transport: action, plateId },
+      }),
+    );
+    this.mediaStateChanged.emit(this.mediaPlateStates());
+    return { ok: true };
+  }
+
+  /**
+   * `MEDIA-PLATES-01` §1.A parity — a bound clip's two settings, written on its bound-media reference
+   * (the console's `bridge-bound-media.json`), republished with the catalogue; a Loop change reaches
+   * the seeded clips of that media already on air, as the bridge's `CALL … LOOP` does.
+   */
+  setMediaPlayback(
+    mediaId: string,
+    playback: MediaPlayback,
+  ): { ok: boolean; reason?: 'unknown-media'; message?: string } {
+    const playoutId = playoutMediaIdOf(mediaId);
+    const held = readStored(BOUND_MEDIA_KEY, BoundMediaStateSchema, { items: [] }).items;
+    const seed = this.#playoutSeed();
+    const seeded = (): BoundMediaItem | undefined => {
+      if (playoutId === null || !seed.bound.includes(playoutId)) return undefined;
+      const item = seed.library.find((m) => m.id === playoutId);
+      return item === undefined ? undefined : toBoundMedia(item, '2026-09-01T00:00:00.000Z');
+    };
+    const base = held.find((m) => m.id === playoutId) ?? seeded();
+    if (playoutId === null || base === undefined) {
+      return {
+        ok: false,
+        reason: 'unknown-media',
+        message: 'That clip is not bound on this station. Nothing was changed.',
+      };
+    }
+    writeStored(BOUND_MEDIA_KEY, {
+      items: [
+        ...held.filter((m) => m.id !== playoutId),
+        { ...base, loop: playback.loop, whenHidden: playback.whenHidden },
+      ],
+    });
+    for (const item of this.#stack) {
+      if (!isOnAirStatus(item)) continue;
+      for (const clip of this.#mediaSeed) {
+        if (clip.templateId !== item.templateId || clip.sourceId !== mediaId) continue;
+        this.#mediaTransport.set(MockRuntime.#clipKey(item.itemId, clip.plateId), {
+          ...this.#clipTransport(item.itemId, clip),
+          loop: playback.loop,
+        });
+      }
+    }
+    this.#audit.unshift(
+      auditEntry('set-media-playback', {
+        media: { name: base.name, loop: playback.loop, whenHidden: playback.whenHidden },
+      }),
+    );
+    this.sourceCatalogChanged.emit(this.sourceCatalog());
+    this.mediaStateChanged.emit(this.mediaPlateStates());
+    return { ok: true };
   }
 
   /**
@@ -2534,6 +2732,8 @@ export class MockRuntime {
 
   #emitStack(): void {
     this.stackChanged.emit(this.stackSnapshot());
+    // `MEDIA-PLATES-01` parity — a row going on or off air brings its seeded clips with it.
+    this.mediaStateChanged.emit(this.mediaPlateStates());
   }
 }
 

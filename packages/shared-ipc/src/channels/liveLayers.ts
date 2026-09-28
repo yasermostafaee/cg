@@ -146,6 +146,51 @@ export const LiveLayersStateChangedChannel = definePublishChannel(
   z.array(LiveLayerStateSchema),
 );
 
+/**
+ * 🔴 `MEDIA-PLATES-01` — **EACH SEATED MEDIA PLATE'S TRANSPORT STATE: what the console shows beside
+ * the clip on an on-air row.**
+ *
+ * A separate channel from the ledger's, and deliberately: this is an OBSERVATION of a clip's clock
+ * (the server's `file/time`), which changes every second, while `liveLayers.state` is the ledger and
+ * is pushed only when the ledger changes. Folding a countdown into it would make the ledger's one
+ * notification a second, timer-driven one.
+ *
+ * `remainingMs` is ABSENT whenever the server has not reported the clip's time — the console then
+ * shows no number at all. It is never estimated from when a `PLAY` was sent.
+ */
+export const MediaPlateStateSchema = z.object({
+  itemId: IdSchema,
+  /** The SCENE's handle for the hole (`guest-1`). */
+  plateId: z.string().min(1),
+  channel: z.number().int().positive(),
+  layer: z.number().int().nonnegative(),
+  /** Whole milliseconds left, from `file/time`; absent when the server does not report it. */
+  remainingMs: z.number().int().nonnegative().optional(),
+  /** The bridge paused it: a hidden `pause` clip, or the operator's Pause. */
+  paused: z.boolean(),
+  /** A clip that is not looping reached its end and stands frozen on its last frame. */
+  ended: z.boolean(),
+  /** The clip loops (its Loop setting). */
+  loop: z.boolean(),
+});
+export type MediaPlateState = z.infer<typeof MediaPlateStateSchema>;
+
+/** Every seated media plate's transport state ([] when none), by channel then layer. */
+export const LiveLayersMediaStateChannel = defineChannel(
+  'liveLayers.media-state',
+  z.void(),
+  z.array(MediaPlateStateSchema),
+);
+
+/**
+ * Pushed when what the console SHOWS would change: a whole second of remaining time, a pause, an
+ * end — never at the server's frame rate.
+ */
+export const LiveLayersMediaStateChangedChannel = definePublishChannel(
+  'liveLayers.media-state-changed',
+  z.array(MediaPlateStateSchema),
+);
+
 // ───────── `B-247` — WHY A SEAT LEFT THE LEDGER, and not merely THAT it did ─────────
 
 /**

@@ -1100,6 +1100,31 @@ export async function armPlayoutSources(page: Page, seed: PlayoutSeed): Promise<
   }, seed);
 }
 
+/**
+ * 🔴 `MEDIA-PLATES-01` — **THE OFFLINE CONSOLE'S CLIPS ON AIR, AS A SPEC ARMS THEM.** The mock seats
+ * nothing on its own, so which plate carries a clip — the bridge's `liveLayers.media-state` — is
+ * seeded (`window.CG_E2E_MEDIA_STATE`), one entry per `(templateId, plateId)`, shown for every ON-AIR
+ * row of that template. `lengthMs` is what Restart rewinds to; no `remainingMs` is a server that
+ * reported no time. Opt in per file with `test.use({ mediaState: [...] })`.
+ */
+export interface MediaStateSeed {
+  readonly templateId: string;
+  readonly plateId: string;
+  readonly lengthMs: number;
+  readonly remainingMs?: number;
+  readonly paused?: boolean;
+  readonly ended?: boolean;
+  readonly loop?: boolean;
+  /** The clip's catalogue id (`md-…`): its name for the audit, and which clip a Loop change reaches. */
+  readonly sourceId?: string;
+}
+
+export async function armMediaState(page: Page, seed: readonly MediaStateSeed[]): Promise<void> {
+  await page.addInitScript((value) => {
+    (window as unknown as { CG_E2E_MEDIA_STATE: unknown }).CG_E2E_MEDIA_STATE = value;
+  }, seed);
+}
+
 /** What to choose in a source picker: one of the call site's own choices, an input, or media. */
 export type SourcePick =
   | { readonly choice: string }
@@ -1181,8 +1206,11 @@ export const test = base.extend<{
   splashDisabled: void;
   /** `PLAYOUT-SOURCES-01` — the offline console's Playout ({@link E2E_PLAYOUT}); none by default. */
   playoutSources: PlayoutSeed | null;
+  /** `MEDIA-PLATES-01` — the offline console's clips on air ({@link MediaStateSeed}); none by default. */
+  mediaState: readonly MediaStateSeed[] | null;
 }>({
   playoutSources: [null, { option: true }],
+  mediaState: [null, { option: true }],
   /**
    * Auto, so a spec that drives the raw `page` (arming its own bridge URL and navigating
    * itself, e.g. `bridge-indicator.spec.ts`) is covered too — those never touch `app`, so
@@ -1196,9 +1224,10 @@ export const test = base.extend<{
     },
     { auto: true },
   ],
-  app: async ({ page, playoutSources }, use) => {
+  app: async ({ page, playoutSources, mediaState }, use) => {
     await disableSplash(page);
     if (playoutSources !== null) await armPlayoutSources(page, playoutSources);
+    if (mediaState !== null) await armMediaState(page, mediaState);
     await page.addInitScript(() => {
       (window as unknown as { CG_E2E: boolean }).CG_E2E = true;
       // R-028 — the declared bank is armed for EVERY spec now, because the

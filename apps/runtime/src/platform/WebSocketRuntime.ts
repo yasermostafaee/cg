@@ -33,6 +33,12 @@ import {
   LiveLayersStateChannel,
   LiveLayersStateChangedChannel,
   LivePlateReleasedChannel,
+  // `MEDIA-PLATES-01` — a clip's settings, its transport on air, and its clock.
+  LiveLayersMediaStateChangedChannel,
+  LiveLayersMediaStateChannel,
+  SourcesSetMediaPlaybackChannel,
+  StackMediaPlateTransportChannel,
+  type MediaPlateState,
   StackLoadChannel,
   StackNextChannel,
   StackOutChannel,
@@ -493,6 +499,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #liveLayerSubs = new Subs<LiveLayerState[]>();
   // `B-247` — and WHY a plate left that ledger, which the ledger payload cannot say.
   readonly #plateReleaseSubs = new Subs<LivePlateReleaseState>();
+  // `MEDIA-PLATES-01` — each seated clip's remaining time, pause and end.
+  readonly #mediaStateSubs = new Subs<MediaPlateState[]>();
 
   #readyResolve: (() => void) | null = null;
   #readyReject: ((err: Error) => void) | null = null;
@@ -1374,6 +1382,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#plateReleaseSubs.emit(p.data);
         break;
       }
+      case LiveLayersMediaStateChangedChannel.name: {
+        const p = LiveLayersMediaStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#mediaStateSubs.emit(p.data);
+        break;
+      }
       /*
         🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THE BRIDGE SAYS THE PERMISSIONS MOVED.**
 
@@ -1672,6 +1685,9 @@ export class WebSocketRuntime implements RuntimeBridge {
     // `add-multibox-audio` — the MAP door: FADER, ON/OFF and SOLO all arrive here.
     setPlateVolumes: (req: ChannelRequest<typeof StackSetPlateVolumesChannel>) =>
       this.#invoke(StackSetPlateVolumesChannel, req),
+    // `MEDIA-PLATES-01` §1.D — Play/Pause and Restart for one media plate of an on-air row.
+    mediaPlateTransport: (req: ChannelRequest<typeof StackMediaPlateTransportChannel>) =>
+      this.#invoke(StackMediaPlateTransportChannel, req),
     // PANIC — no arguments: the bridge scopes it from its own LEDGER, not the browser's copy.
     silenceAllLivePlates: () => this.#invoke(StackSilenceAllLivePlatesChannel, undefined),
     // `MULTI-CHANNEL-01` §2 C — PANIC for the channel on screen; the one above silences them all.
@@ -1915,6 +1931,10 @@ export class WebSocketRuntime implements RuntimeBridge {
     // `B-247` — the bridge's own sentence for a plate the look reconcile let go.
     onPlateReleased: (handler: (event: LivePlateReleaseState) => void) =>
       this.#plateReleaseSubs.add(handler),
+    // `MEDIA-PLATES-01` §1.E — each seated clip's clock, from the server's own report.
+    mediaState: () => this.#invoke(LiveLayersMediaStateChannel, undefined),
+    onMediaStateChanged: (handler: (state: MediaPlateState[]) => void) =>
+      this.#mediaStateSubs.add(handler),
   };
 
   readonly lock = {
@@ -2060,6 +2080,9 @@ export class WebSocketRuntime implements RuntimeBridge {
     mediaSearch: (req: ChannelRequest<typeof SourcesMediaSearchChannel>) =>
       this.#invoke(SourcesMediaSearchChannel, req),
     refresh: () => this.#invoke(SourcesRefreshChannel, undefined),
+    // `MEDIA-PLATES-01` §1.A — a bound clip's Loop and When hidden, station-wide.
+    setMediaPlayback: (req: ChannelRequest<typeof SourcesSetMediaPlaybackChannel>) =>
+      this.#invoke(SourcesSetMediaPlaybackChannel, req),
   };
 
   /** R-034 — the station's delimiter list, owned and disk-persisted by the bridge. */

@@ -101,6 +101,11 @@ import {
   sourceShowableOn,
   unbindableChange,
   redactUrlCredentials,
+  // `MEDIA-PLATES-01` — a clip's playback settings, through the ONE reader.
+  mediaPlaybackOf,
+  type MediaPlayback,
+  type MediaPlateState,
+  type MediaPlateTransportAction,
   type LiveSourceLayerRange,
   type SourceAssignments,
   type SourceCatalog,
@@ -196,6 +201,7 @@ import {
   type LookSourceBindings,
 } from './live-look-bindings.js';
 import {
+  hiddenWhenHeld,
   isParkedFit,
   parkedFit,
   releaseLivePlate,
@@ -297,8 +303,11 @@ type RestorePlacement =
 interface LivePlateApplyPlan {
   readonly placements: readonly LivePlatePlacement[];
   readonly parked: readonly LivePlatePlacement[];
-  /** Keyed by the PRODUCER ARGUMENT — the seat's identity (session BM). */
-  readonly resolved: ReadonlyMap<string, SourceProducer>;
+  /**
+   * Keyed by the PRODUCER ARGUMENT — the seat's identity (session BM). The catalogue ENTRY, because
+   * `canHoldLivePlate` reads a clip's `whenHidden` beside the producer form (`MEDIA-PLATES-01`).
+   */
+  readonly resolved: ReadonlyMap<string, SourceDefinition>;
   readonly offFrame: ReadonlySet<string>;
   /** The producer arguments some look still binds. Keyed by identity, like `resolved`. */
   readonly declared: ReadonlySet<string>;
@@ -357,6 +366,12 @@ interface LivePlatePlacement {
    * the current, confirmed epoch; the ledger keeps it. Absent on every other seat.
    */
   readonly epoch?: string;
+  /**
+   * `MEDIA-PLATES-01` — for a CLIP (a `media` producer), its playback settings as the catalogue
+   * holds them (`mediaPlaybackOf`, the one reader): `loop` decides `PLAY … LOOP`, `whenHidden`
+   * whether a parked seat is paused. Absent on every live input.
+   */
+  readonly playback?: MediaPlayback;
 }
 
 /** Is this placement a Playout route (`@cg/shared-ipc`'s one predicate, asked of a placement)? */
@@ -442,10 +457,11 @@ function wireVolumeOf(record: LiveLayerRecord): number {
 /**
  * 🔴 `ROUTE-PLATES-01` (C2) — the opacity a ledger record's layer carries as today's code computes
  * it: a PLAYOUT ROUTE that is held or parked is HIDDEN, `OPACITY 0` — kept playing, never paused,
- * so showing it again is only the reveal. Every other settled plate is shown, as before.
+ * so showing it again is only the reveal. `MEDIA-PLATES-01` — and so is a held or parked CLIP
+ * ({@link hiddenWhenHeld}, the one question). Every other settled plate is shown, as before.
  */
 function wireOpacityOf(record: LiveLayerRecord): number {
-  return isPlayoutRouteRecord(record) && (record.held === true || isParkedFit(record.fill)) ? 0 : 1;
+  return hiddenWhenHeld(record) && (record.held === true || isParkedFit(record.fill)) ? 0 : 1;
 }
 
 /** What the seat step did for one seat — the facts its action's failure path reads. */
@@ -574,8 +590,9 @@ type LiveSeatingPlan =
        * It also carries the producer FORM, which is what `canHoldLivePlate` needs: the
        * ledger records the producer as the string that went on the wire, and re-parsing
        * that string to recover its kind would be a third spelling of the same fact.
+       * `MEDIA-PLATES-01` — the whole catalogue ENTRY, so a clip's `whenHidden` travels with it.
        */
-      readonly resolved: ReadonlyMap<string, SourceProducer>;
+      readonly resolved: ReadonlyMap<string, SourceDefinition>;
       /**
        * Plates the desired set DID place a rect for, whose hole then clipped to nothing —
        * the row's position override has carried them off the frame entirely.
@@ -835,6 +852,11 @@ interface AuditDetail {
    * force, and recording the merged result would attribute that count to this press.
    */
   timing?: AuditEntry['timing'];
+  /**
+   * `MEDIA-PLATES-01` — `set-media-playback` and `media-transport` ONLY: the clip's NAME and what
+   * was asked (the settings, or the transport action and its plate), through the same one mapping.
+   */
+  media?: AuditEntry['media'];
 }
 
 /**
@@ -934,6 +956,18 @@ const SWEEP_MS = 5000;
  * repetition (~50 Hz), far below the sweep cadence doubling.
  */
 const OCCUPANCY_STALE_MS = 2500;
+/**
+ * `MEDIA-PLATES-01` §1.E — how often the media clock LOOKS for a change the console would show (a
+ * whole second of remaining time, a pause, an end). A look, not a publish: nothing is pushed unless
+ * the shown state changed, so a second of countdown costs one push, not four.
+ */
+const MEDIA_STATE_TICK_MS = 250;
+/**
+ * `MEDIA-PLATES-01` — a clip that is not looping is ENDED once its reported time stands within a
+ * frame of its length. 2.5.0 holds `file/time` AT the length after the end (measured `4.00/4.00`
+ * three seconds past the end of a 4 s clip); the margin only absorbs the last frame's rounding.
+ */
+const CLIP_END_MARGIN_S = 0.05;
 /**
  * `R-058` — how long a channel may go without a `/channel/N/framerate` tick before it is
  * reported as having STOPPED.
@@ -1175,6 +1209,12 @@ export class CasparRuntime {
    * learn WHY here, not by reading the source.
    */
   readonly livePlateReleased = new Emitter<LivePlateRelease>();
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.E — every seated media plate's transport state ({@link mediaPlateStates}),
+   * emitted when what the console SHOWS would change: a whole second of remaining time, a pause, an
+   * end, a plate seated or cleared — never at the server's frame rate.
+   */
+  readonly mediaStateChanged = new Emitter<MediaPlateState[]>();
   /**
    * R-030 — emitted when a browser changes the channel raster AND when a fresh
    * `INFO <channel>` reading lands. Both, because the mismatch verdict is a
@@ -1598,6 +1638,19 @@ export class CasparRuntime {
    */
   #freshMediaClip: ((sourceId: string, played: string) => Promise<string | null>) | null = null;
   /**
+   * `MEDIA-PLATES-01` §1.A — the bound-media store's writer ({@link setMediaPlaybackWriter}): sets a
+   * clip's two playback settings on its reference and answers its NAME, or `null` for an id it does
+   * not hold. `null` — no Playout media — means there is no clip to set.
+   */
+  #writeMediaPlayback:
+    | ((sourceId: string, playback: MediaPlayback) => { readonly name: string } | null)
+    | null = null;
+  /** `MEDIA-PLATES-01` §1.E — the media clock's tick; armed in `start()`, cleared in `stop()`. */
+  #mediaStateTimer: ReturnType<typeof setInterval> | null = null;
+  readonly #mediaStateTickMs: number;
+  /** What the last `mediaStateChanged` said, in the whole seconds the console shows. */
+  #mediaStateShown = '[]';
+  /**
    * 🔴 `ROUTE-PLATES-01` rule 5 — the bounded D10 re-read ({@link setInputsConfirmer}), handed in by
    * the bridge like the media freshener. Answers the catalogue's epoch once a successful read lands
    * within the bound. `null` — no Playout reader — means no route can ever be confirmed.
@@ -1827,6 +1880,8 @@ export class CasparRuntime {
       sweepMs?: number;
       occupancyStaleMs?: number;
       channelTickStaleMs?: number;
+      /** `MEDIA-PLATES-01` — TEST-ONLY: how often the media clock looks for a change to publish. */
+      mediaStateTickMs?: number;
       /**
        * `C-029` — may the bridge `ADD` a declared consumer the output check finds missing?
        * Resolved by `resolveCreateMissingConsumers` in `bridge.ts`; absent here is OFF.
@@ -2046,6 +2101,7 @@ export class CasparRuntime {
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
+    this.#mediaStateTickMs = options.mediaStateTickMs ?? MEDIA_STATE_TICK_MS;
     // C-029 — `=== true`, never `?? false` with a truthy fallback: absent is OFF.
     this.#createMissingConsumers = options.createMissingConsumers === true;
     this.#outputRecheckMs = options.outputRecheckMs ?? OUTPUT_RECHECK_MS;
@@ -2339,6 +2395,11 @@ export class CasparRuntime {
       this.#sweepOccupancy();
     }, this.#sweepMs);
     this.#sweepTimer.unref?.();
+    // `MEDIA-PLATES-01` §1.E — the media clock: a passive read of the OSC tap, unref'd like the sweep.
+    this.#mediaStateTimer = setInterval(() => {
+      this.#publishMediaState();
+    }, this.#mediaStateTickMs);
+    this.#mediaStateTimer.unref?.();
 
     this.#sessions.A.start();
     this.#sessions.B?.start();
@@ -2378,6 +2439,8 @@ export class CasparRuntime {
     this.#flushTimer = null;
     if (this.#sweepTimer !== null) clearInterval(this.#sweepTimer);
     this.#sweepTimer = null;
+    if (this.#mediaStateTimer !== null) clearInterval(this.#mediaStateTimer);
+    this.#mediaStateTimer = null;
     for (const timer of this.#expiryTimers.values()) clearTimeout(timer);
     this.#expiryTimers.clear();
     await Promise.all([this.#sessions.A.stop(), this.#sessions.B?.stop() ?? Promise.resolve()]);
@@ -5952,7 +6015,7 @@ export class CasparRuntime {
       muted, rendering nothing — which is §12.4's hold, now reached by a plate that has never
       been on screen as well as by one leaving.
     */
-    const resolved = new Map<string, SourceProducer>();
+    const resolved = new Map<string, SourceDefinition>();
     const declared = new Set<string>();
     const offFrame = new Set<string>();
     /*
@@ -5974,11 +6037,15 @@ export class CasparRuntime {
       source: LivePlatePlacement['source'];
       fit: LivePlatePlacement['fit'];
       held: boolean;
+      playback?: MediaPlayback;
     }[] = [];
 
     for (const seat of bindings.seats.values()) {
       declared.add(seat.producerArg);
-      resolved.set(seat.producerArg, seat.source.producer);
+      resolved.set(seat.producerArg, seat.source);
+      // `MEDIA-PLATES-01` — a clip's playback travels with each of its seats, read ONCE here.
+      const clip =
+        seat.source.producer.kind === 'media' ? { playback: mediaPlaybackOf(seat.source) } : {};
       const punch = seat.frames.find((f) => f.lookId === lookId);
       /*
         The REPRESENTATIVE frame names a parked seat for the ledger and the operator's table.
@@ -6072,6 +6139,7 @@ export class CasparRuntime {
           source: sourceLabelOf(seat.source),
           fit: parkedFit(this.#parkedSize(itemId, slot, carrier, frame, aspect.aspect)),
           held: true,
+          ...clip,
         });
         continue;
       }
@@ -6119,6 +6187,7 @@ export class CasparRuntime {
           source: sourceLabelOf(seat.source),
           fit: parkedFit({ width: fit.fill.width, height: fit.fill.height }),
           held: true,
+          ...clip,
         });
         continue;
       }
@@ -6129,6 +6198,7 @@ export class CasparRuntime {
         source: sourceLabelOf(seat.source),
         fit: { fill: fit.fill, clip: fit.clip },
         held: false,
+        ...clip,
       });
     }
 
@@ -6251,6 +6321,7 @@ export class CasparRuntime {
       ...(epoch !== undefined && isPlayoutRoute({ origin: s.source.origin, producer: s.producer })
         ? { epoch }
         : {}),
+      ...(s.playback !== undefined && { playback: s.playback }),
     }));
     /*
       SPLIT AFTER ALLOCATION, and only after — a parked seat holds its layer exactly as a
@@ -8180,8 +8251,11 @@ export class CasparRuntime {
   }> {
     // `ROUTE-PLATES-01` — a Playout route is started by its own pair, here and nowhere else.
     if (placementIsPlayoutRoute(placement)) return this.#startRouteProducer(placement);
+    // `MEDIA-PLATES-01` §1.B — a clip whose Loop is on is played with `LOOP`; one that is not freezes
+    // on its last frame at its end (2.5.0's ffmpeg producer — nothing more is needed for that).
+    const play = { loop: placement.playback?.loop === true };
     const first = await this.#send(
-      this.#builder.playSource(placement.slot, placement.producer),
+      this.#builder.playSource(placement.slot, placement.producer, play),
       this.#nextSeq(),
       'urgent',
     );
@@ -8207,7 +8281,7 @@ export class CasparRuntime {
     if (fresh === null) return first;
     const producer = { ...placement.producer, file: fresh };
     const retried = await this.#send(
-      this.#builder.playSource(placement.slot, producer),
+      this.#builder.playSource(placement.slot, producer, play),
       this.#nextSeq(),
       'urgent',
     );
@@ -8442,8 +8516,19 @@ export class CasparRuntime {
     const moved: { slot: CommandSlot; fill: NormalizedRect; clip: NormalizedRect }[] = [];
     /** Plates this action un-muted on the way out of HELD — re-muted by the same rollback. */
     const unmuted: CommandSlot[] = [];
-    /** `ROUTE-PLATES-01` — Playout routes this action un-hid on the way out of HELD — re-hidden too. */
+    /**
+     * `ROUTE-PLATES-01` — Playout routes this action un-hid on the way out of HELD — re-hidden too.
+     * `MEDIA-PLATES-01` — and held clips ({@link hiddenWhenHeld}, the one question).
+     */
     const unhidden: CommandSlot[] = [];
+    /** `MEDIA-PLATES-01` — hidden-paused clips this action `RESUME`d on the way out of HELD. */
+    const resumed: CommandSlot[] = [];
+    /**
+     * `MEDIA-PLATES-01` §1.C — the seats this action HOLDS whose clip is set to `pause`: each is sent
+     * its `PAUSE` right after the switch's one commit has hidden it (a `PAUSE` cannot be `DEFER`red —
+     * it is not a `MIXER` line — so it follows the commit, and the clip is never seen to stop).
+     */
+    const pauseWhenHidden = new Set<string>();
     let failure: string | undefined;
     let failedPlate:
       | {
@@ -8576,6 +8661,16 @@ export class CasparRuntime {
       // `PLAYOUT-SOURCES-01` §1.C — the argument the seat step actually played: the one retry
       // may have played a media item's fresh `clip` instead of the placement's.
       const playedArg = seatUnchanged ? undefined : seats.get(producer)?.playedArg;
+      /*
+        🔴 `MEDIA-PLATES-01` §1.C — A CLIP A LOOK HID AND PAUSED IS `RESUME`d AS A LOOK SHOWS IT, from
+        the same frame. Only a `hidden` pause: one the OPERATOR pressed stays paused whatever the looks
+        do, until they press Play or Restart.
+      */
+      const resumeOnReveal =
+        seatUnchanged &&
+        prior !== undefined &&
+        prior.held === true &&
+        prior.transport?.paused === 'hidden';
 
       const record: LiveLayerRecord = {
         slot: placement.slot,
@@ -8613,6 +8708,21 @@ export class CasparRuntime {
           redundant `VOLUME 0` and nothing else.
         */
         ...(placement.held && { held: false }),
+        /*
+          `MEDIA-PLATES-01` — a clip's state AS SENT: a fresh `PLAY` carries the Loop setting and
+          plays; a seat this action does not re-`PLAY` keeps the loop it has and who paused it —
+          except the pause the `RESUME` below takes back (corrected again if it is refused).
+        */
+        ...(placement.producer.kind === 'media' && {
+          transport:
+            seatUnchanged && prior !== undefined
+              ? {
+                  loop: prior.transport?.loop ?? false,
+                  ...(!resumeOnReveal &&
+                    prior.transport?.paused !== undefined && { paused: prior.transport.paused }),
+                }
+              : { loop: placement.playback?.loop === true },
+        }),
       };
       const recordIndex = next.length;
 
@@ -8630,7 +8740,8 @@ export class CasparRuntime {
           moved.push({ slot: placement.slot, fill: prior.fill, clip: prior.clip });
         }
         if (prior.held === true) unmuted.push(placement.slot);
-        if (prior.held === true && isPlayoutRouteRecord(prior)) unhidden.push(placement.slot);
+        if (prior.held === true && hiddenWhenHeld(prior)) unhidden.push(placement.slot);
+        if (resumeOnReveal) resumed.push(placement.slot);
       }
       if (seatUnchanged && prior !== undefined) {
         // 6.4 — THE FIT, RE-DERIVED PER LOOK. Emitted only when the geometry actually
@@ -8655,8 +8766,15 @@ export class CasparRuntime {
           );
           // `ROUTE-PLATES-01` (C2) — a held Playout route was hidden, not only parked: showing it
           // again is ONLY the reveal — no new `PLAY`, it never stopped playing.
-          if (isPlayoutRouteRecord(prior))
-            lines.push(this.#builder.mixerOpacity(placement.slot, 1));
+          // `MEDIA-PLATES-01` — and so was a held clip ({@link hiddenWhenHeld}).
+          if (hiddenWhenHeld(prior)) lines.push(this.#builder.mixerOpacity(placement.slot, 1));
+          /*
+            `MEDIA-PLATES-01` §1.C — the `RESUME` goes LAST in this plate's lines: after its staged
+            reveal and just before the action's one commit shows it, so the clip runs hidden for as
+            little as the batch allows. It cannot be `DEFER`red (not a `MIXER` line); a refusal is
+            this plate's failure like any other line's, and the switch's rollback pauses it again.
+          */
+          if (resumeOnReveal) lines.push(this.#builder.resume(placement.slot));
         }
       }
       /*
@@ -8696,9 +8814,13 @@ export class CasparRuntime {
           const revealVolume = placement.held ? CREATED_MUTED_VOLUME : record.intendedVolume;
           lines.push(
             // `ROUTE-PLATES-01` (C2) — a parked Playout route stays hidden until a look shows it.
+            // `MEDIA-PLATES-01` — and so does a parked clip.
             this.#builder.mixerOpacity(
               placement.slot,
-              placement.held && placementIsPlayoutRoute(placement) ? 0 : 1,
+              placement.held &&
+                (placementIsPlayoutRoute(placement) || record.transport !== undefined)
+                ? 0
+                : 1,
             ),
             this.#builder.mixerVolume(
               placement.slot,
@@ -8768,6 +8890,9 @@ export class CasparRuntime {
       // See the note on the record's `held` above: it names what happened, not what we meant.
       if (placement.held && failure === undefined && landed >= 2) {
         next[recordIndex] = { ...record, held: true };
+        // `MEDIA-PLATES-01` — a PRESET clip set to `pause` waits, hidden and paused, for the look
+        // that shows it; it is paused after the commit, like every clip a look hides.
+        if (placement.playback?.whenHidden === 'pause') pauseWhenHidden.add(key(record));
       }
       if (failure !== undefined && placement.held) {
         /*
@@ -8933,6 +9058,12 @@ export class CasparRuntime {
         for (const slot of unhidden) {
           await this.#send(this.#builder.mixerOpacity(slot, 0), this.#nextSeq(), 'urgent');
         }
+        // `MEDIA-PLATES-01` — and a clip this switch `RESUME`d goes back to paused, as it was.
+        const repaused = new Set<string>();
+        for (const slot of resumed) {
+          const sent = await this.#send(this.#builder.pause(slot), this.#nextSeq(), 'urgent');
+          if (sent.ok) repaused.add(adoptionKey(slot));
+        }
         /*
           🔴 AND THE RECORDS FOLLOW THE WIRE. Not the other way round.
 
@@ -8959,6 +9090,10 @@ export class CasparRuntime {
             clip: was.clip,
             ...(was.held === true ? { held: true } : {}),
           };
+        }
+        for (const [i, rec] of next.entries()) {
+          if (!repaused.has(key(rec)) || rec.transport === undefined) continue;
+          next[i] = { ...rec, transport: { ...rec.transport, paused: 'hidden' } };
         }
         /*
           🔴 `LOOK-SWITCH-01` — **ALL OR NOTHING REACHES THE PLATES THIS SWITCH SEATED, TOO.**
@@ -9168,8 +9303,9 @@ export class CasparRuntime {
 
       The fallback is NAMED and OBSERVABLE rather than implicit (`releaseLivePlate`), and it
       splits on two independent axes: a plate the template no longer DECLARES has no look
-      that could bring it back, and a `media` clip cannot be held idle because it would run
-      to its end and come back black.
+      that could bring it back, and a `media` clip set to `restart` when hidden is torn down
+      so it plays from the beginning (`MEDIA-PLATES-01` — a `pause` or `continue` clip is held,
+      hidden, and a `pause` one paused after the commit below).
     */
     /*
       🔴 KEYED ON THE PRODUCER (session BM) — "is THIS SEAT on screen", not "is this plate".
@@ -9213,10 +9349,11 @@ export class CasparRuntime {
         next.push(record);
         continue;
       }
+      const entry = resolved.get(record.producer);
       const release = releaseLivePlate({
         itemId,
         plateId: record.sourceId,
-        producer: resolved.get(record.producer),
+        source: entry,
         // From the CARRIER, never from what this plan happened to resolve — see the note on
         // `declared`. A live action resolves only the plates going on screen, so a held
         // plate is routinely absent from `resolved` while being very much still declared.
@@ -9263,8 +9400,12 @@ export class CasparRuntime {
           🔴 `ROUTE-PLATES-01` (C2) — A HELD PLAYOUT ROUTE IS ALSO HIDDEN: `OPACITY 0`, staged with
           the mute, and still PLAYING — never `PAUSE`, and `BLEND` is left at normal. It rides the
           same latch as the mute, and `held` claims both landed or neither.
+
+          `MEDIA-PLATES-01` §1.C — and so is a held CLIP ({@link hiddenWhenHeld}): hiding a clip is
+          always `OPACITY 0` + the mute, in this same staged step. A `pause` clip is paused as well,
+          after the commit below; a `continue` clip is not, and runs on hidden.
         */
-        if (muted && isPlayoutRouteRecord(record)) {
+        if (muted && hiddenWhenHeld(record)) {
           this.#stagedMixerChannel = record.slot.channel;
           const hidden = await this.#send(
             this.#builder.deferMixer(this.#builder.mixerOpacity(record.slot, 0)),
@@ -9315,6 +9456,22 @@ export class CasparRuntime {
         held: muted,
         ...(fitParked && { fill: parked.fill, clip: parked.clip }),
       });
+      /*
+        `MEDIA-PLATES-01` §1.C — A HELD CLIP SET TO `pause` IS PAUSED once the commit has hidden it:
+        on the way out, once (a clip already paused is left alone), and again under a take, which
+        re-asserts every layer it owns. Only a hold that LANDED — a clip whose hide was refused is
+        not frozen where it may still be seen.
+      */
+      if (
+        muted &&
+        record.transport !== undefined &&
+        entry !== undefined &&
+        entry.producer.kind === 'media' &&
+        mediaPlaybackOf(entry).whenHidden === 'pause' &&
+        (record.transport.paused === undefined || mode === 'take')
+      ) {
+        pauseWhenHidden.add(key(record));
+      }
     }
 
     /*
@@ -9327,7 +9484,32 @@ export class CasparRuntime {
     */
     await this.#commitStagedMixer();
 
+    /*
+      🔴 `MEDIA-PLATES-01` §1.C — **THE `PAUSE`s, RIGHT AFTER THE COMMIT THAT HID THEIR CLIPS.** In the
+      same batch as the hole moving, as close to its commit as a non-`MIXER` verb can be: a `PAUSE`
+      is applied the moment it arrives, so sent before the commit it would freeze a clip still on
+      screen; sent here, the clip stops a frame or two after it vanished, and nobody sees it stop.
+      The record says `hidden` only when the `PAUSE` landed; a refused one is tried again at the
+      next reconcile that still holds it. An OPERATOR's pause keeps its name — a take re-sends it.
+
+      ⚠ The ledger is written FIRST: the send seam lets a `PAUSE` reach only a coordinate the ledger
+      names as a clip of ours (`amcp-guard.ts`'s `clipOn`), and a PRESET clip this take seated is
+      not in it until now. The pauses that landed are written after.
+    */
     this.registerLiveLayers(itemId, next);
+    let paused = false;
+    for (const [i, rec] of next.entries()) {
+      if (!pauseWhenHidden.has(key(rec)) || rec.transport === undefined) continue;
+      const sent = await this.#send(this.#builder.pause(rec.slot), this.#nextSeq(), 'urgent');
+      if (sent.ok) {
+        paused = true;
+        next[i] = {
+          ...rec,
+          transport: { ...rec.transport, paused: rec.transport.paused ?? 'hidden' },
+        };
+      }
+    }
+    if (paused) this.registerLiveLayers(itemId, next);
 
     /*
       THE ONE SWEEP THAT CLEARS. A layer this item owned and no longer does — torn down by
@@ -9829,6 +10011,287 @@ export class CasparRuntime {
   /** The audio intent for one item's plates, or `undefined` when none is recorded. */
   livePlateVolumes(itemId: string): LivePlateVolumes | undefined {
     return this.#plateVolumes.get(itemId);
+  }
+
+  // ─────────── `MEDIA-PLATES-01` — a clip's transport, its Loop on air, and its clock ───────────
+
+  /**
+   * The catalogue entry a clip's record was seated from: the `media` entry whose argument is the one
+   * the ledger recorded as SENT — asked of the one formatter, never re-spelt.
+   */
+  #mediaEntryOf(record: LiveLayerRecord): SourceDefinition | undefined {
+    return this.#sourceCatalog.sources.find(
+      (s) =>
+        s.producer.kind === 'media' && this.#builder.sourceArgument(s.producer) === record.producer,
+    );
+  }
+
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.D — **PLAY/PAUSE AND RESTART FOR ONE MEDIA PLATE OF AN ON-AIR ROW.**
+   *
+   * - `pause` — `PAUSE`: the clip holds its frame, and stays paused whatever the looks do (an
+   *   OPERATOR pause, which a look showing it again does not undo) until Play or Restart.
+   * - `play` — `RESUME`, from the frame it holds. (A clip frozen at its end stays there: Restart is
+   *   the press that plays it again.)
+   * - `restart` — `CALL <ch>-<L> SEEK 0`, the cleanest restart 2.5.0 has (no new producer, nothing
+   *   re-seated, and it works on a clip frozen at its end), then `RESUME` — except for a clip a look
+   *   has hidden and paused, which is rewound and waits, paused, for the look that shows it.
+   *
+   * REFUSED WITH NOTHING SENT for a row that is not on air, a plate that is not seated, and a plate
+   * whose seat is not a clip — a live input has no transport. The permission (operator, the row's
+   * channel) and the lock are the gate's, before this is reached; every outcome is audited with the
+   * clip's name. Under the row's seat lock, so a look switch cannot interleave with the press.
+   */
+  async mediaPlateTransport(
+    itemId: string,
+    plateId: string,
+    action: MediaPlateTransportAction,
+  ): Promise<{
+    ok: boolean;
+    reason?: 'not-media' | 'not-seated' | 'not-on-air' | 'amcp-error';
+    message?: string;
+  }> {
+    const result = await this.#withLiveSeatLock(itemId, async () => {
+      const records = this.#liveLayers.get(itemId) ?? [];
+      // The PUNCHED record first, as the volume verb does: one plate can label two seats.
+      const record =
+        records.find((r) => r.sourceId === plateId && r.held !== true) ??
+        records.find((r) => r.sourceId === plateId);
+      const detail: AuditDetail = {
+        ...this.#itemDetail(itemId),
+        ...(record !== undefined && { slot: record.slot }),
+        media: {
+          name: (record === undefined ? undefined : this.#mediaEntryOf(record)?.name) ?? plateId,
+          transport: action,
+          plateId,
+        },
+      };
+      const refuse = (
+        reason: 'not-media' | 'not-seated' | 'not-on-air',
+        message: string,
+      ): { ok: false; reason: typeof reason; message: string } => {
+        this.#recordOutcome('media-transport', detail, { outcome: 'failed', errorCode: reason });
+        return { ok: false, reason, message };
+      };
+      const item = this.#reconciler.get(itemId);
+      if (item === null || !isOnAirStatus(item)) {
+        return refuse('not-on-air', 'This row is not on air. Nothing was sent.');
+      }
+      if (record === undefined)
+        return refuse('not-seated', 'Nothing is seated here. Nothing was sent.');
+      const transport = record.transport;
+      if (transport === undefined) {
+        return refuse('not-media', 'This plate is not a clip. Nothing was sent.');
+      }
+      const lines =
+        action === 'pause'
+          ? [this.#builder.pause(record.slot)]
+          : action === 'play'
+            ? [this.#builder.resume(record.slot)]
+            : [
+                this.#builder.seekFrame(record.slot, 0),
+                ...(transport.paused === 'hidden' ? [] : [this.#builder.resume(record.slot)]),
+              ];
+      for (const line of lines) {
+        const sent = await this.#send(line, this.#nextSeq(), 'urgent');
+        if (sent.ok) continue;
+        this.#recordOutcome('media-transport', detail, {
+          outcome: sent.errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+          errorCode: sent.errorCode ?? 'amcp-error',
+          ...(sent.command !== undefined ? { command: sent.command } : {}),
+        });
+        return {
+          ok: false as const,
+          reason: 'amcp-error' as const,
+          message: 'CasparCG did not accept it. The clip is as it was.',
+        };
+      }
+      // The ledger follows what LANDED: who paused it, if anyone, now. Patched on the ledger as it
+      // is NOW — a take (unlocked by design) may have rewritten it while the sends were out.
+      const paused: 'hidden' | 'operator' | undefined =
+        action === 'pause'
+          ? 'operator'
+          : action === 'restart' && transport.paused === 'hidden'
+            ? 'hidden'
+            : undefined;
+      this.#patchTransport(itemId, [adoptionKey(record.slot)], (t) => ({
+        loop: t.loop,
+        ...(paused !== undefined && { paused }),
+      }));
+      this.#recordOutcome('media-transport', detail, { outcome: 'ok' });
+      return { ok: true as const };
+    });
+    this.#publishMediaState();
+    return result;
+  }
+
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.A — **A BOUND CLIP'S TWO PLAYBACK SETTINGS, STATION-WIDE.** Written on
+   * the clip's bound-media reference by the store's writer (which republishes the catalogue), then
+   * the one live half: a `loop` change reaches every clip of that media already seated AT ONCE —
+   * `CALL <ch>-<L> LOOP 1|0`, which 2.5.0 applies to a playing clip (measured). `whenHidden` needs
+   * nothing sent: it is read the next time a look hides the plate. Audited with the clip's NAME.
+   *
+   * A clip whose `CALL … LOOP` is refused keeps its ledger `loop` as it was — the console shows what
+   * the clip is DOING — and takes the setting at its next seating; the setting itself is saved.
+   */
+  async setMediaPlayback(
+    mediaId: string,
+    playback: MediaPlayback,
+  ): Promise<{ ok: boolean; reason?: 'unknown-media'; message?: string }> {
+    const written = this.#writeMediaPlayback?.(mediaId, playback) ?? null;
+    if (written === null) {
+      this.#recordOutcome(
+        'set-media-playback',
+        {},
+        { outcome: 'failed', errorCode: 'unknown-media' },
+      );
+      return {
+        ok: false,
+        reason: 'unknown-media',
+        message: 'That clip is not bound on this station. Nothing was changed.',
+      };
+    }
+    const entry = this.#sourceCatalog.sources.find(
+      (s) => s.id === mediaId && s.producer.kind === 'media',
+    );
+    const arg = entry === undefined ? undefined : this.#builder.sourceArgument(entry.producer);
+    for (const itemId of [...this.#liveLayers.keys()]) {
+      await this.#withLiveSeatLock(itemId, async () => {
+        const landed: string[] = [];
+        for (const r of this.#liveLayers.get(itemId) ?? []) {
+          if (r.transport === undefined || r.producer !== arg || r.transport.loop === playback.loop)
+            continue;
+          const sent = await this.#send(
+            this.#builder.setLoop(r.slot, playback.loop),
+            this.#nextSeq(),
+            'urgent',
+          );
+          if (sent.ok) {
+            landed.push(adoptionKey(r.slot));
+            continue;
+          }
+          process.stderr.write(
+            `[caspar-bridge] “${written.name}”: CasparCG refused the loop change on ` +
+              `${String(r.slot.channel)}-${String(r.slot.layer)} (${sent.errorCode ?? 'amcp-error'}); ` +
+              `it applies from the clip's next seating\n`,
+          );
+        }
+        this.#patchTransport(itemId, landed, (t) => ({ ...t, loop: playback.loop }));
+      });
+    }
+    this.#recordOutcome(
+      'set-media-playback',
+      { media: { name: written.name, loop: playback.loop, whenHidden: playback.whenHidden } },
+      { outcome: 'ok' },
+    );
+    this.#publishMediaState();
+    return { ok: true };
+  }
+
+  /** `MEDIA-PLATES-01` — does the ledger hold a media clip of ours on this coordinate? (The seam asks.) */
+  #holdsClip(channel: number, layer: number): boolean {
+    for (const records of this.#liveLayers.values()) {
+      for (const r of records) {
+        if (r.transport !== undefined && r.slot.channel === channel && r.slot.layer === layer) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * `MEDIA-PLATES-01` — rewrite the clip transport of the records on `slots` (adoption keys), on the
+   * ledger as it stands NOW. A slot that is no longer a clip of this item — torn down while a send
+   * was out — is left alone: the ledger names what is on air, and a stale copy written back would
+   * name a layer that was cleared.
+   */
+  #patchTransport(
+    itemId: string,
+    slots: readonly string[],
+    patch: (
+      transport: NonNullable<LiveLayerRecord['transport']>,
+    ) => NonNullable<LiveLayerRecord['transport']>,
+  ): void {
+    if (slots.length === 0) return;
+    const wanted = new Set(slots);
+    const records = this.#liveLayers.get(itemId) ?? [];
+    if (!records.some((r) => r.transport !== undefined && wanted.has(adoptionKey(r.slot)))) return;
+    this.registerLiveLayers(
+      itemId,
+      records.map((r) =>
+        r.transport !== undefined && wanted.has(adoptionKey(r.slot))
+          ? { ...r, transport: patch(r.transport) }
+          : r,
+      ),
+    );
+  }
+
+  /**
+   * `MEDIA-PLATES-01` §1.A — **THE BOUND-MEDIA STORE'S WRITER, handed in by the bridge** (the
+   * Playout's store is built after the runtime), like the media freshener. `null` — no Playout media
+   * — means no clip's settings can be set.
+   */
+  setMediaPlaybackWriter(
+    write: ((sourceId: string, playback: MediaPlayback) => { readonly name: string } | null) | null,
+  ): void {
+    this.#writeMediaPlayback = write;
+  }
+
+  /**
+   * 🔴 `MEDIA-PLATES-01` §1.E — **EVERY SEATED MEDIA PLATE'S TRANSPORT STATE**, by channel then layer.
+   *
+   * `remainingMs` is the server's own report — `file/time` from the primary's OSC, fresh within the
+   * occupancy window — and is ABSENT whenever there is no such report: never estimated from when a
+   * `PLAY` was sent. `ended` likewise needs the report (a clip that is not looping, standing at its
+   * length). `paused` and `loop` are the ledger's, which records what was SENT.
+   */
+  mediaPlateStates(): MediaPlateState[] {
+    const clipTimes = this.#adapter.primarySession.osc.clipTimes;
+    const now = Date.now();
+    const rows: MediaPlateState[] = [];
+    for (const [itemId, records] of this.#liveLayers) {
+      for (const record of records) {
+        const transport = record.transport;
+        if (transport === undefined) continue;
+        const time = clipTimes.read(
+          record.slot.channel,
+          record.slot.layer,
+          this.#occupancyStaleMs,
+          now,
+        );
+        const left = time === null ? undefined : Math.max(0, time.total - time.elapsed);
+        rows.push({
+          itemId,
+          plateId: record.sourceId,
+          channel: record.slot.channel,
+          layer: record.slot.layer,
+          ...(left !== undefined && { remainingMs: Math.round(left * 1000) }),
+          paused: transport.paused !== undefined,
+          ended: left !== undefined && !transport.loop && left <= CLIP_END_MARGIN_S,
+          loop: transport.loop,
+        });
+      }
+    }
+    return rows.sort((a, b) => a.channel - b.channel || a.layer - b.layer);
+  }
+
+  /**
+   * Push {@link mediaPlateStates} when what the console SHOWS changed — compared in the whole
+   * seconds it displays, so a countdown costs one push a second and a paused clip costs none.
+   */
+  #publishMediaState(): void {
+    const states = this.mediaPlateStates();
+    const shown = JSON.stringify(
+      states.map((s) => ({
+        ...s,
+        remainingMs: s.remainingMs === undefined ? null : Math.ceil(s.remainingMs / 1000),
+      })),
+    );
+    if (shown === this.#mediaStateShown) return;
+    this.#mediaStateShown = shown;
+    this.mediaStateChanged.emit(states);
   }
 
   /**
@@ -12357,6 +12820,8 @@ export class CasparRuntime {
       ...(verdict.command !== undefined ? { command: verdict.command } : {}),
       // `R3` — what a `set-pass-timing` press asked for. Absent on every other action.
       ...(detail.timing !== undefined ? { timing: detail.timing } : {}),
+      // `MEDIA-PLATES-01` — the clip a playback setting or a transport press was about.
+      ...(detail.media !== undefined ? { media: detail.media } : {}),
     });
   }
 
@@ -13716,6 +14181,8 @@ export class CasparRuntime {
               this.#isOwnConfiguredLayer(channel, layer) ||
               (channel === options.strayTarget?.channel && layer === options.strayTarget.layer),
             playoutRoute: options.routeEpoch !== undefined,
+            // `MEDIA-PLATES-01` — `PAUSE` / `RESUME` / `CALL` only where the ledger holds a clip of ours.
+            clipOn: (channel, layer) => this.#holdsClip(channel, layer),
           });
     if (refusal !== null) {
       this.#clearExpiry(seq);

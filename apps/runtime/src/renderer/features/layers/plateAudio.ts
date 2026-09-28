@@ -235,13 +235,15 @@ export const UNSEATED_PILL: PlateAudioPill = {
  * otherwise correct sentence: that frame was on air a moment ago. The investigation
  * (`LEDGER-SEAT-14`) measured the plant case — a three-frame row whose ledger went from three
  * seats to one within the hour, with nothing in the audit log, because two of its three plates
- * are `media` clips and §12.4 tears a clip down rather than holding it. The narrowing is
- * CORRECT; being unable to tell it from "never seated" was not.
+ * are `media` clips and §12.4 then tore every clip down rather than holding it (since
+ * `MEDIA-PLATES-01`, only a clip set to restart). The narrowing is CORRECT; being unable to tell
+ * it from "never seated" was not.
  *
  * ── THE CAUSE THIS SENTENCE NAMES, AND WHY IT IS SAFE TO NAME ONE ───────────
  *
- * ⚠ `releaseLivePlate` returns `torn-down` for TWO reasons — a `media` clip that cannot be
- * held, and a plate **no look binds any more**. Only the first can reach this pill, and the
+ * ⚠ `releaseLivePlate` returns `torn-down` for TWO reasons — a `media` clip set to RESTART when
+ * hidden (`MEDIA-PLATES-01`: a `pause` or `continue` clip is held, like a live input), and a plate
+ * **no look binds any more**. Only the first can reach this pill, and the
  * reason is structural rather than a guard: {@link declaredFrameRows} builds a row only for a
  * plate the row's template still DECLARES, and a plate nothing declares is not in that list.
  * (`liveLayerRows.test.ts` pins it, so the invariant cannot quietly stop holding.)
@@ -259,8 +261,8 @@ export const CLEARED_PILL: PlateAudioPill = {
   label: 'Cleared',
   tone: cssVars['--r-caution-text'],
   detail:
-    'This frame was on air and was cleared: a clip cannot be held idle across a look. It is ' +
-    're-seated when a look shows it again — the volume is recorded now and applied then.',
+    'This frame was on air and was cleared: its clip is set to restart when hidden. It plays ' +
+    'from the beginning when a look shows it again — the volume is recorded now and applied then.',
 };
 
 /**

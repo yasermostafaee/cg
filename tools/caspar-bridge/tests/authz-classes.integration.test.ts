@@ -219,6 +219,8 @@ describe('C-038 — the census: every route, classified', () => {
       'fixedLayers.state',
       'layers.orphans',
       'layers.owned-occupancy',
+      // `MEDIA-PLATES-01` — each seated clip's remaining time, pause and end. A viewer may watch air.
+      'liveLayers.media-state',
       'liveLayers.state',
       'lock.state',
       // `C-016` — whether the programme return is live. A viewer may watch air.

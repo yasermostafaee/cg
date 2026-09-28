@@ -108,3 +108,33 @@ describe('a CLEAR outside 50–99 on a layer the station itself declares', () =>
     expect(own('CLEAR 1-10')).toBe('amcp-guard-layer');
   });
 });
+
+describe('`MEDIA-PLATES-01` — `PAUSE`, `RESUME` and `CALL` reach only a seated clip of ours', () => {
+  /** A clip is seated on 2-61; 2-60 carries a live input (a route, say). */
+  const clips = (line: string): string | undefined =>
+    amcpLineRefusal(line, {
+      ...context,
+      clipOn: (channel, layer) => channel === 2 && layer === 61,
+    })?.code;
+
+  it('🔴 each is refused on a coordinate that holds no clip — a route is never paused, and a CALL to a live producer hangs the core', () => {
+    expect(clips('PAUSE 2-60')).toBe('amcp-guard-not-a-clip');
+    expect(clips('RESUME 2-60')).toBe('amcp-guard-not-a-clip');
+    expect(clips('CALL 2-60 SEEK 0')).toBe('amcp-guard-not-a-clip');
+    expect(clips('CALL 2-60 LOOP 1')).toBe('amcp-guard-not-a-clip');
+    // …and never channel-wide.
+    expect(clips('PAUSE 2')).toBe('amcp-guard-not-a-clip');
+  });
+
+  it('control: each passes on the clip’s own coordinate', () => {
+    expect(clips('PAUSE 2-61')).toBeUndefined();
+    expect(clips('RESUME 2-61')).toBeUndefined();
+    expect(clips('CALL 2-61 SEEK 0')).toBeUndefined();
+    expect(clips('CALL 2-61 LOOP 0')).toBeUndefined();
+  });
+
+  it('control: a context with no ledger does not ask (and the channel fence still does)', () => {
+    expect(refused('PAUSE 2-60')).toBeUndefined();
+    expect(refused('PAUSE 9-60')).toBe('amcp-guard-channel');
+  });
+});

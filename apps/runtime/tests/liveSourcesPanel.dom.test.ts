@@ -1537,8 +1537,9 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
    *
    * `LEDGER-SEAT-14` measured the plant case and reproduced it: a three-frame row whose ledger
    * went from three seats to ONE within the hour, with nothing in the audit log, because two of
-   * its three plates are `media` clips and §12.4 tears a clip down rather than holding it. The
-   * narrowing is CORRECT. What was wrong is that the two torn-down frames then wore the same
+   * its three plates are `media` clips and §12.4 then tore every clip down rather than holding it
+   * (since `MEDIA-PLATES-01`, only a clip set to restart). The narrowing is CORRECT. What was
+   * wrong is that the two torn-down frames then wore the same
    * word — and the same sentence, *"nothing is on a layer for this plate **yet**"* — as a frame
    * that never had a producer. `yet` was the one false word, and it was reassuring in exactly
    * the case where it should not have been.
@@ -1550,10 +1551,10 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
     itemId: 'item-1',
     plateId: plate,
     disposition,
+    // The bridge's sentence for a clip set to restart when hidden (`MEDIA-PLATES-01`).
     reason:
-      `plate "${plate}" is a media clip, which cannot be held idle — a clip held across a ` +
-      `look runs to its end and comes back black, so it was cleared and will be re-seated ` +
-      `when a look shows it again`,
+      `plate "${plate}" is a media clip set to restart when hidden, so it was cleared and ` +
+      `will play from the beginning when a look shows it again`,
   });
 
   it('🔴 B-247 — a frame that WAS seated and was torn down reads Cleared, not Not seated', async () => {
@@ -1660,8 +1661,8 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
 
   it('🔴 B-247 — a plate the template no longer DECLARES yields no row, so the pill never lies', async () => {
     /*
-      The invariant `CLEARED_PILL`'s wording rests on. `torn-down` has TWO causes — a media clip,
-      and a plate no look binds any more — and the pill names the first. The second cannot reach
+      The invariant `CLEARED_PILL`'s wording rests on. `torn-down` has TWO causes — a media clip
+      set to restart when hidden, and a plate no look binds any more — and the pill names the first. The second cannot reach
       it because this function iterates the template's DECLARED plates, and a plate nothing
       declares is not in that list. Pinned here so the wording cannot quietly become wrong.
     */

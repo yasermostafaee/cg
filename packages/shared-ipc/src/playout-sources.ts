@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import {
   LIVE_SOURCE_FORMATS,
+  MEDIA_PLAYBACK_DEFAULTS,
+  MediaWhenHiddenSchema,
   checkSourceCatalog,
+  mediaPlaybackOf,
   type LiveSourceFormat,
   type LiveSourceLayerRange,
+  type MediaPlayback,
   type SourceCatalog,
   type SourceDefinition,
   type SourceProducer,
@@ -242,14 +246,28 @@ export const BoundMediaItemSchema = z.object({
   folder: z.string().optional(),
   lastBoundAt: z.string(),
   unavailable: z.literal(true).optional(),
+  /**
+   * `MEDIA-PLATES-01` — the clip's two playback settings, station-wide (`MediaPlayback`). A reference
+   * bound before they existed has neither, and reads as the defaults (`mediaPlaybackOf`).
+   */
+  loop: z.boolean().optional(),
+  whenHidden: MediaWhenHiddenSchema.optional(),
 });
 export type BoundMediaItem = z.infer<typeof BoundMediaItemSchema>;
 
 export const BoundMediaStateSchema = z.object({ items: z.array(BoundMediaItemSchema) });
 export type BoundMediaState = z.infer<typeof BoundMediaStateSchema>;
 
-/** A read media item as the bound set keeps it. */
-export function toBoundMedia(item: PlayoutMediaItem, lastBoundAt: string): BoundMediaItem {
+/**
+ * A read media item as the bound set keeps it. `playback` is the clip's settings (`MEDIA-PLATES-01`):
+ * the defaults for a NEW reference, and the held ones when a re-read replaces a reference — a re-read
+ * refreshes what the Playout owns, never what this station set.
+ */
+export function toBoundMedia(
+  item: PlayoutMediaItem,
+  lastBoundAt: string,
+  playback: MediaPlayback = MEDIA_PLAYBACK_DEFAULTS,
+): BoundMediaItem {
   return {
     id: item.id,
     name: item.name,
@@ -260,7 +278,14 @@ export function toBoundMedia(item: PlayoutMediaItem, lastBoundAt: string): Bound
     ...(item.height !== undefined ? { height: item.height } : {}),
     ...(item.folder !== undefined ? { folder: item.folder } : {}),
     lastBoundAt,
+    loop: playback.loop,
+    whenHidden: playback.whenHidden,
   };
+}
+
+/** A bound reference's playback settings — through the ONE reader, so no default is spelled twice. */
+export function boundMediaPlayback(item: BoundMediaItem): MediaPlayback {
+  return mediaPlaybackOf({ media: item });
 }
 
 // ── Catalogue ids ───────────────────────────────────────────────────────────
@@ -434,6 +459,8 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
         ...(m.height !== undefined ? { height: m.height } : {}),
         ...(m.folder !== undefined ? { folder: m.folder } : {}),
         lastBoundAt: m.lastBoundAt,
+        ...(m.loop !== undefined ? { loop: m.loop } : {}),
+        ...(m.whenHidden !== undefined ? { whenHidden: m.whenHidden } : {}),
       },
     });
   }

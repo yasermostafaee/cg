@@ -7,6 +7,8 @@ import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { SourceLabel } from '../sources/SourceLabel.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
+import { MediaPlaybackControl, MediaTransport } from '../sources/MediaPlayback.js';
+import { useMediaState } from '../../hooks/useMediaState.js';
 import { currentSourceCatalog, sourcesVersion, subscribeSources } from '../sources/sourceStore.js';
 import {
   draftsVersion,
@@ -286,6 +288,8 @@ export function LooksBindingsSection({
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
+  // `MEDIA-PLATES-01` — which seats carry a clip, and how each is playing: the bridge's answer.
+  const mediaStateOf = useMediaState();
   /*
     🔴 WHICH LOOK THE OPERATOR IS EDITING — `INSPECTOR-DELTA` §4.
 
@@ -566,22 +570,44 @@ export function LooksBindingsSection({
                     stays enabled because §2.3 accepts the edit; what is communicated is "this
                     value is not in force", which is a statement about the VALUE.
                   */}
-                  <SourcePicker
-                    className={[dirty ? 'is-dirty' : '', masked ? 'is-struck' : '']
-                      .filter(Boolean)
-                      .join(' ')}
-                    aria-label={`Input for ${plate.sourceId} in look ${look.name}`}
-                    data={{
-                      'data-look-binding': `${look.id}:${plate.sourceId}`,
-                      ...(masked ? { 'data-look-binding-masked': '' } : {}),
-                    }}
-                    value={value}
-                    onChange={(sourceId) =>
-                      stageLookBinding(item.itemId, look.id, plate.sourceId, sourceId)
-                    }
-                    choices={[{ value: '', label: defaultLabel }]}
-                    channel={item.slot?.channel}
-                  />
+                  {/*
+                    `MEDIA-PLATES-01` §2 — a clip bound here (this look's own, or the default it
+                    inherits) carries its `Playback` beside the field; a live input carries nothing.
+                  */}
+                  <span className="cg-source-field">
+                    <SourcePicker
+                      className={[dirty ? 'is-dirty' : '', masked ? 'is-struck' : '']
+                        .filter(Boolean)
+                        .join(' ')}
+                      aria-label={`Input for ${plate.sourceId} in look ${look.name}`}
+                      data={{
+                        'data-look-binding': `${look.id}:${plate.sourceId}`,
+                        ...(masked ? { 'data-look-binding-masked': '' } : {}),
+                      }}
+                      value={value}
+                      onChange={(sourceId) =>
+                        stageLookBinding(item.itemId, look.id, plate.sourceId, sourceId)
+                      }
+                      choices={[{ value: '', label: defaultLabel }]}
+                      channel={item.slot?.channel}
+                    />
+                    <MediaPlaybackControl sourceId={value !== '' ? value : templateDefault} />
+                  </span>
+                  {/*
+                    `MEDIA-PLATES-01` §2 — on an ON-AIR row, a plate whose seat the bridge reports as a
+                    clip gets its transport, its remaining time and its `Paused` / `Ended` facts.
+                  */}
+                  {rowOnAir &&
+                    (() => {
+                      const media = mediaStateOf(item.itemId, plate.sourceId);
+                      return media === undefined ? null : (
+                        <MediaTransport
+                          itemId={item.itemId}
+                          plateId={plate.sourceId}
+                          state={media}
+                        />
+                      );
+                    })()}
                   {masked && (
                     <>
                       <span style={styles.masked} data-look-binding-patched={plate.sourceId}>

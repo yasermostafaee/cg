@@ -1,5 +1,6 @@
-import type { SourceProducer } from '@cg/shared-ipc';
+import { mediaPlaybackOf, type MediaWhenHidden, type SourceProducer } from '@cg/shared-ipc';
 import type { NormalizedRect } from './live-layers.js';
+import { isPlayoutRouteRecord } from './route-plates.js';
 
 /**
  * `multibox-layout-switch` `design.md` §12.4 / `tasks.md` 6.5 — **what happens to a live
@@ -24,16 +25,25 @@ import type { NormalizedRect } from './live-layers.js';
  * showing the same thing when you come back, and exactly one producer form in
  * `SourceProducerSchema` breaks that assumption — `media`, described there as _"the one
  * producer that needs no signal"_. A clip has a TIMELINE: held for the length of a debate
- * segment it runs to its end and the layer goes black, so a switch back would restore a
- * FINISHED clip rather than the picture the operator left. There is no pause verb in the
- * seat/fit vocabulary, so the honest answer is to tear it down and re-seat it on return.
+ * segment it runs on, so a switch back shows wherever it has reached rather than the picture
+ * the operator left.
+ *
+ * 🔴 **CORRECTED BY `MEDIA-PLATES-01`.** This header used to say a held clip "runs to its end
+ * and the layer goes black", and that there was "no pause verb in the seat/fit vocabulary", so
+ * every clip was torn down. Both halves are gone. 2.5.0's ffmpeg producer does not go black at
+ * the end of a clip that is not looping — it FREEZES on its last frame, `file/time` standing at
+ * its length (`av_producer.cpp`, measured on the owner's core 2026-09-28: `4.00/4.00` for a 4 s
+ * clip three seconds after its end, `producer` still `ffmpeg`); and `PAUSE`/`RESUME` hold and
+ * continue the frame. So what a clip does when a look hides it is now the CLIP's setting,
+ * `whenHidden` (`@cg/shared-ipc`'s `MediaWhenHidden`): `pause` and `continue` are held, and only
+ * `restart` keeps the teardown — which is today's behaviour, now chosen rather than forced.
  *
  * 🔴 **The decision is a NAMED PREDICATE with the disposition in its return value, not a
  * `kind === 'media'` test written inline at the release site.** Golden rule 6: a predicate's
  * name is part of its contract, and the second local copy is how the name comes to lie. It
  * is also what makes the fallback OBSERVABLE — the reason travels with the disposition, so
- * the runtime can announce "torn down because a clip cannot be held idle" instead of a
- * teardown nobody can distinguish from a bug.
+ * the runtime can announce "torn down because the clip is set to restart when hidden" instead
+ * of a teardown nobody can distinguish from a bug.
  */
 
 /** What the reconcile does with a plate the target look has no rect for. */
@@ -134,13 +144,31 @@ export interface LivePlateRelease {
 }
 
 /**
- * Can a producer of this form be HELD — left seated, muted and idle — across a look that
+ * What {@link canHoldLivePlate} reads of a catalogue entry: its producer FORM and, for a clip, the
+ * clip's playback settings (read through `mediaPlaybackOf`, the one reader — never a default here).
+ */
+export interface HoldableSource {
+  readonly producer: SourceProducer;
+  readonly media?:
+    | {
+        readonly loop?: boolean | undefined;
+        readonly whenHidden?: MediaWhenHidden | undefined;
+      }
+    | undefined;
+}
+
+/**
+ * Can a seat of this source be HELD — left seated, muted and hidden — across a look that
  * does not show it?
  *
  * Continuous live inputs (`route`, `decklink`, `ndi`, `stream`) can: they carry no
  * timeline, so the picture on return is whatever the feed is showing then, which is exactly
- * what it would have been had the plate never left. A `media` clip cannot, for the reason
- * above.
+ * what it would have been had the plate never left.
+ *
+ * 🔴 `MEDIA-PLATES-01` — **a `media` clip answers from its own `whenHidden`**: `pause` (held,
+ * paused, and resumed from the same frame) and `continue` (held and still running) can be held;
+ * `restart` cannot — it is torn down and plays from the beginning when a look shows it again,
+ * which is what every clip did before the setting existed.
  *
  * ⚠ `stream` (C-025) is answered as a continuous input DELIBERATELY: a stream has no local
  * timeline to run out, which is the one thing this predicate asks. That a held stream can
@@ -148,20 +176,43 @@ export interface LivePlateRelease {
  * stall detection recorded out of scope by C-025 v1 — and folding it in here would make
  * this name answer a question it does not test.
  *
- * ⚠ Written as an EXHAUSTIVE switch rather than `kind !== 'media'` on purpose: a producer
- * form added later gets a compile error here — the one place the question is asked — rather
- * than silently inheriting "holdable" from a negation nobody revisits.
+ * ⚠ Written as EXHAUSTIVE switches rather than `kind !== 'media'` or `whenHidden !== 'restart'`
+ * on purpose: a producer form or a `whenHidden` value added later gets a compile error here —
+ * the one place the question is asked — rather than silently inheriting "holdable" from a
+ * negation nobody revisits.
  */
-export function canHoldLivePlate(producer: SourceProducer): boolean {
-  switch (producer.kind) {
+export function canHoldLivePlate(source: HoldableSource): boolean {
+  switch (source.producer.kind) {
     case 'route':
     case 'decklink':
     case 'ndi':
     case 'stream':
       return true;
     case 'media':
-      return false;
+      switch (mediaPlaybackOf(source).whenHidden) {
+        case 'pause':
+        case 'continue':
+          return true;
+        case 'restart':
+          return false;
+      }
   }
+}
+
+/**
+ * 🔴 `MEDIA-PLATES-01` / `ROUTE-PLATES-01` (C2) — **IS A HELD SEAT OF THIS RECORD HIDDEN WITH
+ * `OPACITY 0`**, not only muted and parked? A Playout route (contract v1.3: showing it again is only
+ * the reveal) and a media clip (the Playout core team's rule for every plate, `OPACITY` not the mask
+ * alone). Every other live input keeps today's hold — mute and park — byte for byte. The ONE
+ * question the hold, its reveal, the switch's rollback and the reconnect re-send all ask.
+ */
+export function hiddenWhenHeld(record: {
+  readonly origin?: 'input' | 'media' | undefined;
+  readonly producer: string;
+  /** `LiveLayerRecord.transport` — present exactly when the layer carries a clip. */
+  readonly transport?: object | undefined;
+}): boolean {
+  return isPlayoutRouteRecord(record) || record.transport !== undefined;
 }
 
 /**
@@ -177,8 +228,11 @@ export function canHoldLivePlate(producer: SourceProducer): boolean {
 export function releaseLivePlate(input: {
   itemId: string;
   plateId: string;
-  /** Absent when the template no longer declares this plate at all. */
-  producer: SourceProducer | undefined;
+  /**
+   * The catalogue entry behind the seat — its producer form and, for a clip, its playback
+   * (`MEDIA-PLATES-01`). Absent when the plan could not resolve it.
+   */
+  source: HoldableSource | undefined;
   stillDeclared: boolean;
   /**
    * The desired set DID place a rect for this plate; the hole then clipped to nothing,
@@ -199,7 +253,7 @@ export function releaseLivePlate(input: {
         `that can bring it back — its producer was cleared rather than held`,
     };
   }
-  if (input.producer === undefined) {
+  if (input.source === undefined) {
     /*
       🔴 STILL DECLARED, BUT WE CANNOT SAY WHAT IS BEHIND IT — so we do the harmless thing.
 
@@ -219,15 +273,15 @@ export function releaseLivePlate(input: {
         `not a reason to destroy a picture that is working`,
     };
   }
-  if (!canHoldLivePlate(input.producer)) {
+  if (!canHoldLivePlate(input.source)) {
+    // `MEDIA-PLATES-01` — the one form that is not held: a clip whose `whenHidden` is `restart`.
     return {
       itemId,
       plateId,
       disposition: 'torn-down',
       reason:
-        `plate "${plateId}" is a media clip, which cannot be held idle — a clip held across ` +
-        `a look runs to its end and comes back black, so it was cleared and will be ` +
-        `re-seated when a look shows it again`,
+        `plate "${plateId}" is a media clip set to restart when hidden, so it was cleared and ` +
+        `will play from the beginning when a look shows it again`,
     };
   }
   if (input.offFrame === true) {
@@ -239,6 +293,21 @@ export function releaseLivePlate(input: {
         `plate "${plateId}" is shown by the active look but its hole is entirely outside the ` +
         `frame — the row's position carried it off — so its producer stays seated, muted and ` +
         `idle rather than being cleared`,
+    };
+  }
+  if (input.source.producer.kind === 'media') {
+    // `MEDIA-PLATES-01` — a held clip says which of its two held behaviours it has.
+    return {
+      itemId,
+      plateId,
+      disposition: 'held',
+      reason:
+        mediaPlaybackOf(input.source).whenHidden === 'pause'
+          ? `plate "${plateId}" is a media clip set to pause when hidden — it stays seated, ` +
+            `paused, muted and hidden, and resumes from the same frame when a look shows it again`
+          : `plate "${plateId}" is a media clip set to keep playing when hidden — it stays ` +
+            `seated and running, muted and hidden, and shows wherever it has reached when a look ` +
+            `shows it again`,
     };
   }
   return {

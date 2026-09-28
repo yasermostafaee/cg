@@ -287,6 +287,21 @@ export const SourceDefinitionIdSchema = z
   .max(64)
   .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'a source id is alphanumeric with "_" and "-"');
 
+/**
+ * 🔴 `MEDIA-PLATES-01` — **WHAT A MEDIA CLIP DOES WHEN A LOOK HIDES ITS PLATE**, per clip and
+ * station-wide (the market's common shape: vMix's Auto Pause / Auto Restart, Cinegy's Free Run):
+ *
+ *   - `pause` — the default. Paused and muted, still seated; shown again, it resumes from the SAME
+ *     frame with its audio back.
+ *   - `restart` — torn down when hidden, as every clip was before this setting; shown again, it
+ *     plays from the beginning.
+ *   - `continue` — keeps playing, hidden and muted; shown again, it is wherever it has reached by
+ *     then (its last frame, if it has ended).
+ */
+export const MEDIA_WHEN_HIDDEN = ['pause', 'restart', 'continue'] as const;
+export const MediaWhenHiddenSchema = z.enum(MEDIA_WHEN_HIDDEN);
+export type MediaWhenHidden = z.infer<typeof MediaWhenHiddenSchema>;
+
 /** ONE live this installation has, defined without reference to any template. */
 export const SourceDefinitionSchema = z.object({
   /** Installation-generated and STABLE — see {@link SourceDefinitionIdSchema}. */
@@ -349,10 +364,44 @@ export const SourceDefinitionSchema = z.object({
       folder: z.string().optional(),
       /** When this station last bound it — the picker's `Recent` group. */
       lastBoundAt: z.string().optional(),
+      /** `MEDIA-PLATES-01` — the clip's two playback settings ({@link mediaPlaybackOf}). */
+      loop: z.boolean().optional(),
+      whenHidden: MediaWhenHiddenSchema.optional(),
     })
     .optional(),
 });
 export type SourceDefinition = z.infer<typeof SourceDefinitionSchema>;
+
+/** A clip's two playback settings. */
+export interface MediaPlayback {
+  /** Plays with `LOOP`. Off: the clip freezes on its last frame at its end — never empty. */
+  readonly loop: boolean;
+  readonly whenHidden: MediaWhenHidden;
+}
+
+/**
+ * The settings a NEW bound-media reference gets — and what an absent value reads as, which is every
+ * reference bound before these settings existed (additive; no migration).
+ */
+export const MEDIA_PLAYBACK_DEFAULTS: MediaPlayback = { loop: false, whenHidden: 'pause' };
+
+/**
+ * A clip's playback settings from its catalogue entry. 🔴 **THE ONE READER** — the bridge's hold, its
+ * `PLAY`, the console's control: none of them spells a default of its own.
+ */
+export function mediaPlaybackOf(entry: {
+  readonly media?:
+    | {
+        readonly loop?: boolean | undefined;
+        readonly whenHidden?: MediaWhenHidden | undefined;
+      }
+    | undefined;
+}): MediaPlayback {
+  return {
+    loop: entry.media?.loop ?? MEDIA_PLAYBACK_DEFAULTS.loop,
+    whenHidden: entry.media?.whenHidden ?? MEDIA_PLAYBACK_DEFAULTS.whenHidden,
+  };
+}
 
 /**
  * The aspect THIS SOURCE states: derived from the format, falling back to the
@@ -1046,6 +1095,31 @@ export const SourcesRefreshChannel = defineChannel(
   'sources.refresh',
   z.void(),
   z.object({ ok: z.literal(true) }),
+);
+
+/** `MEDIA-PLATES-01` — why a clip's playback settings were not changed. */
+export const MEDIA_PLAYBACK_REFUSALS = ['unknown-media'] as const;
+
+/**
+ * 🔴 `MEDIA-PLATES-01` §1.A — **A BOUND CLIP'S TWO PLAYBACK SETTINGS, STATION-WIDE.** `mediaId` is
+ * the clip's CATALOGUE id (`md-<Playout id>`), the one every console door names a source by. Stored
+ * on the clip's bound-media reference and published with the catalogue. Operator class, audited with
+ * the clip's name. A `loop` change reaches every plate of that clip already playing at once
+ * (`CALL <ch>-<L> LOOP 0|1` — 2.5.0 switches looping on a playing clip); `whenHidden` applies at the
+ * next time a look hides the plate.
+ */
+export const SourcesSetMediaPlaybackChannel = defineChannel(
+  'sources.set-media-playback',
+  z.object({
+    mediaId: z.string().min(1).max(64),
+    loop: z.boolean(),
+    whenHidden: MediaWhenHiddenSchema,
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(MEDIA_PLAYBACK_REFUSALS).optional(),
+    message: z.string().optional(),
+  }),
 );
 
 /** Read the per-template, per-plate assignments in force. */

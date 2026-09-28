@@ -127,6 +127,23 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     onPlateReleased: () => () => undefined,
   };
   /*
+    `MEDIA-PLATES-01` — Look inputs reads each seated clip's transport state. NO CLIPS is the quiet
+    default, filled even into a `liveLayers` a spec states itself (the `fillBankList` rule: a spec's
+    own members are kept, and only the absent ones are completed).
+  */
+  const liveLayers = cg['liveLayers'] as Record<string, unknown>;
+  liveLayers['mediaState'] ??= (): Promise<unknown[]> => Promise.resolve([]);
+  liveLayers['onMediaStateChanged'] ??= (): (() => void) => () => undefined;
+  /*
+    …and it reads them through `useBridgeSnapshot`, which asks the LINK whether a pull may be made.
+    LIVE is the quiet answer for a stub that states no link: every request a spec answers is one a
+    live bridge would be asked.
+  */
+  cg['link'] ??= {
+    status: () => 'live',
+    onStatusChanged: () => () => undefined,
+  };
+  /*
     `MULTI-CHANNEL-01` §2 F — `useCanOperate` now asks whether a covered-set lock covers the
     selected channel, so every surface with an operator control reads the lock. RELEASED is the
     quiet answer: a filled stub measures exactly what it measured before the question existed.
