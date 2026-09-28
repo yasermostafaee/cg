@@ -408,12 +408,14 @@ fault in the switch.
 - **THEN** the source is torn down and that is surfaced, rather than the switch-back silently taking
   longer than it does for every other source
 
-#### Scenario: A media clip is the kind that cannot be held
+#### Scenario: A media clip set to restart is the kind that cannot be held
 
-- **GIVEN** a plate assigned to a media clip, and a neighbouring plate assigned to a live input
+- **GIVEN** a plate assigned to a media clip whose When hidden is Restart, and a neighbouring plate
+  assigned to a live input
 - **WHEN** the operator switches to a look showing neither
 - **THEN** the live input is held while the clip is torn down and announced with its reason, because
-  a clip held across a look runs to its end and would come back black
+  it is set to play from the beginning when a look shows it again (a clip set to Pause or Keep
+  playing is held like a live input — `media-plates`)
 
 ### Requirement: The seated live-source layers are VISIBLE, and an adopted one is distinguishable from a stranded one
 

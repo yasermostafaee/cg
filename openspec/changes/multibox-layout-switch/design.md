@@ -960,6 +960,8 @@ confirmation, which is `tasks.md` 8.1 rather than a gate.
 > **50 layers** so one or two extra is cheap.
 > ⚠ **A source kind that cannot be held open falls back to teardown as a NAMED behaviour, never a
 > surprise.**
+>
+> ⭐ **`MEDIA-PLATES-01` (2026-09-28) — a media clip follows its own `whenHidden`:** `pause` (the default — held, paused and muted, resumed from the same frame), `continue` (held, running on hidden and muted), or `restart` (torn down, played from the beginning — this section's named fallback); `loop` defaults to off, and a clip that is not looping freezes on its last frame.
 
 | Candidate                                                   | Cost                                                          |
 | ----------------------------------------------------------- | ------------------------------------------------------------- |

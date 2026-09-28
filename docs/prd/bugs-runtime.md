@@ -8067,8 +8067,9 @@ that was already broken. This session's change is the first touch that path has 
 A switch now seats the incoming producer hidden BEFORE the page is told and lets it run three holds before the
 reveal, so the `PLAY` no longer lands inside the switch: on the owner's CasparCG, `ghab` 1 → 2, term (b) measured
 **0 fields in 10 of 10** (it was 0, 4, 4 and six 6s the same hour). Still OPEN for what it records beyond the
-switch: the live-input half below is still an owed hardware run, and the park a `media` clip cannot survive is by
-design (`canHoldLivePlate`).
+switch: the live-input half below is still an owed hardware run. (The park a `media` clip could not survive was by
+design (`canHoldLivePlate`); since `MEDIA-PLATES-01` a clip follows its own `whenHidden` — `pause` and `continue`
+are held, and only `restart` is torn down.)
 
 **Measured, not reasoned about.** `tools/skew-harness --fixture ghab` reproduces the owner's
 membership exactly: `look-1` holds ONE plate (`guest-1`) and `guest-2` exists only in `look-2`. Ten
@@ -11876,6 +11877,12 @@ reproduced it against the AMCP mock with a positive control: the same row, same 
 two clips re-pointed at decklinks, keeps all three seats (parked at `fill=(2,2)`). Do not "fix"
 the teardown.
 
+> ⚠ **Superseded premise — `MEDIA-PLATES-01` (`R-071`, 2026-09-28).** A 2.5.0 clip that is not
+> looping does not come back black: it freezes on its last frame. A clip now follows its own
+> `whenHidden` — `pause` (the default) and `continue` are held like a live input, and only
+> `restart` keeps this teardown; the `Cleared` pill's sentence names that setting. What this
+> entry fixed — the release made observable — is unchanged.
+
 **The bug is that §12.4's own escape clause was never wired.** It calls the fallback _"a NAMED,
 OBSERVABLE behaviour"_ rather than _"a teardown nobody can distinguish from a bug"_, and
 `releaseLivePlate` duly composes an operator-facing sentence for every plate the reconcile lets
@@ -11910,8 +11917,8 @@ the release UNASKED; red-first, `timed out waiting for a frame` without the forw
 `apps/runtime/tests/liveSourcesPanel.dom.test.ts` (five `B-247` blocks: `Cleared` vs `Not seated`
 with an unreleased control frame, the shared amber, the structural retraction with its positive
 control, a `held` release NOT reading cleared, and the invariant that keeps `CLEARED_PILL`'s
-wording honest — a plate the template no longer declares yields no row, so the pill's "a clip
-cannot be held idle" can never be the wrong cause); `apps/runtime/tests/mock-bridge-parity.test.ts`
+wording honest — a plate the template no longer declares yields no row, so the pill's clip cause
+can never be the wrong one); `apps/runtime/tests/mock-bridge-parity.test.ts`
 (the new method exists on both backends).
 
 - **Cross-refs:** [[B-145]] (the ledger this reports on), [[B-147]] and [[B-143]] (the

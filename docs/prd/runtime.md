@@ -4050,3 +4050,25 @@ back to every row. **Why.** After first-run the owner's Layers tab read 30/30 ro
 of sight. **Acceptance:** WHEN first-run declares two channels the tap reads THEN each shows 99–95 and
 59–55 and the rest hidden; WHEN a layer carries a producer at the read THEN its row stays shown; WHEN
 the channel cannot be read THEN every row is shown. An existing station's saved rows are unchanged.
+
+## [~] R-071 — Media plates — when hidden, loop, freeze at end, transport ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `MEDIA-PLATES-01` (v2) · `openspec/changes/media-plates`
+
+**What.** Each bound clip carries two settings, station-wide, on its bound-media reference: `loop`
+(default off) and `whenHidden` — `pause` (the default: paused and muted, still seated, resumed from
+the same frame when a look shows it again), `restart` (torn down and played from the beginning, as
+every clip was before) or `continue` (keeps playing, hidden and muted). A clip that is not looping
+freezes on its last frame at its end — 2.5.0's ffmpeg producer does it, nothing is sent. An on-air
+row's media plate has Play/Pause and Restart, its remaining time (`−0:12`) only when the server
+reports the clip's time, and `Paused` / `Ended`. **Why.** A clip in box 2 of a two-box look was torn
+down whenever a one-box look hid it and started again from the beginning, on the premise that a held
+clip "runs to its end and comes back black" — false on 2.5.0; vMix, TriCaster, Cinegy and Viz all
+make it a per-clip setting plus transport on air. **Acceptance:** WHEN a look hides a `pause` clip
+THEN it is sent `OPACITY 0` and its mute in the switch's committed batch, then `PAUSE`, and no `CLEAR`;
+and WHEN a look shows it again THEN `RESUME` with its declared volume, on the same layer, before the
+reveal is committed. WHEN it is `continue` THEN only the hide and the reveal are sent. WHEN it is
+`restart` THEN the teardown and a fresh `PLAY` happen as before. WHEN Loop is on THEN the `PLAY`
+carries `LOOP`, and a change reaches a playing clip at once (`CALL … LOOP 1|0`). WHEN the operator
+presses Pause, Play or Restart on an on-air row's clip THEN `PAUSE`, `RESUME`, or `CALL … SEEK 0` then
+`RESUME` is sent; it is refused with nothing sent for a live input, a plate not seated, a row not on
+air, a viewer, another channel's operator and a locked console. WHEN the server reports no time THEN
+no number is shown. A live-input plate's hold, release and wire are byte-identical to before.

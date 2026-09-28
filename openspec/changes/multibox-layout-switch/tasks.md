@@ -553,10 +553,14 @@ candidate shapes.
       crosstalk returns inside one template) while its producer stays seated on its band layer.
       ✅ **Session BC.** `live-plate-release.ts` — `canHoldLivePlate` (exhaustive switch, so a new
       producer form gets a compile error rather than inheriting "holdable") + `releaseLivePlate`
-      returning the disposition WITH its sentence, announced on `livePlateReleased`. `media` is
-      the kind that cannot be held: a clip held across a look runs to its end and comes back
-      black. Seat/punch separation is representable — `LiveLayerRecord.held`, additive and
-      persisted, because the un-hold path re-asserts the plate's volume off it.
+      returning the disposition WITH its sentence, announced on `livePlateReleased`. `media` was
+      then the kind that could not be held. Seat/punch separation is representable —
+      `LiveLayerRecord.held`, additive and persisted, because the un-hold path re-asserts the
+      plate's volume off it.
+      ⚠ **Corrected by `MEDIA-PLATES-01` (2026-09-28).** Its premise — a held clip "runs to its
+      end and comes back black" — is false on 2.5.0: a clip that is not looping freezes on its
+      last frame. A clip now follows its own `whenHidden`: `pause` and `continue` are held, and
+      `restart` keeps this teardown (`openspec/changes/media-plates`).
 - [x] 6.6 **A test per inverse in §4's audit table** — plate set, mask, fit, layer allocation.
       ✅ **Session BC.** `tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts` —
       four `INVERSE n/4` tests, plus the 6-box fixture and the position-only / size-only / both
