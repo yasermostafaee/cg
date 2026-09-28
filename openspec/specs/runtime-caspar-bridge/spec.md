@@ -3094,3 +3094,59 @@ full frame.
 
 - **WHEN** a row is taken out and CasparCG refuses one plate layer's `CLEAR`
 - **THEN** that layer receives no `MIXER CLEAR`, while the plate whose `CLEAR` landed does (the control)
+
+### Requirement: A take refused for having no plate band SHALL be carried on its row
+
+A take the bridge refuses because no Live Source layer band is in force SHALL be recorded on its row as a take
+refusal carrying the code `live-source-no-layer-range` and no plate — the band is the station's, not a box's — and
+SHALL be answered as a refusal the row carries, exactly as a take refused for a plate is. Nothing SHALL be sent to
+the server. A take of that row that lands SHALL withdraw it.
+
+⚠ Amended 2026-09-28 (`plate-band`, `PLATE-BAND-01`): "no band in force" — none declared, and no default. A
+station linked to the Playout with none declared is given 60–79 unless its own config claims a layer there, and
+then no refusal happens at all.
+
+#### Scenario: The no-band refusal is on the row
+
+- **WHEN** a template with plates is taken on a station with no plate band in force (none declared, and not linked
+  to the Playout or claiming a layer in 60–79) **THEN** the take is refused with `live-source-no-layer-range`, the
+  row carries the refusal with that code, the reply says the row carries it, and no AMCP line was sent for the take
+- **WHEN** the row is later taken and the take lands **THEN** the refusal is withdrawn
+
+### Requirement: A Source defaults write SHALL be judged by the channel grant on the channels it changes
+
+A `sources.set-assignments` SHALL be refused, before anything is applied, when the signed-in principal's grant
+(`cg_channels`) does not hold a channel whose Source defaults it changes — with the permission gate's existing
+channel sentence for that channel. `"*"` SHALL hold every channel. A channel is changed when the defaults it reads
+through the one reader differ between the set in force and the set sent; a channel whose defaults are sent back as
+they were SHALL NOT be judged, because a console sends the whole set on every save. The role check SHALL come first,
+as for every route, and with auth off nothing SHALL be refused by it. A channel-scoped lock SHALL judge the same
+channels, as it judges a bank change's.
+
+#### Scenario: A station-admin holding channel 2 only
+
+- **WHEN** a station-admin granted channel 2 alone saves Source defaults that change channel 1's **THEN** the save
+  is refused with `This sign-in does not cover channel 1, …`, and no channel's defaults change
+- **WHEN** the same principal saves defaults that change channel 2's alone **THEN** they change, and channel 1's
+  stay as they were (the control)
+
+#### Scenario: A principal holding every channel
+
+- **WHEN** a station-admin whose grant is `"*"` changes channel 1's defaults and then channel 2's **THEN** both are
+  accepted
+
+#### Scenario: The role still comes first, and auth off refuses nothing
+
+- **WHEN** an operator-role principal saves Source defaults **THEN** it is refused for its role, as before
+- **WHEN** the bridge runs with auth off **THEN** a save that changes channel 1's defaults is accepted
+
+#### Scenario: A lock covering channel 1
+
+- **WHEN** a lock covers channel 1 and a principal holding channels 1 and 2 saves defaults that change channel 1's
+  **THEN** the lock refuses it
+- **WHEN** the same principal's save changes channel 2's alone **THEN** it passes the lock and is applied
+
+#### Scenario: The console says so
+
+- **WHEN** the Source defaults dialog's save is refused by the grant **THEN** the dialog shows the gate's sentence,
+  keeps the operator's edit, and adopts nothing

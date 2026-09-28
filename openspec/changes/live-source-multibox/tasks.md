@@ -939,7 +939,7 @@ UNCHANGED:**
    upgrade. The band also carries **no channel** (a Live Source lands on whatever channel its
    template is on), so overlap is tested on layer NUMBERS across every channel — it refuses more
    than strictly necessary, which is the right direction here.
-   ⚠ **Amended 2026-09-28 by the owner (`PLATE-BAND-01`, `openspec/changes/plate-band`, `R-073`).** Both
+   ⚠ **Amended 2026-09-28 by the owner (`PLATE-BAND-01`, `openspec/changes/archive/2026-09-28-plate-band`, `R-073`).** Both
    reasons were answered. (1) A Playout-linked station's plant is not unseen: the contract fixes its
    layers — the Playout owns 1–49, CG Control 50–99 (beds 50–59, plates 60–79, template rows 80–99;
    `PLAYOUT-INTEGRATION-CONTRACT-v1.md` §7, and C5 as the Playout answered it). (2) The upgrade hazard

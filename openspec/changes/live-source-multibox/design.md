@@ -242,7 +242,7 @@ SourceAssignmentsSchema = {
 }
 ```
 
-⚠ **Amended 2026-09-28 (`PLATE-BAND-01`, `openspec/changes/plate-band`).** `layerRange` is still the DECLARED
+⚠ **Amended 2026-09-28 (`PLATE-BAND-01`, `openspec/changes/archive/2026-09-28-plate-band`).** `layerRange` is still the DECLARED
 band and the only one the file holds. But "never defaulted" no longer holds for a station linked to the
 Playout: with none declared it is given 60–79 unless its own config claims a layer there, because the
 contract fixes the plant's layers and a reservation in the band now turns the default off instead of failing

@@ -1823,3 +1823,44 @@ refusal of a switch (the look, the link, the page) SHALL keep its banner.
 
 - **WHEN** a switch is refused for a reason that names no plate
 - **THEN** the console raises its banner, in the bridge's words, exactly as before
+
+### Requirement: The no-band take refusal SHALL be one line on its row, with no banner
+
+A take refused because no plate band is in force SHALL be said on its row and in its Inspector as one short line
+naming the row — `<row>: no live source layer band is declared — nothing was sent.` — in that channel's view only,
+and SHALL NOT raise a console-wide banner.
+
+⚠ Amended 2026-09-28 (`plate-band`, `PLATE-BAND-01`): "in force" — a Playout-linked station with none declared is
+given 60–79 unless its own config claims a layer there. The line's words stay true where it appears: no band was
+declared there, and none was given.
+
+#### Scenario: One line on the row, nowhere else
+
+- **WHEN** a take on channel 1 is refused for having no band **THEN** its row and its Inspector read the one line,
+  and no banner is shown
+- **WHEN** the operator views channel 2 **THEN** no line and no banner are shown there
+- **WHEN** the row is taken again and the take lands **THEN** the line is gone (the control)
+
+### Requirement: Station setup SHALL show the plate band in force, and SHALL say default when it is computed
+
+Station setup → Live sources SHALL show the plate band in force — the declared band, or a Playout-linked
+station's default — and SHALL say `default` when it is the computed one. A declared band SHALL read as it did,
+with no `default`; with no band in force the tab SHALL read as it did. A station-admin's band fields SHALL show
+the band in force, and only a press of Apply band SHALL declare it.
+
+#### Scenario: The default, on a real linked bridge
+
+- **WHEN** a station-admin opens Live sources on a Playout-linked station with nothing declared **THEN** the
+  band reads `Currently 60–79 · default · 20 layers.` and the band fields read 60 and 79
+
+#### Scenario: A reserved layer, or a declared band
+
+- **WHEN** the station reserves layer 65 **THEN** the band reads as it did with none in force:
+  `Nothing is declared yet; 60–79 is the usual choice.`
+- **WHEN** the station declares 70–79 **THEN** the band reads `Currently 70–79 · 10 layers.` with no `default`
+
+#### Scenario: Only a press declares it
+
+- **WHEN** a station-admin opens the tab on a station with the default in force **THEN** nothing is sent
+- **WHEN** they press Apply band with the fields untouched **THEN** 60–79 is declared, and the tab stops
+  calling it the default

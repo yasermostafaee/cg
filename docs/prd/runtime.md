@@ -4083,7 +4083,7 @@ no number is shown. A live-input plate's hold, release and wire are byte-identic
 **The owner's decisions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change):** `Loop` stays a
 checkbox; a clip on air across the upgrade gets its transport record at its next take.
 
-## [~] R-072 — Each channel keeps its own Source defaults; a take refused for having no band is a row line ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `CHANNEL-SOURCES-01` (v1) · `openspec/changes/channel-sources` · decision 1 STOPPED, then decided → `R-073`
+## [x] R-072 — Each channel keeps its own Source defaults; a take refused for having no band is a row line ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `CHANNEL-SOURCES-01` (v1) · decision 1 STOPPED, then decided → `R-073` · archived 2026-09-29 (`openspec/changes/archive/2026-09-28-channel-sources`)
 
 **What.** (2) Source defaults are kept per channel, keyed (channel, template, plate); every reader —
 take, look switch, swap, restore, the Inspector's `Default (…)`, the Source defaults dialog, PVW —
@@ -4108,7 +4108,7 @@ stands; until then a station with no band still refuses a take — as one row li
 2026-09-28 by the owner** — see [[R-073]]: a Playout-linked station with none declared is given 60–79,
 unless its own config claims a layer there.
 
-## [~] R-073 — A station linked to the Playout gets the plate band 60–79 with no hand step, unless it claims a layer there; Source defaults obey the channel grant ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01` (v1) · `openspec/changes/plate-band`
+## [x] R-073 — A station linked to the Playout gets the plate band 60–79 with no hand step, unless it claims a layer there; Source defaults obey the channel grant ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01` (v1) · archived 2026-09-29 (`openspec/changes/archive/2026-09-28-plate-band`) · the owner's `dev:station --fake` check still open
 
 **What.** A station linked to the Playout (its auth config names one) that declares no plate band seats
 its plates in 60–79, unless its own config claims a layer there — a reserved playout layer, a bank row or

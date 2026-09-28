@@ -180,3 +180,105 @@ declared, and an absent aspect produces no fit at all.
 
 - **WHEN** a payload carrying plate fit facts is applied **THEN** the reserved key is stripped before
   anything treats the payload as field values, exactly as it is for the active look
+
+### Requirement: Source defaults SHALL belong to a channel
+
+A template's Source defaults SHALL be kept per channel: an assignment carries the channel it belongs to, and the
+store SHALL be keyed (channel, template, plate). Changing a default on one channel SHALL NOT change any other
+channel's. Every reader — the take, a look switch, a swap, a restore, the Inspector's `Default (…)`, the Source
+defaults dialog and the preview — SHALL read a plate's default through ONE function over the row's own channel,
+so no two of them can disagree about which default a plate uses.
+
+An assignment written without a channel (a file from before this requirement) SHALL answer on a channel only where
+that channel holds no entry of its own for that plate.
+
+On the first load of a station's assignments file, every station-wide entry SHALL become one entry per declared
+channel, and the file SHALL be written back at once. Nothing on air changes: on every channel the same source
+answers as before. A second load SHALL copy nothing.
+
+A channel that joins the declared set later SHALL start from a copy of each template's current defaults, taken
+whole from the lowest previously declared channel that holds defaults for that template, and the copy SHALL be
+persisted. A plate the joining channel already holds SHALL be kept.
+
+The Source defaults dialog SHALL edit the defaults of the channel of the row it was opened from, and its title
+SHALL name that channel.
+
+#### Scenario: A change on channel 2 leaves channel 1 unchanged
+
+- **WHEN** a plate's default is changed on channel 2 **THEN** channel 1's default for that plate is unchanged, and
+  a take on channel 1 plays channel 1's input
+- **WHEN** the same template is taken on channel 2 **THEN** it plays the new default (the control)
+- **WHEN** a row on channel 1 is taken **THEN** what it freezes is channel 1's defaults, not the entry written
+  for channel 2
+
+#### Scenario: The one-time copy on the first load
+
+- **WHEN** a station's assignments file holds station-wide entries and two channels are declared **THEN** each
+  channel holds its own copy of every entry, the file is rewritten with them, and a take plays exactly what it
+  played before
+- **WHEN** the same file is loaded a second time **THEN** nothing is copied and its bytes are unchanged
+
+#### Scenario: A channel added later starts from a copy
+
+- **WHEN** a second channel is declared after channel 1's defaults were set **THEN** channel 2 holds a copy of
+  them, persisted, and a plate channel 1 never set is not invented on channel 2
+- **WHEN** a station moves from one channel to another (one bank for one) **THEN** its defaults move with it
+
+#### Scenario: The dialog names and edits its row's channel
+
+- **WHEN** the Source defaults dialog is opened from a row on channel 2 **THEN** its title reads
+  `Source defaults · CH 2`, it shows channel 2's defaults, and saving writes channel 2's entries and leaves every
+  other channel's as they were
+
+### Requirement: A station linked to the Playout SHALL seat its plates in 60–79 when it declares no band
+
+The bridge SHALL seat a take's plates in the contract's plate band, 60–79, on a station linked to the Playout
+(its auth config names one) that declares no plate band — unless the station's own config claims a layer in
+that band: a reserved playout layer, a bank row or bed, or a dynamic policy range. Then no band is in force,
+and a take of a template with plates is refused as one line on its row, as before. A declared band SHALL be
+used exactly as declared. A station not linked to the Playout SHALL keep the declared band or none.
+
+The default SHALL be computed from the station's config and SHALL never be written into it, so a station
+boots whatever its config holds; and it SHALL be read through ONE function by every reader — the seating plan,
+the binding-change check, the own-layer test, the published catalogue, the boot line and the offline console.
+
+#### Scenario: A linked station with no band declared
+
+- **WHEN** a station linked to the Playout, with no band declared and nothing of its own in 60–79, takes a
+  template with two plates **THEN** both plates are played on layers in 60–79, and no band file is written
+- **AND** the station `pnpm dev:station --fake` starts, signed in and reading the fake Playout's inputs, does
+  the same for a two-plate bed on channel 1
+
+#### Scenario: A declared band is used as declared
+
+- **WHEN** the same station has 70–79 declared **THEN** the plates are played on layers in 70–79
+
+#### Scenario: A reserved layer in the band turns the default off
+
+- **WHEN** a linked station's config reserves layer 65 and declares no band **THEN** no band is in force, the
+  take is refused with `live-source-no-layer-range` on its row, and nothing reaches the server
+
+#### Scenario: A station not linked to the Playout
+
+- **WHEN** a station whose auth config names no Playout declares no band **THEN** no band is in force and the
+  take is refused as before
+
+#### Scenario: A config reserving 60–79 boots unchanged
+
+- **WHEN** a linked station's config reserves 60–79 and declares no band **THEN** it boots, no band is in
+  force, and its config files are as they were
+- **AND** the same reservation beside a DECLARED 60–79 still refuses to boot, naming the reserved range
+
+#### Scenario: The console is told the band in force, and only a declared band is written
+
+- **WHEN** a console reads the catalogue of a linked station with none declared **THEN** it is told 60–79,
+  origin `default`
+- **WHEN** a station-admin declares 70–79 and then withdraws it **THEN** the console is told 70–79 as
+  declared, then 60–79 as the default again, and the band file holds 70–79 and then no band at all
+
+#### Scenario: A bank change can turn the default off
+
+- **WHEN** a bank whose rows sit in 60–79 is declared on a linked station **THEN** no band is in force and the
+  catalogue is published again
+- **WHEN** a bank on the standard map is declared instead **THEN** the band is unchanged and nothing is
+  published (the control)
