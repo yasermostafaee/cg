@@ -5,17 +5,18 @@ import type { EnqueueOptions, QueueResult } from '../queue/command-queue.js';
 export type ServerLabel = 'A' | 'B';
 
 /**
- * `send()` targeting model. Strategies interpret this differently:
+ * Where a `send()` goes is the STRATEGY's decision alone (`RedundancyAdapter.send`):
  *
- *   mirror-sync     : 'both' fans out and awaits both
- *   mirror-async    : 'both' fans out, awaits primary, journals
- *   journal-replay  : 'primary' only; 'both' is treated as 'primary' too
+ *   mirror-sync     : fans out to both, awaits both, the primary's ack wins
+ *   mirror-async    : awaits the primary, the backup fire-and-forget, journals
+ *   journal-replay  : the primary only, journals
+ *
+ * `B-287` / `FOLLOWUPS-01` C — there used to be a `target` override here, documented as choosing
+ * among `'primary'`, `'backup'` and `'both'`, which the adapter never read: a caller passing
+ * `target: 'primary'` under `mirror-sync` still reached server B. It is DELETED (the owner,
+ * 2026-09-28). The one exception a caller may ask for is `mirror: false`, which IS read.
  */
-export type SendTarget = 'primary' | 'backup' | 'both';
-
 export interface SendOptions extends EnqueueOptions {
-  /** Override target (default `'both'` for mirror strategies, `'primary'` for journal-replay). */
-  target?: SendTarget;
   /**
    * 🔴 `ROUTE-PLATES-01` / contract v1.3 C4 — `false`: this line reaches the PRIMARY ONLY, under
    * every strategy, and is NEVER journaled — so neither a failover replay nor a corrective resend can

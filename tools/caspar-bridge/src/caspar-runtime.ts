@@ -13435,14 +13435,14 @@ export class CasparRuntime {
    */
   async #readChannelMode(channel: number): Promise<void> {
     try {
-      // `target: 'primary'` — the geometry that matters is the channel currently
-      // ON AIR, and under a mirror strategy the default `'both'` fans out and can
-      // return the BACKUP's reply as the winner. That would attribute B's video
-      // mode to the live channel, which is the wrong machine's answer to the
-      // question actually being asked.
+      // `B-287` — under `mirror-sync` this read fans out to both servers, and when the
+      // primary fails and the backup answers, `result.winner` is the BACKUP. That is why
+      // every fact below is filed under `result.winner`, never under whoever was primary:
+      // the geometry that matters is the machine that actually answered. (A `target:
+      // 'primary'` option once sat here believing it prevented the fan-out; the adapter
+      // never read it, and it was deleted — `FOLLOWUPS-01` C.)
       const result = await this.#adapter.send(this.#builder.info(channel), {
         priority: 'low',
-        target: 'primary',
       });
       const response = result.response;
       /*
@@ -13492,8 +13492,8 @@ export class CasparRuntime {
   /**
    * `C-029` — the DECLARED half: `INFO CONFIG`, once per connection.
    *
-   * Sent the way the mode read is sent — through the adapter, `low` priority, `primary`
-   * target — and for the same reasons. Latches on ANY `201` reply: a reply that is not a
+   * Sent the way the mode read is sent — through the adapter, `low` priority, filed under the
+   * server that answered — and for the same reasons. Latches on ANY `201` reply: a reply that is not a
    * configuration (an older build, a different dialect) is recorded as `null` and NOT
    * re-asked, because asking again would not make it one; only a refusal or a timeout
    * leaves the latch unset so the next tick tries again. Keyed by the server that ANSWERED.
@@ -13501,10 +13501,7 @@ export class CasparRuntime {
   async #readServerConfig(label: ServerLabel): Promise<void> {
     this.#configReadInFlight.add(label);
     try {
-      const result = await this.#adapter.send('INFO CONFIG', {
-        priority: 'low',
-        target: 'primary',
-      });
+      const result = await this.#adapter.send('INFO CONFIG', { priority: 'low' });
       const response = result.response;
       const xml =
         response.kind === 'ok-line'
@@ -13531,10 +13528,7 @@ export class CasparRuntime {
    */
   async #readChannelOutputs(channel: number): Promise<void> {
     try {
-      const result = await this.#adapter.send(this.#builder.info(channel), {
-        priority: 'low',
-        target: 'primary',
-      });
+      const result = await this.#adapter.send(this.#builder.info(channel), { priority: 'low' });
       const response = result.response;
       const xml =
         response.kind === 'ok-line'

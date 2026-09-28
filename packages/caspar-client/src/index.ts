@@ -72,7 +72,6 @@ export type {
   PairedSessions,
   RedundancySendResult,
   SendOptions,
-  SendTarget,
   ServerLabel,
 } from './redundancy/types.js';
 export { InMemoryJournal } from './redundancy/journal.js';

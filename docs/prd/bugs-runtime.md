@@ -12819,7 +12819,7 @@ Playout to say where each install keeps an item, which the contract does not car
 `CasparRuntime`'s `#send` → `RedundancyAdapter.send`;
 `openspec/changes/archive/2026-09-27-playout-sources/design.md` §0.8.
 
-## [ ] B-287 — `SendOptions.target` is documented as an override and read by nothing ⟨priority: low⟩ — FILED 2026-09-28 by `ROUTE-PLATES-01` §0.5 · not fixed
+## [x] B-287 — `SendOptions.target` is documented as an override and read by nothing ⟨priority: low⟩ — FILED 2026-09-28 by `ROUTE-PLATES-01` §0.5 · CLOSED IN CODE 2026-09-28 by `FOLLOWUPS-01` C (deleted)
 
 `SendOptions.target` (`packages/caspar-client/src/redundancy/types.ts`) says it overrides where a
 line goes — `'primary'`, `'backup'` or `'both'` — and `RedundancyAdapter.send` never reads it: the
@@ -12830,3 +12830,16 @@ establishing `ROUTE-PLATES-01` §0.5 (what reaches server B for a plate), which 
 must NEVER reach B and so could not use it: C4's route lines go by the new `mirror: false` instead,
 which IS read, bypasses the journal as well, and is tested under all three strategies. The fix is
 to honour `target` or delete it; which is a decision, not a rider.
+
+**Closed — deleted (`FOLLOWUPS-01` C, the owner's decision of 2026-09-28: nothing reads it, and
+`mirror: false` does its job).** `SendOptions.target` and the `SendTarget` type (and its
+`@cg/caspar-client` export) are gone; `types.ts` now says the strategy alone decides and names
+`mirror: false` as the one exception a caller may ask for. **Correction to the filing:** "nothing in
+the bridge passes it today" was not so. Four sites passed `target: 'primary'`: the `R-030` mode read
+(`#readChannelMode`), `C-029`'s `INFO CONFIG` read (`#readServerConfig`) and its slow re-read
+(`#readChannelOutputs`), all believing it kept the read off server B, plus `C-029`'s consumer `ADD`
+(retired the same day, `FOLLOWUPS-01` A). The three reads lose the option and keep their wire
+byte-identical, since the adapter never read it; their comments now say what really happens — under
+`mirror-sync` the read fans out, and each fact is filed under `result.winner`, the server that
+answered, which is what already kept it correct. **Verified:** a `target: 'primary'` planted back at
+one site fails the bridge's typecheck (`TS2353`, not a property of `SendOptions`); removed → clean.

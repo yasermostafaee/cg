@@ -2856,4 +2856,5 @@ rule closes one of those, and the seam's guard keeps a stray command off the Pla
   before.
 - WHEN D10 carries a 64-bit `epoch` THEN it is kept digit for digit.
 
-**Filed alongside:** [[B-287]] (`SendOptions.target` is read by nothing).
+**Filed alongside:** [[B-287]] (`SendOptions.target` is read by nothing) — closed 2026-09-28 by
+`FOLLOWUPS-01` C, deleted.
