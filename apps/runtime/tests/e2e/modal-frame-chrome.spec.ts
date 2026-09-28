@@ -1,5 +1,23 @@
 import { cssColour, expect, test } from './fixtures/runtime.js';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+
+/**
+ * 🔴 `P-057` / `FOLLOWUPS-01` §2.2 — **resolve once every transition on the element has ENDED**,
+ * so a computed colour read afterwards is the one that LANDED, not one on the way.
+ *
+ * `getAnimations()` flushes style first, so a state change already applied (the selection, the
+ * pointer leaving) has its transitions listed; a finished transition leaves the list. It is
+ * awaited until the list is EMPTY, not once, because a transition interrupted mid-flight — the
+ * hover leaving while the selection lands — is cancelled and replaced by a new one with its own
+ * timing. That re-timing is why the border could still be moving when the background had landed.
+ */
+async function transitionsEnded(loc: Locator): Promise<void> {
+  await loc.evaluate(async (el) => {
+    for (let running = el.getAnimations(); running.length > 0; running = el.getAnimations()) {
+      await Promise.allSettled(running.map((a) => a.finished));
+    }
+  });
+}
 
 /**
  * 🔴 `MODAL-CHROME-10` §2(b) + §4 — **THE MODAL FRAME: ITS CORNERS AND ITS HEIGHT.**
@@ -164,9 +182,12 @@ test('§4 — the picker and the audit log keep ONE box through every state that
  * Both are token swaps that a unit test could assert against `cssVars` without ever proving
  * the pixel moved. These read the COMPUTED value off the real control.
  *
- * ⚠ Both poll. `.cg-btn` transitions its background, so a single read after the click
- * photographs a colour on the way rather than the one that lands — this measurement was taken
- * mid-transition twice before the poll went in.
+ * ⚠ Both read AFTER the control's transitions have ENDED ({@link transitionsEnded}). `.cg-btn`
+ * transitions its background and border, so a read after the click photographs a colour on the
+ * way. The poll that stood here waited for the BACKGROUND alone and then read the border once —
+ * and the border, re-timed by the hover leaving mid-flight, was still moving: CI read
+ * `rgb(75, 107, 127)` for `rgb(75, 116, 139)` (`P-057`; `MEDIA-PLATES-01` §8). Every value is now
+ * read once, from a control with nothing left to animate.
  */
 test('§2(a)/§3 — a selected chip is the console selected BLUE, and the confirm commits in RED', async ({
   app,
@@ -178,15 +199,15 @@ test('§2(a)/§3 — a selected chip is the console selected BLUE, and the confi
   const chip = page.locator('[data-template-filter="bed"]');
   await chip.click();
   await page.mouse.move(5, 5);
-  await expect
-    .poll(async () => chip.evaluate((b) => getComputedStyle(b).backgroundColor), { timeout: 4000 })
-    // `--r-look-btn-sel-bg` (#2e4e67) — the console's selected-not-on-air fill. NOT the
-    // rehearse violet `--r-rehearsing-strong` (#7C3AED = rgb(124, 58, 237)) it used to wear.
-    .toBe('rgb(46, 78, 103)');
+  await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  await transitionsEnded(chip);
   const chipPaint = await chip.evaluate((b) => {
     const cs = getComputedStyle(b);
-    return { border: cs.borderColor, ring: cs.boxShadow, ink: cs.color };
+    return { fill: cs.backgroundColor, border: cs.borderColor, ring: cs.boxShadow, ink: cs.color };
   });
+  // `--r-look-btn-sel-bg` (#2e4e67) — the console's selected-not-on-air fill. NOT the
+  // rehearse violet `--r-rehearsing-strong` (#7C3AED = rgb(124, 58, 237)) it used to wear.
+  expect(chipPaint.fill, 'the chip lost the selected fill').toBe('rgb(46, 78, 103)');
   expect(chipPaint.border, 'the chip lost the selected edge').toBe('rgb(75, 116, 139)');
   expect(chipPaint.ring, 'the chip lost the selected ring').toContain('rgb(88, 173, 221)');
   expect(chipPaint.ink).toBe('rgb(255, 255, 255)');
@@ -199,22 +220,21 @@ test('§2(a)/§3 — a selected chip is the console selected BLUE, and the confi
     .click();
   const commit = page.getByRole('button', { name: 'Delete from station', exact: true });
   await expect(commit).toBeVisible();
-  await expect
-    .poll(async () => commit.evaluate((b) => getComputedStyle(b).backgroundColor), {
-      timeout: 4000,
-    })
-    /*
-      🔴 THE DELETION FAMILY, ground and ink together — reversed once on 2026-09-13 (solid
-      amber → `--r-danger-confirm-bg`) and again on 2026-09-14, when the owner put this dialog
-      beside Station setup's `Remove "sdi"?` and asked why one act wears two buttons. The
-      argument and the four measured ratios are in `controls.css`; it is read from the tokens
-      here so a later retune moves the assertion with the value.
-    */
-    .toBe(await cssColour(page, 'var(--r-setup-danger-bg)'));
+  await transitionsEnded(commit);
   const paint = await commit.evaluate((b) => {
     const cs = getComputedStyle(b);
-    return { ink: cs.color, weight: cs.fontWeight };
+    return { ground: cs.backgroundColor, ink: cs.color, weight: cs.fontWeight };
   });
+  /*
+    🔴 THE DELETION FAMILY, ground and ink together — reversed once on 2026-09-13 (solid
+    amber → `--r-danger-confirm-bg`) and again on 2026-09-14, when the owner put this dialog
+    beside Station setup's `Remove "sdi"?` and asked why one act wears two buttons. The
+    argument and the four measured ratios are in `controls.css`; it is read from the tokens
+    here so a later retune moves the assertion with the value.
+  */
+  expect(paint.ground, 'the commit button lost the family ground').toBe(
+    await cssColour(page, 'var(--r-setup-danger-bg)'),
+  );
   // FILLED at a primary's weight, not the row buttons' quiet outline. `#ffaaa7` on `#352224`
   // is 8.22:1 — HIGHER than the white-on-`#684044` it replaces (8.73 at rest, 7.29 on hover;
   // this pair is 8.22 and 7.02, and the ink alone on the old ground would have been 4.02).
