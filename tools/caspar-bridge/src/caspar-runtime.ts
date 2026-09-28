@@ -4269,6 +4269,21 @@ export class CasparRuntime {
           refusalOnRow: true as const,
         };
       }
+      if (refused.errorCode === LIVE_PLATE_NO_RANGE) {
+        /*
+          🔴 `CHANNEL-SOURCES-01` decision 3 (the owner, 2026-09-28) — a take refused because no
+          plate band is declared is said ON ITS ROW, in that channel's view only, as one short line
+          (`FIELD-FIXES-01` A/B) — never a console-wide banner. It names no plate: the band is the
+          station's, not a box's. Nothing was sent, exactly as before.
+        */
+        this.#recordTakeRefusal(itemId, { code: refused.errorCode });
+        return {
+          accepted: false as const,
+          errorCode: refused.errorCode,
+          message: refused.message,
+          refusalOnRow: true as const,
+        };
+      }
       // The MESSAGE rides out with the code. Which PLATE is unassigned, and which
       // two aspects disagree, are the facts that make these refusals actionable,
       // and no fixed code can carry them — see `StackTakeChannel`.

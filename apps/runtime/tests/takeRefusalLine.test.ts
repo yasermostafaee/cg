@@ -104,6 +104,16 @@ describe('`ROUTE-PLATES-01` — contract v1.3’s two lines', () => {
   });
 });
 
+describe('`CHANNEL-SOURCES-01` decision 3 — no plate band', () => {
+  it('🔴 `Bed 59: no live source layer band is declared — nothing was sent.` — one short line, no plate', () => {
+    const line = takeRefusalLine('Bed 59', { code: 'live-source-no-layer-range' });
+    expect(line.text).toBe('Bed 59: no live source layer band is declared — nothing was sent.');
+    expect(line.source).toBeNull();
+    // One line: not the console-wide sentence with its "Declare the band…" instruction.
+    expect(line.text).not.toMatch(/Declare|installation|\n/);
+  });
+});
+
 describe('where it is said', () => {
   it('🔴 a refusal the ROW carries raises nothing else — the async result has no message', () => {
     expect(

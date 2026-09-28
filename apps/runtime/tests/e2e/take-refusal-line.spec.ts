@@ -89,3 +89,45 @@ test('🔴 a refused take is said on its row and in its Inspector, in its channe
     .click();
   await expect(markOn(page, 1)).toHaveCount(0);
 });
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 3 — **A TAKE REFUSED FOR HAVING NO PLATE BAND is the same one short
+ * line, on its row, in its channel's view only — never a console-wide banner.** The owner met it as a
+ * banner across the top of the console (`Bed 59`, 2026-09-28): the bridge returned the refusal as a
+ * bare message and recorded nothing on the row. It is recorded now exactly as below — the code alone,
+ * no plate, because the band is the station's and not a box's (`live-seating.integration.test.ts`).
+ */
+test('🔴 a take refused for having no plate band says one short line on its row — no banner, no other channel', async ({
+  app,
+}) => {
+  const { page } = app;
+  await declareSecondChannel(page);
+  const row = app.layerRow(96);
+  await expect(row.locator('[data-take-refusal]')).toHaveCount(0);
+  await page.evaluate(() => {
+    (window as unknown as { CG_E2E_REFUSE_NEXT_TAKE?: unknown }).CG_E2E_REFUSE_NEXT_TAKE = {
+      code: 'live-source-no-layer-range',
+    };
+  });
+  await row.getByRole('button', { name: 'PLAY' }).click();
+
+  const line = 'TICKER: no live source layer band is declared — nothing was sent.';
+  await expect(row.locator('[data-take-refusal]')).toHaveText(line);
+  await expect(page.locator('[data-refusal]')).toHaveCount(0);
+  await app.selectLayerRow(96);
+  await expect(page.locator('[data-inspector-take-refusal]')).toHaveText(line);
+
+  await strip(page)
+    .getByRole('tab', { name: /^CHANNEL 2/ })
+    .click();
+  await expect(page.locator('[data-take-refusal]')).toHaveCount(0);
+  await expect(page.locator('[data-refusal]')).toHaveCount(0);
+
+  // CONTROL — a take that lands withdraws it.
+  await strip(page)
+    .getByRole('tab', { name: /^CHANNEL 1/ })
+    .click();
+  await row.getByRole('button', { name: 'PLAY' }).click();
+  await expect(row).toContainText('ON AIR');
+  await expect(row.locator('[data-take-refusal]')).toHaveCount(0);
+});

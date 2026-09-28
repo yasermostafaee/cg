@@ -71,6 +71,14 @@ const NOT_SHOWABLE_CODE = 'source-not-showable';
 /** `ROUTE-PLATES-01` rule 5 — a Playout route whose epoch could not be confirmed stays empty. */
 const ROUTE_WAITING_CODE = 'route-epoch-waiting';
 
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 3 — the take found no live source layer band declared. One short
+ * line on the row, in the words of Station setup's `Live source layer band` card; no plate is named,
+ * because the band is the station's and not a box's.
+ */
+const NO_BAND_CODE = 'live-source-no-layer-range';
+const NO_BAND_CLAUSE = 'no live source layer band is declared — nothing was sent.';
+
 export function takeRefusalLine(
   rowName: string,
   refusal: TakeRefusal,
@@ -99,6 +107,15 @@ export function takeRefusalLine(
       clause,
       text: `${who}: ${clause}`,
       unseatable: { plate, name: words.name, rest: words.rest },
+    };
+  }
+  if (refusal.code === NO_BAND_CODE) {
+    return {
+      row: rowName,
+      source: null,
+      input: null,
+      clause: NO_BAND_CLAUSE,
+      text: `${rowName}: ${NO_BAND_CLAUSE}`,
     };
   }
   if (refusal.code === ROUTE_WAITING_CODE) {

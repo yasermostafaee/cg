@@ -405,6 +405,14 @@ it('no declared BAND refuses with its own code — there is nowhere to put a pro
   expect(verdict.accepted).toBe(false);
   expect(verdict.errorCode).toBe('live-source-no-layer-range');
   expect((await recvLines()).slice(before)).toEqual([]);
+  /*
+    🔴 `CHANNEL-SOURCES-01` decision 3 — ON ITS ROW, never a banner: the row carries the refusal
+    (the code alone — the band is the station's, not a plate's), and the verdict says so, so the
+    console's one surface for it is the row's line.
+  */
+  expect(verdict).toMatchObject({ refusalOnRow: true });
+  const row = r.stackSnapshot().find((i) => i.itemId === 'item-1');
+  expect(row?.takeRefusal).toEqual({ code: 'live-source-no-layer-range' });
 });
 
 it('a band with no ROOM refuses with a DIFFERENT code — the operator can act on each', async () => {
