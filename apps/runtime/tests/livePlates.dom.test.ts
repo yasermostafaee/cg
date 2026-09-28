@@ -39,6 +39,8 @@ import {
  *  3. 🔴 the assignment is TEMPLATE-LEVEL — an APPLIED assignment made from one
  *     row is what a DIFFERENT row carrying the same template reads back. That is
  *     the test that pins the semantics rather than trusting the section's label.
+ *     `CHANNEL-SOURCES-01`: template-level ON ONE CHANNEL — a row on another channel
+ *     reads that channel's own (the last case in that block).
  *
  * ⚠ **A8 — the picker STAGES, it does not commit.** Changing it reaches the draft
  * store and nothing else; `Update` is what writes it. The mechanism itself is
@@ -411,9 +413,11 @@ describe('the Inspector binds THIS template plates', () => {
               instruction not to leave prose behind where the thing it described has gone.
 
       What is asserted is unchanged: that the operator is told which LEVEL this control is on,
-      at the moment they can act on it.
+      at the moment they can act on it. `CHANNEL-SOURCES-01` made that level a channel's, so the
+      sentence names the channel, and so does the title.
     */
-    expect(dialog.textContent).toContain('apply to every row using this template');
+    expect(dialog.textContent).toContain('Source defaults · CH 1');
+    expect(dialog.textContent).toContain('apply to every row on CH 1 using this template');
     expect(dialog.textContent).toContain('row overrides remain separate');
   });
 
@@ -479,8 +483,9 @@ describe('the Inspector binds THIS template plates', () => {
 
     await saveDefaults(dialog);
     expect(setCalls).toHaveLength(1);
+    // `CHANNEL-SOURCES-01` — written for the row's channel, and for no other.
     expect(setCalls[0]?.assignments).toEqual([
-      { templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' },
+      { channel: 1, templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' },
     ]);
   });
 
@@ -535,6 +540,35 @@ describe('the Inspector binds THIS template plates', () => {
     expect(pickerValue(defaultsSelect(secondDialog, 'guest-1'))).toBe('src-aaa');
     // …and its OTHER plate is still owed one.
     expect(pickerValue(defaultsSelect(secondDialog, 'guest-2'))).toBe('');
+  });
+
+  it('🔴 CHANNEL-SOURCES-01 — a CH 2 row’s dialog edits CH 2’s defaults, and CH 1’s come back untouched', async () => {
+    // CH 1 holds guest-1 → Studio A. The row below sits on CH 2.
+    const onOne = {
+      channel: 1,
+      templateId: 'tpl-two-box',
+      plateId: 'guest-1',
+      sourceId: 'src-aaa',
+    };
+    stored = { assignments: [onOne] };
+    const onTwo: StackItemState = {
+      ...item('item-2', 'tpl-two-box'),
+      slot: { channel: 2, layer: 71, server: 'primary' },
+    };
+    const el = await renderInspector(onTwo, TWO_BOX);
+    const dialog = await openDefaults(el as HTMLElement);
+    // The title names the channel the dialog edits, and CH 1's default does not show through.
+    expect(dialog.textContent).toContain('Source defaults · CH 2');
+    expect(pickerValue(defaultsSelect(dialog, 'guest-1'))).toBe('');
+
+    await choosePickerOption(defaultsSelect(dialog, 'guest-1'), 'src-bbb');
+    await saveDefaults(dialog);
+    expect(setCalls).toHaveLength(1);
+    // Control: the write carries CH 2's new entry — and CH 1's, byte for byte as it was.
+    expect(setCalls[0]?.assignments).toEqual([
+      onOne,
+      { channel: 2, templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-bbb' },
+    ]);
   });
 });
 

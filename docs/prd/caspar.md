@@ -447,7 +447,8 @@ plate to a concrete source is an INSTALLATION concern configured in the Runtime.
   NDI note below). The list is built with NO reference to any template
 - WHEN a template with live plates is selected THEN the Inspector offers, per plate, a picker over
   those named sources; the assignment is TEMPLATE-LEVEL (shared by every row carrying that template)
-  and the surface SAYS SO where it is made
+  and the surface SAYS SO where it is made — ⚠ amended 2026-09-28 (`R-072`, `CHANNEL-SOURCES-01`):
+  template-level ON ONE CHANNEL, shared by every row carrying that template there
 - WHEN a source that plates are assigned to is REMOVED THEN the removal is allowed, the assignments
   it orphans are dropped in the same operation, and the surface names at that moment which templates
   referenced it — an assignment that dangles until air is the failure this feature exists to prevent

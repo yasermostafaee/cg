@@ -104,7 +104,12 @@ async function openPicker(accepts: 'low' | 'high' = 'high'): Promise<{
     // RUNTIME-REPAIR-05 — the destination is what the footer's primary names, so the
     // helper supplies one: a picker opened from a row always knows which row.
     open = () =>
-      pickTemplate('Load onto Bed 1', accepts, { rowName: 'Bed 1', coord: '1-9', holding: null });
+      pickTemplate('Load onto Bed 1', accepts, {
+        rowName: 'Bed 1',
+        coord: '1-9',
+        channel: 1,
+        holding: null,
+      });
     return createElement('div', null, pickerDialog);
   }
   const r = root;

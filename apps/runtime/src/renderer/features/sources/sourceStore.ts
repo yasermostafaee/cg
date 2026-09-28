@@ -302,7 +302,8 @@ export async function reconcileAssignmentsForImport(
   if (mine.length > dropped.length) carriedOver.add(templateId);
   else carriedOver.delete(templateId);
   bump();
-  return dropped.map((a) => a.plateId);
+  // `CHANNEL-SOURCES-01` — one plate is named once, however many channels held a default for it.
+  return [...new Set(dropped.map((a) => a.plateId))];
 }
 
 /** Test seam — forget the carried-over marks. */

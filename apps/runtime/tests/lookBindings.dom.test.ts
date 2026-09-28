@@ -115,7 +115,9 @@ async function render(
   root = createRoot(host);
   const item = itemWith('on-air', { activeLookId: 'two', ...over });
   await act(async () => {
-    root?.render(createElement(LooksBindingsSection, { item, info: TEMPLATE, ...props }));
+    root?.render(
+      createElement(LooksBindingsSection, { item, info: TEMPLATE, channel: 1, ...props }),
+    );
   });
   return host;
 }

@@ -262,6 +262,8 @@ export function PreviewPanel(): JSX.Element {
             plateSources: {
               templateId: item.templateId,
               assignments: currentSourceAssignments(),
+              // `CHANNEL-SOURCES-01` — the rehearsing row's channel's own defaults.
+              channel: r.channel,
               ...(item.frozenAssignment !== undefined && {
                 frozenAssignment: item.frozenAssignment,
               }),

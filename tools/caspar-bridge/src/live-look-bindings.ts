@@ -139,7 +139,14 @@ export interface LookBindingPlan {
 export function resolveLookBindings(input: {
   readonly templateId: string;
   readonly carrier: TemplateLiveSources;
-  readonly assignments: readonly { templateId: string; plateId: string; sourceId: string }[];
+  readonly assignments: readonly {
+    channel?: number | undefined;
+    templateId: string;
+    plateId: string;
+    sourceId: string;
+  }[];
+  /** `CHANNEL-SOURCES-01` — the row's channel: level 2 is read ON it. */
+  readonly channel: number;
   readonly catalog: SourceCatalog;
   readonly bindings?: LookSourceBindings | undefined;
   readonly overrides?: PlateSourceOverrides | undefined;
@@ -170,6 +177,7 @@ export function resolveLookBindings(input: {
       templateId: input.templateId,
       plateIds: input.carrier.sources.map((d) => d.sourceId),
       assignments: { assignments: [...input.assignments] },
+      channel: input.channel,
       lookId,
       lookBindings: input.bindings,
       overrides: input.overrides,

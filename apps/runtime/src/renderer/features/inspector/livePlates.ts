@@ -15,16 +15,20 @@ import { currentSourceAssignments } from '../sources/sourceStore.js';
  *
  * The ON-AIR truth is the bridge's, read through the sources store; this only
  * narrows it to the plates THIS template declares, in declaration order.
+ *
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — ON ONE CHANNEL: the template's defaults belong to a channel,
+ * so the row's own channel is required, and the answer is the one the bridge's take reads there.
  */
 export function appliedPlateSources(
   templateId: string,
   plates: readonly LiveSourceDeclaration[],
+  channel: number,
 ): ReadonlyMap<string, string | null> {
   const assignments = currentSourceAssignments();
   return new Map(
     plates.map((plate) => [
       plate.sourceId,
-      assignedSourceId(assignments, templateId, plate.sourceId),
+      assignedSourceId(assignments, channel, templateId, plate.sourceId),
     ]),
   );
 }

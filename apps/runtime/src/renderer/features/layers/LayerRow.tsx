@@ -530,6 +530,7 @@ export function LayerRow({
       const chosen = await pickTemplate(`Load onto ${rowName}`, acceptsBank, {
         rowName,
         coord: layerName,
+        channel: slot.channel,
         holding: templateLabel,
       });
       // The operator's own dismissal: not a success, not a refusal to report.
@@ -1275,6 +1276,7 @@ export function LayerRow({
         <LiveSourceSwapDialog
           item={item}
           template={template}
+          channel={slot.channel}
           onSwap={(plateId, sourceId) =>
             window.cg.stack.swapLiveSource({ itemId: item.itemId, plateId, sourceId })
           }

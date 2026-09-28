@@ -305,6 +305,13 @@ export interface PickDestination {
   rowName: string;
   /** `channel-layer`, kept in the sentence: `R-028` — the number is how a layer is cleared by hand. */
   coord: string;
+  /**
+   * 🔴 `CHANNEL-SOURCES-01` decision 2 — the row's CHANNEL: Source defaults belong to a channel, so
+   * the `Needs a source` caution reads the defaults of the channel the template would land on. It
+   * travels with the request rather than being subscribed here, because this hook is mounted by
+   * every `LayerRow` (see `bank` below).
+   */
+  channel: number;
   /** The template the row holds today, if any. Its NAME, never its id. */
   holding: string | null;
 }
@@ -445,14 +452,23 @@ export function useTemplatePicker(): {
   // this dialog is open. The list is browser-local, so a snapshot is right for
   // it and wrong for this.
   useSyncExternalStore(subscribeSources, sourcesVersion);
+  /*
+    `CHANNEL-SOURCES-01` — the defaults a template would take are those of the row's own channel. A
+    pick with no destination names no row, so it has no channel whose defaults could be missing, and
+    it claims none; every console door (`LayerRow`) passes one.
+  */
+  const channel = request?.destination?.channel;
   const unassigned = useCallback(
     (template: TemplateInfo): string[] =>
-      unassignedPlateIds(
-        currentSourceAssignments(),
-        template.templateId,
-        (template.liveSources?.sources ?? []).map((s) => s.sourceId),
-      ),
-    [],
+      channel === undefined
+        ? []
+        : unassignedPlateIds(
+            currentSourceAssignments(),
+            channel,
+            template.templateId,
+            (template.liveSources?.sources ?? []).map((s) => s.sourceId),
+          ),
+    [channel],
   );
 
   /**

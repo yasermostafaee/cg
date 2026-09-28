@@ -83,30 +83,35 @@ describe('assignmentInForce — level 2, freeze or live', () => {
         { templateId: 'other', plateId: 'l-1', sourceId: 'studio-9' },
       ],
     };
-    expect(assignmentInForce('tpl-1', store, undefined)).toEqual({ 'l-1': 'studio-1' });
+    expect(assignmentInForce('tpl-1', store, undefined, 1)).toEqual({ 'l-1': 'studio-1' });
   });
 
   it('🔴 a FROZEN snapshot wins over the store — session BP', () => {
     // A row on air resolves what its take captured, so an edit made during a show cannot
     // change a picture that is already up.
     expect(
-      assignmentInForce('tpl-1', assignments({ 'l-1': 'studio-9' }), { 'l-1': 'studio-1' }),
+      assignmentInForce('tpl-1', assignments({ 'l-1': 'studio-9' }), { 'l-1': 'studio-1' }, 1),
     ).toEqual({ 'l-1': 'studio-1' });
   });
 
   it('🔴 an EMPTY frozen record is a real freeze to nothing, NOT "not frozen"', () => {
     // The test is presence, never emptiness. A row taken with no assignment is pinned to
     // having none, and must not silently pick the store up afterwards.
-    expect(assignmentInForce('tpl-1', assignments({ 'l-1': 'studio-9' }), {})).toEqual({});
+    expect(assignmentInForce('tpl-1', assignments({ 'l-1': 'studio-9' }), {}, 1)).toEqual({});
   });
 
   it('the frozen map is COMPLETE: a plate absent from it does NOT fall through', () => {
     // A partial freeze would leave "…except for plates that had no assignment" as a caveat,
     // and would reopen the multi-station case for exactly those plates.
     expect(
-      assignmentInForce('tpl-1', assignments({ 'l-1': 'studio-9', 'l-2': 'studio-2' }), {
-        'l-1': 'studio-1',
-      }),
+      assignmentInForce(
+        'tpl-1',
+        assignments({ 'l-1': 'studio-9', 'l-2': 'studio-2' }),
+        {
+          'l-1': 'studio-1',
+        },
+        1,
+      ),
     ).toEqual({ 'l-1': 'studio-1' });
   });
 });
@@ -116,6 +121,7 @@ describe('resolvePlateSourcesForLook — the whole answer a TAKE would give', ()
     templateId: 'tpl-1',
     plateIds: ['l-1', 'l-2'],
     assignments: assignments({ 'l-1': 'studio-1', 'l-2': 'studio-2' }),
+    channel: 1,
   };
 
   it('level 2 alone, which is the commonest case by far', () => {
@@ -177,6 +183,7 @@ describe('resolvePlateSourcesForLook — the whole answer a TAKE would give', ()
       templateId: 'tpl-1',
       plateIds: ['l-1', 'l-9'],
       assignments: assignments({ 'l-1': 'studio-1' }),
+      channel: 1,
       lookId: 'look-1',
     });
     expect(out.get('l-9')).toBeNull();

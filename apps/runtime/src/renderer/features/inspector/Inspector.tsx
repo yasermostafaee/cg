@@ -51,6 +51,8 @@ import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
 import { TimingSection } from './TimingSection.js';
 import { appliedPlateSources } from './livePlates.js';
+import { itemChannelOf } from '../channels/itemChannel.js';
+import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { PositionPicker } from './PositionPicker.js';
 import { Tag } from '../../ui/Tag.js';
 import {
@@ -410,6 +412,9 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   const rowSlot =
     item?.slot ??
     (boundSlot === undefined ? undefined : { channel: boundSlot.channel, layer: boundSlot.layer });
+  // `CHANNEL-SOURCES-01` — the row's channel, whose own Source defaults this panel reads.
+  const { selected: selectedChannel } = useSelectedChannel();
+  const itemChannel = itemChannelOf(item, slots, selectedChannel);
   // Re-render on any draft change so dirty markers + the draft-or-applied
   // values stay live (a push to `item` also re-renders via props).
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -535,7 +540,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   const dirty = isItemDirty(
     itemId,
     item.fields,
-    appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []),
+    appliedPlateSources(item.templateId, info?.liveSources?.sources ?? [], itemChannel),
     // BM-2 — and the per-look composition, which stages here too and is the SAME fact.
     item.lookSourceOverride,
     /*
@@ -722,10 +727,15 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
         <PositionPicker key={`pos-${itemId}`} item={item} />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at
             all for a template that declares none, which is most of them. */}
-        <LivePlatesSection item={item} info={info} />
+        <LivePlatesSection item={item} info={info} channel={itemChannel} />
         {/* BM-2 — the per-look inputs sit BELOW the default they fall back to, so the two
             levels read top-down in the order they resolve. */}
-        <LooksBindingsSection item={item} info={info} rehearsing={rehearsing} />
+        <LooksBindingsSection
+          item={item}
+          info={info}
+          rehearsing={rehearsing}
+          channel={itemChannel}
+        />
         {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
             operator's passes/gap as controls. Renders nothing for a template imported before
             `TemplateInfo.playout` existed, rather than guessing what it does. */}

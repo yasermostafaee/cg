@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import type { TemplateInfo } from '@cg/shared-ipc';
+import { assignedSourceId, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -35,7 +35,8 @@ import {
  * safely:
  *
  *   1. the installation's CATALOG — what lives this station has;
- *   2. the template's ASSIGNMENT — the default for every row carrying it;
+ *   2. the template's ASSIGNMENT — the default for every row carrying it on this channel
+ *      (`CHANNEL-SOURCES-01`: defaults belong to a channel);
  *   3. THIS — one row's substitution, on top of both.
  *
  * 🔴 **It does not write back**, and the dialog says so in as many words. An
@@ -60,6 +61,11 @@ const styles = {
 export interface LiveSourceSwapDialogProps {
   item: StackItemState;
   template: TemplateInfo;
+  /**
+   * `CHANNEL-SOURCES-01` — the channel of the row that opened it: the template's default a revert
+   * returns to is that channel's own.
+   */
+  channel: number;
   /** `sourceId: null` reverts the plate to the template's assignment. */
   onSwap: (
     plateId: string,
@@ -71,6 +77,7 @@ export interface LiveSourceSwapDialogProps {
 export function LiveSourceSwapDialog({
   item,
   template,
+  channel,
   onSwap,
   onClose,
 }: LiveSourceSwapDialogProps): React.JSX.Element {
@@ -82,9 +89,7 @@ export function LiveSourceSwapDialog({
   const override = item.sourceOverride ?? {};
 
   const assignedFor = (plateId: string): string | undefined =>
-    assignments.assignments.find(
-      (a) => a.templateId === template.templateId && a.plateId === plateId,
-    )?.sourceId;
+    assignedSourceId(assignments, channel, template.templateId, plateId) ?? undefined;
   const nameFor = (sourceId: string | undefined): string =>
     catalog.sources.find((s) => s.id === sourceId)?.name ?? '— none —';
 

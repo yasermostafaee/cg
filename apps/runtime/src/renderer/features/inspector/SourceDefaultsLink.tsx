@@ -27,10 +27,13 @@ export function SourceDefaultsLink({
   templateId,
   info,
   plates,
+  channel,
 }: {
   templateId: string;
   info: TemplateInfo | null;
   plates: readonly NonNullable<TemplateInfo['liveSources']>['sources'][number][];
+  /** `CHANNEL-SOURCES-01` — the row's channel: the dialog edits that channel's defaults. */
+  channel: number;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   /*
@@ -55,7 +58,8 @@ export function SourceDefaultsLink({
     refusal cannot disagree about which plate is owed a source.
   */
   const needing = plates.filter(
-    (plate) => (appliedPlateSources(templateId, plates).get(plate.sourceId) ?? null) === null,
+    (plate) =>
+      (appliedPlateSources(templateId, plates, channel).get(plate.sourceId) ?? null) === null,
   ).length;
   const warning =
     needing === 0
@@ -133,6 +137,7 @@ export function SourceDefaultsLink({
         */
         templateName={displayLabel(info ?? {}) ?? 'Unnamed template'}
         plates={plates}
+        channel={channel}
       />
     </>
   );

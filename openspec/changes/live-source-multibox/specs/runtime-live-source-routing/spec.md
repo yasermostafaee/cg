@@ -75,20 +75,23 @@ PRESENT but unusable SHALL still be a HARD startup failure, before the socket ac
   bound media are in force, with the time of the last read, so two machines running different lists
   cannot disagree silently
 
-### Requirement: A template's plate is ASSIGNED a source, once per template
+### Requirement: A template's plate is ASSIGNED a source, once per template on each channel
 
 A template's declared source id SHALL be read as a **PLATE IDENTIFIER** — it names a hole in that
 template and nothing outside it — and SHALL NOT be matched against the installation's source list by
 name. A name match silently requires the AUTHOR to guess the installation's naming convention, which
 the Designer cannot know.
 
-The bridge SHALL therefore persist a second store of **ASSIGNMENTS** — template, plate, source —
-beside its template registry, because the bridge is what resolves a plate to a producer at take. An
-assignment held per browser would mean the console that made it is the only console that can take
-the item.
+The bridge SHALL therefore persist a second store of **ASSIGNMENTS** — channel, template, plate,
+source — beside its template registry, because the bridge is what resolves a plate to a producer at
+take. An assignment held per browser would mean the console that made it is the only console that
+can take the item.
 
-The assignment SHALL be **TEMPLATE-LEVEL**: it is the default for every use of that template, and
-the surface SHALL SAY SO where the operator makes it rather than in a tooltip. A per-run override of
+The assignment SHALL be **TEMPLATE-LEVEL ON A CHANNEL**: it is the default for every use of that
+template on that channel, and the surface SHALL SAY SO — naming the channel — where the operator
+makes it rather than in a tooltip (amended by `CHANNEL-SOURCES-01` decision 2, 2026-09-28: the
+owner changed one channel's defaults and another channel's changed with them, so a default belongs
+to a channel; it was station-wide). A per-run override of
 one plate on one on-air item is a separate capability layered on top, and that override SHALL NOT
 write back to this assignment — an emergency substitution must never silently become the permanent
 configuration.
@@ -96,7 +99,7 @@ configuration.
 The binding control SHALL STAGE an unapplied draft rather than write on change, through the SAME
 draft mechanism every other control on that surface uses — the same state, the same dirty marking,
 the same discard, and the same apply. Because the assignment is shared by every row carrying the
-template, a control that wrote on change would let one stray action change what those rows do with
+template on its channel, a control that wrote on change would let one stray action change what those rows do with
 no moment to notice and nothing to undo: the draft IS the confirmation step. Every protection that
 already guards an unapplied edit — surviving a selection change, surviving a panel round-trip, and a
 prune that refuses to act on a stack state it cannot confirm — SHALL guard this draft identically.
@@ -139,12 +142,14 @@ surface SHALL present it as guaranteed.
 - **WHEN** the selection changes, or the panel is closed and reopened, with a plate edit unapplied
   **THEN** the draft survives, exactly as a staged field does
 
-#### Scenario: The assignment is made once and holds for every row using that template
+#### Scenario: The assignment is made once per channel and holds for every row using that template there
 
 - **WHEN** the operator APPLIES a plate binding from one row **THEN** a different row carrying the
-  same template resolves that plate to the same source
-- **WHEN** the binding surface is shown **THEN** it states that the setting is the template's, not
-  the row's
+  same template ON THE SAME CHANNEL resolves that plate to the same source, and a row on another
+  channel keeps that channel's own default (`CHANNEL-SOURCES-01` decision 2, 2026-09-28 —
+  superseding "every row using that template", station-wide)
+- **WHEN** the binding surface is shown **THEN** it states that the setting is the template's on
+  that channel, not the row's
 
 #### Scenario: A template with no live plates offers no binding surface
 

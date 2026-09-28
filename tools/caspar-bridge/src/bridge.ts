@@ -141,6 +141,7 @@ import {
   reservedLayerNumbers,
   sortBanks,
   redactCatalogForConsole,
+  migrateAssignmentsToChannels,
   validateSourceCatalogAgainstBanks,
   type AnyChannel,
   type AnyPublishChannel,
@@ -1649,8 +1650,37 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // rebuilt from Playout reads, and a binding is never deleted because its entry is gone (ADR 0010
   // rule 14). A duplicated plate is still a refusal: two answers for one hole is not a state anything
   // downstream can read.
-  const resolvedAssignments = resolveSourceAssignments(options);
-  validateSourceAssignments(resolvedAssignments.value, { catalog: null });
+  const loadedAssignments = resolveSourceAssignments(options);
+  validateSourceAssignments(loadedAssignments.value, { catalog: null });
+  /*
+    🔴 `CHANNEL-SOURCES-01` decision 2 (the owner, 2026-09-28) — **SOURCE DEFAULTS BELONG TO A
+    CHANNEL, and the station's stored ones become every declared channel's own copy on the first
+    load.** Nothing on air changes: on every channel the same source answers as before. The copy is
+    written back at once, so a second load finds no station-wide entry and copies nothing again
+    (`migrateAssignmentsToChannels` is idempotent). Only the station's FILE is migrated; an in-process
+    set (tests, embedders) is used as given, its station-wide entries answering on every channel.
+  */
+  const migratedAssignments =
+    loadedAssignments.source === 'file'
+      ? migrateAssignmentsToChannels(loadedAssignments.value, [
+          ...new Set(fixedBanks.map((bank) => bank.channel)),
+        ])
+      : { value: loadedAssignments.value, copied: 0 };
+  if (migratedAssignments.copied > 0 && options.sourceAssignmentsPath !== undefined) {
+    try {
+      saveSourceAssignments(options.sourceAssignmentsPath, migratedAssignments.value);
+    } catch (err) {
+      process.stderr.write(
+        `[caspar-bridge] ⚠ failed to persist the per-channel source defaults to ` +
+          `${options.sourceAssignmentsPath}: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
+    }
+    process.stderr.write(
+      `[caspar-bridge] source defaults: the station-wide defaults were copied to every declared ` +
+        `channel (${String(migratedAssignments.copied)} entries) — each channel keeps its own now\n`,
+    );
+  }
+  const resolvedAssignments = { ...loadedAssignments, value: migratedAssignments.value };
   /*
     🔴 `DESKTOP-APPS-01-C` C6 — **ONE IPv4 FOR THE PLAYOUT'S READS AND FOR AMCP.** The Playout lets
     in the ADDRESS the introducing D9 read came from, so AMCP must leave from the same one: the
@@ -2993,6 +3023,15 @@ export function buildRoutes(
    * as the v1 object, byte for byte (`saveFixedLayerBanks`), so a one-channel station's file is
    * exactly what `set-config` always wrote.
    */
+  /**
+   * 🔴 `CHANNEL-SOURCES-01` decision 2 — a channel that JOINED the set was given a copy of each
+   * template's current defaults by the runtime (`#copyDefaultsToJoiningChannels`); that copy is
+   * persisted beside the banks, so a restart keeps the new channel's own defaults.
+   */
+  const persistDefaultsIfCopied = (before: SourceAssignments): void => {
+    const now = b.sourceAssignments();
+    if (now !== before) persistAssignments(sourceAssignmentsPath, now);
+  };
   const persistBanks = (): void => {
     if (fixedLayersPath === undefined) return;
     try {
@@ -3279,8 +3318,12 @@ export function buildRoutes(
     // runtime publishes from setFixedLayers itself, after apply).
     route(FixedLayersConfigChannel, 'read', 'read', () => b.fixedLayersConfig()),
     route(FixedLayersSetConfigChannel, 'operator', 'station-admin', (r: FixedLayerBank) => {
+      const defaultsBefore = b.sourceAssignments();
       const result = b.setFixedLayers(r);
-      if (result.ok) persistBanks();
+      if (result.ok) {
+        persistBanks();
+        persistDefaultsIfCopied(defaultsBefore);
+      }
       return result;
     }),
     /*
@@ -3297,8 +3340,12 @@ export function buildRoutes(
       'operator',
       'station-admin',
       (r: { banks: FixedLayerBank[] }) => {
+        const defaultsBefore = b.sourceAssignments();
         const result = b.setFixedLayerBanks(r.banks);
-        if (result.ok) persistBanks();
+        if (result.ok) {
+          persistBanks();
+          persistDefaultsIfCopied(defaultsBefore);
+        }
         return result;
       },
     ),

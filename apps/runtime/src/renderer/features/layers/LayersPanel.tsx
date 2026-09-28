@@ -71,7 +71,8 @@ import {
   useRestoreSkips,
 } from '../../hooks/useRestoreSkips.js';
 import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
-import { useChannelBankState } from '../channels/useSelectedChannel.js';
+import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
+import { itemChannelOf } from '../channels/itemChannel.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { usePlateReleases } from '../../hooks/usePlateReleases.js';
@@ -350,6 +351,9 @@ export function LayersPanel({
     () => (scopeChannel === null ? undefined : { channel: scopeChannel }),
     [scopeChannel],
   );
+  // `CHANNEL-SOURCES-01` — the channel whose own Source defaults a row with no slot or binding reads.
+  const { selected: selectedChannel } = useSelectedChannel();
+  const defaultsChannel = viewChannel ?? selectedChannel;
   const { slots, ready: slotsReady, failed: slotsFailed } = useFixedSlotsState();
   /*
     🔴 `DELTA A` §A2 — the bridge ANSWERED and the answer was a refusal. Kept apart from
@@ -964,6 +968,8 @@ export function LayersPanel({
       templateId: item.templateId,
       plateIds: [plateId],
       assignments: sourceAssignments,
+      // `CHANNEL-SOURCES-01` — the row's own channel's defaults.
+      channel: itemChannelOf(item, slots, defaultsChannel),
       ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
       ...(item.lookSourceOverride !== undefined && { lookBindings: item.lookSourceOverride }),
       ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
@@ -1821,6 +1827,7 @@ export function LayersPanel({
                           appliedPlateSources(
                             item.templateId,
                             template?.liveSources?.sources ?? [],
+                            itemChannelOf(item, slots, defaultsChannel),
                           ),
                           item.lookSourceOverride,
                           /*

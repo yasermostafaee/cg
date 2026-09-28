@@ -1,5 +1,5 @@
 import type { FieldValue, FieldValues, StackItemState } from '@cg/shared-schema';
-import type { TemplateInfo } from '@cg/shared-ipc';
+import { withChannelDefaults, type TemplateInfo } from '@cg/shared-ipc';
 import { timingPatchToSend } from './timingToSend.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
@@ -305,12 +305,23 @@ function sendPlateAssignments(
   item: StackItemState,
   plates: ReadonlyMap<string, string>,
 ): Promise<boolean> {
-  const next = nextPlateAssignments(
-    currentSourceAssignments().assignments,
-    item.templateId,
-    plates,
-  );
-  return commitSourceAssignments({ assignments: next }).then((refusal) => {
+  /*
+    `CHANNEL-SOURCES-01` decision 2 — on the row's OWN channel when the item carries one (the
+    defaults belong to a channel). This door is unreachable from the product today (see
+    `LivePlatesSection`'s note); an item with no slot keeps the station-wide write it always made.
+  */
+  const channel = item.slot?.channel;
+  const next =
+    channel === undefined
+      ? {
+          assignments: nextPlateAssignments(
+            currentSourceAssignments().assignments,
+            item.templateId,
+            plates,
+          ),
+        }
+      : withChannelDefaults(currentSourceAssignments(), channel, item.templateId, plates);
+  return commitSourceAssignments(next).then((refusal) => {
     if (refusal === null) {
       clearStagedPlatesMatching(item.itemId, plates);
       return true;

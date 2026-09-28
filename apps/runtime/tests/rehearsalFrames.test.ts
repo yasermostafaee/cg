@@ -46,6 +46,7 @@ function subject(over: Partial<RehearsalSubject> & { layer: number }): Rehearsal
     plateSources: {
       templateId: 'tpl-1',
       assignments: { assignments: [] },
+      channel: 1,
       nameOf: () => null,
     },
     ...over,

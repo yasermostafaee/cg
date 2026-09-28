@@ -57,6 +57,7 @@ function lookup(over: Partial<PlateSourceLookup> = {}): PlateSourceLookup {
   return {
     templateId: 'tpl-1',
     assignments: { assignments: [] },
+    channel: 1,
     nameOf: (id) => NAMES[id] ?? null,
     ...over,
   };

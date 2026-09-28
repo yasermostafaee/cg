@@ -53,6 +53,8 @@ import {
   bankForChannel,
   ChannelRasterSchema,
   checkSourceAssignments,
+  assignmentsOnChannel,
+  copyAssignmentsToChannel,
   checkSourceCatalogAgainstBanks,
   defaultFixedLayerBank,
   firstBank,
@@ -609,7 +611,13 @@ export class MockRuntime {
     // picture because somebody edited configuration, and the take is the only writer.
     // Deliberately a SET rather than set-if-absent: a re-take re-freezes, which is the
     // operator's way to adopt an edited default.
-    this.#frozenAssignments.set(itemId, this.#assignmentMapFor(item.templateId));
+    this.#frozenAssignments.set(
+      itemId,
+      this.#assignmentMapFor(
+        item.templateId,
+        this.#slotFor(itemId)?.channel ?? this.#fixedBanks[0]?.channel ?? 1,
+      ),
+    );
     // C-015 parity — the take is what SEATS the plates.
     this.#seatLivePlates(itemId);
     /*
@@ -1478,9 +1486,10 @@ export class MockRuntime {
    * mock read would have given. (`PLAYOUT-SOURCES-01` — nothing is pruned on that read any more:
    * a binding whose entry is gone is kept, exactly as the bridge keeps it.)
    */
-  #assignmentMapFor(templateId: string): Record<string, string> {
+  #assignmentMapFor(templateId: string, channel: number): Record<string, string> {
     const map: Record<string, string> = {};
-    for (const a of this.sourceAssignments().assignments) {
+    // `CHANNEL-SOURCES-01` parity — the defaults IN FORCE ON THE ROW'S CHANNEL, the bridge's reader.
+    for (const a of assignmentsOnChannel(this.sourceAssignments(), channel).assignments) {
       if (a.templateId === templateId) map[a.plateId] = a.sourceId;
     }
     return map;
@@ -1579,7 +1588,25 @@ export class MockRuntime {
         };
       }
     }
+    const declaredBefore = this.#fixedBanks.map((bank) => bank.channel);
     this.#fixedBanks = sortBanks(next);
+    /*
+      `CHANNEL-SOURCES-01` parity — a channel JOINING the set starts from a copy of each template's
+      current defaults, read from the channels declared before it (`copyAssignmentsToChannel`, the
+      bridge's one rule).
+    */
+    let defaults = this.sourceAssignments();
+    let copied = 0;
+    for (const bank of this.#fixedBanks) {
+      if (declaredBefore.includes(bank.channel)) continue;
+      const result = copyAssignmentsToChannel(defaults, declaredBefore, bank.channel);
+      defaults = result.value;
+      copied += result.copied;
+    }
+    if (copied > 0) {
+      writeStored(SOURCE_ASSIGNMENTS_KEY, defaults);
+      this.sourceAssignmentsChanged.emit(defaults);
+    }
     this.fixedConfigChanged.emit(firstBank(this.#fixedBanks));
     this.fixedBanksChanged.emit(this.fixedLayerBanks());
     this.fixedStateChanged.emit(this.fixedLayersState());
@@ -2281,8 +2308,9 @@ export class MockRuntime {
     }
     const shape = checkSourceAssignments(next, { catalog: null });
     if (!shape.ok) return shape;
+    // `CHANNEL-SOURCES-01` parity — new or changed ON ITS CHANNEL, as the bridge keys it.
     const keyed = (a: TemplateSourceAssignment): { key: string; sourceId: string } => ({
-      key: `${a.templateId}\u0000${a.plateId}`,
+      key: `${String(a.channel ?? '*')}\u0000${a.templateId}\u0000${a.plateId}`,
       sourceId: a.sourceId,
     });
     const refusal = unbindableChange(

@@ -73,11 +73,13 @@ afterEach(() => {
 async function renderDialog(
   onSwap: (plateId: string, sourceId: string | null) => Promise<{ ok: boolean; message?: string }>,
   over: Parameters<typeof itemWith>[1] = {},
+  channel = 1,
+  assignments: SourceAssignments = ASSIGNMENTS,
 ): Promise<void> {
   initSources({
     sources: {
       config: () => Promise.resolve(CATALOG),
-      assignments: () => Promise.resolve(ASSIGNMENTS),
+      assignments: () => Promise.resolve(assignments),
       onConfigChanged: () => () => undefined,
       onAssignmentsChanged: () => () => undefined,
       setConfig: () => Promise.resolve({ ok: true }),
@@ -97,6 +99,7 @@ async function renderDialog(
       createElement(LiveSourceSwapDialog, {
         item: itemWith('on-air', over),
         template: TEMPLATE,
+        channel,
         onSwap,
         onClose: () => undefined,
       }),
@@ -178,6 +181,25 @@ describe('6.9 — the dialog states the layering, and commits in ONE more action
     expect(
       [...panel.querySelectorAll('[data-picker-input]')].some((o) => o.textContent === 'Baku'),
     ).toBe(true);
+  });
+
+  it('🔴 the ASSIGNED source is the row’s own CHANNEL’s default (CHANNEL-SOURCES-01) — control: the other channel’s', async () => {
+    const perChannel: SourceAssignments = {
+      assignments: [
+        { channel: 1, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-a' },
+        { channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-b' },
+      ],
+    };
+    await renderDialog(() => Promise.resolve({ ok: true }), {}, 2, perChannel);
+    expect(openDialog()?.textContent).toContain('Baku');
+    expect(openDialog()?.textContent).not.toContain('Studio A');
+    act(() => root?.unmount());
+    host?.remove();
+    clearPortals();
+    __resetSourcesForTest();
+    await renderDialog(() => Promise.resolve({ ok: true }), {}, 1, perChannel);
+    expect(openDialog()?.textContent).toContain('Studio A');
+    expect(openDialog()?.textContent).not.toContain('Baku');
   });
 
   it('🔴 choosing a source COMMITS immediately — there is no Apply step', async () => {

@@ -368,15 +368,16 @@ describe('the assignments — the join the operator makes', () => {
     const assignments = {
       assignments: [{ templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' }],
     };
-    expect(assignedSourceId(assignments, 'tpl-1', 'guest-1')).toBe('src-aaa');
-    expect(assignedSourceId(assignments, 'tpl-1', 'guest-2')).toBeNull();
+    expect(assignedSourceId(assignments, 1, 'tpl-1', 'guest-1')).toBe('src-aaa');
+    expect(assignedSourceId(assignments, 1, 'tpl-1', 'guest-2')).toBeNull();
     // A freshly imported template has ALL of its plates here, which is the
     // ordinary state and not an error.
-    expect(unassignedPlateIds(assignments, 'tpl-1', ['guest-1', 'guest-2'])).toEqual(['guest-2']);
-    expect(unassignedPlateIds(EMPTY_SOURCE_ASSIGNMENTS, 'tpl-1', ['guest-1', 'guest-2'])).toEqual([
-      'guest-1',
+    expect(unassignedPlateIds(assignments, 1, 'tpl-1', ['guest-1', 'guest-2'])).toEqual([
       'guest-2',
     ]);
+    expect(
+      unassignedPlateIds(EMPTY_SOURCE_ASSIGNMENTS, 1, 'tpl-1', ['guest-1', 'guest-2']),
+    ).toEqual(['guest-1', 'guest-2']);
   });
 });
 
@@ -409,7 +410,9 @@ describe('deleting a source that is in use — cascades, never dangles', () => {
   it('leaves the plates it dropped reading as UNASSIGNED, not as broken', () => {
     const withoutBaku: SourceCatalog = { sources: [source('src-aaa', 'Studio A')] };
     const pruned = pruneAssignmentsForCatalog(assignments, withoutBaku);
-    expect(unassignedPlateIds(pruned.value, 'tpl-1', ['guest-1', 'guest-2'])).toEqual(['guest-2']);
+    expect(unassignedPlateIds(pruned.value, 1, 'tpl-1', ['guest-1', 'guest-2'])).toEqual([
+      'guest-2',
+    ]);
   });
 
   it('returns the SAME object when nothing is orphaned', () => {

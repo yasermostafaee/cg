@@ -140,7 +140,7 @@ async function render(
   root = createRoot(host);
   const item = options.item ?? itemWith('on-air', { activeLookId: 'two' });
   await act(async () => {
-    root?.render(createElement(LooksBindingsSection, { item, info: TEMPLATE }));
+    root?.render(createElement(LooksBindingsSection, { item, info: TEMPLATE, channel: 1 }));
   });
   // The pull of the clips' state settles.
   await act(async () => {

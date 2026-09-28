@@ -23,9 +23,10 @@ import { definePublishChannel } from '../publish.js';
  *    lives, built with NO reference to any template and NO dependence on any
  *    declared id. Each entry carries an installation-generated id, a human NAME
  *    ("Studio A", "Baku", "Skype 1") and its producer definition.
- * 2. **The ASSIGNMENTS** ({@link SourceAssignmentsSchema}) — per template, per
- *    PLATE, which catalog entry that plate uses. The operator assigns once, per
- *    template.
+ * 2. **The ASSIGNMENTS** ({@link SourceAssignmentsSchema}) — per CHANNEL, per template, per
+ *    PLATE, which catalog entry that plate uses: the template's Source defaults. The operator
+ *    assigns once per template on each channel (`CHANNEL-SOURCES-01`; before it, once per
+ *    template for the whole station — {@link assignmentsOnChannel}).
  *
  * The author names plates for the LAYOUT; the installation names sources for
  * what they ARE; one deliberate operator action joins them. **The template stays
@@ -500,6 +501,18 @@ export const EMPTY_SOURCE_CATALOG: SourceCatalog = { sources: [] };
  * names a hole in that template and nothing outside it.
  */
 export const TemplateSourceAssignmentSchema = z.object({
+  /**
+   * 🔴 `CHANNEL-SOURCES-01` decision 2 (the owner, 2026-09-28) — **SOURCE DEFAULTS BELONG TO A
+   * CHANNEL.** Each channel keeps its own defaults for a template; changing them on one channel
+   * never changes another ({@link assignmentsOnChannel} is the one reader).
+   *
+   * ABSENT is the station-wide entry every assignment was before this field existed. It is read as
+   * the default on a channel that has none of its own for that plate, so nothing on air changed
+   * the day it arrived — and the bridge turns every such entry into one copy per declared channel
+   * the first time it loads them ({@link migrateAssignmentsToChannels}), so a station's stored
+   * defaults are per channel from then on.
+   */
+  channel: z.number().int().positive().optional(),
   templateId: IdSchema,
   plateId: LiveSourceIdSchema,
   sourceId: SourceDefinitionIdSchema,
@@ -916,12 +929,14 @@ export function validateSourceAssignments(
       the first 8000 bytes for binary detection and the NUL sat past that, which is exactly the
       sort of accident that makes a hole look closed.)
     */
-    const key = `${assignment.templateId}\u0000${assignment.plateId}`;
+    // `CHANNEL-SOURCES-01` — one entry per plate PER CHANNEL; the station-wide entry is its own key.
+    const key = `${String(assignment.channel ?? '*')}\u0000${assignment.templateId}\u0000${assignment.plateId}`;
     if (seen.has(key)) {
       throw new SourceAssignmentsConfigError(
         'duplicate-plate',
         `plate "${assignment.plateId}" of template "${assignment.templateId}" is assigned ` +
-          `twice — which source it used would depend on the order of the list`,
+          `twice${assignment.channel === undefined ? '' : ` on channel ${String(assignment.channel)}`} ` +
+          `— which source it used would depend on the order of the list`,
       );
     }
     seen.add(key);
@@ -990,30 +1005,144 @@ export function pruneAssignmentsForCatalog(
   return dropped.length === 0 ? { value, dropped: [] } : { value: { assignments: kept }, dropped };
 }
 
-/** The source a plate is assigned to, or `null` when nothing is assigned. */
+/** `templateId` + `plateId` — one plate of one template, whatever channel. */
+function plateKeyOf(a: { readonly templateId: string; readonly plateId: string }): string {
+  return `${a.templateId}\u0000${a.plateId}`;
+}
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **THE DEFAULTS IN FORCE ON ONE CHANNEL**, and the one reader
+ * of them: the take, a look switch, a swap, a restore, the Inspector's `Default (…)` and the Source
+ * defaults dialog all ask this, so no two of them can disagree about which default a plate uses.
+ *
+ * A plate's entry for `channel` wins. A station-wide entry (no `channel`) answers only where the
+ * channel has none of its own for that plate. An entry for ANOTHER channel never answers — which is
+ * the whole of "changing them on one channel never changes another".
+ */
+export function assignmentsOnChannel(value: SourceAssignments, channel: number): SourceAssignments {
+  const own = new Set<string>();
+  for (const a of value.assignments) if (a.channel === channel) own.add(plateKeyOf(a));
+  return {
+    assignments: value.assignments.filter(
+      (a) => a.channel === channel || (a.channel === undefined && !own.has(plateKeyOf(a))),
+    ),
+  };
+}
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **THE ONE-TIME COPY.** Every station-wide entry becomes one
+ * entry per declared channel that has none of its own for that plate, and the station-wide entry
+ * goes. Nothing on air changes: on every channel the same source answers as before.
+ *
+ * Idempotent: a set with no station-wide entry comes back as it was (`copied: 0`), which is why a
+ * second load copies nothing. With no channel declared there is nowhere to copy to, and the set is
+ * returned as it is — its entries keep answering on every channel until one is declared.
+ */
+export function migrateAssignmentsToChannels(
+  value: SourceAssignments,
+  channels: readonly number[],
+): { value: SourceAssignments; copied: number } {
+  const stationWide = value.assignments.filter((a) => a.channel === undefined);
+  if (stationWide.length === 0 || channels.length === 0) return { value, copied: 0 };
+  const kept = value.assignments.filter((a) => a.channel !== undefined);
+  const held = new Set(kept.map((a) => `${String(a.channel)}\u0000${plateKeyOf(a)}`));
+  const added: TemplateSourceAssignment[] = [];
+  for (const channel of [...new Set(channels)].sort((a, b) => a - b)) {
+    for (const a of stationWide) {
+      if (held.has(`${String(channel)}\u0000${plateKeyOf(a)}`)) continue;
+      added.push({ ...a, channel });
+    }
+  }
+  return { value: { assignments: [...kept, ...added] }, copied: added.length };
+}
+
+/**
+ * 🔴 `CHANNEL-SOURCES-01` decision 2 — **A CHANNEL ADDED LATER starts from a copy of each template's
+ * current defaults.** "Current" is read from the channels declared before it: for each template, the
+ * LOWEST of `from` that holds defaults of its own for it, copied whole, so the new channel starts
+ * from one channel's coherent set rather than a plate-by-plate mixture. A plate the new channel
+ * already holds is kept (a channel declared, left and declared again keeps what it had).
+ */
+export function copyAssignmentsToChannel(
+  value: SourceAssignments,
+  from: readonly number[],
+  to: number,
+): { value: SourceAssignments; copied: number } {
+  const donors = [...new Set(from)].filter((c) => c !== to).sort((a, b) => a - b);
+  const held = new Set(value.assignments.filter((a) => a.channel === to).map(plateKeyOf));
+  const templates = new Set(value.assignments.map((a) => a.templateId));
+  const added: TemplateSourceAssignment[] = [];
+  for (const templateId of templates) {
+    const donor = donors.find((c) =>
+      value.assignments.some((a) => a.channel === c && a.templateId === templateId),
+    );
+    if (donor === undefined) continue;
+    for (const a of value.assignments) {
+      if (a.channel !== donor || a.templateId !== templateId || held.has(plateKeyOf(a))) continue;
+      added.push({ ...a, channel: to });
+    }
+  }
+  return added.length === 0
+    ? { value, copied: 0 }
+    : { value: { assignments: [...value.assignments, ...added] }, copied: added.length };
+}
+
+/**
+ * The Source defaults dialog's write: `templateId`'s defaults ON `channel` become `entries`
+ * (`plateId → catalog id`; an absent plate keeps what it had, an empty id removes the entry), and
+ * nothing of any other channel or template is touched. The entry already there is carried forward
+ * so a field this writer has never heard of (`fitMode`) survives it.
+ */
+export function withChannelDefaults(
+  value: SourceAssignments,
+  channel: number,
+  templateId: string,
+  entries: ReadonlyMap<string, string>,
+): SourceAssignments {
+  const inForce = new Map(
+    assignmentsOnChannel(value, channel)
+      .assignments.filter((a) => a.templateId === templateId)
+      .map((a) => [a.plateId, a]),
+  );
+  const untouched = value.assignments.filter(
+    (a) => !(a.channel === channel && a.templateId === templateId && entries.has(a.plateId)),
+  );
+  const written: TemplateSourceAssignment[] = [];
+  for (const [plateId, sourceId] of entries) {
+    if (sourceId === '') continue;
+    written.push({ ...inForce.get(plateId), channel, templateId, plateId, sourceId });
+  }
+  return { assignments: [...untouched, ...written] };
+}
+
+/** The source a plate is assigned to ON `channel`, or `null` when nothing is assigned there. */
 export function assignedSourceId(
   assignments: SourceAssignments,
+  channel: number,
   templateId: string,
   plateId: string,
 ): string | null {
-  const hit = assignments.assignments.find(
+  const hit = assignmentsOnChannel(assignments, channel).assignments.find(
     (a) => a.templateId === templateId && a.plateId === plateId,
   );
   return hit === undefined ? null : hit.sourceId;
 }
 
 /**
- * The plates of `templateId` that no assignment covers, in the order given.
+ * The plates of `templateId` that no assignment covers ON `channel`, in the order given.
  *
  * A freshly imported template has ALL of them, which is the ordinary state and
  * not an error — the row names them so the operator knows what is left to do.
  */
 export function unassignedPlateIds(
   assignments: SourceAssignments,
+  channel: number,
   templateId: string,
   plateIds: readonly string[],
 ): string[] {
-  return plateIds.filter((plateId) => assignedSourceId(assignments, templateId, plateId) === null);
+  return plateIds.filter(
+    (plateId) => assignedSourceId(assignments, channel, templateId, plateId) === null,
+  );
 }
 
 /** Read the catalog in force. An empty `sources` list = nothing is defined (see the header). */
@@ -1229,10 +1358,12 @@ export function assignmentInForce(
   templateId: string,
   assignments: SourceAssignments,
   frozenAssignment: Readonly<Record<string, string>> | undefined,
+  /** `CHANNEL-SOURCES-01` — the row's channel: the defaults answer per channel. */
+  channel: number,
 ): Record<string, string> {
   if (frozenAssignment !== undefined) return { ...frozenAssignment };
   const map: Record<string, string> = {};
-  for (const a of assignments.assignments) {
+  for (const a of assignmentsOnChannel(assignments, channel).assignments) {
     if (a.templateId === templateId) map[a.plateId] = a.sourceId;
   }
   return map;
@@ -1245,6 +1376,8 @@ export interface PlateSourceResolution {
   readonly plateIds: readonly string[];
   /** The installation's level 2 store. */
   readonly assignments: SourceAssignments;
+  /** `CHANNEL-SOURCES-01` — the row's channel: level 2 is read ON it ({@link assignmentsOnChannel}). */
+  readonly channel: number;
   /** Session BP — the row's frozen level 2, when it has taken. Absent ⇒ not frozen. */
   readonly frozenAssignment?: Readonly<Record<string, string>> | undefined;
   /** The look being resolved; `undefined` for a carrier that authors none. */
@@ -1269,7 +1402,12 @@ export interface PlateSourceResolution {
 export function resolvePlateSourcesForLook(
   input: PlateSourceResolution,
 ): Map<string, string | null> {
-  const levelTwo = assignmentInForce(input.templateId, input.assignments, input.frozenAssignment);
+  const levelTwo = assignmentInForce(
+    input.templateId,
+    input.assignments,
+    input.frozenAssignment,
+    input.channel,
+  );
   const effective = effectiveOverridesForLook(input.lookId, input.lookBindings, input.overrides);
   return new Map(
     input.plateIds.map((plateId) => [plateId, effective?.[plateId] ?? levelTwo[plateId] ?? null]),

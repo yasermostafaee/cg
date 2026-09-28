@@ -272,9 +272,15 @@ export function LooksBindingsSection({
   item,
   info,
   rehearsing = false,
+  channel,
 }: {
   item: StackItemState;
   info: TemplateInfo | null;
+  /**
+   * `CHANNEL-SOURCES-01` — the row's channel: `Default (…)` names THAT channel's own Source
+   * default. A prop, for the same reason as `rehearsing` below.
+   */
+  channel: number;
   /**
    * 🔴 A PROP, not a subscription — and that is deliberate (`B-156`).
    *
@@ -311,7 +317,7 @@ export function LooksBindingsSection({
 
   const liveLookId = activeLookOf(carrier, item.activeLookId)?.id;
   const badge = badgeFor(claimsAir(item), rehearsing);
-  const defaults = appliedPlateSources(item.templateId, carrier.sources ?? []);
+  const defaults = appliedPlateSources(item.templateId, carrier.sources ?? [], channel);
   const patches = item.sourceOverride ?? {};
   /*
     🔴 THE TWO ON-AIR DIVERGENCE MARKS, read through the SAME joins the `LIVE PLATES`
@@ -418,6 +424,7 @@ export function LooksBindingsSection({
           templateId={item.templateId}
           info={info}
           plates={carrier.sources ?? []}
+          channel={channel}
         />
       </div>
       {/*

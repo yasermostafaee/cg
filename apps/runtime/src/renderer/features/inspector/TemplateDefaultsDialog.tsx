@@ -6,6 +6,7 @@ import { Modal, ModalAction } from '../../ui/Modal.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import { MediaPlaybackControl } from '../sources/MediaPlayback.js';
+import { withChannelDefaults } from '@cg/shared-ipc';
 import {
   commitSourceAssignments,
   currentSourceAssignments,
@@ -23,23 +24,18 @@ import { appliedPlateSources } from './livePlates.js';
  * 396 px panel. The reference does not put it in the panel: it is a link in the section head
  * that opens a dialog, and that is what this is.
  *
- * **Nothing about the data changes.** Same store, same channel, same `(template, plate)` key,
- * same refusal.
+ * **Nothing about the data changes.** Same store, same channel, same refusal.
  *
- * ── 🔴 THE SCOPE, ESTABLISHED BEFORE THE TITLE WAS WRITTEN ──────────────────
+ * ── 🔴 THE SCOPE — PER CHANNEL, AND THE TITLE SAYS SO ───────────────────────
  *
- * The reference titles its dialog `Channel N · source defaults` and says the defaults apply to
- * the template ON THE ACTIVE CHANNEL. **Ours are not per channel, and the title must not say
- * they are.** `TemplateSourceAssignmentSchema` is `{ templateId, plateId, sourceId, fit? }` —
- * there is no channel field — and `validateSourceAssignments` keys uniqueness on
- * `templateId` + `plateId`. The module header says it in words: _"per template, per PLATE …
- * The operator assigns once, per template."_
- *
- * ⚠ So a `Channel 2` in this title would be a surface LYING ABOUT SCOPE, and the operator
- * would set a default on one channel expecting the other to be untouched. Making it truly
- * per-channel would add a field to a persisted, validated schema and cross the IPC contract —
- * out of scope by §2's own instruction — so the dialog is titled for the scope we HAVE and the
- * subtitle names the TEMPLATE, which is the thing the value actually belongs to.
+ * `CHANNEL-SOURCES-01` decision 2 (the owner, 2026-09-28): **Source defaults belong to a
+ * channel.** The owner changed CH 2's defaults and CH 1's changed with them, because the store
+ * was keyed `(template, plate)` alone. It is keyed `(channel, template, plate)` now
+ * (`TemplateSourceAssignmentSchema.channel`), so this dialog edits the defaults of the channel
+ * it was opened from — the row's — and its title names that channel, as the reference always
+ * did (`Channel N · source defaults`). This header used to explain why the title must NOT name a
+ * channel: then, the scope was the whole station, and a channel in the title would have been a
+ * surface lying about its scope. The scope moved; the title moved with it.
  *
  * ── WHAT THIS DIALOG MAY NOT DO ─────────────────────────────────────────────
  *
@@ -59,6 +55,7 @@ export function TemplateDefaultsDialog({
   templateId,
   templateName,
   plates,
+  channel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -67,6 +64,8 @@ export function TemplateDefaultsDialog({
   templateName: string;
   /** The template's DECLARED plates, in declaration order. */
   plates: readonly LiveSourceDeclaration[];
+  /** `CHANNEL-SOURCES-01` — the channel whose defaults this dialog edits: the row's. */
+  channel: number;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   /*
@@ -99,7 +98,7 @@ export function TemplateDefaultsDialog({
 
   if (!open) return null;
 
-  const applied = appliedPlateSources(templateId, plates);
+  const applied = appliedPlateSources(templateId, plates, channel);
   const valueOf = (plateId: string): string => draft?.get(plateId) ?? applied.get(plateId) ?? '';
   const stage = (plateId: string, sourceId: string): void => {
     setDraft((prev) => {
@@ -115,28 +114,20 @@ export function TemplateDefaultsDialog({
   async function commit(): Promise<{ accepted: boolean }> {
     if (draft === null) return { accepted: true };
     /*
-      🔴 **THE EXISTING ENTRY IS SPREAD, NOT REBUILT FROM THREE FIELDS.**
+      🔴 **THIS CHANNEL'S ENTRIES, AND NOTHING ELSE — `CHANNEL-SOURCES-01` decision 2.** The write
+      is `@cg/shared-ipc`'s `withChannelDefaults`: the staged plates are written ON THIS CHANNEL,
+      every other channel's entries and every other template's stay as they are, and a plate set
+      to `None` loses this channel's entry (an assignment naming nothing is a state nothing
+      downstream can read).
 
-      `TemplateSourceAssignment` carries an optional `fit` — `C-028`'s operator fit-mode
-      override — and a writer that reconstructs `{ templateId, plateId, sourceId }` DELETES it
-      for every plate it touches. Nothing in the renderer writes `fit` today, so the loss
-      would be latent rather than immediate, which is exactly the kind of defect that ships.
-      Carrying the entry forward and overriding only `sourceId` is the same cost and cannot
-      lose a field this dialog has never heard of.
+      ⚠ **THE EXISTING ENTRY IS STILL SPREAD, NOT REBUILT FROM THREE FIELDS** — inside that
+      function now. `TemplateSourceAssignment` carries an optional `fitMode` (`C-028`), and a
+      writer that reconstructs `{ templateId, plateId, sourceId }` would delete it for every plate
+      it touches: a latent loss, which is exactly the kind of defect that ships.
     */
-    const current = currentSourceAssignments();
-    const mine = new Map(
-      current.assignments.filter((a) => a.templateId === templateId).map((a) => [a.plateId, a]),
+    const res = await commitSourceAssignments(
+      withChannelDefaults(currentSourceAssignments(), channel, templateId, draft),
     );
-    const untouched = current.assignments.filter(
-      (a) => !(a.templateId === templateId && draft.has(a.plateId)),
-    );
-    const written = [...draft.entries()]
-      // An empty value means NOT ASSIGNED, which REMOVES the entry rather than writing a
-      // blank one — an assignment naming nothing is a state nothing downstream can read.
-      .filter(([, sourceId]) => sourceId !== '')
-      .map(([plateId, sourceId]) => ({ ...mine.get(plateId), templateId, plateId, sourceId }));
-    const res = await commitSourceAssignments({ assignments: [...untouched, ...written] });
     if (res !== null) {
       /*
         🔴 REFUSED WITH A REASON, NEVER SILENTLY REWRITTEN (§6). The rule sentence is shown in
@@ -155,11 +146,11 @@ export function TemplateDefaultsDialog({
   return (
     <Modal
       /*
-        §2 — NO CHANNEL IN THIS TITLE. See the module header: the value is per TEMPLATE, and
-        naming a channel over it would be a surface lying about its own scope.
+        `CHANNEL-SOURCES-01` — THE CHANNEL IS IN THE TITLE: the defaults are this channel's (see the
+        module header), in the console's own `· CH n` spelling.
       */
-      title="Source defaults"
-      ariaLabel="Source defaults"
+      title={`Source defaults · CH ${String(channel)}`}
+      ariaLabel={`Source defaults · CH ${String(channel)}`}
       onClose={close}
       size="prose"
       /*
@@ -206,7 +197,7 @@ export function TemplateDefaultsDialog({
           <strong>
             <IsolatedName title={templateId}>{templateName}</IsolatedName>
           </strong>
-          . These defaults apply to every row using this template; row overrides remain separate.
+          {`. These defaults apply to every row on CH ${String(channel)} using this template; row overrides remain separate.`}
         </p>
         {plates.length === 0 ? (
           /*
@@ -265,8 +256,7 @@ export function TemplateDefaultsDialog({
               its next take — the half an operator editing a live show needs to read.
             */}
             <p style={styles.foot} data-defaults-foot="">
-              Applies to every row using this template, at its next take. No playout command is
-              sent.
+              {`Applies to every row on CH ${String(channel)} using this template, at its next take. No playout command is sent.`}
             </p>
           </>
         )}

@@ -1295,7 +1295,8 @@ candidate shapes.
       template."_ That is the right reading of that surface, and it rules out BO's option (a).
       The assignment is keyed by **(template, plate)** — not a property of a source and not a
       property of a row — so its natural home is **the template's own entry**, wherever templates
-      are managed.
+      are managed. (Since `CHANNEL-SOURCES-01`, 2026-09-28: keyed **(channel, template, plate)** —
+      still not a property of a row.)
       ⭐ **This is no longer a correctness question.** Once a live row resolves from a frozen
       snapshot, an assignment edit cannot reach anything on air from any surface at any time. Where
       the control lives is now only a question of where an operator expects to find it, and it can

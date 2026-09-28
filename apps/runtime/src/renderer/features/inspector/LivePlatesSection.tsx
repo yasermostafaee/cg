@@ -108,9 +108,15 @@ const styles = {
 export function LivePlatesSection({
   item,
   info,
+  channel,
 }: {
   item: StackItemState;
   info: TemplateInfo | null;
+  /**
+   * `CHANNEL-SOURCES-01` — the row's channel, whose own Source defaults this section reads. A prop,
+   * for the reason `LooksBindingsSection`'s `rehearsing` is one: the Inspector already holds it.
+   */
+  channel: number;
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -158,7 +164,7 @@ export function LivePlatesSection({
     clean in exactly that state before being moved.
   */
   const rowIsOnAir = isOnAir(item);
-  const applied = appliedPlateSources(item.templateId, plates);
+  const applied = appliedPlateSources(item.templateId, plates, channel);
   /*
     🔴 **THIS SECTION EXISTS ONLY TO CARRY THE DOOR — owner, 2026-09-15:** «این بخش قرمز
     فضای بیخودی اشغال کرده حذفش کن.»
@@ -233,7 +239,12 @@ export function LivePlatesSection({
       <div className="cg-section-caption">
         <h2>Live plates</h2>
         {!hasLooks && (
-          <SourceDefaultsLink templateId={item.templateId} info={info} plates={plates} />
+          <SourceDefaultsLink
+            templateId={item.templateId}
+            info={info}
+            plates={plates}
+            channel={channel}
+          />
         )}
       </div>
       {/*

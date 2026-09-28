@@ -142,6 +142,8 @@ export interface PlateSourceLookup {
   readonly templateId: string;
   /** The installation's level-2 store, as this browser has it. */
   readonly assignments: SourceAssignments;
+  /** `CHANNEL-SOURCES-01` — the row's channel: level 2 is read ON it, as the take reads it. */
+  readonly channel: number;
   /**
    * Session BP — the snapshot this row's TAKE froze, when it has taken.
    *
@@ -230,6 +232,7 @@ export function platePlacements(
     templateId: sources.templateId,
     plateIds: live.sources.map((p) => p.sourceId),
     assignments: sources.assignments,
+    channel: sources.channel,
     frozenAssignment: sources.frozenAssignment,
     lookId: activeLookId,
     lookBindings: sources.lookBindings,

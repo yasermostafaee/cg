@@ -84,6 +84,8 @@ import {
   type ChannelSettingsState,
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
+  assignmentsOnChannel,
+  copyAssignmentsToChannel,
   checkSourceAssignments,
   checkSourceCatalogAgainstBanks,
   describeTemplateReferences,
@@ -5308,6 +5310,7 @@ export class CasparRuntime {
       throw err;
     }
     const channels = new Set(next.map((bank) => bank.channel));
+    const declaredBefore = this.#fixedBanks.map((bank) => bank.channel);
     /*
       🔴 `DESKTOP-APPS-01-D` e/j — **EVERY ITEM LEFT ON A CHANNEL THE SET NO LONGER DECLARES LEAVES
       THE STACK, BEFORE THE NEW ROWS ARE APPLIED** (its slot must be released while it is still a
@@ -5323,12 +5326,35 @@ export class CasparRuntime {
     }
     this.#layers.applyFixed(slots);
     this.#fixedBanks = sortBanks(next);
+    this.#copyDefaultsToJoiningChannels(declaredBefore, [...channels]);
     this.fixedConfigChanged.emit(firstBank(this.#fixedBanks));
     this.fixedBanksChanged.emit(this.fixedLayerBanks());
     // The bank changed, so the per-slot state did too — publish through the
     // same change-compare the sweep uses (never a second derivation).
     this.#publishFixedStateIfChanged();
     return { ok: true };
+  }
+
+  /**
+   * 🔴 `CHANNEL-SOURCES-01` decision 2 — **A CHANNEL JOINING THE SET starts from a copy of each
+   * template's current defaults**, read from the channels declared before it
+   * ({@link copyAssignmentsToChannel}: per template, the lowest of them holding its own). A station
+   * that MOVES (Change channel…, one bank for one) therefore carries its defaults to the new
+   * channel. Configuration only: nothing is sent, and a row already taken keeps what it froze.
+   * `bridge.ts` persists the result beside the banks.
+   */
+  #copyDefaultsToJoiningChannels(before: readonly number[], after: readonly number[]): void {
+    let value = this.#sourceAssignments;
+    let copied = 0;
+    for (const channel of after) {
+      if (before.includes(channel)) continue;
+      const result = copyAssignmentsToChannel(value, before, channel);
+      value = result.value;
+      copied += result.copied;
+    }
+    if (copied === 0) return;
+    this.#sourceAssignments = value;
+    this.sourceAssignmentsChanged.emit(value);
   }
 
   /**
@@ -5915,7 +5941,7 @@ export class CasparRuntime {
       for a row that has one. The seat set, the collisions and the band arithmetic below are
       all questions about the same union, so they must all be asked of the same level 2.
     */
-    const resolvedFrom = this.#assignmentMapFor(itemId, templateId, levelTwo);
+    const resolvedFrom = this.#assignmentMapFor(itemId, templateId, levelTwo, slot.channel);
     /*
       🔴 `PLAYOUT-SOURCES-01` — ONLY SEATABLE ENTRIES CAN RESOLVE A FRAME. An entry the Playout
       stopped offering, one it marks unavailable, and one that is unusable (its rules, or the route
@@ -5933,7 +5959,8 @@ export class CasparRuntime {
     const bindings = resolveLookBindings({
       templateId,
       carrier,
-      assignments: this.#assignmentsFor(itemId, templateId, levelTwo).assignments,
+      assignments: this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel).assignments,
+      channel: slot.channel,
       catalog: seatableCatalog,
       bindings: this.#lookSourceBindings.get(itemId),
       overrides: this.#sourceOverrides.get(itemId),
@@ -5950,7 +5977,7 @@ export class CasparRuntime {
       so a row cannot pick up another template's override for a same-named plate.
     */
     const fitOverrides = new Map<string, LiveFitMode>();
-    for (const a of this.#assignmentsFor(itemId, templateId, levelTwo).assignments) {
+    for (const a of this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel).assignments) {
       if (a.templateId !== templateId || a.fitMode === undefined) continue;
       fitOverrides.set(a.plateId, a.fitMode);
     }
@@ -5988,7 +6015,7 @@ export class CasparRuntime {
         // SESSION BP — the SAME level 2 the resolver above used, or the refusal would name
         // a plate as unassigned that the plan resolved (or, worse, stay silent about one it
         // did not). `#assignmentsFor` is the one door.
-        assignments: this.#assignmentsFor(itemId, templateId, levelTwo),
+        assignments: this.#assignmentsFor(itemId, templateId, levelTwo, slot.channel),
         catalog: this.#sourceCatalog,
         overrides: this.#effectiveOverridesFor(itemId, lookId),
         // `ROUTE-PLATES-01` — so an entry this row's channel may not show is named as such.
@@ -6416,7 +6443,8 @@ export class CasparRuntime {
       // the live store would refuse (or accept) a binding change against an assignment the
       // row is not resolving from, which is the collision check answering about a different
       // seat set than the reconcile below it will build.
-      assignments: this.#assignmentsFor(itemId, templateId, 'pinned').assignments,
+      assignments: this.#assignmentsFor(itemId, templateId, 'pinned', slot.channel).assignments,
+      channel: slot.channel,
       catalog: this.#sourceCatalog,
       bindings: next.bindings,
       overrides: next.overrides,
@@ -6652,9 +6680,19 @@ export class CasparRuntime {
    * unassigned for this run and does NOT fall through to the live store. See the schema for
    * why a partial freeze would reopen the multi-station case for exactly those plates.
    */
-  #assignmentsFor(itemId: string, templateId: string, levelTwo: LevelTwoSource): SourceAssignments {
+  #assignmentsFor(
+    itemId: string,
+    templateId: string,
+    levelTwo: LevelTwoSource,
+    /**
+     * 🔴 `CHANNEL-SOURCES-01` decision 2 — the row's channel. The live store answers the defaults
+     * IN FORCE ON IT ({@link assignmentsOnChannel}), so a change on one channel never reaches a row
+     * on another. A frozen snapshot is already this row's own.
+     */
+    channel: number,
+  ): SourceAssignments {
     const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
-    if (frozen === undefined) return this.#sourceAssignments;
+    if (frozen === undefined) return assignmentsOnChannel(this.#sourceAssignments, channel);
     return {
       assignments: Object.entries(frozen).map(([plateId, sourceId]) => ({
         templateId,
@@ -6690,11 +6728,13 @@ export class CasparRuntime {
     itemId: string,
     templateId: string,
     levelTwo: LevelTwoSource,
+    /** `CHANNEL-SOURCES-01` — the row's channel, as for {@link #assignmentsFor}. */
+    channel: number,
   ): Record<string, string> {
     const frozen = levelTwo === 'fresh' ? undefined : this.#frozenAssignments.get(itemId);
     if (frozen !== undefined) return { ...frozen };
     const map: Record<string, string> = {};
-    for (const a of this.#sourceAssignments.assignments) {
+    for (const a of assignmentsOnChannel(this.#sourceAssignments, channel).assignments) {
       if (a.templateId === templateId) map[a.plateId] = a.sourceId;
     }
     return map;
@@ -13059,8 +13099,9 @@ export class CasparRuntime {
       now reads unassigned): only an operator action removes a binding, and a dropped input must not
       make every other edit to the defaults impossible.
     */
+    // `CHANNEL-SOURCES-01` — a binding is new or changed ON ITS CHANNEL (station-wide is its own key).
     const keyed = (a: TemplateSourceAssignment): { key: string; sourceId: string } => ({
-      key: `${a.templateId}\u0000${a.plateId}`,
+      key: `${String(a.channel ?? '*')}\u0000${a.templateId}\u0000${a.plateId}`,
       sourceId: a.sourceId,
     });
     const refusal = unbindableChange(

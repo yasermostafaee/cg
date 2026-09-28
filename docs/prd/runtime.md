@@ -4082,3 +4082,26 @@ air, a viewer, another channel's operator and a locked console. WHEN the server 
 no number is shown. A live-input plate's hold, release and wire are byte-identical to before.
 **The owner's decisions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change):** `Loop` stays a
 checkbox; a clip on air across the upgrade gets its transport record at its next take.
+
+## [~] R-072 — Each channel keeps its own Source defaults; a take refused for having no band is a row line ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `CHANNEL-SOURCES-01` (v1) · `openspec/changes/channel-sources` · decision 1 STOPPED
+
+**What.** (2) Source defaults are kept per channel, keyed (channel, template, plate); every reader —
+take, look switch, swap, restore, the Inspector's `Default (…)`, the Source defaults dialog, PVW —
+reads the row's own channel. On the first load, the station-wide defaults become every declared
+channel's own copy and the file is rewritten; a channel declared later starts from a copy of the
+template's defaults. The dialog edits the channel of the row it was opened from and is titled
+`Source defaults · CH n`. (3) A take refused because no plate band is declared is one line on its row
+and in its Inspector — `<row>: no live source layer band is declared — nothing was sent.` — in that
+channel's view only, with no banner. **Why.** The owner's check on `dev:station --fake` (2026-09-28):
+changing Source defaults on channel 2 changed channel 1's too, and a take of `Bed 59` was refused with a
+console-wide banner. **Acceptance:** WHEN a default is changed on CH 2 THEN CH 1's default and its take
+are unchanged, and CH 2's take uses the new one; WHEN a station-wide file is first loaded THEN every
+declared channel holds its own copy and a take is unchanged, and a second load copies nothing; WHEN a
+channel is declared later THEN it starts from a copy; WHEN a take is refused for having no band THEN
+its row carries one line and no banner is raised. **Decision 1 — no hand-declared band before a take
+(the effective band is the declared one, else 60–79) — is STOPPED** at the prompt's hard stop: the
+design record says the band is DECLARED, never defaulted, and gives a reason — defaulting it would be
+this project choosing layer numbers for a plant it cannot see, and a station whose reservation already
+sits inside the band would fail to boot on upgrade (`packages/shared-ipc/src/channels/sources.ts:426`,
+`openspec/changes/live-source-multibox/tasks.md:935`). The owner decides whether that reason still
+stands; until then a station with no band still refuses a take — as one row line.

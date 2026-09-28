@@ -157,6 +157,9 @@ because some scene said `guest-1`.
    producer definition.
 2. **The ASSIGNMENTS** — each imported TEMPLATE gets, **per live plate**, a property whose
    value is one of those defined sources. **The operator assigns once, per template.**
+   ⚠ Amended 2026-09-28 (`CHANNEL-SOURCES-01` decision 2, `R-072`): once per template ON EACH
+   CHANNEL — the store is keyed (channel, template, plate), because a default set on one channel
+   changed another's.
 
 🔴 **The reasoning, recorded so it is not re-litigated.** Binding by NAME MATCH silently
 requires the **AUTHOR** to guess the installation's naming convention — which contradicts

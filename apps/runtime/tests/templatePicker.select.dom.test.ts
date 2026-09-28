@@ -69,7 +69,7 @@ const BANK: FixedLayerBank = { channel: 1, start: 70, count: 30, low: { start: 5
 let container: HTMLDivElement | null = null;
 const loads: unknown[] = [];
 
-function installBridge(): void {
+function installBridge(assignments: SourceAssignments = { assignments: [] }): void {
   const stub = {
     link: {
       status: () => 'live' as const,
@@ -99,7 +99,7 @@ function installBridge(): void {
       config: () => Promise.resolve({ sources: [] }),
       onConfigChanged: () => () => undefined,
       setConfig: () => Promise.resolve({ ok: true }),
-      assignments: () => Promise.resolve({ assignments: [] } as SourceAssignments),
+      assignments: () => Promise.resolve(assignments),
       onAssignmentsChanged: () => () => undefined,
       setAssignments: () => Promise.resolve({ ok: true }),
     },
@@ -108,7 +108,10 @@ function installBridge(): void {
 }
 
 /** Open the picker on an OPERATOR row (`accepts: 'high'`), and keep its promise. */
-async function openPicker(accepts: 'low' | 'high' = 'high'): Promise<{
+async function openPicker(
+  accepts: 'low' | 'high' = 'high',
+  channel = 1,
+): Promise<{
   dialog: HTMLElement;
   choice: Promise<TemplateChoice>;
 }> {
@@ -121,7 +124,8 @@ async function openPicker(accepts: 'low' | 'high' = 'high'): Promise<{
     open = () =>
       pickTemplate('Load onto Layer 3', accepts, {
         rowName: 'Layer 3',
-        coord: '1-97',
+        coord: `${String(channel)}-97`,
+        channel,
         holding: null,
       });
     return createElement('div', null, pickerDialog);
@@ -300,6 +304,28 @@ describe('§3 — the ONE refusal, unchanged, said where there is room for it', 
     expect(commitButton()?.disabled).toBe(false);
     const carrier = document.querySelector('[data-template-id="tpl-graphic"] [data-live-sources]');
     expect(carrier, 'the carrier state is still stated on the row').not.toBeNull();
+  });
+
+  it('🔴 `Needs a source` reads the DESTINATION’s channel’s defaults (CHANNEL-SOURCES-01) — control: the channel that has one', async () => {
+    // `guest-1` has a default on CH 1 and none on CH 2.
+    installBridge({
+      assignments: [{ channel: 1, templateId: 'tpl-bed', plateId: 'guest-1', sourceId: 'src-a' }],
+    });
+    initSources(window.cg);
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+    const chip = (): Element | null =>
+      document.querySelector('[data-template-id="tpl-bed"] [data-plates-unassigned]');
+
+    await openPicker('low', 2);
+    expect(chip()?.getAttribute('data-plates-unassigned')).toBe('guest-1');
+
+    container?.remove();
+    container = null;
+    clearPortals();
+    await openPicker('low', 1);
+    expect(chip(), 'CH 1 holds a default for guest-1').toBeNull();
   });
 });
 
