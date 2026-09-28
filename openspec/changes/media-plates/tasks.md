@@ -59,5 +59,17 @@
 
 ## 4. Gate and CI
 
-- [ ] 4.1 Prettier; `pnpm gate`; `pnpm openspec validate --all --strict`
-- [ ] 4.2 Pushed; the `e2e` and installer runs green with their jobs RUN — run URLs:
+- [x] 4.1 Prettier; `pnpm gate`; `pnpm openspec validate --all --strict` — the pre-push gate on `a13ddcaf` and
+      again on `c1bc13ea`: 96 of 96 tasks, 0 cached; openspec 91 passed
+- [x] 4.2 Pushed; the `e2e` and installer runs green with their jobs RUN — run URLs:
+  - `c1bc13ea` (the change, and the rig's wait for the boot blanket):
+    PR https://github.com/yasermostafaee/cg/actions/runs/36366862406 — `Lint • Typecheck • Test • Build` RAN,
+    green (`media-plates.integration.test.ts`, 21 tests); `E2E (Playwright)` RAN, green (runtime 298 passed;
+    designer 290 passed, 12 skipped, 1 flaky: `video-import.spec.ts:291`, known, not this change).
+    Desktop https://github.com/yasermostafaee/cg/actions/runs/36366862418 — `Installers (Windows)` and
+    `Installer smoke (clean Windows)` RAN, green.
+  - `a13ddcaf`: PR https://github.com/yasermostafaee/cg/actions/runs/36364248543 — `E2E (Playwright)` RAN, green
+    (runtime 297 passed, 1 flaky: `modal-frame-chrome.spec.ts:171`, not this change; designer 291 passed);
+    `Lint • Typecheck • Test • Build` RED — three of this change's own bridge tests caught R-022's boot volume
+    blanket inside an exact wire window, fixed in `c1bc13ea`.
+    Desktop https://github.com/yasermostafaee/cg/actions/runs/36364248553 — both jobs RAN, green.
