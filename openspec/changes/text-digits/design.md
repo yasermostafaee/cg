@@ -125,3 +125,8 @@ gains no key. No normalisation step touches `digits`; defaults are written only 
 13. **The detector lives in `@cg/gesture`**: interaction behaviour with neither styling nor markup, shared by both
     apps — that package's stated purpose — and `@cg/gesture` now depends on `@cg/text-shaping` for the language
     names.
+
+## The owner's decisions on the open questions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change)
+
+- **A date draws in its field's choice, and gets no control of its own** — choice 1 above stands as the decision.
+- **The Keyboard poll stays**: every 250 ms while a text box has focus (§0.3), beside the per-key ask.

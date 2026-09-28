@@ -130,3 +130,9 @@ its layer.
   held muted and parked but neither hidden nor paused, until its next take. Not worth a migration.
 - **The skew harness pins its clips to `restart`**, so a new run measures the same switch as the evidence it
   already holds.
+
+## The owner's decisions on the open questions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change)
+
+- **`Loop` stays a checkbox** — the first choice above stands as the decision.
+- **A clip on air across the upgrade gets its transport record at its next take** — the fourth choice above stands:
+  no migration.

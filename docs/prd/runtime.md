@@ -4080,3 +4080,5 @@ presses Pause, Play or Restart on an on-air row's clip THEN `PAUSE`, `RESUME`, o
 `RESUME` is sent; it is refused with nothing sent for a live input, a plate not seated, a row not on
 air, a viewer, another channel's operator and a locked console. WHEN the server reports no time THEN
 no number is shown. A live-input plate's hold, release and wire are byte-identical to before.
+**The owner's decisions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change):** `Loop` stays a
+checkbox; a clip on air across the upgrade gets its transport record at its next take.
