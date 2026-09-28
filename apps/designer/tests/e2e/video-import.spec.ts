@@ -325,6 +325,17 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
   // composites to a black-edged halo. getImageData returns STRAIGHT rgba, so a
   // correct un-premultiply reads the right region back at ~gold, matching the
   // opaque LEFT half — proving the semi-transparent pixels are NOT darkened.
+  //
+  // 🔴 `P-057` / `FOLLOWUPS-01` §2.3 — THE READ WAITS FOR A PRESENTED FRAME. It used to draw once
+  // `readyState >= 2` on `loadeddata`, and on CI that read twice received `R = 0` at the OPAQUE
+  // half (run 36338340420, attempt 1, both tries) — a canvas with NOTHING drawn on it. Measured on
+  // the dev host: 184 of 184 reads at that trigger were correct, and the one way to receive `0` was
+  // a read with no frame to paint (`readyState 1` → `[0,0,0,0]`, 9 of 10). So `readyState` says a
+  // frame is DECODED, not that the painter holds it. `requestVideoFrameCallback` fires when a frame
+  // has been PRESENTED, and a draw inside the callback is of that frame; it fires only for an element
+  // that is rendered, so the video is attached, on screen, for the read. `new VideoFrame(video)` was
+  // measured and rejected as the signal: it constructs at `readyState 1`, when there is nothing to
+  // paint. Every assertion below carries the whole read, so a failure records what and when.
   const px = await page.evaluate(async () => {
     const assets = await window.cg.assets.list();
     const vid = assets.find((a) => a.kind === 'video');
@@ -332,47 +343,75 @@ test('a premultiplied-alpha source imports WITHOUT the black fringe (D-128 un-pr
     const url = await window.cg.assets.url(vid.assetId);
     if (url === null) return { ok: false as const, why: 'url() returned null' };
     return await new Promise<
-      { ok: true; left: number[]; right: number[]; w: number } | { ok: false; why: string }
+      | {
+          ok: true;
+          left: number[];
+          right: number[];
+          w: number;
+          presentedFrames: number;
+          readyState: number;
+          atMs: number;
+        }
+      | { ok: false; why: string }
     >((resolve) => {
       const v = document.createElement('video');
       v.muted = true;
       v.preload = 'auto';
-      const deadline = Date.now() + 12_000;
-      v.onerror = () => resolve({ ok: false, why: `decode error: ${v.error?.message ?? '?'}` });
-      const sample = (): void => {
+      v.style.cssText =
+        'position:fixed;left:0;bottom:0;width:64px;height:64px;z-index:2147483647;pointer-events:none';
+      document.body.appendChild(v);
+      const t0 = performance.now();
+      const done = (r: Parameters<typeof resolve>[0]): void => {
+        clearTimeout(timer);
+        v.remove();
+        resolve(r);
+      };
+      const timer = setTimeout(() => {
+        done({
+          ok: false,
+          why: `no frame was presented in 12 s (readyState ${String(v.readyState)})`,
+        });
+      }, 12_000);
+      v.onerror = () => done({ ok: false, why: `decode error: ${v.error?.message ?? '?'}` });
+      v.requestVideoFrameCallback((_now, meta) => {
         const c = document.createElement('canvas');
         c.width = v.videoWidth;
         c.height = v.videoHeight;
         const ctx = c.getContext('2d');
-        if (ctx === null) return resolve({ ok: false, why: 'no 2d context' });
+        if (ctx === null) return done({ ok: false, why: 'no 2d context' });
         ctx.clearRect(0, 0, c.width, c.height);
         ctx.drawImage(v, 0, 0);
         const at = (fx: number): number[] => [
           ...ctx.getImageData(Math.round(v.videoWidth * fx), Math.round(v.videoHeight / 2), 1, 1)
             .data,
         ];
-        resolve({ ok: true, left: at(0.25), right: at(0.78), w: v.videoWidth });
-      };
-      const tryDraw = (): void => {
-        if (v.readyState >= 2 && v.videoWidth > 0) sample();
-        else if (Date.now() < deadline) setTimeout(tryDraw, 100);
-        else resolve({ ok: false, why: `never decoded rs=${String(v.readyState)}` });
-      };
-      v.onloadeddata = tryDraw;
+        done({
+          ok: true,
+          left: at(0.25),
+          right: at(0.78),
+          w: v.videoWidth,
+          presentedFrames: meta.presentedFrames,
+          readyState: v.readyState,
+          atMs: Math.round(performance.now() - t0),
+        });
+      });
       v.src = url;
     });
   });
-  expect(px, JSON.stringify(px)).toMatchObject({ ok: true });
+  const read = JSON.stringify(px);
+  expect(px, read).toMatchObject({ ok: true });
   if (px.ok) {
+    // The precondition, asserted: the pixels below are of a frame the painter was handed.
+    expect(px.presentedFrames, read).toBeGreaterThanOrEqual(1);
     // opaque LEFT half is gold (control)
-    expect(px.left[0]).toBeGreaterThan(200); // R
-    expect(px.left[1]).toBeGreaterThan(160); // G
+    expect(px.left[0], read).toBeGreaterThan(200); // R
+    expect(px.left[1], read).toBeGreaterThan(160); // G
     // half-alpha RIGHT half is RESTORED to ~gold — NOT the darkened premult (~126)
-    expect(px.right[0]).toBeGreaterThan(200); // R (would be <150 with the fringe bug)
-    expect(px.right[1]).toBeGreaterThan(160); // G
+    expect(px.right[0], read).toBeGreaterThan(200); // R (would be <150 with the fringe bug)
+    expect(px.right[1], read).toBeGreaterThan(160); // G
     // and it is genuinely semi-transparent (partial alpha carried through)
-    expect(px.right[3]).toBeGreaterThan(60);
-    expect(px.right[3]).toBeLessThan(210);
+    expect(px.right[3], read).toBeGreaterThan(60);
+    expect(px.right[3], read).toBeLessThan(210);
   }
 });
 
