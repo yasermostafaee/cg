@@ -177,4 +177,12 @@ Those boxes stay ticked as the record of what was built; this section is what st
 - [x] 8.5 Docs: `C-029` (caspar.md) records the retirement and supersedes its creation acceptance;
       the operator guide; `B-208`'s note; the registry line; this change's proposal, design §4 and
       spec delta.
-- [ ] 8.6 Gate and CI — recorded by `FOLLOWUPS-01`.
+- [x] 8.6 Gate and CI — `pnpm gate` 96/96, 0 cached, three times in a row on the final tree
+      (`gate-20260928T100800Z-15948.log`, `…101521Z-18636.log`, `…102238Z-24812.log`). Linux CI on
+      `8d48692e`, which carries this section's code (`b1a6ce93`): PR
+      <https://github.com/yasermostafaee/cg/actions/runs/36405138989> — COMPLETED `success`, `ci` and
+      `E2E (Playwright)` both RAN (runtime 298 passed; designer 291 passed, 12 skipped); Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/36405139002> — both installer jobs RAN, `success`.
+      Head `b5e681f4` also green with every job RAN: PR
+      <https://github.com/yasermostafaee/cg/actions/runs/36410757836>, Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/36410757798>.

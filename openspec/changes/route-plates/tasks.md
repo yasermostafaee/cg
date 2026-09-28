@@ -68,4 +68,12 @@
 - [x] 5.3 C — `SendOptions.target` deleted, `B-287` closed (the filing's "nothing passes it" corrected: three
       `INFO` reads did, wire byte-identical)
 - [x] 5.4 D — recorded: the stray door's exemption stays; a moved holder's row waits until a re-take
-- [ ] 5.5 Gate and CI — recorded by `FOLLOWUPS-01`
+- [x] 5.5 Gate and CI — `pnpm gate` 96/96, 0 cached, three times in a row on the final tree
+      (`gate-20260928T100800Z-15948.log`, `…101521Z-18636.log`, `…102238Z-24812.log`); Linux CI on
+      `8d48692e` (A `b1a6ce93`, C `4343fc5f`, B `8d48692e`): PR
+      <https://github.com/yasermostafaee/cg/actions/runs/36405138989> — COMPLETED `success`, `ci` and
+      `E2E (Playwright)` both RAN (runtime 298 passed; designer 291 passed, 12 skipped); Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/36405139002> — both installer jobs RAN, `success`.
+      `FOLLOWUPS-01`'s head `b5e681f4`: PR <https://github.com/yasermostafaee/cg/actions/runs/36410757836>
+      and Desktop <https://github.com/yasermostafaee/cg/actions/runs/36410757798>, both `success`, every job
+      RAN

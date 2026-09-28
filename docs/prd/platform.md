@@ -3552,3 +3552,18 @@ planted THEN that test is red.
   - Attempt 2, the one rerun, **completed with `success`, and its `E2E` step RAN**: runtime 289 passed;
     Designer 287 passed + 1 flaky (`live-source.spec.ts:610`, green on its retry).
 - **Installers:** <https://github.com/yasermostafaee/cg/actions/runs/36338340442> — `success`.
+
+**Evidence (2026-09-28, `FOLLOWUPS-01` §2):**
+
+- **Local.** Three `pnpm gate` runs in a row on the final tree, all green (96/96, 0 cached),
+  `reachability-predicate` 7/7 in each: `gate-20260928T100800Z-15948.log`,
+  `gate-20260928T101521Z-18636.log`, `gate-20260928T102238Z-24812.log`; the pre-push gate a fourth
+  (`gate-20260928T102945Z-23800.log`). The two `e2e` specs, which the gate does not run (`P-028`):
+  `modal-frame-chrome` 5/5 and `video-import:291` 5/5 repeated, the whole `video-import` file 8/8
+  (Windows, non-authoritative).
+- **Linux CI** on `b5e681f4`, which carries all three:
+  <https://github.com/yasermostafaee/cg/actions/runs/36410757836> — COMPLETED `success` on the first
+  attempt; `ci` RAN; `E2E (Playwright)` RAN: runtime 298 passed, `modal-frame-chrome.spec.ts:192`
+  among them; designer 291 passed, 12 skipped, `video-import.spec.ts:291` among them; no retry.
+- **Installers:** <https://github.com/yasermostafaee/cg/actions/runs/36410757798> — both jobs RAN,
+  `success`.
