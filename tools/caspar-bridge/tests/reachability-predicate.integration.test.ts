@@ -25,7 +25,9 @@ import { HEALTH_MS, track, TEST_LAYER_POLICY } from './support/harness.js';
  * OSC silence, and inflates `oscDownAfterMs` so nothing else acts on that silence
  * for the test's lifetime. OSC silence is produced the same way B-094's test does
  * it — the session binds a `deafPort` the mock never emits to, so the AMCP axis
- * stays perfectly healthy while OSC is never heard.
+ * stays perfectly healthy while OSC is never heard. `P-057`: that port is taken from
+ * below the OS's ephemeral range ({@link deafUdpPort}), so NO mock in the suite can be
+ * emitting to it either.
  *
  * B-101 changed what the inflated `oscDownAfterMs` buys, so the tuning STAYS but
  * for a new reason. It used to tune out a force-disconnect on continued silence;
@@ -67,6 +69,70 @@ function freeUdpPort(): Promise<number> {
       sock.close(() => resolve(port));
     });
   });
+}
+
+/**
+ * 🔴 `P-057` / `FOLLOWUPS-01` §2.1 — the lowest port the OS may hand to a `bind(0)` on this host.
+ * Linux says so in `/proc`; Windows and macOS default to 49152 (IANA's dynamic range, and what
+ * `netsh int ipv4 show dynamicport udp` reads on the dev host).
+ */
+function ephemeralFloor(): number {
+  try {
+    const range = fs.readFileSync('/proc/sys/net/ipv4/ip_local_port_range', 'utf8');
+    const low = Number(range.trim().split(/\s+/)[0]);
+    if (Number.isInteger(low) && low > 1024) return low;
+  } catch {
+    // Not Linux: the IANA default below.
+  }
+  return 49152;
+}
+
+/** Below the ephemeral range on every host this suite runs on, and above the well-known ports. */
+const DEAF_BAND = { from: 20000, below: Math.min(ephemeralFloor(), 32768) } as const;
+
+/**
+ * 🔴 **A "deaf" OSC port NO OTHER TEST CAN BE HANDED** — `P-057` / `FOLLOWUPS-01` §2.1.
+ *
+ * It used to come from {@link freeUdpPort}: bind port 0, close, reuse. Every OTHER test's OSC target
+ * comes from that same `bind(0)`, and a mock keeps sending to its target after the runtime that
+ * listened there has stopped — this file's own `plantOrphan` does exactly that. So the "deaf" port
+ * could be one a live mock was sending to (or be handed to another test's mock before our runtime
+ * bound it), the session heard OSC, read `healthy`, and "load onto a degraded server…" waited 15 s
+ * for `degraded` (CI run 36358077540, attempt 1).
+ *
+ * The port now comes from BELOW the OS's ephemeral range, which `bind(0)` never hands out: no mock
+ * in this suite can be sending to it, because every mock's target came from a `bind(0)`. It is
+ * probed free (an in-use or excluded port is skipped) and asserted to be outside the range, so the
+ * precondition is a checked fact rather than a hope. The start is spread by pid only so that two
+ * processes probing at once do not start on the same number.
+ */
+async function deafUdpPort(): Promise<number> {
+  const span = DEAF_BAND.below - DEAF_BAND.from;
+  const start = process.pid % span;
+  for (let i = 0; i < 64; i += 1) {
+    const port = DEAF_BAND.from + ((start + i * 97) % span);
+    const free = await new Promise<boolean>((resolve) => {
+      const sock = dgram.createSocket('udp4');
+      sock.once('error', () => {
+        try {
+          sock.close();
+        } catch {
+          // A socket whose bind failed may already be closed; either way it holds nothing.
+        }
+        resolve(false);
+      });
+      sock.bind(port, '127.0.0.1', () => {
+        sock.close(() => resolve(true));
+      });
+    });
+    if (free) {
+      expect(port, 'the deaf port is inside the range bind(0) hands out').toBeLessThan(
+        ephemeralFloor(),
+      );
+      return port;
+    }
+  }
+  throw new Error(`no free UDP port below the ephemeral range in ${String(DEAF_BAND.from)}+`);
 }
 
 function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
@@ -169,13 +235,19 @@ async function plantOrphan(m: MockHandle, oscPort: number): Promise<void> {
  * primary is degraded.
  */
 async function bootDegraded(m: MockHandle): Promise<CasparRuntime> {
-  const deafPort = await freeUdpPort();
+  // `P-057` — from below the ephemeral range: no mock in the suite can be sending to it.
+  const deafPort = await deafUdpPort();
   const r = newRuntime(singleServer(m.amcpPort, deafPort), DEGRADED_TUNING);
   r.start();
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
   await r.whenServerHealthy(HEALTH_MS);
-  await expect.poll(() => r.health().primary.state, { timeout: HEALTH_MS }).toBe('degraded');
+  await expect
+    .poll(() => r.health().primary.state, {
+      timeout: HEALTH_MS,
+      message: `the deaf OSC port ${String(deafPort)} heard OSC, so the session never went degraded`,
+    })
+    .toBe('degraded');
   // AMCP command axis is believed UP even though we hear no OSC — the exact
   // conjunction B-100 is about, and B-094's "answering AMCP, silent OSC" shape.
   expect(r.health().primary.amcpAxisOk).toBe(false); // amcpAxisOk tracks `healthy` only
