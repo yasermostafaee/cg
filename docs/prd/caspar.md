@@ -1953,7 +1953,7 @@ harm it guarded returns without anyone noticing.
 
 ---
 
-## [~] C-029 — program output is GONE and nothing says so: the declared-versus-running output check, its banner, and a bounded off-by-default re-creation ⟨priority: high — the station had no SDI output for days and every pill read HEALTHY⟩ — IMPLEMENTED 2026-09-04, `openspec/changes/pgm-output-alarm/`; Linux `gate:e2e` DISCHARGED for `d4ffe68f` — <https://github.com/yasermostafaee/cg/actions/runs/33822182671> (`E2E (Playwright)` RAN, 10m02s, `success`); ⚠ CORRECTED 2026-09-05 by [[B-223]] (`TICKER-JUDDER-01` §B): severity by air-criticality — a missing `screen` / `system-audio` raises NOTHING for the operator, the banner is one line, the engineering detail moved to Server connection ▸ Outputs; its Linux `gate:e2e` DISCHARGED for `3b431f67` — <https://github.com/yasermostafaee/cg/actions/runs/33969010294> (`E2E (Playwright)` RAN 621 s, `success`)
+## [~] C-029 — program output is GONE and nothing says so: the declared-versus-running output check, its banner, and a bounded off-by-default re-creation ⟨priority: high — the station had no SDI output for days and every pill read HEALTHY⟩ — IMPLEMENTED 2026-09-04, `openspec/changes/pgm-output-alarm/`; Linux `gate:e2e` DISCHARGED for `d4ffe68f` — <https://github.com/yasermostafaee/cg/actions/runs/33822182671> (`E2E (Playwright)` RAN, 10m02s, `success`); ⚠ CORRECTED 2026-09-05 by [[B-223]] (`TICKER-JUDDER-01` §B): severity by air-criticality — a missing `screen` / `system-audio` raises NOTHING for the operator, the banner is one line, the engineering detail moved to Server connection ▸ Outputs; its Linux `gate:e2e` DISCHARGED for `3b431f67` — <https://github.com/yasermostafaee/cg/actions/runs/33969010294> (`E2E (Playwright)` RAN 621 s, `success`); ⚠ the re-creation RETIRED 2026-09-28 by `FOLLOWUPS-01` A (the owner's decision) — see "Retired" below
 
 **What the plant did, 2026-09-01.** The DeckLink card was replaced. `casparcg.config` kept the old
 card's persistent ID (`<decklink><device>23487013</device>`), the consumer failed at boot and never
@@ -2001,13 +2001,25 @@ the destroy exactly like `CLEAR`'s ([[B-177]]); (d) **probing is NOT a substitut
 — a failure cannot tell a missing device from missing drivers or an unsupported format, and a
 success puts a card ON AIR. Both lying errors filed as [[B-208]].
 
-**The flag — `--create-missing-consumers`, OFF by default.** On, the bridge sends ONE `ADD` per
-connection per channel for a declared DeckLink the check found missing, built from the declaration's
-OWN tokens (`ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO` for this plant's config), records CasparCG's
-answer in the health snapshot and the banner, and verifies a `202` by re-reading `INFO`. It never
-names a device the config did not (the owner's boundary: the config stays the boot-time baseline;
-no silent substitution on a multi-card box). `output-policy.test.ts` reddens if the default flips —
-in the resolver and on the shipped CLI's boot line.
+**The flag — `--create-missing-consumers`, OFF by default. 🔴 RETIRED 2026-09-28 (below).** On,
+the bridge sent ONE `ADD` per connection per channel for a declared DeckLink the check found
+missing, built from the declaration's OWN tokens (`ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO` for
+this plant's config), recorded CasparCG's answer in the health snapshot, and verified a `202` by
+re-reading `INFO`. It never named a device the config did not (the owner's boundary: the config
+stays the boot-time baseline; no silent substitution on a multi-card box).
+
+**Retired — `FOLLOWUPS-01` A, the owner's decision of 2026-09-28.** A consumer `ADD` on a programme
+channel is one of the Playout's C5 commands this station never sends (contract v1.3 rule 3; our
+acceptance in `CG-CONTROL-REPLY-V13-STATE` §3), and since `ROUTE-PLATES-01` the send seam refused it
+anyway (`amcp-guard.ts`), so the flag could only record "not attempted". The flag, its resolver, its
+once-per-connection `ADD` (`#createMissingConsumer`), its boot line and the check's `creation` record
+(IPC field and the Outputs section's sentence) are removed. **The check itself is unchanged**: a
+missing output is still read, published, alarmed and kept across a disconnect. A start script that
+still passes the flag boots, and the bridge says once that the flag is retired and ignored.
+`missingConsumerAddCommand` survives for one caller, the lab instrument `@cg/skew-harness`
+([[C-033]]), which re-creates a consumer its own `SET MODE` took down; the bridge never sends it.
+Tests: `output-check.integration.test.ts` (no `ADD` for a missing output, against a server that
+would accept one), `output-policy.test.ts` (the retired flag boots, bare or with a value).
 
 **Acceptance:**
 
@@ -2015,15 +2027,15 @@ in the resolver and on the shipped CLI's boot line.
   running consumer of that kind THEN the Runtime shows a full-width alarm naming the channel, the
   kind and its device, what is running, and the next action — with every reachability pill still
   green
-- WHEN a later read (60 s, a reconnect after a config fix, or the bridge's own `ADD`) finds the
-  consumer running THEN the alarm clears on its own
+- WHEN a later read (60 s, or a reconnect after a config fix) finds the consumer running THEN the
+  alarm clears on its own
 - WHEN the bridge cannot reach CasparCG after a `missing` verdict THEN the alarm stays, re-labelled
   UNVERIFIED, saying when the output was last seen missing
 - WHEN the declaration cannot be read, or nothing has been checked yet, or the browser→bridge link
   is down THEN nothing lights from this alarm
-- WHEN the bridge runs without `--create-missing-consumers` THEN no `ADD` is ever sent for a missing
-  consumer; WHEN it runs with it THEN at most one `ADD` per connection per channel, with the
-  declaration's own device, its outcome recorded
+- WHEN a declared consumer is missing THEN no `ADD` is ever sent for it, whatever flag the bridge
+  was started with (`FOLLOWUPS-01` A — superseding "with the flag, at most one `ADD` per connection
+  per channel")
 
 **What this does NOT see, stated in the operator guide:** a consumer that is present but unhappy
 (lost reference, dropped frames) — `INFO` reports existence and configuration, never health; that

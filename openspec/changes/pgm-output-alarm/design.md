@@ -153,6 +153,13 @@ putting each card to air in turn. The question closes on "not".
 
 ## 4. Creation — safe only in the shape it is built
 
+> 🔴 **RETIRED 2026-09-28 (`FOLLOWUPS-01` A, the owner's decision).** A consumer `ADD` on a
+> programme channel is one of the Playout's C5 commands this station never sends; since
+> `ROUTE-PLATES-01` the send seam refused it anyway. The flag, `#createMissingConsumer`, the boot
+> line and the `creation` record are gone; a missing consumer is reported and never created, and
+> the retired flag boots with a one-line notice. The section below is kept as the record of what
+> was built and why it was safe in its shape.
+
 Given §3, the bridge can act safely for exactly one case: a declared kind the check found
 ABSENT, re-created with the declaration's OWN parameters. Absent means the index is free, so
 `ADD` is additive and a failure leaves no trace but a log line; the device token is the

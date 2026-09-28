@@ -22,8 +22,6 @@
 //   caspar-bridge --template-serve-port 7911          # B-162: pin the template HTTP port (default: ephemeral)
 //   caspar-bridge --look-mixer-hold-ms 40             # B-174: the look switch's mixer hold (default: one
 //                                                     #   channel frame of the observed mode; 0 disables)
-//   caspar-bridge --create-missing-consumers          # C-029: ADD a consumer casparcg.config declares that
-//                                                     #   is not running (default OFF: reported, never created)
 //   caspar-bridge --auth playout --playout-issuer http://playout.local:8080
 //                 --playout-jwks-url http://playout.local:8080/.well-known/jwks.json
 //                                                     # C-037: require a Playout-issued JWT on the control
@@ -108,7 +106,6 @@ import {
   createBridge,
   defaultPlayoutConfigPath,
   parseReservedLayersFlag,
-  resolveCreateMissingConsumers,
   resolveLiveLayersPath,
   writePlayoutAddress,
 } from '../dist/index.js';
@@ -348,18 +345,17 @@ const lookMixerHoldMs = readMsFlag('look-mixer-hold-ms', 'disables the hold');
 */
 
 /*
-  🔴 C-029 — `--create-missing-consumers`: may the bridge ADD a consumer that casparcg.config
-  declares and CasparCG is not running? OFF unless typed. The absence of the flag is the
-  station's normal state: a missing output is REPORTED (the banner, the stderr line) and
-  never created behind the operator's back. The flag takes no value — a value is a typo,
-  and a typo that switches a card ON AIR must not boot silently.
+  🔴 C-029 / `FOLLOWUPS-01` A — `--create-missing-consumers` is RETIRED (the owner, 2026-09-28): a
+  consumer ADD is one of the Playout's C5 commands this station never sends, so a missing output
+  is reported and never created. A start script that still passes the flag keeps booting — a
+  station that will not start is worse than a flag that no longer does anything — and is told so
+  once, here, in either spelling.
 */
-if (typeof args['create-missing-consumers'] === 'string') {
+if (args['create-missing-consumers'] !== undefined) {
   console.error(
-    '[caspar-bridge] --create-missing-consumers takes no value. Type it bare to turn creation ' +
-      'on, or omit it (the default) to have missing outputs reported and never created.',
+    '[caspar-bridge] --create-missing-consumers is retired and ignored: a missing output is ' +
+      'reported, never created (a consumer ADD is never sent, C5).',
   );
-  process.exit(1);
 }
 for (const flag of ['first-run', 'exit-on-stdin-close']) {
   if (typeof args[flag] === 'string') {
@@ -367,9 +363,6 @@ for (const flag of ['first-run', 'exit-on-stdin-close']) {
     process.exit(1);
   }
 }
-const createMissingConsumers = resolveCreateMissingConsumers(
-  args['create-missing-consumers'] === true ? true : undefined,
-);
 
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
@@ -524,7 +517,6 @@ const bridgeOptions = {
   amcpLogPath,
   templateServe,
   ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
-  createMissingConsumers,
   playout: playoutFlags,
   playoutConfigPath,
   /*
@@ -591,9 +583,8 @@ async function boot() {
 function describeBoot(handle) {
   console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
   /*
-    C-037 — READ BACK on the boot line, both ways, exactly as C-029's missing-consumer line is,
-    and for the same reason: a station can see which state it is in without knowing the flag
-    exists. The OFF line is the one a test holds the default to.
+    C-037 — READ BACK on the boot line, both ways, so a station can see which state it is in
+    without knowing the flag exists.
   */
   console.error(
     handle.auth.mode === 'playout'
@@ -654,17 +645,6 @@ function describeBoot(handle) {
         'long, on air, with swaps and updates on that row waiting behind it.',
     );
   }
-  // C-029 — READ BACK on the boot line, both ways, so a station can see which state it is in
-  // without knowing the flag exists. The OFF line is the one a test holds the default to.
-  console.error(
-    createMissingConsumers
-      ? '[caspar-bridge] missing-consumer creation: ON (--create-missing-consumers) - a consumer ' +
-          'casparcg.config declares that is not running will be ADDed once per connection with ' +
-          "the declaration's own device, never a substitute; the outcome is reported either way"
-      : '[caspar-bridge] missing-consumer creation: OFF (default) - a consumer casparcg.config ' +
-          'declares that is not running is REPORTED (banner + this log), never created; ' +
-          '--create-missing-consumers turns creation on',
-  );
   console.error(
     `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
       (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)') +

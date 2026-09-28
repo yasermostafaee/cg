@@ -141,20 +141,12 @@ describe('B-223 — an AIR loss carries the full remedy here', () => {
     expect(text).not.toMatch(/reference signal|dropping frames|unhappy/i);
   });
 
-  it('a refused ADD says CasparCG could not open the device either', async () => {
-    const check: ChannelOutputCheck = {
-      ...missingDevice('23487013'),
-      creation: {
-        at: '2026-09-04T20:00:05.000Z',
-        outcome: 'refused',
-        command: 'ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO',
-        code: 403,
-      },
-    };
-    const text = (await render(health(serverA('healthy', [check])))).textContent ?? '';
-    expect(text).toContain('ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO');
-    expect(text).toMatch(/refused \(403\)/);
-    expect(text).toMatch(/cannot open that device either/);
+  it('🔴 FOLLOWUPS-01 A — a missing output is reported, and nothing says the bridge re-creates it', async () => {
+    const text =
+      (await render(health(serverA('healthy', [missingDevice('23487013')])))).textContent ?? '';
+    // Positive control: this IS the section showing the missing DeckLink.
+    expect(text).toMatch(/declared and not running/);
+    expect(text).not.toMatch(/re-creat|Creation is on|ADD \d/i);
   });
 });
 

@@ -10,50 +10,34 @@ import {
 } from '@cg/shared-ipc';
 
 /**
- * `C-029` — the program-output check's policy knobs and its one command builder.
+ * `C-029` — the program-output check's interval and its two stderr lines.
  *
- * ── THE DEFAULT IS OFF, AND THIS IS THE ONE FUNCTION THAT SAYS SO ────────────
+ * ── A MISSING OUTPUT IS REPORTED, NEVER CREATED ─────────────────────────────
  *
- * `bin/caspar-bridge.mjs` resolves `--create-missing-consumers` through
- * {@link resolveCreateMissingConsumers}, so the default is ONE exported function a test can
- * hold to its answer (`output-policy.test.ts`) rather than a `=== true` buried in a `.mjs`
- * script no test could reach — the `B-145` shape, applied to a flag whose wrong default
- * would put a card ON AIR without anyone typing anything.
- *
- * ── WHY THE FLAG EXISTS AT ALL, AND WHAT IT MAY NEVER DO ─────────────────────
- *
- * The owner's boundary, on record: `casparcg.config` stays the boot-time baseline so air
- * survives a dead bridge; the bridge intervenes only when that baseline is absent, and it
- * must NEVER substitute a different card on a multi-card box. So the only `ADD` this module
- * builds is the declaration's OWN parameters, verbatim — the same device token the config
- * names, the same audio and keyer flags — and it builds nothing for a kind whose `ADD`
- * grammar it has not measured. Measured 2026-09-04 on the plant (`192.168.21.114`) and the
- * dev 2.5.0: an `ADD` for a device the server cannot open answers `403 ADD FAILED` in a few
- * ms and leaves the channel's consumer set untouched; an `ADD` whose index is ALREADY
- * running REPLACES that consumer (`output::add` removes first, then initialises — the old
- * one is destroyed ~28 ms after the new one's `202`), which is exactly why creation is
- * attempted only for a kind the check found MISSING and never for one that is present.
+ * `FOLLOWUPS-01` A (the owner, 2026-09-28): `--create-missing-consumers` and its
+ * once-per-connection `ADD` are RETIRED. A consumer `ADD` is one of the Playout's C5 commands
+ * this station never sends (`ROUTE-PLATES-01`; the send seam refuses one, `amcp-guard.ts`).
+ * `casparcg.config` stays the boot-time baseline, and the fix for a consumer that failed at
+ * start stays on the playout machine: the banner and the lines below say so.
  */
 
 /** How often a REACHABLE server's running consumers are re-read (`INFO <channel>`). */
 export const OUTPUT_RECHECK_MS = 60_000;
 
 /**
- * `--create-missing-consumers` → whether the bridge may `ADD` a declared consumer the check
- * found missing. Saying nothing is OFF; only an explicit `true` turns it on.
- */
-export function resolveCreateMissingConsumers(flag: boolean | undefined): boolean {
-  return flag === true;
-}
-
-/**
  * The `ADD` that re-creates ONE declared consumer from its own declaration, or `null` when
- * the bridge does not create that kind.
+ * that kind's grammar is not measured.
+ *
+ * ⚠ **THE BRIDGE NEVER SENDS THIS** (`FOLLOWUPS-01` A). Its one caller is the lab instrument
+ * `@cg/skew-harness` (`C-033`), which re-creates a consumer ITS OWN `SET MODE` took down on a
+ * borrowed channel, and borrows this speller so the instrument and the product cannot disagree
+ * about the grammar (golden rule 6).
  *
  * DeckLink only, on the grammar 2.5.0's `parse_amcp_config` reads (`config.cpp`): the device
- * token positionally after `DECKLINK`, then flag words. `<screen/>` and `<system-audio/>`
- * are confidence monitors on the playout box and are reported, never created; every other
- * kind's grammar is unmeasured here and so is declined rather than guessed.
+ * token positionally after `DECKLINK`, then flag words. Measured 2026-09-04: an `ADD` for a
+ * device the server cannot open answers `403 ADD FAILED` and leaves the consumer set untouched;
+ * an `ADD` at an index ALREADY running REPLACES that consumer. Every other kind's grammar is
+ * unmeasured here and so is declined rather than guessed.
  */
 export function missingConsumerAddCommand(
   channel: number,
@@ -66,20 +50,6 @@ export function missingConsumerAddCommand(
   if (declared.embeddedAudio === true) words.push('EMBEDDED_AUDIO');
   if (declared.keyOnly === true) words.push('KEY_ONLY');
   return words.join(' ');
-}
-
-/** The declared consumer the bridge would try to create for a check, or `null`. */
-export function creatableMissingConsumer(check: {
-  declared: readonly DeclaredConsumer[] | null;
-  missing: readonly MissingConsumer[];
-}): DeclaredConsumer | null {
-  if (check.declared === null) return null;
-  const missingKinds = new Set(check.missing.map((m) => m.kind));
-  return (
-    check.declared.find(
-      (d) => missingKinds.has(d.kind) && missingConsumerAddCommand(1, d) !== null,
-    ) ?? null
-  );
 }
 
 /**

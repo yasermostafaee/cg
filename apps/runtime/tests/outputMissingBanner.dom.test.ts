@@ -163,21 +163,6 @@ describe('B-223 — the operator gets ONE line; the engineering detail is not on
     expect(text).not.toMatch(/power-cycle/);
     expect(text).not.toMatch(/CasparCG log/);
   });
-
-  it('🔴 the creation outcome is engineering detail and stays off the banner', async () => {
-    const check: ChannelOutputCheck = {
-      ...MISSING,
-      creation: {
-        at: '2026-09-04T20:00:05.000Z',
-        outcome: 'refused',
-        command: 'ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO',
-        code: 403,
-      },
-    };
-    const text = alertEl(await renderStrip(server('healthy', [check])))?.textContent ?? '';
-    expect(text).not.toContain('ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO');
-    expect(text).not.toMatch(/refused/);
-  });
 });
 
 describe('B-223 — a local monitor never reaches the operator', () => {

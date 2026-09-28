@@ -2158,7 +2158,7 @@ gaps).
 
 | kind | id      | one line                                                                                                                                                                                       | home                               |
 | ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `C-` | `C-029` | the declared-versus-running output check (`INFO CONFIG` vs `INFO <channel>`), its full-width banner with an UNVERIFIED arm, and `--create-missing-consumers` OFF by default                    | [caspar.md](caspar.md)             |
+| `C-` | `C-029` | the declared-versus-running output check (`INFO CONFIG` vs `INFO <channel>`), its full-width banner with an UNVERIFIED arm, and `--create-missing-consumers` (retired 2026-09-28)              | [caspar.md](caspar.md)             |
 | `B-` | `B-208` | a DeckLink `ADD` for a device the server cannot open is `403` + " Check syntax."; `ADD … DECKLINK DEVICE <n>` is `404 File not found.`; `ADD` at a running index replaces; `REMOVE` acks early | [bugs-runtime.md](bugs-runtime.md) |
 
 **Derivation for `C-`, from headings as the rule requires:** highest `C-` HEADING was **`C-028`**;

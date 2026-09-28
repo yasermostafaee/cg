@@ -58,8 +58,7 @@ export type RunningConsumer = z.infer<typeof RunningConsumerSchema>;
  * `C-029` — one consumer `casparcg.config` DECLARES for a channel, read back through
  * `INFO CONFIG`. This is what the OPERATOR WROTE, not what the card reports (the 2026-08-25
  * walk's Q2): it is the boot-time baseline the alarm compares the running set against, and
- * it carries the declaration's own parameters so a re-creation can repeat them exactly and
- * never substitute.
+ * it carries the declaration's own parameters verbatim.
  */
 const DeclaredConsumerSchema = z.object({
   kind: z.string().min(1),
@@ -89,28 +88,16 @@ const MissingConsumerSchema = z.object({
 export type MissingConsumer = z.infer<typeof MissingConsumerSchema>;
 
 /**
- * `C-029` — what the bridge did about a missing consumer, when `--create-missing-consumers`
- * is on. `not-attempted` names a kind the bridge does not create (a screen, system audio,
- * or a kind whose `ADD` grammar it does not know); the others are the wire's answer to the
- * one `ADD` it sent, verbatim in `command`.
- */
-const ConsumerCreationSchema = z.object({
-  at: z.string().datetime(),
-  outcome: z.enum(['created', 'refused', 'failed', 'not-attempted']),
-  command: z.string().optional(),
-  code: z.number().int().optional(),
-  note: z.string().optional(),
-});
-
-export type ConsumerCreation = z.infer<typeof ConsumerCreationSchema>;
-
-/**
  * `C-029` — ONE channel's declared-versus-running output check.
  *
  * `declared` is `null` when `INFO CONFIG` answered but could not be read as a configuration
  * — a gap in the check, never an alarm (the `R-030` `unreadable` stance). `missing` is the
  * alarm: a declared kind with fewer running instances than declared, which is exactly the
  * shape of a consumer that failed at boot and therefore never appeared in `<output>`.
+ *
+ * `FOLLOWUPS-01` A — a missing consumer is reported and never created, so the check carries
+ * no creation record: the `creation` field went with `--create-missing-consumers`. A field
+ * an older bridge still sends is stripped on parse, as any unknown key is.
  */
 const ChannelOutputCheckSchema = z.object({
   channel: z.number().int().positive(),
@@ -124,7 +111,6 @@ const ChannelOutputCheckSchema = z.object({
    */
   unknown: z.array(MissingConsumerSchema).optional(),
   observedAt: z.string().datetime(),
-  creation: ConsumerCreationSchema.optional(),
 });
 
 export type ChannelOutputCheck = z.infer<typeof ChannelOutputCheckSchema>;

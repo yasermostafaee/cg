@@ -58,7 +58,6 @@ import {
   parseDeclaredConsumersFromConfig,
   parseRunningConsumersFromInfo,
   type ChannelOutputCheck,
-  type ConsumerCreation,
   type DeclaredChannelConsumers,
   type RunningConsumer,
   type LayerClearReason,
@@ -134,13 +133,7 @@ import {
   adoptionNotice,
   type AdoptedRaster,
 } from './channel-settings-store.js';
-import {
-  OUTPUT_RECHECK_MS,
-  creatableMissingConsumer,
-  describeMissingOutput,
-  describeUnknownOutput,
-  missingConsumerAddCommand,
-} from './output-check.js';
+import { OUTPUT_RECHECK_MS, describeMissingOutput, describeUnknownOutput } from './output-check.js';
 import {
   validateFixedBankChange,
   validateFixedBankInstall,
@@ -1723,9 +1716,6 @@ export class CasparRuntime {
   readonly #outputChecks = new Map<ServerLabel, Map<number, ChannelOutputCheck>>();
   /** When this server's running set was last read (ms epoch), for the slow re-check. */
   readonly #outputReadAt = new Map<ServerLabel, number>();
-  /** `label:channel` pairs the bridge has already tried to create a consumer on, this connection. */
-  readonly #outputCreateAttempted = new Set<string>();
-  readonly #createMissingConsumers: boolean;
   readonly #outputRecheckMs: number;
   /**
    * R-030 — channels whose raster mismatch has already been shouted, so a
@@ -1882,11 +1872,6 @@ export class CasparRuntime {
       channelTickStaleMs?: number;
       /** `MEDIA-PLATES-01` — TEST-ONLY: how often the media clock looks for a change to publish. */
       mediaStateTickMs?: number;
-      /**
-       * `C-029` — may the bridge `ADD` a declared consumer the output check finds missing?
-       * Resolved by `resolveCreateMissingConsumers` in `bridge.ts`; absent here is OFF.
-       */
-      createMissingConsumers?: boolean;
       /** `C-029` — TEST-ONLY: how often a reachable server's running consumers are re-read. */
       outputRecheckMs?: number;
       /**
@@ -2102,8 +2087,6 @@ export class CasparRuntime {
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
     this.#mediaStateTickMs = options.mediaStateTickMs ?? MEDIA_STATE_TICK_MS;
-    // C-029 — `=== true`, never `?? false` with a truthy fallback: absent is OFF.
-    this.#createMissingConsumers = options.createMissingConsumers === true;
     this.#outputRecheckMs = options.outputRecheckMs ?? OUTPUT_RECHECK_MS;
     this.#mixerLineDelayMs = options.faultInjection?.mixerLineDelayMs ?? 0;
     this.#throwAfterMixerLines = options.faultInjection?.throwAfterMixerLines ?? 0;
@@ -2240,8 +2223,8 @@ export class CasparRuntime {
       session.on('state-change', ({ from, to }) => {
         if (this.#sessions[label] !== session) return; // torn-down era
         /*
-          C-029 — a NEW CONNECTION invalidates the per-connection facts: the declaration,
-          the mode latch and the one-shot creation attempt. A CasparCG restarted after a
+          C-029 — a NEW CONNECTION invalidates the per-connection facts: the declaration
+          and the mode latch. A CasparCG restarted after a
           config fix comes back through resyncing → healthy, and this is what makes the
           alarm CLEAR on the next tick's re-read instead of latching for the life of the
           bridge. `degraded → healthy` is the SAME connection with OSC back, so it is
@@ -2254,9 +2237,6 @@ export class CasparRuntime {
           this.#outputReadAt.delete(label);
           for (const [channel, readFrom] of [...this.#modeReadFrom]) {
             if (readFrom === label) this.#modeReadFrom.delete(channel);
-          }
-          for (const key of [...this.#outputCreateAttempted]) {
-            if (key.startsWith(`${label}:`)) this.#outputCreateAttempted.delete(key);
           }
         }
         if (this.#adapter.currentPrimary !== label) return; // only the primary feeds the reconciler
@@ -13547,7 +13527,7 @@ export class CasparRuntime {
   /**
    * `C-029` — the slow re-read of one channel's RUNNING consumers. The first reading rides
    * the mode read's own reply (`#readChannelMode` → `#ingestChannelInfo`); this exists only
-   * so the alarm can clear or fire without a reconnect, and after the bridge's own `ADD`.
+   * so the alarm can clear or fire without a reconnect.
    */
   async #readChannelOutputs(channel: number): Promise<void> {
     try {
@@ -13617,7 +13597,6 @@ export class CasparRuntime {
       missing,
       ...(unknown.length > 0 ? { unknown } : {}),
       observedAt: observed.at,
-      ...(previous?.creation !== undefined ? { creation: previous.creation } : {}),
     };
     byChannel.set(channel, next);
     const changed =
@@ -13638,109 +13617,12 @@ export class CasparRuntime {
       }
       this.healthChanged.emit(this.health());
     }
-    if (this.#createMissingConsumers && missing.length > 0) {
-      const key = `${label}:${String(channel)}`;
-      if (!this.#outputCreateAttempted.has(key)) {
-        this.#outputCreateAttempted.add(key);
-        void this.#createMissingConsumer(label, channel, next);
-      }
-    }
-  }
-
-  /**
-   * 🔴 `C-029` — CREATE a declared consumer the check found missing. Behind
-   * `--create-missing-consumers`, OFF by default, and bounded three ways:
-   *
-   * 1. **Once per connection per channel** (`#outputCreateAttempted`, reset on reconnect):
-   *    a device CasparCG could not open at boot it usually cannot open now either, and a
-   *    refused `ADD` every minute would be noise on the plant's log for no output.
-   * 2. **The declaration's OWN parameters, verbatim** (`missingConsumerAddCommand`): the
-   *    same device token the config names, so a multi-card box can never be handed a
-   *    different card by this path. Kinds the bridge does not create are recorded as
-   *    `not-attempted`, with the reason.
-   * 3. **Only a kind the check found MISSING**: measured 2026-09-04, `output::add` REMOVES
-   *    whatever sits at the index before initialising the new consumer, so an `ADD` for a
-   *    consumer that is already running would replace it on air. Absent is the only safe
-   *    precondition, and it is the only one this is ever called under.
-   *
-   * The wire's answer is recorded in the check (`creation`) and the running set is re-read
-   * right after, so a `202` is verified against `INFO` rather than believed.
-   */
-  async #createMissingConsumer(
-    label: ServerLabel,
-    channel: number,
-    check: ChannelOutputCheck,
-  ): Promise<void> {
-    const at = new Date().toISOString();
-    const target = creatableMissingConsumer(check);
-    const command = target === null ? null : missingConsumerAddCommand(channel, target);
-    const record = (creation: ConsumerCreation): void => {
-      const byChannel = this.#outputChecks.get(label);
-      const current = byChannel?.get(channel);
-      if (byChannel === undefined || current === undefined) return;
-      byChannel.set(channel, { ...current, creation });
-      this.healthChanged.emit(this.health());
-    };
-    if (command === null) {
-      const kinds = check.missing.map((m) => m.kind).join(', ');
-      record({
-        at,
-        outcome: 'not-attempted',
-        note: `${kinds} is not a consumer kind the bridge creates (only a DeckLink with a declared device)`,
-      });
-      process.stderr.write(
-        `[caspar-bridge] --create-missing-consumers is on, but ${kinds} on channel ` +
-          `${String(channel)} is not a kind the bridge creates — reported only.\n`,
-      );
-      return;
-    }
     /*
-      🔴 `ROUTE-PLATES-01` §1.E / §0.8 — THE SAME GUARD, on the one line the bridge sends around
-      `#send`. A consumer `ADD` on a programme channel is one of the Playout's C5 commands we never
-      send (`CG-CONTROL-REPLY-V13-STATE` §3), so while that stands this flag reports and creates
-      nothing. Whether it should be retired or excepted is the owner's decision, not this seam's.
+      🔴 `FOLLOWUPS-01` A (the owner, 2026-09-28) — a missing consumer is REPORTED and never
+      created. `--create-missing-consumers` and its `ADD` path are retired: a consumer `ADD` on a
+      programme channel is one of the Playout's C5 commands we never send, and the send seam
+      refuses one anyway (`amcp-guard.ts`). Nothing here sends anything.
     */
-    const refused = amcpLineRefusal(command, {
-      isDeclaredChannel: (c) => this.#isDeclaredChannel(c),
-      seatedPlateOn: (c, l) => this.#holdsSeatedPlate({ channel: c, layer: l }),
-    });
-    if (refused !== null) {
-      record({ at, outcome: 'not-attempted', note: `not sent — ${refused.reason}` });
-      process.stderr.write(
-        `[caspar-bridge] 🔴 --create-missing-consumers: "${command}" not sent — ${refused.reason}.\n`,
-      );
-      return;
-    }
-    process.stderr.write(
-      `[caspar-bridge] --create-missing-consumers: sending "${command}" to server ${label} ` +
-        `(the declaration's own device; never a substitute).\n`,
-    );
-    try {
-      const result = await this.#adapter.send(command, { target: 'primary' });
-      const response = result.response;
-      if (response.kind === 'err') {
-        record({ at, outcome: 'refused', command, code: response.code });
-        process.stderr.write(
-          `[caspar-bridge] 🔴 CasparCG refused "${command}" (${String(response.code)}) — it ` +
-            `cannot open that device either; the config on the playout machine still names a ` +
-            `device the server does not have.\n`,
-        );
-      } else {
-        record({ at, outcome: 'created', command });
-        process.stderr.write(
-          `[caspar-bridge] "${command}" accepted (${String(response.code)}) — re-reading INFO ` +
-            `${String(channel)} to confirm the consumer is running.\n`,
-        );
-      }
-    } catch (err) {
-      record({
-        at,
-        outcome: 'failed',
-        command,
-        note: err instanceof Error ? err.message : String(err),
-      });
-    }
-    void this.#readChannelOutputs(channel);
   }
 
   /** `C-029` — the checks as the health snapshot carries them, for tests and diagnostics. */

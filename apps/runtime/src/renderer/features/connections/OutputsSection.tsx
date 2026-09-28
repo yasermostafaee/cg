@@ -24,7 +24,7 @@ import {
 } from '@cg/shared-ipc';
 import { STATION_SETUP_PX, colors } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
-import { creationWords, formatClock, missingWords, runningWords } from './outputWords.js';
+import { formatClock, missingWords, runningWords } from './outputWords.js';
 import { Tag } from '../../ui/Tag.js';
 
 /**
@@ -266,9 +266,6 @@ function ChannelRows({
         )}
         {air.length > 0 && <span style={styles.detail}>{FAILED_AT_START_WORDS}</span>}
         {air.length > 0 && <span style={styles.detail}>{DEVICE_NUMBER_RECIPE}</span>}
-        {check.creation !== undefined && (
-          <span style={styles.detail}>{creationWords(check.creation)}</span>
-        )}
         {local.map((m) => (
           <span key={m.kind} style={styles.local} data-severity="local">
             {m.kind === 'screen' ? 'Preview' : 'Local monitor'} — {missingWords([m])} is declared

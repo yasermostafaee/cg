@@ -354,12 +354,10 @@ reference signal, or is dropping frames. The server reports a consumer's existen
 never its health; that lives in the CasparCG log. A channel that WAS producing frames and stopped is
 the StatusBar's `NOT PRODUCING` chip, a different signal on a different axis.
 
-**`--create-missing-consumers` (bridge flag, OFF unless you type it).** With it on, the bridge sends
-ONE `ADD` per connection for a declared DeckLink it found missing — with exactly the device and
-flags the config names, never a substitute — and shows you CasparCG's answer on the banner. Useful
-when a card was busy or its driver late at boot; useless when the config names a card the machine
-does not have, which CasparCG refuses the same way (`403`), and that refusal is shown. The bridge's
-boot log says which state it is in: `missing-consumer creation: OFF (default)` or `ON`.
+**The bridge never creates a missing output.** It reports it; the fix is on the playout machine (the
+config, then a CasparCG restart). The old `--create-missing-consumers` flag is retired: a consumer
+`ADD` is one of the commands this station never sends to the Playout's server. A bridge started with
+it still boots and says once that the flag is ignored.
 
 ## Keyboard
 

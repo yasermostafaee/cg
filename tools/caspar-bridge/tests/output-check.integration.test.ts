@@ -99,10 +99,7 @@ function scriptInfo(m: MockHandle, script: Script): void {
   });
 }
 
-async function boot(
-  script: Script,
-  options: { createMissingConsumers?: boolean; outputRecheckMs?: number } = {},
-): Promise<void> {
+async function boot(script: Script, options: { outputRecheckMs?: number } = {}): Promise<void> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
   scriptInfo(mock, script);
@@ -113,9 +110,6 @@ async function boot(
       layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 60,
       outputRecheckMs: options.outputRecheckMs ?? 150,
-      ...(options.createMissingConsumers !== undefined
-        ? { createMissingConsumers: options.createMissingConsumers }
-        : {}),
     },
   );
   runtime.start();
@@ -246,13 +240,20 @@ it('an INFO CONFIG that is not a configuration → declared null, verdict UNKNOW
   expect(script.configSends).toBe(1);
 }, 30000);
 
-it('🔴 with creation OFF (the default) NO ADD is ever sent, however long the output stays missing', async () => {
+/*
+  🔴 `FOLLOWUPS-01` A (the owner, 2026-09-28) — `--create-missing-consumers` is RETIRED, so this is
+  no longer "creation OFF": there is no creation. The server here WOULD accept an `ADD` (and would
+  then report the DeckLink running), which is the strongest form: nothing of ours asks. The three
+  cases that pinned the flag's refused / accepted / monitor-only outcomes went with it.
+*/
+it('🔴 NO ADD is ever sent for a missing output, however long it stays missing — and the check records no creation', async () => {
   const script = fixture();
   await boot(script);
   const adds: string[] = [];
   mock!.setHandler('ADD', (req) => {
     adds.push(`ADD ${req.args.join(' ')}`);
-    return { kind: 'err', code: 403, verb: 'ADD' };
+    script.running = [...WITH_DECKLINK];
+    return { kind: 'ok', code: 202, verb: 'ADD' };
   });
   await vi.waitFor(
     () => {
@@ -260,123 +261,8 @@ it('🔴 with creation OFF (the default) NO ADD is ever sent, however long the o
     },
     { timeout: HEALTH_MS, interval: 25 },
   );
-  await settle(60 * 6);
-  expect(adds).toEqual([]);
-  expect(runtime!.health().primary.outputs?.[0]?.creation).toBeUndefined();
-}, 30000);
-
-/*
-  🔴 `ROUTE-PLATES-01` §1.E — SUPERSEDED: a consumer `ADD` on a programme channel is one of the
-  Playout's C5 commands this station never sends (`CG-CONTROL-REPLY-V13-STATE` §3). These two cases
-  used to pin the ADD the flag sent (the plant's 403, and a verified 202); with creation ON the
-  guard now refuses it before the wire, the check records it `not-attempted` and names why, and the
-  output stays reported MISSING. Whether `--create-missing-consumers` is retired or excepted is the
-  owner's decision (the report's open decisions), not the guard's.
-*/
-it('with creation ON: the consumer ADD is refused at the seam (C5) — recorded, never sent, and the output stays missing', async () => {
-  const script = fixture();
-  const oscPort = await freeUdpPort();
-  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  scriptInfo(mock, script);
-  const adds: string[] = [];
-  mock.setHandler('ADD', (req) => {
-    adds.push(`ADD ${req.args.join(' ')}`);
-    // What the plant answered on 2026-09-04 for a device it does not have.
-    return { kind: 'err', code: 403, verb: 'ADD' };
-  });
-  runtime = new CasparRuntime(
-    singleServer(mock.amcpPort, oscPort),
-    {},
-    {
-      layerPolicy: TEST_LAYER_POLICY,
-      sweepMs: 60,
-      outputRecheckMs: 150,
-      createMissingConsumers: true,
-    },
-  );
-  runtime.start();
-  await runtime.startServing();
-  await runtime.whenServerHealthy(HEALTH_MS);
-
-  await vi.waitFor(
-    () => {
-      const creation = runtime!.health().primary.outputs?.[0]?.creation;
-      expect(creation?.outcome).toBe('not-attempted');
-      expect(creation?.note).toMatch(/consumer ADD is never sent \(C5\)/);
-    },
-    { timeout: HEALTH_MS, interval: 25 },
-  );
-  expect(outputVerdictOf(runtime!.health().primary).kind).toBe('missing');
   await settle(150 * 4);
-  expect(adds, 'nothing reached the server').toEqual([]);
-}, 30000);
-
-it('with creation ON and a server that WOULD accept: still no ADD — the refusal is ours, not the server’s', async () => {
-  const script = fixture();
-  const oscPort = await freeUdpPort();
-  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  scriptInfo(mock, script);
-  const adds: string[] = [];
-  mock.setHandler('ADD', (req) => {
-    adds.push(`ADD ${req.args.join(' ')}`);
-    script.running = [...WITH_DECKLINK];
-    return { kind: 'ok', code: 202, verb: 'ADD' };
-  });
-  runtime = new CasparRuntime(
-    singleServer(mock.amcpPort, oscPort),
-    {},
-    {
-      layerPolicy: TEST_LAYER_POLICY,
-      sweepMs: 60,
-      outputRecheckMs: 60_000,
-      createMissingConsumers: true,
-    },
-  );
-  runtime.start();
-  await runtime.startServing();
-  await runtime.whenServerHealthy(HEALTH_MS);
-
-  await vi.waitFor(
-    () => {
-      expect(runtime!.health().primary.outputs?.[0]?.creation?.outcome).toBe('not-attempted');
-    },
-    { timeout: HEALTH_MS, interval: 25 },
-  );
-  expect(adds).toEqual([]);
+  expect(adds, 'nothing of ours asked the server for a consumer').toEqual([]);
   expect(outputVerdictOf(runtime!.health().primary).kind).toBe('missing');
-}, 30000);
-
-it('with creation ON but only a MONITOR missing: nothing is sent and the reason is recorded', async () => {
-  const script = fixture();
-  script.running = [
-    { port: 23487313, kind: 'decklink' },
-    { port: 500, kind: 'system-audio' },
-  ];
-  const oscPort = await freeUdpPort();
-  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  scriptInfo(mock, script);
-  const adds: string[] = [];
-  mock.setHandler('ADD', (req) => {
-    adds.push(`ADD ${req.args.join(' ')}`);
-    return { kind: 'ok', code: 202, verb: 'ADD' };
-  });
-  runtime = new CasparRuntime(
-    singleServer(mock.amcpPort, oscPort),
-    {},
-    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60, createMissingConsumers: true },
-  );
-  runtime.start();
-  await runtime.startServing();
-  await runtime.whenServerHealthy(HEALTH_MS);
-
-  await vi.waitFor(
-    () => {
-      expect(runtime!.health().primary.outputs?.[0]?.creation?.outcome).toBe('not-attempted');
-    },
-    { timeout: HEALTH_MS, interval: 25 },
-  );
-  expect(adds).toEqual([]);
-  expect(runtime!.health().primary.outputs?.[0]?.missing).toEqual([
-    { kind: 'screen', declared: 1, running: 0, devices: [] },
-  ]);
+  expect(Object.keys(runtime!.health().primary.outputs?.[0] ?? {})).not.toContain('creation');
 }, 30000);

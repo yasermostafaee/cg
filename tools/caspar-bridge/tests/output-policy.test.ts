@@ -4,34 +4,22 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import {
-  creatableMissingConsumer,
-  missingConsumerAddCommand,
-  resolveCreateMissingConsumers,
-} from '../src/output-check.js';
+import { missingConsumerAddCommand } from '../src/output-check.js';
 
 /**
- * `C-029` — the creation flag's DEFAULT, held to its answer three ways.
+ * `C-029` / `FOLLOWUPS-01` A — `--create-missing-consumers` is RETIRED (the owner, 2026-09-28): a
+ * consumer `ADD` is one of the Playout's C5 commands this station never sends, so a missing output
+ * is reported and never created. That half is held at the wire by `output-check.integration.test.ts`.
  *
- * The unit tests hold `resolveCreateMissingConsumers` and the command builder; the CLI test
- * spawns the shipped `bin/caspar-bridge.mjs` and reads the boot line, because a default
- * that is right in the resolver and wrong in the wiring (`createBridge({...})` with a
- * `?? true`, say) would leave every unit test green while a station's bridge started
- * `ADD`ing cards. Same shape as `live-layers-default.test.ts`, for the same reason.
+ * This file holds the CLI half, by spawning the shipped `bin/caspar-bridge.mjs`: a station whose
+ * start script still passes the flag — bare, or with a value the old parser refused — must BOOT,
+ * and be told once that the flag does nothing. A station that will not start is worse than a flag
+ * that no longer does anything.
+ *
+ * `missingConsumerAddCommand` stays, for the skew harness only (`C-033`); its grammar is held here.
  */
 
-describe('C-029 · resolveCreateMissingConsumers — OFF is the default', () => {
-  it('🔴 saying NOTHING resolves to OFF — this reddens if the default flips to on', () => {
-    expect(resolveCreateMissingConsumers(undefined)).toBe(false);
-  });
-
-  it('an explicit false is OFF; only an explicit true is ON', () => {
-    expect(resolveCreateMissingConsumers(false)).toBe(false);
-    expect(resolveCreateMissingConsumers(true)).toBe(true);
-  });
-});
-
-describe('C-029 · missingConsumerAddCommand — the declaration’s OWN parameters, verbatim', () => {
+describe('C-033 · missingConsumerAddCommand — the declaration’s OWN parameters, verbatim', () => {
   it('the plant’s declaration: device, embedded audio, default keyer', () => {
     expect(
       missingConsumerAddCommand(1, {
@@ -66,24 +54,6 @@ describe('C-029 · missingConsumerAddCommand — the declaration’s OWN paramet
   });
 });
 
-describe('C-029 · creatableMissingConsumer', () => {
-  it('picks the missing DeckLink, never a present one and never a monitor', () => {
-    expect(
-      creatableMissingConsumer({
-        declared: [{ kind: 'decklink', device: '23487013' }, { kind: 'screen' }],
-        missing: [{ kind: 'decklink', declared: 1, running: 0, devices: ['23487013'] }],
-      }),
-    ).toEqual({ kind: 'decklink', device: '23487013' });
-    expect(
-      creatableMissingConsumer({
-        declared: [{ kind: 'decklink', device: '23487013' }, { kind: 'screen' }],
-        missing: [{ kind: 'screen', declared: 1, running: 0, devices: [] }],
-      }),
-    ).toBeNull();
-    expect(creatableMissingConsumer({ declared: null, missing: [] })).toBeNull();
-  });
-});
-
 const CLI = fileURLToPath(new URL('../bin/caspar-bridge.mjs', import.meta.url));
 const DIST = fileURLToPath(new URL('../dist/index.js', import.meta.url));
 
@@ -93,7 +63,7 @@ function tmpHome(): string {
 
 /**
  * Run the real CLI with a private home against a deliberately dead CasparCG; resolve with
- * everything it printed once it has either booted past the creation line or exited.
+ * everything it printed once it has either reached its listening line or exited.
  */
 async function runCli(
   extraArgs: readonly string[],
@@ -129,12 +99,12 @@ async function runCli(
   try {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
-        reject(new Error(`the CLI never printed its creation line. stderr so far:\n${out}`));
+        reject(new Error(`the CLI never printed its listening line. stderr so far:\n${out}`));
       }, 30_000);
       child.stderr.setEncoding('utf8');
       child.stderr.on('data', (chunk: string) => {
         out += chunk;
-        if (out.includes('missing-consumer creation:')) {
+        if (out.includes('WS listening on')) {
           clearTimeout(timer);
           resolve();
         }
@@ -155,23 +125,28 @@ async function runCli(
   return { out, exitCode };
 }
 
-describe('C-029 · the shipped CLI — creation is OFF with nothing configured', () => {
-  it('🔴 a bridge started with NO flag says creation is OFF — reddens if the default, or its wiring, flips', async () => {
-    const { out } = await runCli([]);
-    expect(out).toMatch(/missing-consumer creation: OFF \(default\)/);
-    expect(out).toMatch(/REPORTED .* never created/);
+const RETIRED = /--create-missing-consumers is retired and ignored/;
+
+describe('C-029 · the shipped CLI — `--create-missing-consumers` is retired', () => {
+  it('a bridge started with no flag boots and says nothing about it', async () => {
+    const { out, exitCode } = await runCli([]);
+    expect(out).toMatch(/WS listening on/);
+    expect(exitCode).toBeNull();
+    expect(out).not.toMatch(/create-missing-consumers|missing-consumer creation/);
+  }, 45_000);
+
+  it('🔴 the bare flag still BOOTS, is named as retired and ignored, and turns nothing on', async () => {
+    const { out, exitCode } = await runCli(['--create-missing-consumers']);
+    expect(out).toMatch(RETIRED);
+    expect(out).toMatch(/WS listening on/);
+    expect(exitCode).toBeNull();
     expect(out).not.toMatch(/missing-consumer creation: ON/);
   }, 45_000);
 
-  it('--create-missing-consumers turns it on, and the boot line says what that means', async () => {
-    const { out } = await runCli(['--create-missing-consumers']);
-    expect(out).toMatch(/missing-consumer creation: ON \(--create-missing-consumers\)/);
-    expect(out).toMatch(/never a substitute/);
-  }, 45_000);
-
-  it('a VALUE on the flag is refused at boot rather than read as on or off', async () => {
+  it('a VALUE on the flag, once a boot refusal, now boots the same way', async () => {
     const { out, exitCode } = await runCli(['--create-missing-consumers=yes']);
-    expect(out).toMatch(/--create-missing-consumers takes no value/);
-    expect(exitCode).toBe(1);
+    expect(out).toMatch(RETIRED);
+    expect(out).toMatch(/WS listening on/);
+    expect(exitCode).toBeNull();
   }, 45_000);
 });

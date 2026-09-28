@@ -153,3 +153,28 @@ Time: 3m11.472s`, openspec `72 passed, 0 failed` (`.gate-logs/gate-20260904T0017
 - [x] 7.7 Confirmed by grep (§B.4): the check gates nothing — its readers are the two surfaces,
       `health()` and the off-by-default `#createMissingConsumer`; no refusal, no disabled control,
       no failover reads `outputs` or `missing`.
+
+## 8. `FOLLOWUPS-01` A — the re-creation retired (the owner's decision, 2026-09-28)
+
+Supersedes 1.1's `creation`, 2.4's "creation attempt", 2.6's resolver and `creatableMissingConsumer`,
+2.7, 2.8's flag and boot line, 2.10's four `ON`/`OFF` cases, 2.11, and the creation sentence of 7.3.
+Those boxes stay ticked as the record of what was built; this section is what stands.
+
+- [x] 8.1 Bridge: `#createMissingConsumer`, `#outputCreateAttempted`, the `createMissingConsumers`
+      runtime and `BridgeOptions` option, `resolveCreateMissingConsumers` and
+      `creatableMissingConsumer` removed; `missingConsumerAddCommand` kept for its one caller, the
+      skew harness (`C-033`), and documented as never sent by the bridge.
+- [x] 8.2 CLI: `--create-missing-consumers` (bare or valued) boots with the one line "is retired
+      and ignored"; the `missing-consumer creation: OFF/ON` boot line is removed.
+- [x] 8.3 IPC and console: `ChannelOutputCheck.creation` and `ConsumerCreation` removed (an older
+      bridge's field is stripped on parse); `creationWords` and the Outputs section's creation
+      sentence removed.
+- [x] 8.4 Tests: `output-check.integration.test.ts` — one case, no `ADD` for a missing output
+      against a server that would accept one, and no `creation` key (planted: an `ADD` sent past the
+      seam turns it red, removed → green); `output-policy.test.ts` — the retired flag boots, bare and
+      valued, and the builder's grammar; the two dom specs lose their creation cases, and
+      `outputsSection.dom.test.ts` pins the absence.
+- [x] 8.5 Docs: `C-029` (caspar.md) records the retirement and supersedes its creation acceptance;
+      the operator guide; `B-208`'s note; the registry line; this change's proposal, design §4 and
+      spec delta.
+- [ ] 8.6 Gate and CI — recorded by `FOLLOWUPS-01`.

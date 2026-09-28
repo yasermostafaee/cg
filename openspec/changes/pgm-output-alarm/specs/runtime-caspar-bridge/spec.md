@@ -56,48 +56,25 @@ surface SHALL re-derive that decision.
 - **THEN** the health snapshot still carries the check, and `outputVerdictOf` answers
   `unverifiable` with the last observation, never `unknown` and never `ok`
 
-### Requirement: Missing-consumer creation is off by default and, when on, bounded
+### Requirement: A missing consumer is reported and never created
 
-The bridge SHALL NOT send any `ADD` on account of a missing consumer unless
-`--create-missing-consumers` is given. That default SHALL be resolved by ONE exported function,
-SHALL be read back on the boot line, and a test SHALL fail if either the function or the shipped
-CLI's boot line stops saying OFF. A value on the flag SHALL be refused at boot.
+The bridge SHALL NOT send any consumer `ADD` on account of a missing consumer, whatever flag it
+was started with, and the output check SHALL carry no creation record. A consumer `ADD` on a
+programme channel is one of the Playout's C5 commands this station never sends (`FOLLOWUPS-01` A,
+the owner's decision of 2026-09-28, superseding the bounded, off-by-default re-creation this
+change first shipped behind `--create-missing-consumers`).
 
-When creation is on, the bridge SHALL send at most ONE `ADD` per connection per channel, built
-from the missing consumer's OWN declaration — the same device token, embedded-audio, key-only and
-keyer flags — and SHALL NEVER name a device the declaration did not. It SHALL create only a kind
-the check found missing and only a DeckLink with a declared device; a missing monitor
-(`screen`, `system-audio`) or any other kind SHALL be recorded as `not-attempted` with the reason.
-The wire's answer SHALL be recorded in the check (`created`, `refused` with its code, or `failed`)
-and a `202` SHALL be verified by re-reading `INFO <channel>` rather than believed.
+The retired `--create-missing-consumers` flag, bare or with a value, SHALL NOT stop the bridge
+booting; the bridge SHALL say once on stderr that the flag is retired and ignored.
 
-#### Scenario: Off by default — no ADD, however long the output stays missing
+#### Scenario: No ADD, however long the output stays missing — even to a server that would accept
 
-- **WHEN** the bridge runs without `--create-missing-consumers` and a declared consumer is missing
-- **THEN** no `ADD` is ever sent and the check carries no creation record
+- **WHEN** a declared DeckLink is missing and the server would answer an `ADD` with `202`
+- **THEN** no `ADD` is ever sent, the verdict stays `missing`, and the check has no `creation` key
 
-#### Scenario: On — one ADD with the declaration's own parameters, and the refusal recorded
+#### Scenario: The retired flag still boots, and says so
 
-- **WHEN** `--create-missing-consumers` is on, `casparcg.config` declares
-  `<decklink><device>23487013</device><embedded-audio>true</embedded-audio>` and it is not running
-- **THEN** exactly `ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO` is sent once, a `403` is recorded as
-  `refused` with code 403 and that command, the verdict stays `missing`, and no further `ADD` is
-  sent on later re-reads
-
-#### Scenario: On — an accepted ADD is verified, not believed
-
-- **WHEN** CasparCG answers the `ADD` with `202` and the subsequent `INFO <channel>` reports the
-  consumer running
-- **THEN** the creation record is `created` and the verdict is `ok`
-
-#### Scenario: On — a missing monitor is reported, not created
-
-- **WHEN** only a `screen` consumer is missing
-- **THEN** nothing is sent and the creation record is `not-attempted` naming the kind
-
-#### Scenario: The default is pinned by the shipped CLI's boot line
-
-- **WHEN** `bin/caspar-bridge.mjs` starts with no flag
-- **THEN** it prints `missing-consumer creation: OFF (default)`; with the flag it prints
-  `missing-consumer creation: ON (--create-missing-consumers)`; with `--create-missing-consumers=<value>`
-  it refuses to boot
+- **WHEN** `bin/caspar-bridge.mjs` starts with `--create-missing-consumers` or
+  `--create-missing-consumers=<value>`
+- **THEN** it prints that `--create-missing-consumers is retired and ignored` and reaches its
+  listening line; started without the flag, it says nothing about it

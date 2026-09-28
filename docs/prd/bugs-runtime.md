@@ -9602,10 +9602,11 @@ is gone; an `ADD` does not silently remove something first.
 
 ### What this means for code, today and later
 
-- [[C-029]]'s creation path (`--create-missing-consumers`, OFF by default) is built INSIDE these
-  facts: it sends the declaration's own grammar (never the `DEVICE` word), only for a kind the
-  check found ABSENT (so instance 3 cannot fire), reads `403` as "CasparCG cannot open that device
-  either" rather than as its own syntax, and verifies a `202` by re-reading `INFO`.
+- [[C-029]]'s creation path (`--create-missing-consumers`, OFF by default) was built INSIDE these
+  facts: it sent the declaration's own grammar (never the `DEVICE` word), only for a kind the
+  check found ABSENT (so instance 3 cannot fire), read `403` as "CasparCG cannot open that device
+  either" rather than as its own syntax, and verified a `202` by re-reading `INFO`. That path was
+  RETIRED on 2026-09-28 (`FOLLOWUPS-01` A): the bridge never sends a consumer `ADD` now.
 - ⚠ Any future path that REMOVEs and re-ADDs the same DeckLink device must not issue the `ADD` on
   the `REMOVE`'s `202` — wait for the destroy or a settle (instance 4), exactly [[B-177]]'s rule.
 - ⚠ Nothing may classify a consumer verb's failure by response code alone: `403` is "parameter OR

@@ -24,7 +24,8 @@ NDI, …) it prints a loud notice naming it and every change the run is about to
 `SET MODE` that re-initialises every consumer on the channel, the `ADD`/`REMOVE FILE` cycles, the
 final `CLEAR` — and waits five seconds before touching anything. After the mode is restored it
 re-reads the running set and re-`ADD`s what did not survive, from a **measured** grammar only (a
-DeckLink from its own declaration's tokens via the bridge's `missingConsumerAddCommand`, a
+DeckLink from its own declaration's tokens via the bridge's `missingConsumerAddCommand` — which the
+bridge itself never sends since `--create-missing-consumers` was retired — a
 `SCREEN`); anything else is reported as missing with the reason, never guessed at, and a consumer
 that survived is never touched (an `ADD` at a running index replaces it — `B-208`). The reading
 lands in `report.json` under `consumers` and on stderr, one line per fact.

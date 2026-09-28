@@ -1,4 +1,4 @@
-import type { ConsumerCreation, MissingConsumer, RunningConsumer } from '@cg/shared-ipc';
+import type { MissingConsumer, RunningConsumer } from '@cg/shared-ipc';
 
 /**
  * `B-223` — the words both output surfaces share: the operator banner's one line and the
@@ -28,22 +28,4 @@ export function formatClock(iso: string): string {
   const m = String(d.getMinutes()).padStart(2, '0');
   const s = String(d.getSeconds()).padStart(2, '0');
   return `${h}:${m}:${s}`;
-}
-
-/** What the bridge did about it, when `--create-missing-consumers` is on — the wire's answer read back. */
-export function creationWords(creation: ConsumerCreation): string {
-  const at = formatClock(creation.at);
-  switch (creation.outcome) {
-    case 'created':
-      return `The bridge re-created it at ${at} (${creation.command ?? 'ADD'}); the next check confirms whether it is running.`;
-    case 'refused':
-      return (
-        `The bridge tried to re-create it at ${at} (${creation.command ?? 'ADD'}) and CasparCG refused` +
-        `${creation.code !== undefined ? ` (${String(creation.code)})` : ''} — it cannot open that device either.`
-      );
-    case 'failed':
-      return `The bridge tried to re-create it at ${at} (${creation.command ?? 'ADD'}) and the command did not complete.`;
-    case 'not-attempted':
-      return `Creation is on, but ${creation.note ?? 'this kind is not one the bridge creates'}.`;
-  }
 }
