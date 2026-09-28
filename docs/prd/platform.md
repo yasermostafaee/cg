@@ -2145,6 +2145,24 @@ four named tests, and every one of them is an animate-within-N-milliseconds asse
   well past the fourth occurrence the paragraph above sets as the point to go and measure the decode.
   That is still not done: recorded here, not fixed.
 
+- ✅ **2026-09-28 — MEASURED, then closed in code** (`FOLLOWUPS-01` §2.3, filed under [[P-057]]). The
+  local Designer video suite runs on this host now (8 of 8), so the decode was measured here, on system
+  Chrome: **184 of 184** reads at the spec's own trigger (`loadeddata`, `readyState >= 2`) received the
+  right frame — left `255,215,3,255`, right `253,212,4,129` — plain, eight decodes at once, and under a
+  12× CDP CPU throttle, 2–247 ms after `src`. The ONE way to receive CI's `0` was a read with no frame
+  to paint: at `loadedmetadata` (`readyState 1`) the draw is `[0,0,0,0]`, 9 of 10. So `readyState`
+  says a frame is decoded, not that the painter holds it, and CI's Linux Chromium read an empty
+  canvas at `readyState >= 2`. `requestVideoFrameCallback` never fires for a detached paused element
+  (124 of 124) and fires every time once it is attached on screen (60 of 60, `presentedFrames 1`,
+  right pixels); `new VideoFrame(video)` was rejected as the signal — it constructs at `readyState 1`.
+  The read now draws inside that callback, asserts `presentedFrames >= 1`, and every assertion
+  carries the whole read, so if CI ever fails it again the record says what and when. No frame was
+  decoded WRONG, so no product defect is filed. ⚠ The Linux reproduction was not obtained: this host
+  never produced the failure, and CI's evidence was the one number.
+- ⚠ Found on the way, not fixed: `:379` ("MOTION keeps transparency") asserts that corners stay
+  transparent after each `seeked`, and a draw that painted NOTHING passes it too — it has no positive
+  control that a frame was drawn.
+
 - whether the local concurrency finding and the CI flakes share anything at all — **no evidence
   either way**, which is a different state from "consistent with a single cause" and must not be
   written back as one.
@@ -3460,7 +3478,7 @@ Check-rerun e2e had the same reach and was moved off it (`eac4e7c0`). **Why.** T
 every push, and a developer's dev station is not a test's to reach. **Acceptance:** WHEN the gate
 runs beside a running dev station THEN no test bridge opens a connection to `127.0.0.1:5250`.
 
-## [~] P-057 — Wall-clock tests turned the local gate red: a test's precondition must be an assertion, not a hope ⟨priority: medium⟩ — FILED 2026-09-27 by `TIMING-TESTS-01` · the two below CLOSED IN CODE
+## [~] P-057 — Wall-clock tests turned the local gate red: a test's precondition must be an assertion, not a hope ⟨priority: medium⟩ — FILED 2026-09-27 by `TIMING-TESTS-01` · the two below CLOSED IN CODE · three more CLOSED IN CODE 2026-09-28 by `FOLLOWUPS-01` §2
 
 **What.** A test that waits on the wall clock for its PRECONDITION fails under the gate's load while
 the code is right (`B-098`'s signature: the victim moves between runs). Each such test is made
@@ -3487,6 +3505,30 @@ row on two different tests while Linux CI was green (`DAY-RUN-01`; logs
 Each was shown red under the defect it guards, planted and removed: an extra write after the request
 and a duplicated frame (the relay), and the missing post-preroll re-ask (the switch).
 
+**Closed in code (2026-09-28, `FOLLOWUPS-01` §2)** — three flakes CI had met, same rule, no product
+code changed:
+
+- `tools/caspar-bridge/tests/reachability-predicate.integration.test.ts` ("load onto a degraded
+  server…") waited 15 s for `degraded` and saw `healthy` (run 36358077540, attempt 1). Its "deaf" OSC
+  port came from `freeUdpPort()` — `bind(0)`, close, reuse — and so does every other test's OSC
+  target, while a mock keeps sending to its target after its runtime stops (the file's own
+  `plantOrphan` does). The deaf port now comes from BELOW the OS's ephemeral range (Linux reads
+  `ip_local_port_range`; otherwise 49152), which `bind(0)` never hands out, probed free and asserted
+  outside it. Reproduced first: the deaf port set to the orphan mock's target → red exactly as CI
+  (`the deaf OSC port 57690 heard OSC`, `healthy` for `degraded`). Guard kept: `B-100`'s predicate
+  (`state !== 'healthy'`) planted → red.
+- `apps/runtime/tests/e2e/modal-frame-chrome.spec.ts:171` (now `:192`) polled the chip's BACKGROUND,
+  then read its border once; the hover leaving mid-flight re-times the interrupted transitions, so the
+  border was still moving (`rgb(75, 107, 127)` / `rgb(75, 111, 133)` for `rgb(75, 116, 139)`). Both
+  reads now wait until the element's `getAnimations()` list is empty, then read every value once; the
+  colours asserted are unchanged. Reproduced: `border-color` slowed to 3 s → the OLD spec red as CI,
+  the new one green. Guard kept: the selected edge planted violet → red.
+- `apps/designer/tests/e2e/video-import.spec.ts:291` — see [[P-034]]'s last bullet: measured first,
+  then the read waits for a PRESENTED frame (`requestVideoFrameCallback` on the attached element),
+  asserts `presentedFrames >= 1`, and every assertion carries the whole read. No frame was ever
+  decoded wrong, so no product defect was filed. Guard kept: the un-premultiply switched off → red,
+  right `R` 127.
+
 **Open:** the rest of `TIMING-TESTS-01` §0.2's table. In the 43 gate logs retained since 2026-09-13, no
 other wall-clock assertion failed on timing. Every other failure there came from three runs on
 2026-09-14 against the layer re-band in progress (`bd3e7455`): 11–62 failures a run, the same set
@@ -3495,8 +3537,9 @@ each time, green from the next gate. The wall-clock-shaped ones among them — `
 restart waits, `pending-update-completion` and `look-picker-operator`'s publish beat — failed with that
 code, not with time, and are listed there, not fixed. A timing failure found later goes on this item.
 
-**Acceptance:** WHEN `pnpm gate` runs three times in a row on one host THEN neither test fails;
-WHEN the defect each guards is planted THEN that test is red.
+**Acceptance:** WHEN `pnpm gate` runs three times in a row on one host THEN none of these tests
+fails (the two `e2e` specs are the CI `e2e` job's, not the gate's); WHEN the defect each guards is
+planted THEN that test is red.
 
 **Evidence (2026-09-27):**
 

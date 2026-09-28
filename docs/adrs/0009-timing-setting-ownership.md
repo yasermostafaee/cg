@@ -297,7 +297,8 @@ are discharged by it as well as by their own runs.
   `{ ok: false, why }` and the test asserts `toMatchObject({ ok: true })` before reading any
   pixel, then checks positive thresholds on both the opaque and the half-alpha region.
   Closer to `P-047`'s CONTENTION family (a decode under a loaded gate) but a different spec
-  and a different suite, so not that item.
+  and a different suite, so not that item. _(2026-09-28: measured and closed in code by
+  `FOLLOWUPS-01` §2.3 — the read now waits for a PRESENTED frame; see `P-034`'s last bullet.)_
 
 ### `DELTA A` — the follow-up commits
 
