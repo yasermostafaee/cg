@@ -3588,3 +3588,12 @@ planted THEN that test is red.
   among them; designer 291 passed, 12 skipped, `video-import.spec.ts:291` among them; no retry.
 - **Installers:** <https://github.com/yasermostafaee/cg/actions/runs/36410757798> — both jobs RAN,
   `success`.
+
+**Evidence (2026-09-28, `PLATE-BAND-01`):**
+
+- **Local.** The pre-push gate at `1ce93cb1` was red on the sibling (above) and pushed nothing; at
+  `9d732331` it was green, 96/96, 0 cached (`gate-20260928T142540Z-12316.log`), and again at the two
+  later pushes of the same session.
+- **Linux CI** on `9d732331`: <https://github.com/yasermostafaee/cg/actions/runs/36436809766> — COMPLETED
+  `success` on the first attempt; `Lint • Typecheck • Test • Build` RAN, `media-plates.integration.test.ts`
+  21 ✓ and `route-plates.integration.test.ts` 26 ✓; `E2E (Playwright)` RAN, green.

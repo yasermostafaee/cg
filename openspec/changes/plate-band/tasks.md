@@ -63,7 +63,27 @@ Lane: FULL for all three items. One commit per item, each with its own pre-push 
 
 ## Gate and discharge
 
-- [x] Z.0 Item 3 — pre-push gate at `9d732331`: 96/96, 0 cached (`gate-20260928T142540Z-12316.log`).
-- [ ] Z.1 `pnpm gate` green on the change; `pnpm openspec validate --all --strict`.
-- [ ] Z.2 CI — the `e2e` and installer runs COMPLETED and GREEN with the jobs confirmed RAN; URLs here.
-- [ ] Z.3 `pnpm dev:station --fake`, `Bed 59` with no band declared — if its ports are free.
+- [x] Z.0 Item 3 — pre-push gate at `9d732331`: 96/96, 0 cached (`gate-20260928T142540Z-12316.log`). The
+      first push of `1ce93cb1` was refused by its own pre-push gate (95/96: `route-plates:617`, the same
+      race — `gate-20260928T141642Z-25016.log`), and `9d732331` fixed that sibling.
+- [x] Z.1 Pre-push gates, each 96/96, 0 cached: `cba05053` (`gate-20260928T150334Z-2152.log`), `d9eb9bc4`
+      (`gate-20260928T152231Z-24028.log`); `pnpm openspec validate --all --strict` 93/93.
+- [x] Z.2 CI — the `e2e` and installer runs COMPLETED and GREEN with the jobs confirmed RAN:
+  - [x] `9d732331` (item 3): PR https://github.com/yasermostafaee/cg/actions/runs/36436809766 — `success`;
+        `Lint • Typecheck • Test • Build` RAN (`media-plates` 21 ✓, `route-plates` 26 ✓); `E2E (Playwright)`
+        RAN, `E2E` step success. Installers https://github.com/yasermostafaee/cg/actions/runs/36436809792 —
+        both jobs RAN, success.
+  - [x] `cba05053` (item 1): PR https://github.com/yasermostafaee/cg/actions/runs/36441605377 — `success`;
+        `E2E (Playwright)` RAN, `E2E` step success: runtime 304 passed, `plate-band.spec.ts:167`, `:189` and
+        `:207` among them; designer 291 passed, 12 skipped; `Lint • Typecheck • Test • Build` RAN.
+        Installers https://github.com/yasermostafaee/cg/actions/runs/36441605178 — both jobs RAN, success.
+  - [x] `d9eb9bc4` (item 2, and the change's code HEAD): PR
+        https://github.com/yasermostafaee/cg/actions/runs/36444031988 — `success`; `Lint • Typecheck • Test •
+Build` RAN (`source-defaults-grant.integration` 5 ✓, `plate-band.integration` 7 ✓, `fake-station` 4 ✓,
+        `plate-band.test` 11 ✓, `channel-defaults.test` 15 ✓); `E2E (Playwright)` RAN, `E2E` step success:
+        runtime 304 passed, designer 291 passed, 12 skipped. Installers
+        https://github.com/yasermostafaee/cg/actions/runs/36444031873 — `Installers (Windows)` and `Installer
+smoke (clean Windows)` RAN, success.
+- [ ] Z.3 `pnpm dev:station --fake`, `Bed 59` with no band declared: **not run** — its ports are held by the
+      owner's own `dev:station --fake`, running since 11:25 (PIDs 12804, 23260, 5544), whose bridge predates
+      this change. Left to the owner: restart it, take `Bed 59`.
