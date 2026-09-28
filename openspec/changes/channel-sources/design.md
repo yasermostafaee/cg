@@ -121,3 +121,10 @@ answers `refusalOnRow: true`; nothing was sent. The console's `takeRefusalLine` 
 8. The refusal line is the take's only; a look switch keeps its own surface (`look-switch-all-or-nothing`).
 9. Decision 1 stopped at the recorded reason; nothing of it was built, including Station setup showing an
    "effective" band.
+10. `sources.set-assignments` keeps the station-level gate it had (`bridge.ts:3547`, `operator` / lock
+    `station-admin`) and is not fenced per channel. Its channels are INSIDE the list — data about which channel
+    a default belongs to, not a door onto that channel — which is how the fence's census now classifies it
+    (`station-channel-fence.integration.test.ts`, beside `fixedLayers.set-banks` and `stack.restore`). This is
+    no wider than before: when defaults were station-wide, any operator allowed to write them changed every
+    channel's. Whether a channel-scoped operator's write should be judged per channel is **filed for the
+    owner** — it would be a new refusal condition.

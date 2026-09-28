@@ -47,6 +47,10 @@ Lane: FULL (the path to air reads the defaults; a persisted key changes shape).
       (`templatePicker.select.dom.test.ts`) — each red under a channel-blind plant of its surface.
 - [x] 2.7 E2E — `apps/runtime/tests/e2e/source-defaults.spec.ts`: a default set on CH 2 stays on CH 2 (red under
       a channel-blind reader); a channel declared later starts from a copy (red with the copy removed).
+- [x] 2.7a The fence's census (`station-channel-fence.integration.test.ts`) classifies the new nested key:
+      `sources.set-assignments` → `req.assignments[].channel` (fourteen routes carry a channel key, eleven at
+      the top level — the living `runtime-caspar-bridge` scenario's own count); not fenced, station-level gate
+      unchanged (`design.md` choice 10).
 - [x] 2.8 The refusal line — `live-seating.integration.test.ts` (the row's record, `refusalOnRow`, nothing
       sent), `takeRefusalLine.test.ts`, e2e `take-refusal-line.spec.ts` (row and Inspector, no banner, not on CH
       2; control: a landed take clears it).
