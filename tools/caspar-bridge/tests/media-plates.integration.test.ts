@@ -552,13 +552,22 @@ describe('§1.C — the reconnect re-send keeps a held clip hidden', () => {
     mock.closeAllAmcpConnections();
     await waitFor(() => r.health().primary.state !== 'healthy', 'the drop');
     await waitFor(() => r.health().primary.state === 'healthy', 'the reconnect');
-    // The re-send is asynchronous after `healthy`: wait for the shown plate's line (the control).
+    /*
+      🔴 `PLATE-BAND-01` / `P-057` — WAIT FOR THE RE-SEND'S OWN END, never for one plate's line.
+      `#resendLiveMixerState` sends a row's lines one at a time, each awaited, and closes the row with
+      its one `MIXER 2 COMMIT`, sent only once every `DEFER` line of the row has been answered. This rig
+      holds ONE row on ONE channel and stages nothing else, so that commit is the re-send's last line:
+      every line it carries is on the wire before it. The wait used to end on the SHOWN plate's
+      `OPACITY 1` — the first record's last line — and read the clip's lines before they were sent
+      (CI run 36419832113, attempt 1). Reproduced by a 300 ms pause between the two records.
+    */
     const deadline = Date.now() + 5_000;
     let lines = await sentSince(from);
-    while (!lines.includes(`MIXER 2-${String(shown)} OPACITY 1 DEFER`) && Date.now() < deadline) {
+    while (!lines.includes('MIXER 2 COMMIT') && Date.now() < deadline) {
       await delay(50);
       lines = await sentSince(from);
     }
+    expect(lines, 'the re-send reached its commit').toContain('MIXER 2 COMMIT');
     expect(lines).toContain(`MIXER 2-${String(shown)} OPACITY 1 DEFER`);
     expect(lines).toContain(`MIXER 2-${String(clip)} OPACITY 0 DEFER`);
     expect(lines).toContain(`MIXER 2-${String(clip)} VOLUME 0 DEFER`);

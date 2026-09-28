@@ -3478,7 +3478,7 @@ Check-rerun e2e had the same reach and was moved off it (`eac4e7c0`). **Why.** T
 every push, and a developer's dev station is not a test's to reach. **Acceptance:** WHEN the gate
 runs beside a running dev station THEN no test bridge opens a connection to `127.0.0.1:5250`.
 
-## [~] P-057 — Wall-clock tests turned the local gate red: a test's precondition must be an assertion, not a hope ⟨priority: medium⟩ — FILED 2026-09-27 by `TIMING-TESTS-01` · the two below CLOSED IN CODE · three more CLOSED IN CODE 2026-09-28 by `FOLLOWUPS-01` §2
+## [~] P-057 — Wall-clock tests turned the local gate red: a test's precondition must be an assertion, not a hope ⟨priority: medium⟩ — FILED 2026-09-27 by `TIMING-TESTS-01` · the two below CLOSED IN CODE · three more CLOSED IN CODE 2026-09-28 by `FOLLOWUPS-01` §2 · one more CLOSED IN CODE 2026-09-28 by `PLATE-BAND-01`
 
 **What.** A test that waits on the wall clock for its PRECONDITION fails under the gate's load while
 the code is right (`B-098`'s signature: the victim moves between runs). Each such test is made
@@ -3528,6 +3528,20 @@ code changed:
   asserts `presentedFrames >= 1`, and every assertion carries the whole read. No frame was ever
   decoded wrong, so no product defect was filed. Guard kept: the un-premultiply switched off → red,
   right `R` 127.
+
+**Closed in code (2026-09-28, `PLATE-BAND-01` §1)** — one flake CI met, same rule, no product code
+changed:
+
+- `tools/caspar-bridge/tests/media-plates.integration.test.ts:563` ("a held, paused clip is re-sent
+  `OPACITY 0` and muted…") was red on `a802a7c0`'s CI, attempt 1 (run 36419832113:
+  `MIXER 2-61 OPACITY 0 DEFER` not seen). After the reconnect it waited for the SHOWN plate's
+  `OPACITY 1`, which is the first record's last line, and then asserted the clip's lines, which
+  `#resendLiveMixerState` sends after it, one awaited line at a time. It now waits for the re-send's
+  own end: the row's one `MIXER 2 COMMIT`, sent only once every `DEFER` line of the row has been
+  answered, on a rig holding one row on one channel. The margin is unchanged (5 s, 50 ms poll).
+  Reproduced first: a 300 ms pause planted between the two records → the OLD test red exactly as CI;
+  the new one green under the same pause. Guard kept: the re-send planted to send `OPACITY 1` for
+  every plate → red (`MIXER 2-61 OPACITY 0 DEFER` missing, 13 lines read).
 
 **Open:** the rest of `TIMING-TESTS-01` §0.2's table. In the 43 gate logs retained since 2026-09-13, no
 other wall-clock assertion failed on timing. Every other failure there came from three runs on
