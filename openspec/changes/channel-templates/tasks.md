@@ -50,6 +50,12 @@
       re-import / remove on CH 2 leave CH 1); the wording sweep (golden rule 9, two passes) re-pointed
       `live-source-sources`, `modal-frame-chrome`, `picker-chrome`, `ui-polish`, and `source-defaults`
       imports on a channel declared later.
+- [x] 3.7 Found after `9a457684`: `LibraryStore.delete(id, channel)` deleted the pre-change record, so a
+      removal on CH 2 took the template off CH 1's offline list and CH 1's PVW page in the same browser.
+      The record is now hidden on the removing channel only (`removedOn`, persisted) and no longer
+      re-delivered; a channel-less removal still deletes it. Test: `LibraryStore` — red on `9a457684`
+      (`expected [] to deeply equal [ { templateId: 'lower-third', … } ]`), green with the fix, plus the
+      channel-less control.
 
 ## 4. Docs
 

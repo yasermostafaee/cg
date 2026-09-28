@@ -183,7 +183,60 @@ describe('LibraryStore — per channel', () => {
     expect(store.entries().find((e) => e.channel === undefined)?.html).toBe('<html>old</html>');
   });
 
-  it('a removal from CH 2 leaves CH 1’s record — and takes the pre-channel record with it', async () => {
+  it('a removal from CH 2 leaves CH 1’s own record as it was', async () => {
+    const ws = new MemoryWorkspace();
+    const store = new LibraryStore(ws);
+    await store.import(TEMPLATE, '<html>v1</html>', 1);
+    await store.import(V2, '<html>v2</html>', 2);
+
+    expect(await store.remove('lower-third', [], null, 2)).toEqual({ ok: true });
+    expect(store.has('lower-third', 2)).toBe(false);
+    expect(store.html('lower-third', 1)).toBe('<html>v1</html>');
+    expect(store.entries().map((e) => e.channel)).toEqual([1]);
+    const reloaded = new LibraryStore(ws);
+    await reloaded.hydrate();
+    expect(reloaded.has('lower-third', 2)).toBe(false);
+    expect(reloaded.html('lower-third', 1)).toBe('<html>v1</html>');
+  });
+
+  it('a removal from CH 2 hides a pre-channel record on CH 2 ONLY — CH 1 still lists it and still has its page, across a reload', async () => {
+    const ws = new MemoryWorkspace();
+    // The upgrade case: the only copy is the one written before the lists, answering for all.
+    await ws.writeJson('library/lower-third.json', {
+      template: TEMPLATE,
+      html: '<html>old</html>',
+    });
+    const store = new LibraryStore(ws);
+    await store.hydrate();
+
+    expect(await store.remove('lower-third', [], null, 2)).toEqual({ ok: true });
+    expect(store.has('lower-third', 2)).toBe(false);
+    expect(store.list(2)).toEqual([]);
+    expect(store.html('lower-third', 2)).toBeNull();
+    // CH 1 — and any other channel — is exactly as it was: listed, and PVW still has the page.
+    expect(store.list(1)).toEqual([TEMPLATE]);
+    expect(store.html('lower-third', 1)).toBe('<html>old</html>');
+    expect(store.html('lower-third', 3)).toBe('<html>old</html>');
+    // It is no longer re-delivered: a channel-less restore after a bridge restart would put it
+    // back on CH 2 as well.
+    expect(store.entries()).toEqual([]);
+
+    const reloaded = new LibraryStore(ws);
+    await reloaded.hydrate();
+    expect(reloaded.has('lower-third', 2)).toBe(false);
+    expect(reloaded.html('lower-third', 1)).toBe('<html>old</html>');
+    expect(reloaded.entries()).toEqual([]);
+
+    // CH 2 imports it again: its own record answers there; a second removal hides it again, and
+    // CH 1 is still untouched.
+    await reloaded.import(V2, '<html>v2</html>', 2);
+    expect(reloaded.html('lower-third', 2)).toBe('<html>v2</html>');
+    expect(await reloaded.remove('lower-third', [], null, 2)).toEqual({ ok: true });
+    expect(reloaded.has('lower-third', 2)).toBe(false);
+    expect(reloaded.html('lower-third', 1)).toBe('<html>old</html>');
+  });
+
+  it('control: a removal naming NO channel deletes the pre-channel record outright', async () => {
     const ws = new MemoryWorkspace();
     await ws.writeJson('library/lower-third.json', {
       template: TEMPLATE,
@@ -191,19 +244,13 @@ describe('LibraryStore — per channel', () => {
     });
     const store = new LibraryStore(ws);
     await store.hydrate();
-    await store.import(TEMPLATE, '<html>v1</html>', 1);
-    await store.import(V2, '<html>v2</html>', 2);
 
-    expect(await store.remove('lower-third', [], null, 2)).toEqual({ ok: true });
-    expect(store.has('lower-third', 2)).toBe(false);
-    expect(store.html('lower-third', 1)).toBe('<html>v1</html>');
-    // The pre-channel record answered for EVERY channel, so it would have put the template back
-    // on CH 2's list offline and re-delivered it — it goes with the removal.
-    expect(store.entries().some((e) => e.channel === undefined)).toBe(false);
+    expect(await store.remove('lower-third', [])).toEqual({ ok: true });
+    expect(store.has('lower-third', 1)).toBe(false);
     const reloaded = new LibraryStore(ws);
     await reloaded.hydrate();
-    expect(reloaded.has('lower-third', 2)).toBe(false);
-    expect(reloaded.has('lower-third', 1)).toBe(true);
+    expect(reloaded.has('lower-third', 1)).toBe(false);
+    expect(reloaded.list()).toEqual([]);
   });
 
   it('the offline refusal counts the references it is handed — the caller passes that channel’s', async () => {

@@ -104,7 +104,9 @@ after reconnect resolves against a populated bridge registry.
 each record SHALL be re-delivered to that channel only. A record written before the per-channel lists
 SHALL be re-delivered naming no channel, which the bridge SHALL read as "restore this if no channel lists
 it" and never as a replacement of a version a channel holds. A record for a channel the signed-in
-principal does not hold SHALL NOT be sent.
+principal does not hold SHALL NOT be sent. A record written before the per-channel lists that a removal
+on ONE channel has acted on SHALL stay this browser's copy for every other channel (its offline list and
+its PVW page), hidden on the channel that removed it, and SHALL NOT be re-delivered after that.
 
 The conflict policy SHALL be **local-wins, per channel**: the browser library is the source of truth for
 the channel a record names, so reconciliation makes that channel's entry reflect it
@@ -136,3 +138,9 @@ template in the local library and therefore still delivered on reconnect.
 - **WHEN** a template was imported at one version on CH 1 and another on CH 2, and the bridge comes back
   with an empty registry **THEN** reconnect re-delivers each version to its own channel, and neither
   channel receives the other's
+
+#### Scenario: A removal on CH 2 leaves a pre-change record on CH 1
+
+- **WHEN** this browser's only copy of a template was written before the per-channel lists and the
+  template is removed from CH 2 **THEN** CH 2 no longer lists it, CH 1 still lists it offline and PVW
+  still has its page there, both survive a reload, and the record is not re-delivered on reconnect

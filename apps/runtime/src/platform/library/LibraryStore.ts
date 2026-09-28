@@ -25,6 +25,14 @@ export interface LibraryEntry {
    * reads as "restore it if no channel lists it", never as a replacement.
    */
   channel?: number;
+  /**
+   * `CHANNEL-TEMPLATES-01` — a pre-channel record only: the channels the template was REMOVED from
+   * in this browser. It no longer answers for them, and — having been acted on — it is no longer
+   * re-delivered (a channel-less restore could otherwise put back what a channel removed once the
+   * bridge's process-lifetime tombstones are gone). It still answers for every other channel: a
+   * removal on CH 2 leaves CH 1's offline list and CH 1's PVW page exactly as they were.
+   */
+  removedOn?: number[];
 }
 
 export interface RemoveResult {
@@ -52,6 +60,11 @@ function pathFor(templateId: string, channel: number | undefined): string {
 /** A channel's record, keyed — `channel` and id, never decoded from anything. */
 function keyOf(channel: number, templateId: string): string {
   return `${String(channel)}\u0000${templateId}`;
+}
+
+/** A pre-channel record that `channel` has removed (see {@link LibraryEntry.removedOn}). */
+function hiddenOn(entry: LibraryEntry, channel: number): boolean {
+  return (entry.removedOn ?? []).includes(channel);
 }
 
 /**
@@ -105,7 +118,14 @@ export class LibraryStore {
         if (typeof rec.channel === 'number') {
           this.#own.set(keyOf(rec.channel, rec.template.templateId), rec);
         } else {
-          this.#legacy.set(rec.template.templateId, { template: rec.template, html: rec.html });
+          const removedOn = Array.isArray(rec.removedOn)
+            ? rec.removedOn.filter((c): c is number => typeof c === 'number')
+            : [];
+          this.#legacy.set(rec.template.templateId, {
+            template: rec.template,
+            html: rec.html,
+            ...(removedOn.length > 0 && { removedOn }),
+          });
         }
       } catch {
         // skip a corrupt/partial record
@@ -147,9 +167,15 @@ export class LibraryStore {
     return this.#resolve(templateId, channel)?.html ?? null;
   }
 
-  /** The full retention/delivery set (metadata + HTML, each with its channel) for reconcile-on-connect. */
+  /**
+   * The full retention/delivery set (metadata + HTML, each with its channel) for reconcile-on-connect.
+   * A pre-channel record a channel has removed is not in it (see {@link LibraryEntry.removedOn}).
+   */
   entries(): LibraryEntry[] {
-    return [...this.#own.values(), ...this.#legacy.values()];
+    return [
+      ...this.#own.values(),
+      ...[...this.#legacy.values()].filter((e) => (e.removedOn ?? []).length === 0),
+    ];
   }
 
   /**
@@ -180,9 +206,10 @@ export class LibraryStore {
    * authoritative for refuse-while-referenced).
    *
    * `CHANNEL-TEMPLATES-01` — from `channel` (no channel: from every channel). A pre-channel
-   * record for the template goes too, whichever channel the removal names: it answers for every
-   * channel, so keeping it would put the template back on this channel's list offline and
-   * re-deliver it after a bridge restart.
+   * record for the template answers for every channel, so a removal naming one channel does not
+   * delete it — that would take the template off every OTHER channel's offline list and PVW page
+   * too. It is kept, hidden on `channel` ({@link LibraryEntry.removedOn}); a removal naming no
+   * channel deletes it.
    */
   async delete(templateId: string, channel?: number): Promise<void> {
     const own = [...this.#own.values()].filter(
@@ -194,7 +221,21 @@ export class LibraryStore {
       this.#own.delete(keyOf(e.channel, templateId));
       await this.#ws.delete(pathFor(templateId, e.channel));
     }
-    if (this.#legacy.delete(templateId)) await this.#ws.delete(pathFor(templateId, undefined));
+    const legacy = this.#legacy.get(templateId);
+    if (legacy === undefined) return;
+    if (channel === undefined) {
+      this.#legacy.delete(templateId);
+      await this.#ws.delete(pathFor(templateId, undefined));
+      return;
+    }
+    if (hiddenOn(legacy, channel)) return;
+    const kept: LibraryEntry = {
+      template: legacy.template,
+      html: legacy.html,
+      removedOn: [...(legacy.removedOn ?? []), channel].sort((a, b) => a - b),
+    };
+    this.#legacy.set(templateId, kept);
+    await this.#ws.writeJson(pathFor(templateId, undefined), kept);
   }
 
   /**
@@ -242,7 +283,10 @@ export class LibraryStore {
   /** One template on `channel` (or station-wide), as {@link list} would answer it. */
   #resolve(templateId: string, channel: number | undefined): LibraryEntry | null {
     if (channel !== undefined) {
-      return this.#own.get(keyOf(channel, templateId)) ?? this.#legacy.get(templateId) ?? null;
+      const own = this.#own.get(keyOf(channel, templateId));
+      if (own !== undefined) return own;
+      const legacy = this.#legacy.get(templateId);
+      return legacy !== undefined && !hiddenOn(legacy, channel) ? legacy : null;
     }
     return this.#view(undefined).find((e) => e.template.templateId === templateId) ?? null;
   }
@@ -252,7 +296,9 @@ export class LibraryStore {
       const own = [...this.#own.values()].filter((e) => e.channel === channel);
       const mine = new Set(own.map((e) => e.template.templateId));
       return [
-        ...[...this.#legacy.values()].filter((e) => !mine.has(e.template.templateId)),
+        ...[...this.#legacy.values()].filter(
+          (e) => !mine.has(e.template.templateId) && !hiddenOn(e, channel),
+        ),
         ...own,
       ];
     }

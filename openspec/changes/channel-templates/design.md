@@ -84,8 +84,13 @@
    confirm `Remove “<name>” from CH n?` / `Remove from CH n`. `useTemplateIndex` pulls one list per channel
    its rows name and answers `get(id, channel)` (a one-argument read no longer compiles); the Inspector,
    PVW (`templates.html(id, channel)`) and the operator names read the row's channel. `LibraryStore` keeps
-   per-channel records beside the pre-change ones; a removal on any channel also drops the pre-change
-   record (it answered for every channel). The mock mirrors all of it.
+   per-channel records beside the pre-change ones. A pre-change record answers for every channel, so a
+   removal naming one channel does not delete it: it is hidden on that channel (`removedOn`, persisted)
+   and still answers for every other — CH 1's offline list and CH 1's PVW page are as they were after a
+   removal on CH 2. Once a channel has removed it, it is no longer re-delivered (a channel-less restore
+   would put it back on that channel too); a removal naming no channel deletes it. The mock mirrors the
+   per-channel lists and every picker call; it keeps no browser-local copy, so it has no pre-change
+   record.
 
 ## What did not change
 
