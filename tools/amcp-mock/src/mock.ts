@@ -190,7 +190,25 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     received.push({ at: now(), line });
   });
   server.setAdmission(opts.admit ?? null);
-  const boundAmcp = await server.start(host, amcpPort);
+  let boundAmcp: number;
+  try {
+    boundAmcp = await server.start(host, amcpPort);
+  } catch (err) {
+    /*
+      `DEV-LOCAL-CASPAR-01` (review) — the emitter above has bound its UDP socket and started its tick
+      timer; a failed AMCP listen must not leave them open. They kept `pnpm dev:station --fake` alive
+      after it had said, in one line, why it could not start.
+    */
+    await emitter.stop();
+    if (traceStream !== null) {
+      await new Promise<void>((resolve) => {
+        traceStream.end(() => {
+          resolve();
+        });
+      });
+    }
+    throw err;
+  }
 
   return {
     receivedCommands(): readonly ReceivedCommand[] {

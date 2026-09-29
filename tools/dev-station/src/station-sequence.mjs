@@ -60,7 +60,9 @@ export async function runDevStation(options, deps) {
     /*
       `DEV-LOCAL-CASPAR-01` — a station that cannot start is ONE line: nothing answering AMCP on this
       machine's CasparCG (`--caspar`), or the stand-in's port taken (`--fake`). The line is the
-      station's own; nothing else has started, so there is nothing to stop.
+      station's own, and so is the clean-up: a start that fails stops what it had started
+      (`fake-station.ts` stops its Playout; `@cg/amcp-mock` closes its OSC socket and timer on a
+      failed listen — which it did not, and a failed `--fake` start then hung instead of exiting).
     */
     try {
       fake = await deps.startFake();
