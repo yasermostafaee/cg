@@ -61,8 +61,9 @@ CasparCG is connected. **A row's `#` and its default name are its real CasparCG 
 row is `99`, _Layer 99_; beds read _Bed 59_ … _Bed 50_. A name you give a row replaces the default.
 
 **Closing CG Control stops control, not air.** What is on air stays on air, and the next start
-picks the rows up again. If CG Control will not start, it says why on its own screen; the
-**CG Control → Open bridge log** menu shows the file to send to support.
+picks the rows up again. If CG Control will not start, it says why on its own screen and names
+its log file there; once it runs, **LOG → Open log folder** (in the audit log) opens the folder to
+send to support.
 
 ## Daily flow
 

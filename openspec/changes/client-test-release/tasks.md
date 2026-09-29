@@ -44,13 +44,32 @@
 
 ## 4. The Persian install guide (B3)
 
-- [ ] 4.1 `docs/release/0.9.0/install-guide.fa.md`.
-- [ ] 4.2 Up to four screenshots from the real apps, by the e2e harness.
-- [ ] 4.3 The PDF, built by Chromium from the repo's Vazirmatn, right to left.
+- [x] 4.1 `docs/release/0.9.0/install-guide.fa.md` — the seven sections in the prompt's order; every
+      app label quoted exactly as the app shows it (`Export (.vcg)`, not its accessible name); one
+      Playout-side point our records do not file, marked `[confirm with the Playout team]`: the name
+      of the Playout's approve action.
+- [x] 4.2 Four screenshots from the real apps, by the e2e harness (`guide-shots.spec.ts` in both apps,
+      run only with `CG_GUIDE_SHOTS`): the Playout address (a documentation address), the sign-in
+      (masked), the channel, the Designer's `Export (.vcg)`. No real address, token or password.
+- [x] 4.3 The PDF: `tools/release/src/build-guide.mjs` — Chromium (Playwright, the installed Chrome),
+      the repo's Vazirmatn inlined as the app declares it, RTL, pictures inlined; it refuses to print
+      when the font did not load. Locally: 2 A4 pages, 165 KB.
+- [x] 4.4 `tests/guide.test.ts` — the sections and their order, the release's version and file names,
+      every quoted label against the source that renders it (control: a planted stale label reddens),
+      the pictures, no private address or secret, the one marker; the markdown forms; the page (RTL,
+      six faces, everything inlined). `turbo.json` hashes every file it reads.
+- [x] 4.5 The English operator guide named the removed **CG Control → Open bridge log** menu; it now
+      names **LOG → Open log folder**.
 
 ## 5. The tag release (B4)
 
-- [ ] 5.1 A `v*` tag builds, smokes and opens a draft pre-release with exactly four files.
+- [x] 5.1 `desktop.yml`: a `v*` tag runs the installers and the smoke from the tagged commit; the
+      version step refuses a tag that does not name the version, before anything is built; `release`
+      (tag only, after both) builds the guide, assembles the four files
+      (`tools/release/src/release-files.mjs`: the installers renamed without a space, which GitHub
+      would rewrite; `SHA256SUMS.txt` in sha256sum's format), opens the draft pre-release and reads it
+      back. `tests/release-files.test.ts`; the assembly dry-run locally on stand-in installers.
+- [ ] 5.2 It ran on `v0.9.0`: the draft pre-release holds exactly the four files.
 
 ## 6. Gates, CI, the tag
 

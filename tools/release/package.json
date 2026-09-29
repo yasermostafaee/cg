@@ -2,7 +2,7 @@
   "name": "@cg/release",
   "version": "0.0.0",
   "private": true,
-  "description": "CLIENT-TEST-RELEASE-01 - the client release's own tooling: the one version CG Control, CG Designer and the bridge carry. Plain zero-dependency ESM with no build step; the release workflow runs the same modules the tests drive.",
+  "description": "CLIENT-TEST-RELEASE-01 - the client release's own tooling: the one version CG Control, CG Designer and the bridge carry, the scan of what the installers ship, and the Persian install guide's PDF. Plain ESM with no build step (Playwright's Chromium prints the PDF); the release workflow runs the same modules the tests drive.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
@@ -12,6 +12,7 @@
   },
   "devDependencies": {
     "@cg/eslint-config": "workspace:*",
+    "@playwright/test": "1.60.0",
     "@types/node": "^22.10.0",
     "eslint": "^9.17.0",
     "rimraf": "^6.0.1",

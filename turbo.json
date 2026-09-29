@@ -131,7 +131,19 @@
         "$TURBO_ROOT$/apps/designer/src-tauri/tauri.conf.json",
         "$TURBO_ROOT$/apps/runtime/src-tauri/Cargo.toml",
         "$TURBO_ROOT$/apps/designer/src-tauri/Cargo.toml",
-        "$TURBO_ROOT$/Cargo.lock"
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/docs/release/**",
+        "$TURBO_ROOT$/apps/runtime/public/fonts/vazirmatn/**",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/starting/start.js",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/firstRun/**",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/layers/layerRowActions.ts",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/fixedLayers/useTemplatePicker.tsx",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/shell/AppHeader.tsx",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/features/audit/AuditPanel.tsx",
+        "$TURBO_ROOT$/apps/runtime/src/renderer/ui/Tabs.tsx",
+        "$TURBO_ROOT$/apps/designer/src/renderer/features/shell/LandingView.tsx",
+        "$TURBO_ROOT$/apps/designer/src/renderer/features/compositions/**",
+        "$TURBO_ROOT$/tools/caspar-bridge/src/connection-check.ts"
       ],
       "passThroughEnv": [
         "VITEST_MAX_FORKS",
