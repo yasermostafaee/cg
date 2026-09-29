@@ -750,9 +750,15 @@ async function controlDrive() {
 async function controlUninstall() {
   // Uninstall removes exactly the rules the install added (their presence is the install phase's).
   run(path.join(CONTROL_DIR, 'uninstall.exe'), ['/S']);
-  await until('the uninstaller to finish', () => !fs.existsSync(CONTROL_EXE), 60_000).catch(
-    () => undefined,
-  );
+  // `CLIENT-TEST-RELEASE-01` — Tauri's NSIS uninstaller deletes `cg-control.exe` FIRST and the
+  // Installed-apps entry near its END (`Section Uninstall`: files, shortcuts, then `DeleteRegKey`), so
+  // waiting for the exe alone read the registry mid-uninstall (run 36572556033). Wait for its last
+  // add/remove step too, bounded: an entry that never goes still fails the check below.
+  await until(
+    'the uninstaller to finish',
+    () => !fs.existsSync(CONTROL_EXE) && installedEntry('HKLM', 'CG Control') === null,
+    60_000,
+  ).catch(() => undefined);
   check(
     'uninstalling removes both firewall rules',
     firewallRule(RULE_OSC) === null && firewallRule(RULE_TEMPLATES) === null,
