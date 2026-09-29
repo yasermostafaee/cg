@@ -13,7 +13,12 @@ import {
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import { formatAmcpLogLine, type AmcpLogEntry } from '../src/amcp-log.js';
-import { CasparRuntime, D10_VOLUME_RAMP_FRAMES } from '../src/caspar-runtime.js';
+import {
+  CasparRuntime,
+  PLATE_VOLUME_RAMP_FRAMES,
+  plateVolumeFrames,
+  startsSilentFromPlayout,
+} from '../src/caspar-runtime.js';
 import { CommandBuilder } from '../src/command-builder.js';
 import { PlayoutSources, SOURCES_POLL_MS } from '../src/playout-sources.js';
 import { FAKE_MEDIA_IDS } from './support/fake-playout.js';
@@ -666,10 +671,10 @@ describe('§1.I — a Playout input is seated silent and only ever rises by a ra
       .slice(before)
       .filter((l) => l.startsWith(`MIXER 1-${layer} VOLUME`));
     expect(sent).toEqual([
-      `MIXER 1-${layer} VOLUME 0.8 ${String(D10_VOLUME_RAMP_FRAMES)}`,
+      `MIXER 1-${layer} VOLUME 0.8 ${String(PLATE_VOLUME_RAMP_FRAMES)}`,
       `MIXER 1-${layer} VOLUME 0`,
     ]);
-    expect(D10_VOLUME_RAMP_FRAMES).toBe(25);
+    expect(PLATE_VOLUME_RAMP_FRAMES).toBe(25);
   });
 
   it('a Playout input swapped IN PLACE is muted before its PLAY, and its declared volume comes back by a ramp', async () => {
@@ -691,20 +696,55 @@ describe('§1.I — a Playout input is seated silent and only ever rises by a ra
     // No CLEAR — a replace in place (`B-126`) — and the reveal ramps back to the declared volume.
     expect(sent.some((l) => l.startsWith('CLEAR '))).toBe(false);
     expect(sent.slice(play)).toContain(
-      `MIXER 1-${layer} VOLUME 0.5 ${String(D10_VOLUME_RAMP_FRAMES)} DEFER`,
+      `MIXER 1-${layer} VOLUME 0.5 ${String(PLATE_VOLUME_RAMP_FRAMES)} DEFER`,
     );
   });
 
-  it('control: a MEDIA plate keeps today’s wire — no in-place mute and no ramp', async () => {
-    const { r } = await boot({ assignments: plates(MEDIA_KHABAR), bindMedia: [MEDIA_KHABAR] });
+  /*
+    🔴 `RELEASE-091-01` §2 (`B-289`) — SUPERSEDES the control that stood here, "a MEDIA plate keeps
+    today's wire — no in-place mute and no ramp". The owner extended rule 2 to D11 media on
+    2026-09-29: a clip starts silent exactly like a D10 input, and rises by the same ramp. The
+    control that remains is a plate with no Playout origin (`startsSilentFromPlayout` below).
+  */
+  it('🔴 a MEDIA plate follows the same rule — an operator raise ramps, and a clip swapped in place is muted before its PLAY and ramps back', async () => {
+    const { r } = await boot({
+      assignments: plates(MEDIA_KHABAR),
+      bindMedia: [MEDIA_KHABAR, MEDIA_STUDIO_1],
+    });
     await takeOnAir(r);
     const layer = String(layerOf(r, 'item-1', 'guest-1'));
     const before = (await recvLines()).length;
-    await r.setLivePlateVolume('item-1', 'guest-1', 0.8);
-    const sent = (await recvLines())
+    expect(await r.setLivePlateVolume('item-1', 'guest-1', 0.8)).toMatchObject({
+      ok: true,
+      sent: true,
+    });
+    const raised = (await recvLines())
       .slice(before)
       .filter((l) => l.startsWith(`MIXER 1-${layer} VOLUME`));
-    expect(sent).toEqual([`MIXER 1-${layer} VOLUME 0.8`]);
+    expect(raised).toEqual([`MIXER 1-${layer} VOLUME 0.8 ${String(PLATE_VOLUME_RAMP_FRAMES)}`]);
+
+    const beforeSwap = (await recvLines()).length;
+    expect(await r.swapLiveSource('item-1', 'guest-1', MEDIA_STUDIO_1)).toEqual({ ok: true });
+    const sent = (await recvLines()).slice(beforeSwap);
+    const mute = sent.indexOf(`MIXER 1-${layer} VOLUME 0 DEFER`);
+    const play = sent.findIndex((l) => l.startsWith(`PLAY 1-${layer} `));
+    expect(mute).toBeGreaterThanOrEqual(0);
+    expect(sent.slice(mute, play)).toContain('MIXER 1 COMMIT');
+    expect(play).toBeGreaterThan(mute);
+    expect(sent.slice(play)).toContain(
+      `MIXER 1-${layer} VOLUME 0.8 ${String(PLATE_VOLUME_RAMP_FRAMES)} DEFER`,
+    );
+  });
+
+  it('control: only a plate whose source comes from the Playout is covered — no origin keeps the bare line', () => {
+    expect(startsSilentFromPlayout('input')).toBe(true);
+    expect(startsSilentFromPlayout('media')).toBe(true);
+    expect(startsSilentFromPlayout(undefined)).toBe(false);
+    expect(plateVolumeFrames(undefined, 1)).toBeUndefined();
+    expect(plateVolumeFrames('media', 1)).toBe(PLATE_VOLUME_RAMP_FRAMES);
+    // A silence is immediate for every plate.
+    expect(plateVolumeFrames('media', 0)).toBeUndefined();
+    expect(plateVolumeFrames('input', 0)).toBeUndefined();
   });
 });
 

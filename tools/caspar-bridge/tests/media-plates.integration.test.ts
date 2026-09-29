@@ -22,7 +22,7 @@ import {
 } from '@cg/shared-ipc';
 import type { AuditEntry } from '@cg/shared-schema';
 import type { BridgeHandle } from '../src/index.js';
-import { CasparRuntime } from '../src/caspar-runtime.js';
+import { CasparRuntime, PLATE_VOLUME_RAMP_FRAMES } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { LIVE_PLATE_NO_LAYER } from '../src/live-plate-seating.js';
 import { PlayoutSources } from '../src/playout-sources.js';
@@ -459,7 +459,10 @@ describe('§1.C — `pause`, the default: hidden, paused and muted, still seated
     from = await mark();
     expect(await r.setActiveLook(ROW, 'two')).toEqual({ ok: true });
     lines = await sentSince(from);
-    const volume = lines.indexOf(`MIXER 2-${String(clip)} VOLUME 0.8 DEFER`);
+    // `RELEASE-091-01` §2 (`B-289`) — a clip's declared volume comes back by the ramp.
+    const volume = lines.indexOf(
+      `MIXER 2-${String(clip)} VOLUME 0.8 ${String(PLATE_VOLUME_RAMP_FRAMES)} DEFER`,
+    );
     const reveal = lines.indexOf(`MIXER 2-${String(clip)} OPACITY 1 DEFER`);
     const resume = lines.indexOf(`RESUME 2-${String(clip)}`);
     const commitBack = lines.indexOf('MIXER 2 COMMIT', Math.max(resume, 0));
@@ -512,6 +515,67 @@ describe('§1.C — `pause`, the default: hidden, paused and muted, still seated
       `PLAY 2-${String(back)} "C:/Media/promo.mp4"`,
     ]);
     expect(lines.some((l) => l.startsWith('RESUME '))).toBe(false);
+  });
+});
+
+/*
+  🔴 `RELEASE-091-01` §2 (`B-289`) — the owner's decision of 2026-09-29: a D11 clip starts silent
+  EXACTLY like a D10 input (contract v1.3 rule 2), and the operator raises it. Measured first on his
+  own CasparCG 2.5.0 (`m1.mkv`, AAC stereo): the seat was already silent; the raise JUMPED where a
+  D10 input ramps.
+*/
+describe('RELEASE-091-01 §2 — a media plate starts silent, and the operator’s raise ramps on its own layer', () => {
+  it('🔴 `VOLUME 0` before its PLAY; ON sends `VOLUME 1 25` to the plate’s layer; a `pause` switch-away sends 0 and the way back its declared volume — control: the page layer’s `VOLUME 1` is untouched', async () => {
+    const { r, mock, mark, sentSince } = await boot();
+    let from = await mark();
+    await take(r);
+    const clip = layerOf(r, 'l2');
+    let lines = await sentSince(from);
+    const mute = lines.indexOf(`MIXER 2-${String(clip)} VOLUME 0 DEFER`);
+    const commit = lines.indexOf('MIXER 2 COMMIT', Math.max(mute, 0));
+    const play = lines.findIndex((l) => l.startsWith(`PLAY 2-${String(clip)} `));
+    expect(mute, 'the mute').toBeGreaterThanOrEqual(0);
+    expect(commit, 'committed').toBeGreaterThan(mute);
+    expect(play, 'before its PLAY').toBeGreaterThan(commit);
+    // Nothing automatic raises it: every volume line on its layer is a 0.
+    expect(on(lines, clip).filter((l) => / VOLUME /.test(l) && !/ VOLUME 0( |$)/.test(l))).toEqual(
+      [],
+    );
+    // Positive control for the page layer: the take gave it its `VOLUME 1`.
+    expect(lines).toContain(`MIXER 2-${String(BED.layer)} VOLUME 1`);
+
+    // ON — what the audio dialog's button sends (`commit({ l2: 1 })` → `stack.set-plate-volumes`).
+    from = await mark();
+    expect(await r.setLivePlateVolumes(ROW, { l2: 1 })).toEqual({
+      ok: true,
+      results: [{ plateId: 'l2', ok: true }],
+    });
+    lines = await sentSince(from);
+    expect(lines.filter((l) => / VOLUME /.test(l))).toEqual([
+      `MIXER 2-${String(clip)} VOLUME 1 ${String(PLATE_VOLUME_RAMP_FRAMES)}`,
+    ]);
+    expect(mock.layerState({ channel: 2, layer: clip })?.volume).toBe(1);
+
+    // A `pause` switch-away sends 0 …
+    from = await mark();
+    expect(await r.setActiveLook(ROW, 'one')).toEqual({ ok: true });
+    lines = await sentSince(from);
+    expect(on(lines, clip).filter((l) => / VOLUME /.test(l))).toEqual([
+      `MIXER 2-${String(clip)} VOLUME 0 DEFER`,
+    ]);
+    // … and switching back sends its declared volume, by the ramp.
+    from = await mark();
+    expect(await r.setActiveLook(ROW, 'two')).toEqual({ ok: true });
+    lines = await sentSince(from);
+    expect(on(lines, clip).filter((l) => / VOLUME /.test(l))).toEqual([
+      `MIXER 2-${String(clip)} VOLUME 1 ${String(PLATE_VOLUME_RAMP_FRAMES)} DEFER`,
+    ]);
+
+    // Control: none of it touched the page layer's volume.
+    const all = await sentSince(0);
+    const pageLines = on(all, BED.layer).filter((l) => / VOLUME /.test(l));
+    expect(pageLines.at(-1)).toBe(`MIXER 2-${String(BED.layer)} VOLUME 1`);
+    expect(mock.layerState(BED)?.volume).toBe(1);
   });
 });
 

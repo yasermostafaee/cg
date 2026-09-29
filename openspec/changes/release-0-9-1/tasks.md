@@ -22,12 +22,12 @@
 
 ## 2. A media plate starts silent and rises by the ramp (`B-289`)
 
-- [ ] 2.1 `startsSilentFromPlayout` — the one predicate for `mutedInPlace` and `plateVolumeFrames`;
+- [x] 2.1 `startsSilentFromPlayout` — the one predicate for `mutedInPlace` and `plateVolumeFrames`;
       `PLATE_VOLUME_RAMP_FRAMES` (renamed from `D10_VOLUME_RAMP_FRAMES`).
-- [ ] 2.2 `media-plates.integration.test.ts`: `VOLUME 0` before `PLAY`; ON → `VOLUME 1 25` on the plate's
+- [x] 2.2 `media-plates.integration.test.ts`: `VOLUME 0` before `PLAY`; ON → `VOLUME 1 25` on the plate's
       layer; a `pause` switch-away sends 0 and back the declared volume by the ramp; control: the page
       layer's `VOLUME 1`. The `pause` reveal pin moved to the ramp.
-- [ ] 2.3 `playout-sources.integration.test.ts`: the media control ("no in-place mute and no ramp")
+- [x] 2.3 `playout-sources.integration.test.ts`: the media control ("no in-place mute and no ramp")
       superseded — a media swap is muted before its `PLAY` and ramps back; control: no origin keeps the
       bare line. Full bridge suite green (157 files, 1453 tests).
 - [ ] 2.4 After the fix, the same live run on the owner's CasparCG: ON → `VOLUME 1 25`, heard.

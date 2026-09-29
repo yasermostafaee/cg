@@ -435,13 +435,14 @@ interface SeatRequest {
 }
 
 /**
- * 🔴 `PLAYOUT-SOURCES-01` §1.I — **a Playout input seated IN PLACE** (an `R-048` swap or restore,
+ * 🔴 `PLAYOUT-SOURCES-01` §1.I — **a Playout plate seated IN PLACE** (an `R-048` swap or restore,
  * on a layer of ours). It is not hidden — that would take the working picture off air before the
  * replace is known to land (`B-126`) — but it IS muted before its `PLAY`, in the seat step's one
- * commit, so a D10 plate starts silent on every seating (contract v1.3 rule 2).
+ * commit, so a Playout plate starts silent on every seating (contract v1.3 rule 2; a D11 clip too
+ * since `RELEASE-091-01` §2 — {@link startsSilentFromPlayout}).
  */
 function mutedInPlace(request: SeatRequest): boolean {
-  return !request.hide && request.placement.source.origin === 'input';
+  return !request.hide && startsSilentFromPlayout(request.placement.source.origin);
 }
 
 /**
@@ -755,25 +756,41 @@ const INTENDED_VOLUME = 1;
 const CREATED_MUTED_VOLUME = 0;
 
 /**
- * 🔴 `PLAYOUT-SOURCES-01` §1.I — **the ramp a Playout input's plate rises by: 25 frames.**
+ * 🔴 `PLAYOUT-SOURCES-01` §1.I — **the ramp a Playout plate rises by: 25 frames.**
  *
  * Contract v1.3 rule 2 (`PLAYOUT-CG-RESPONSE-V13-STATE` §3.1): the Playout may route the same
  * input to the same channel, where the two sounds add up (about +6 dB), and it warns on air when
  * a CG plate on such an input is not at 0. So a D10 plate is seated silent and its volume never
  * JUMPS up — even `VOLUME 1 4` reaches 0.25 in its first block. Silences stay immediate.
+ * `RELEASE-091-01` §2 (`B-289`) — a D11 clip rises by the same ramp ({@link startsSilentFromPlayout}).
  */
-export const D10_VOLUME_RAMP_FRAMES = 25;
+export const PLATE_VOLUME_RAMP_FRAMES = 25;
+
+/**
+ * 🔴 `RELEASE-091-01` §2 (`B-289`) — **A PLATE WHOSE SOURCE COMES FROM THE PLAYOUT STARTS SILENT AND
+ * ONLY RISES BY A RAMP.** Contract v1.3 rule 2 was written for a D10 input (`PLAYOUT-SOURCES-01`
+ * §1.I); the owner extended it to a D11 media clip on 2026-09-29: "a media clip starts silent, exactly
+ * like a D10 input; the operator raises it". The ONE predicate both halves ask — the mute before an
+ * in-place `PLAY` ({@link mutedInPlace}) and the ramp ({@link plateVolumeFrames}) — so the two can
+ * never disagree about which plates the rule covers. A plate seated before `origin` existed answers
+ * false and keeps its wire.
+ */
+export function startsSilentFromPlayout(origin: 'input' | 'media' | undefined): boolean {
+  return origin === 'input' || origin === 'media';
+}
 
 /**
  * `PLAYOUT-SOURCES-01` §1.I — the frames one plate's `MIXER … VOLUME <v>` carries. **The one
- * spelling** every plate site asks: a Playout input going above silence ramps; every silence, and
- * every other plate (media, and anything seated before `origin` existed), is today's bare line.
+ * spelling** every plate site asks: a Playout plate (a D10 input or a D11 clip) going above silence
+ * ramps; every silence, and a plate seated before `origin` existed, is the bare line.
  */
 export function plateVolumeFrames(
   origin: 'input' | 'media' | undefined,
   volume: number,
 ): number | undefined {
-  return origin === 'input' && volume > CREATED_MUTED_VOLUME ? D10_VOLUME_RAMP_FRAMES : undefined;
+  return startsSilentFromPlayout(origin) && volume > CREATED_MUTED_VOLUME
+    ? PLATE_VOLUME_RAMP_FRAMES
+    : undefined;
 }
 
 /**
