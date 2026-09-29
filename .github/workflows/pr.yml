@@ -353,7 +353,13 @@ jobs:
     # Browser SPAs build + test cross-platform; no Electron means no Windows
     # requirement, so CI runs on Linux (faster + cheaper).
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # CLIENT-TEST-RELEASE-01 — 15 → 25 min, MEASURED. A push that changes a turbo
+    # `globalDependencies` file (pnpm-lock.yaml above all) misses every task's cache, and this
+    # job then runs the whole suite uncached: 15.0 min (run 36572555950, green by seconds),
+    # 15.3 min — cut off at the cap, which GitHub reports as "cancelled" (36577397241, attempt
+    # 1) — and 14.4 min (its re-run). A cached push takes 5–12 min. 25 leaves the uncached run
+    # ~60 % headroom, and a hung job still ends in bounded time.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
