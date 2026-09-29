@@ -1,0 +1,21 @@
+{
+  "name": "@cg/release",
+  "version": "0.0.0",
+  "private": true,
+  "description": "CLIENT-TEST-RELEASE-01 - the client release's own tooling: the one version CG Control, CG Designer and the bridge carry. Plain zero-dependency ESM with no build step; the release workflow runs the same modules the tests drive.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",
+    "lint": "eslint . --max-warnings 0",
+    "test": "vitest run",
+    "clean": "rimraf --glob *.tsbuildinfo coverage"
+  },
+  "devDependencies": {
+    "@cg/eslint-config": "workspace:*",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.17.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

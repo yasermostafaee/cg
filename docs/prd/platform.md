@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/`
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS SET: `0.9.0`** (2026-09-29, the first client delivery — see the section at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1751,6 +1751,31 @@ without it, someone reads "no backward compatibility is owed" a year from now, c
 item, and deletes a path a real station's files depend on. **Today's decision is scoped to
 today's fact — nothing has shipped — and it expires the moment that fact does.** If you are
 reading this after a release has gone out, this section is HISTORY, not licence.
+
+### 🔴 THE FLOOR IS SET — `0.9.0`, the first client delivery (2026-09-29, `CLIENT-TEST-RELEASE-01` B1)
+
+**`0.9.0` is the first release a client holds** — CG Control, CG Designer and the bridge, one
+version (`tools/release/src/release-version.mjs` reads all nine files that carry it). **The policy
+above reverses from this release.** Everything `0.9.0` can open must keep opening in every later
+release; a shim that keeps it opening is a requirement with a test; removing one is a breaking change
+that needs its own decision and a migration story.
+
+**What `0.9.0` opens, and so must keep opening:**
+
+- a `.vcg` template package — manifest `schemaVersion: 1`, `formatVersion: '1.0'`
+  (`packages/shared-schema/src/manifest.ts:54`, `:56`), its scene `schemaVersion: 1`
+  (`packages/shared-schema/src/scene.ts:545`);
+- a CG Designer project, `.cgproj` — `formatVersion: '1.0'`
+  (`packages/shared-schema/src/project-package.ts:56`);
+- CG Control's station files, read at every start from `%APPDATA%\CG Control\.cg-runtime\` — the
+  `bridge-*.json` stores and the template registry under `bridge-templates\`;
+- what each app keeps in its own WebView2 storage (the console's retained stack, the Designer's
+  workspace).
+
+Every record or comment that cites this item's licence ("nothing has shipped", "no conversion is
+owed") was written before `0.9.0` and is history from this date. `CG_RUNTIME_VERSION`
+(`packages/shared-schema/src/runtime-version.ts`) is a rendering-CONTRACT version and is untouched by
+this release, as its header prescribes for an ordinary release.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
