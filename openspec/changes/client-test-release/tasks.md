@@ -69,11 +69,32 @@
       (`tools/release/src/release-files.mjs`: the installers renamed without a space, which GitHub
       would rewrite; `SHA256SUMS.txt` in sha256sum's format), opens the draft pre-release and reads it
       back. `tests/release-files.test.ts`; the assembly dry-run locally on stand-in installers.
-- [ ] 5.2 It ran on `v0.9.0`: the draft pre-release holds exactly the four files.
+- [x] 5.2 It ran on `v0.9.0` — <https://github.com/yasermostafaee/cg/actions/runs/36583156212>,
+      COMPLETED `success`, every job RAN: the version step read `REF_TYPE: tag`, `REF_NAME: v0.9.0` and
+      accepted it; the scan was clean; installers, the clean-Windows smoke and `Draft release (tag only)`
+      all green. The draft read back independently: `APASAI CG 0.9.0 (test build)`, draft, pre-release,
+      exactly four assets — `CG-Control_0.9.0_x64-setup.exe` 240,540,708 B,
+      `CG-Designer_0.9.0_x64-setup.exe` 226,128,109 B, `APASAI-CG-0.9.0-install-guide-fa.pdf` 166,246 B
+      (2 pages, Vazirmatn embedded), `SHA256SUMS.txt` 298 B; downloaded, every sum OK; both installers'
+      version resource `0.9.0`. <https://github.com/yasermostafaee/cg/releases/tag/untagged-d830df91bf1c34d88f63>
+      (a draft's URL until it is published).
 
 ## 6. Gates, CI, the tag
 
-- [ ] 6.1 `pnpm gate` green, uncached.
-- [ ] 6.2 Pushed; `origin/dev` read back.
-- [ ] 6.3 CI: the `e2e` and installer runs COMPLETED green on the commit to be tagged, every job RAN.
-- [ ] 6.4 `v0.9.0` pushed on that commit; the draft release's four files read back.
+- [x] 6.1 `pnpm gate` green, full and uncached (99/99, 0 cached; OpenSpec 91/91), as the pre-push gate
+      of each push: `gate-20260929T125706Z-21104.log`, `gate-20260929T133718Z-16588.log`, and the tag's.
+      ⚠ The Stop hook's gate between them went red on
+      `packages/template-runtime/tests/clock-timeofday-zones.test.ts` — a one-BIT flip in the working
+      file (`0x6B` → `0x69` at byte 12570, size and mtime kept, so `git status` stayed clean), not an edit:
+      restored from git and the whole tree re-hashed against the index (3,598 files, 0 differ).
+- [x] 6.2 Pushed; `origin/dev` read back at `6f20bd72`, `aba3c8fa` and `901a9d37`.
+- [x] 6.3 CI on `aba3c8fa`, the tagged commit — both COMPLETED `success`, every job RAN:
+      PR <https://github.com/yasermostafaee/cg/actions/runs/36577397241> (`E2E (Playwright)` in attempt
+      1; `ci` in attempt 2, re-run by the owner after attempt 1's was cut off at its 15-minute cap on an
+      uncached run — `901a9d37` raises the cap, measured) and Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/36577397114> (installers; smoke 46/46). Push 1
+      (`6f20bd72`): PR <https://github.com/yasermostafaee/cg/actions/runs/36572555950> green, every job
+      RAN; Desktop <https://github.com/yasermostafaee/cg/actions/runs/36572556033> smoke 45/46 — the
+      smoke's own uninstall race, fixed in `aba3c8fa`.
+- [x] 6.4 `v0.9.0` pushed on `aba3c8fa` (annotated, tag object `08a2f754`), read back with
+      `git ls-remote`; the draft release as in 5.2. Publishing it is the owner's.
