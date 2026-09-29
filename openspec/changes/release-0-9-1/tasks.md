@@ -37,9 +37,11 @@
 
 ## 3. Each app its own icon (`B-290`)
 
-- [ ] 3.1 CG Control: `42af1a96`'s dark icon set; CG Designer: its light set.
+- [x] 3.1 CG Control: `42af1a96`'s dark icon set; CG Designer: its light set (restored byte for byte).
 - [ ] 3.2 The clean-Windows smoke reads each installed exe's icon, each shortcut's icon and each
-      shortcut's AppUserModelID; control: the two apps' values differ.
+      shortcut's AppUserModelID; control: the two apps' values differ. Written
+      (`app-identity.mjs`, the drive phase's `identities` step; `installerAppIdentity.test.ts`); the
+      smoke's run on the pushed commit is owed.
 
 ## 4. Help → About (`D-161`)
 

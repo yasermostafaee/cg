@@ -31,6 +31,11 @@
  * that carries it (`tools/release/src/release-version.mjs`): the installers' names and what Windows
  * lists under Installed apps are checked against it (B1), and each firewall rule is judged by the
  * fields `netsh` prints, never by its name (B2, `firewall-rule.mjs`).
+ *
+ * `RELEASE-091-01` §3 (`B-290`) — once both apps are installed, each exe's icon, each shortcut's icon
+ * and AppUserModelID, and each Installed-apps icon are read, and the two apps' values must DIFFER
+ * (`app-identity.mjs`). The identifiers are read from each app's own `tauri.conf.json`, sparse-checked
+ * out beside this folder for that alone.
  */
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes below run INSIDE the installed apps (serialised through CDP), not in Node.
@@ -39,6 +44,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { identityChecks, parseIdentityRead } from './app-identity.mjs';
 import { ruleProblems } from './firewall-rule.mjs';
 
 const args = Object.fromEntries(
@@ -60,6 +67,8 @@ const CONSOLE = 'http://127.0.0.1:5174';
 const RULE_OSC = 'CG Control - OSC from CasparCG (UDP 6250)';
 const RULE_TEMPLATES = 'CG Control - templates to CasparCG (TCP 7911)';
 const APPDATA = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
+/** The checkout root: this script sits at `apps/runtime/tests/desktop/`. */
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
 const results = [];
 let failed = false;
@@ -167,7 +176,12 @@ function installedEntry(hive, product) {
     }
     const value = (name) =>
       new RegExp(`^\\s+${name}\\s+REG_SZ\\s+(.*?)\\s*$`, 'm').exec(text)?.[1] ?? null;
-    return { displayName: value('DisplayName'), displayVersion: value('DisplayVersion') };
+    return {
+      displayName: value('DisplayName'),
+      displayVersion: value('DisplayVersion'),
+      // `RELEASE-091-01` §3 — the icon Installed apps draws for it.
+      displayIcon: value('DisplayIcon'),
+    };
   }
   return null;
 }
@@ -429,6 +443,111 @@ async function ffmpegProbe() {
   };
 }
 
+// ── Each app's icon and taskbar identity (`RELEASE-091-01` §3, `B-290`) ──────
+
+/** Where CG Designer's per-user install puts its exe, and the first that exists. */
+function installedDesignerExe() {
+  const candidates = [
+    path.join(process.env.LOCALAPPDATA ?? '', 'CG Designer', 'cg-designer.exe'),
+    path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'CG Designer', 'cg-designer.exe'),
+  ];
+  return { exe: candidates.find((c) => fs.existsSync(c)), candidates };
+}
+
+/**
+ * The bundle identifier Tauri's NSIS stamps on every shortcut it writes (`SetLnkAppUserModelId`), read
+ * from the app's own config — never a second copy here.
+ */
+function identifierOf(app) {
+  const file = path.join(REPO, 'apps', app, 'src-tauri', 'tauri.conf.json');
+  return JSON.parse(fs.readFileSync(file, 'utf8')).identifier;
+}
+
+/**
+ * One PowerShell read of what Windows shows for an app: the SHA-256 of the icon inside its exe (as the
+ * shell extracts it, rendered to PNG), and for every `<product>.lnk` under Start and the desktop — both
+ * the all-users and this user's folders — the file its icon comes from, that icon's hash, and its
+ * AppUserModelID (the shortcut's own property; `Get-StartApps` only when the shell cannot say).
+ */
+function identityScript(product, exe) {
+  const literal = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    // `Get-StartApps` loads a module on first use and reports progress on stderr as CLIXML.
+    "$ProgressPreference = 'SilentlyContinue'",
+    'Add-Type -AssemblyName System.Drawing',
+    'function IconHash([string]$p) {',
+    '  if ([string]::IsNullOrWhiteSpace($p) -or -not (Test-Path -LiteralPath $p)) { return $null }',
+    '  $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($p)',
+    '  if ($null -eq $icon) { return $null }',
+    '  $ms = New-Object System.IO.MemoryStream',
+    '  $icon.ToBitmap().Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)',
+    '  $sha = [System.Security.Cryptography.SHA256]::Create()',
+    "  return (($sha.ComputeHash($ms.ToArray()) | ForEach-Object { $_.ToString('x2') }) -join '')",
+    '}',
+    `$product = ${literal(product)}`,
+    `$exe = ${literal(exe)}`,
+    '$places = @(',
+    "  @{ where = 'start'; root = [Environment]::GetFolderPath('CommonPrograms') },",
+    "  @{ where = 'start'; root = [Environment]::GetFolderPath('Programs') },",
+    "  @{ where = 'desktop'; root = [Environment]::GetFolderPath('CommonDesktopDirectory') },",
+    "  @{ where = 'desktop'; root = [Environment]::GetFolderPath('DesktopDirectory') }",
+    ')',
+    '$ws = New-Object -ComObject WScript.Shell',
+    '$shell = New-Object -ComObject Shell.Application',
+    '$startApps = @()',
+    'try { $startApps = @(Get-StartApps) } catch { }',
+    '$seen = @{}',
+    '$shortcuts = @()',
+    'foreach ($place in $places) {',
+    '  if ([string]::IsNullOrWhiteSpace($place.root) -or -not (Test-Path -LiteralPath $place.root)) { continue }',
+    '  foreach ($lnk in @(Get-ChildItem -LiteralPath $place.root -Filter "$product.lnk" -Recurse -Depth 1 -ErrorAction SilentlyContinue)) {',
+    '    if ($seen.ContainsKey($lnk.FullName)) { continue }',
+    '    $seen[$lnk.FullName] = $true',
+    '    $sc = $ws.CreateShortcut($lnk.FullName)',
+    '    $loc = [string]$sc.IconLocation',
+    "    $cut = $loc.LastIndexOf(',')",
+    '    $src = if ($cut -ge 0) { $loc.Substring(0, $cut) } else { $loc }',
+    '    if ([string]::IsNullOrWhiteSpace($src)) { $src = $sc.TargetPath }',
+    '    $src = [Environment]::ExpandEnvironmentVariables($src)',
+    '    $aumid = $null; $via = $null',
+    "    try { $aumid = [string]$shell.Namespace($lnk.DirectoryName).ParseName($lnk.Name).ExtendedProperty('System.AppUserModel.ID'); $via = 'shortcut' } catch { }",
+    "    if ([string]::IsNullOrEmpty($aumid)) { $app = $startApps | Where-Object { $_.Name -eq $product } | Select-Object -First 1; if ($null -ne $app) { $aumid = [string]$app.AppID; $via = 'Get-StartApps' } }",
+    '    $shortcuts += [pscustomobject]@{ path = $lnk.FullName; where = $place.where; iconSource = $src; icon = (IconHash $src); aumid = $aumid; aumidVia = $via }',
+    '  }',
+    '}',
+    '[pscustomobject]@{ exeIcon = (IconHash $exe); shortcuts = $shortcuts } | ConvertTo-Json -Compress -Depth 4',
+  ].join('\n');
+}
+
+/** Run {@link identityScript} — encoded, so no quote in it is ever re-parsed by a command line. */
+function readIdentity(product, exe) {
+  const encoded = Buffer.from(identityScript(product, exe), 'utf16le').toString('base64');
+  return parseIdentityRead(
+    run('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded]),
+  );
+}
+
+/** Both apps installed: what Windows shows for each, and that the two DIFFER. */
+function identities() {
+  const designerExe = installedDesignerExe().exe ?? '';
+  const apps = [
+    { product: 'CG Control', identifier: identifierOf('runtime'), exe: CONTROL_EXE, hive: 'HKLM' },
+    {
+      product: 'CG Designer',
+      identifier: identifierOf('designer'),
+      exe: designerExe,
+      hive: 'HKCU',
+    },
+  ].map(({ hive, ...app }) => ({
+    ...app,
+    ...readIdentity(app.product, app.exe),
+    displayIcon: installedEntry(hive, app.product)?.displayIcon ?? null,
+  }));
+  fs.writeFileSync(path.join(out, 'app-identity.json'), JSON.stringify(apps, null, 2));
+  for (const c of identityChecks(apps)) check(c.name, c.ok, c.detail);
+}
+
 // ── CG Designer ──────────────────────────────────────────────────────────────
 
 async function designer() {
@@ -439,11 +558,7 @@ async function designer() {
     check('CG Designer installs without admin', false, err instanceof Error ? err.message : '');
     return;
   }
-  const candidates = [
-    path.join(process.env.LOCALAPPDATA ?? '', 'CG Designer', 'cg-designer.exe'),
-    path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'CG Designer', 'cg-designer.exe'),
-  ];
-  const exe = candidates.find((c) => fs.existsSync(c));
+  const { exe, candidates } = installedDesignerExe();
   check(
     'CG Designer installs per user, without admin, under LOCALAPPDATA',
     exe !== undefined,
@@ -791,6 +906,8 @@ if (phase === 'install') {
 } else if (phase === 'drive') {
   check('the apps are driven unelevated, as an operator runs them', level === 'Medium', level);
   await step('CG Designer smoke', designer);
+  // `RELEASE-091-01` §3 — both apps are installed now (CG Control by the install phase).
+  await step('Each app its own icon and taskbar identity', identities);
   await step('CG Control smoke', controlDrive);
 } else {
   await step('CG Control uninstall', controlUninstall);

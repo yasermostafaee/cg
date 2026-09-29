@@ -9,12 +9,20 @@ Designer the light one — so that the taskbar, Alt+Tab, the title bar, the Star
 and Installed apps each show that app's own icon, and the two apps never share one there. Each app's
 shortcuts SHALL carry its own AppUserModelID (its bundle identifier), so the two never group together in
 the taskbar. The clean-Windows smoke SHALL read each installed exe's icon resource, each shortcut's icon
-and each shortcut's AppUserModelID, and SHALL fail when the two apps' values are equal.
+and each shortcut's AppUserModelID (Start and the desktop, all users and the current user), and each
+Installed-apps entry's icon, and SHALL fail when the two apps' values are equal. The identifier each
+shortcut must carry SHALL be read from the app's own `tauri.conf.json`, never restated in the smoke.
 
 #### Scenario: Two installed apps
 
 - **WHEN** both installers have run on a clean Windows **THEN** CG Control's exe icon, its shortcut's icon
   and its shortcut's AppUserModelID each differ from CG Designer's
+
+#### Scenario: Each app's own
+
+- **WHEN** the smoke reads either app **THEN** each of its shortcuts shows its own exe's icon and carries
+  its own bundle identifier, and Installed apps shows its own exe's icon
+- **WHEN** both apps embed one icon, as `0.9.0` did **THEN** the per-app checks pass and the controls fail
 
 ### Requirement: The release's SHA256SUMS.txt SHALL be the only one, and SHALL match its assets
 

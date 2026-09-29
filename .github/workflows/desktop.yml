@@ -138,12 +138,17 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # Only the smoke script is needed; nothing is installed or built from the checkout.
+      # Only the smoke script is needed; nothing is installed or built from the checkout. The two
+      # tauri.conf.json files are read for each app's identifier alone (RELEASE-091-01 §3: the
+      # AppUserModelID each shortcut must carry), never a second copy in the script.
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
-          sparse-checkout: apps/runtime/tests/desktop
+          sparse-checkout: |
+            apps/runtime/tests/desktop
+            apps/runtime/src-tauri/tauri.conf.json
+            apps/designer/src-tauri/tauri.conf.json
           sparse-checkout-cone-mode: false
 
       # Node runs the smoke SCRIPT only. The installed app runs its own cg-bridge.exe, and the

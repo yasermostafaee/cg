@@ -1378,3 +1378,13 @@ dark tile, CG Designer the light one — so every place Windows draws an app (ta
 bar, Start menu, desktop shortcut, Installed apps) shows that app's own. **Regression test:** the
 clean-Windows smoke reads each installed exe's icon resource, each shortcut's icon and each
 shortcut's AppUserModelID; control: the two apps' values differ.
+
+**Closed in code (2026-09-30, `RELEASE-091-01` §3; not yet archived).** `42af1a96`'s two sets are back
+(`src-tauri/icons/*`, byte for byte). The smoke's drive phase, once both apps are installed, reads for
+each app the SHA-256 of the icon the shell extracts from its exe, every `<product>.lnk` under Start and
+the desktop (all users and this user) with its icon and AppUserModelID, and the Installed-apps
+`DisplayIcon`; each app must show its own exe's icon and carry its own identifier (read from its
+`tauri.conf.json`), and the controls require the two apps' icons and ids to differ — the checks `0.9.0`
+would have failed. The judgement is `app-identity.mjs`, unit-tested (`installerAppIdentity.test.ts`,
+where the `0.9.0` reading fails exactly the controls); the Windows read was proven on this host against
+another app before CI ran it.
