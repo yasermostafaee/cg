@@ -97,14 +97,23 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     peekLayer(slot: LayerSlot): LayerState | undefined {
       return registry.peek(slot);
     },
+    stageLayers(channel: number): readonly LayerState[] {
+      return registry
+        .onStage()
+        .filter((l) => l.slot.channel === channel)
+        .sort((a, b) => a.slot.layer - b.slot.layer);
+    },
     setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void {
-      registry.patch(slot, patch);
+      const next = registry.patch(slot, patch);
       // Emit immediately so an integration test can observe state changes
       // without having to wait for the next tick. The tick still fires
       // independently to model CasparCG's framerate heartbeat.
+      // `RELEASE-091-01` B2 — only for a layer ON THE STAGE: a cleared layer goes silent, as the
+      // core's does, and a mixer write on a layer nothing was placed on says nothing either.
+      if (!next.onStage) return;
       emitter.sendMessage(
         `/channel/${String(slot.channel)}/stage/layer/${String(slot.layer)}/foreground/producer`,
-        [registry.get(slot).producer],
+        [next.producer],
       );
     },
     recordCgAdd(slot: LayerSlot, template: string, result: CgDataResult): number {

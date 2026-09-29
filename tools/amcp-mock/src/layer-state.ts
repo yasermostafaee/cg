@@ -38,6 +38,8 @@ export class LayerRegistry {
       clipLengthS: undefined,
       clipElapsedS: 0,
       clipRunningSince: null,
+      // `RELEASE-091-01` B2 — a layer nothing has been placed on is not on the stage.
+      onStage: false,
     };
     this.slots.set(key, fresh);
     return fresh;
@@ -50,14 +52,28 @@ export class LayerRegistry {
 
   patch(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): LayerState {
     const cur = this.get(slot);
-    const next: LayerState = { ...cur, ...patch };
+    // `RELEASE-091-01` B2 — placing a producer (fore- or background) puts the layer on the stage;
+    // only an explicit `onStage: false` (a `CLEAR`) takes it off. A mixer write changes neither.
+    const placed =
+      (patch.producer !== undefined && patch.producer !== 'empty') ||
+      (patch.backgroundProducer !== undefined && patch.backgroundProducer !== 'empty');
+    const next: LayerState = {
+      ...cur,
+      ...patch,
+      onStage: patch.onStage ?? (cur.onStage || placed),
+    };
     this.slots.set(keyOf(slot), next);
     return next;
   }
 
-  /** All currently-tracked layers (allocated by any past write). */
+  /** All currently-tracked layers (allocated by any past write, mixer-only ones included). */
   all(): readonly LayerState[] {
     return [...this.slots.values()];
+  }
+
+  /** `RELEASE-091-01` B2 — the layers that exist on the core's stage: what OSC and `INFO` report. */
+  onStage(): readonly LayerState[] {
+    return [...this.slots.values()].filter((l) => l.onStage);
   }
 }
 

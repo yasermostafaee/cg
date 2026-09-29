@@ -128,6 +128,42 @@ describe('the bridge writes it', () => {
     expect(text).not.toMatch(/\\"take\\":\\"[0-9a-f]{8,}/);
     fs.rmSync(path.dirname(file), { recursive: true, force: true });
   }, 30_000);
+
+  /*
+    🔴 `RELEASE-091-01` (DELTA B) — THE LOG KEEPS WRITING AFTER A RECONNECT. The session replaces its
+    command queue on every reconnect cycle, and the log listened on the FIRST queue — so after the
+    first reconnect nothing more reached `amcp.log`. Found while making the bridge count its own
+    acknowledged CLEAR, which listened in the same place and went deaf the same way.
+  */
+  it('🔴 a take after a reconnect is still written — control: the take before it was', async () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-amcp-rig-')), 'amcp.log');
+    const rig = await twoChannelRig({ banks: [standardBank(1)], bridge: { amcpLogPath: file } });
+    const rt = rig.handle.runtime;
+    expect(await rt.loadFixed({ channel: 1, layer: 99 }, 'logo-1', 'logo', {})).toEqual({
+      accepted: true,
+    });
+    expect((await rt.take('logo-1')).accepted).toBe(true);
+    await rig.handle.amcpLog?.flush();
+    expect(fs.readFileSync(file, 'utf8')).toMatch(/ms >> CG 1-99 PLAY 0 << 202/);
+
+    rig.mock.closeAllAmcpConnections();
+    const deadline = Date.now() + 15_000;
+    while (rt.health().primary.state === 'healthy' && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    while (rt.health().primary.state !== 'healthy' && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(rt.health().primary.state, 'the reconnect').toBe('healthy');
+
+    expect(await rt.loadFixed({ channel: 1, layer: 98 }, 'logo-2', 'logo', {})).toEqual({
+      accepted: true,
+    });
+    expect((await rt.take('logo-2')).accepted).toBe(true);
+    await rig.handle.amcpLog?.flush();
+    expect(fs.readFileSync(file, 'utf8')).toMatch(/ms >> CG 1-98 PLAY 0 << 202/);
+    fs.rmSync(path.dirname(file), { recursive: true, force: true });
+  }, 40_000);
 });
 
 // ───────────────────────────── the installed app's sidecar ─────────────────────────────

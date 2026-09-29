@@ -189,6 +189,17 @@ export interface LayerState {
   clipElapsedS: number;
   /** The mock clock's `now()` (ms) when the clip last started running; `null` while paused. */
   clipRunningSince: number | null;
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B2) — **WHETHER THE LAYER EXISTS ON THE CORE'S STAGE.** CasparCG
+   * 2.5 creates a stage layer when a producer is placed on it and ERASES it on `CLEAR`
+   * (`stage.cpp` `clear`: `layers_.erase(index)`); its OSC and its `INFO` entry are built from the
+   * layers that exist, so a cleared layer simply goes SILENT — it is never reported `empty`. A
+   * STOPPED layer still exists and reports `producer "empty"` (`layer.cpp` `stop`). Mixer state
+   * lives apart (`tweens_`) and survives a `CLEAR`, which is why this record is kept rather than
+   * deleted. The mock used to report every layer it had ever touched, `empty` included — the
+   * difference that let no test see a cleared layer of ours stay ON AIR (`B-292`).
+   */
+  onStage: boolean;
 }
 
 /** B-041 — why the mock's second-layer (html_cg_proxy → V8) emulation rejected a CG data arg. */
@@ -445,6 +456,8 @@ export interface HandlerContext {
   getLayer(slot: LayerSlot): LayerState;
   /** `ROUTE-PLATES-01` — the layer if it was ever touched, WITHOUT allocating one (a refusal must not). */
   peekLayer(slot: LayerSlot): LayerState | undefined;
+  /** `RELEASE-091-01` B2 — the channel's layers on the core's stage, lowest first: what `INFO` lists. */
+  stageLayers(channel: number): readonly LayerState[];
   /** Apply a partial update to a layer; emits OSC reflecting the new state. */
   setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void;
   /**

@@ -128,6 +128,37 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     this.clipTimes.reset();
   }
 
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B2) — **A LAYER OUR OWN `CLEAR` EMPTIED, noted as the core never
+   * reports it.**
+   *
+   * CasparCG 2.5 erases a cleared layer from its stage and simply stops reporting it
+   * (`stage.cpp` `clear`); it never sends `producer "empty"` for it. So after OUR clear the evidence
+   * that the layer is empty is the core's own `202 CLEAR OK`, and the caller notes it here. The
+   * occupancy and clip-time taps forget the producer AT ONCE — no staleness window in which a take
+   * could read the old `html` and resume a layer that is empty — and the change tracker records
+   * `empty`, so the next producer placed there is not suppressed as a repeat (`B-053`).
+   *
+   * It emits NOTHING on `events`: the session's OSC liveness (`lastOscAt`) is fed only by what
+   * actually arrives on the wire, and a note of our own must never vouch for a silent link. The
+   * event is returned for the caller to apply to its own reconciler.
+   *
+   * The mock used to send `empty` itself, which is how every test stood on a report the real core
+   * never makes.
+   */
+  noteCleared(channel: number, layer: number, at: number = Date.now()): OscEvent {
+    const event: OscEvent = {
+      kind: 'osc.layer.foreground.producer',
+      channel,
+      layer,
+      producer: 'empty',
+    };
+    this.occupancy.note(event, at);
+    this.clipTimes.note(event, at);
+    this.changeTracker.shouldEmit(event);
+    return event;
+  }
+
   get port(): number {
     return this.boundPort;
   }

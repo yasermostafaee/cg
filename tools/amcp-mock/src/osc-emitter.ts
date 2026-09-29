@@ -110,7 +110,9 @@ export class OscEmitter {
         args: [0, 0, 0, 0, 0, 0, 0, 0],
       });
     }
-    for (const layer of this.registry.all()) {
+    // `RELEASE-091-01` B2 — the layers ON THE STAGE only: a cleared layer is erased from the core's
+    // stage and simply stops being reported (`stage.cpp` rebuilds the state from what exists).
+    for (const layer of this.registry.onStage()) {
       const base = `/channel/${String(layer.slot.channel)}/stage/layer/${String(layer.slot.layer)}`;
       messages.push({
         address: `${base}/foreground/producer`,

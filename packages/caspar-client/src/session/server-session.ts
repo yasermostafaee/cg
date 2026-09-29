@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { AmcpTransport, type ParsedAmcpResponse } from '../amcp/transport.js';
 import { OscTransport } from '../osc/transport.js';
-import { CommandQueue } from '../queue/command-queue.js';
+import { CommandQueue, type AmcpExchange } from '../queue/command-queue.js';
 import { probeAmcpLiveness } from './amcp-probe.js';
 import { Backoff } from './backoff.js';
 
@@ -76,6 +76,14 @@ export interface ServerSessionEvents {
   healthy: [];
   disconnected: [info: { reason: string }];
   error: [err: Error];
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B) — **EVERY COMMAND ANY OF THIS SESSION'S QUEUES SETTLES**, and its
+   * reply. The queue is REPLACED on every reconnect cycle (a fresh transport + queue), so a listener
+   * on `session.queue` heard only the first connection's commands: the bridge's AMCP log (`B-276`)
+   * went silent after the first reconnect, and so would anything else listening there. The session
+   * outlives its queues, so it is where a listener belongs.
+   */
+  exchange: [e: AmcpExchange];
 }
 
 /**
@@ -171,11 +179,19 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
 
     this.currentOsc = createOsc();
     this.currentAmcp = this.createAmcp();
-    this.currentQueue = this.createQueue(this.currentAmcp);
+    this.currentQueue = this.adoptQueue(this.createQueue(this.currentAmcp));
     this.backoff = new Backoff(opts.initialBackoffMs, opts.maxBackoffMs);
 
     this.currentOsc.on('events', this.onOscEvents);
     this.on('error', noop);
+  }
+
+  /** Forward a new cycle's queue's exchanges as the session's own ({@link ServerSessionEvents.exchange}). */
+  private adoptQueue(queue: CommandQueue): CommandQueue {
+    queue.on('exchange', (e) => {
+      this.emit('exchange', e);
+    });
+    return queue;
   }
 
   /** The current AMCP transport. Reference rotates after each reconnect cycle. */
@@ -296,7 +312,7 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
       // Fresh transport + queue for the next cycle. OSC stays bound.
       this.currentAmcp = this.createAmcp();
       this.currentAmcp.on('error', noop);
-      this.currentQueue = this.createQueue(this.currentAmcp);
+      this.currentQueue = this.adoptQueue(this.createQueue(this.currentAmcp));
     }
   }
 

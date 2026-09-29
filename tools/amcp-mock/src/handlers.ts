@@ -314,7 +314,14 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     ].join('\n');
     return { kind: 'ok-line', code: 201, verb: 'INFO', data: config };
   }
-  const ch = Number(req.args[0]);
+  /*
+    🔴 `RELEASE-091-01` (DELTA B, B2) — `INFO <channel>-<layer>` answers exactly as `INFO <channel>`:
+    2.5.0 registers INFO as a channel command and `info_channel_command` never reads the layer
+    (`AMCPCommandsImpl.cpp:1507-1535`), so the reply is the WHOLE channel — measured on the plant's
+    core as byte-identical replies (`occupancy-tap.ts`). The mock answered it `404`.
+  */
+  const address = /^(\d+)(?:-\d+)?$/.exec(req.args[0] ?? '');
+  const ch = address === null ? Number.NaN : Number(address[1]);
   if (!Number.isInteger(ch) || ch < 1 || ch > ctx.channelCount) {
     return { kind: 'err', code: 404, verb: 'INFO' };
   }
@@ -351,10 +358,46 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     '         </port_600>',
     '      </port>',
     '   </output>',
+    ...stageXml(ctx.stageLayers(ch)),
     '</channel>',
     '',
   ].join('\n');
   return { kind: 'ok-line', code: 201, verb: 'INFO', data: xml };
+}
+
+/**
+ * 🔴 `RELEASE-091-01` (DELTA B, B2) — **THE `<stage>` BLOCK, IN THE REAL 2.5 SHAPE**: one
+ * `<layer_N>` per layer on the stage, each with its background and foreground producer, and NO
+ * `<stage>` element at all when nothing is on it. Captured on the plant's core:
+ * `b3-info-2-80-on-air.ndjson` (a live `html` page on 2-80) and `b5-teardown-info.ndjson` (an empty
+ * channel, no `<stage>`). The mock carried no stage data, so nothing could ask it which layers exist.
+ */
+function stageXml(layers: readonly LayerState[]): string[] {
+  if (layers.length === 0) return [];
+  const producer = (kind: ProducerKind, path: string, paused: boolean | null): string[] => [
+    ...(kind !== 'empty' && path !== ''
+      ? ['<file>', `   <path>${xmlText(path)}</path>`, '</file>']
+      : []),
+    ...(paused === null ? [] : [`<paused>${String(paused)}</paused>`]),
+    `<producer>${kind}</producer>`,
+  ];
+  const indent = (lines: string[], by: string): string[] => lines.map((l) => `${by}${l}`);
+  return [
+    '   <stage>',
+    '      <layer>',
+    ...layers.flatMap((l) => [
+      `         <layer_${String(l.slot.layer)}>`,
+      '            <background>',
+      ...indent(producer(l.backgroundProducer, l.backgroundFilePath, null), '               '),
+      '            </background>',
+      '            <foreground>',
+      ...indent(producer(l.producer, l.filePath, l.paused), '               '),
+      '            </foreground>',
+      `         </layer_${String(l.slot.layer)}>`,
+    ]),
+    '      </layer>',
+    '   </stage>',
+  ];
 }
 
 /**
@@ -794,6 +837,9 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
       clipLengthS: undefined,
       clipElapsedS: 0,
       clipRunningSince: null,
+      // `RELEASE-091-01` B2 — and the layer leaves the stage: its OSC stops and `INFO` no longer
+      // lists it, as on the core. Its mixer state stays (the core keeps its transforms).
+      onStage: false,
     });
     return { kind: 'ok', code: 202, verb: 'CLEAR' };
   }

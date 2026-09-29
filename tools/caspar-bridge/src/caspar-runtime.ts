@@ -781,6 +781,20 @@ export function startsSilentFromPlayout(origin: 'input' | 'media' | undefined): 
 }
 
 /**
+ * `RELEASE-091-01` (DELTA B, B2) — the layer a settled exchange cleared: a `CLEAR <ch>-<L>` the core
+ * answered `202`. Anything else — a refusal, a timeout, a channel-wide `CLEAR` — proves nothing
+ * about one layer and answers `null`.
+ */
+export function acknowledgedClearOf(
+  line: string,
+  reply: string | undefined,
+): { channel: number; layer: number } | null {
+  if (reply === undefined || !reply.startsWith('202')) return null;
+  const m = /^CLEAR (\d+)-(\d+)$/.exec(line.trim());
+  return m === null ? null : { channel: Number(m[1]), layer: Number(m[2]) };
+}
+
+/**
  * `PLAYOUT-SOURCES-01` §1.I — the frames one plate's `MIXER … VOLUME <v>` carries. **The one
  * spelling** every plate site asks: a Playout plate (a D10 input or a D11 clip) going above silence
  * ramps; every silence, and a plate seated before `origin` existed, is the bare line.
@@ -2237,6 +2251,22 @@ export class CasparRuntime {
         for (const event of events) this.#reconciler.applyOsc(event);
       });
       /*
+        🔴 `RELEASE-091-01` (DELTA B, B2) — **OUR OWN ACKNOWLEDGED `CLEAR` IS THE EVIDENCE THE LAYER
+        IS EMPTY**, because the core never says so: it erases a cleared layer and goes silent
+        (`stage.cpp` `clear`). Until now the bridge waited for an `empty` report that only
+        `@cg/amcp-mock` ever sent, so on a real core a row read `loaded` or ON AIR for the tap's
+        staleness window after its own clear — and a take in that window could resume an EMPTY
+        layer (`CG PLAY` on nothing answers `202`). At the queue, where every CLEAR any path sends
+        is settled; the reconciler hears it from the primary only, exactly as it hears OSC.
+      */
+      session.on('exchange', (exchange) => {
+        if (this.#sessions[label] !== session) return; // torn-down era
+        const cleared = acknowledgedClearOf(exchange.line, exchange.reply);
+        if (cleared === null) return;
+        const event = session.osc.noteCleared(cleared.channel, cleared.layer);
+        if (this.#adapter.currentPrimary === label) this.#reconciler.applyOsc(event);
+      });
+      /*
         `FIELD-FIXES-01-A` — EVERY AMCP COMMAND THIS SESSION SETTLES, AND ITS REPLY LINE, for the
         bridge's AMCP log. At the session's queue, the one place every command it sends passes —
         the take, the seating, the mode and output reads, the heartbeat — so the log cannot miss a
@@ -2246,7 +2276,7 @@ export class CasparRuntime {
       if (sink !== undefined) {
         const server = this.#config.servers[label];
         const host = server === undefined ? '' : `${server.host}:${String(server.amcpPort)}`;
-        session.queue.on('exchange', (exchange) => {
+        session.on('exchange', (exchange) => {
           if (this.#sessions[label] !== session) return; // torn-down era
           sink({ ...exchange, server: label, host, at: Date.now() });
         });
