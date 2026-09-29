@@ -14,6 +14,7 @@ import {
   buildArgs,
   devStateDir,
   fakeModulePaths,
+  fakeStateName,
   installedStateDir,
   isInside,
   parseArgs,
@@ -156,9 +157,15 @@ describe('isolation — its own state folder, every path named', () => {
 describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` is a whole station', () => {
   const repo = path.resolve(here, '..', '..', '..');
 
-  it('the four modules the launcher loads by path are there — the three fakes, their composition, and CasparCG’s stand-in from its build', () => {
+  it('the five modules the launcher loads by path are there — the three fakes, their two compositions, and CasparCG’s stand-in from its build', () => {
     const files = fakeModulePaths(repo);
-    expect(Object.keys(files).sort()).toEqual(['caspar', 'pgmFeed', 'playout', 'station']);
+    expect(Object.keys(files).sort()).toEqual([
+      'caspar',
+      'localCaspar',
+      'pgmFeed',
+      'playout',
+      'station',
+    ]);
     for (const [name, file] of Object.entries(files)) {
       expect(fs.existsSync(file), `${name}: ${file}`).toBe(true);
     }
@@ -303,6 +310,117 @@ describe('the flags', () => {
     expect(parseArgs(['--playout'])).toHaveProperty('error');
     expect(parseArgs(['--fake', '--playout', 'x'])).toHaveProperty('error');
     expect(parseArgs(['--port', '1'])).toHaveProperty('error');
+  });
+});
+
+describe('`DEV-LOCAL-CASPAR-01` — `--fake --caspar <host:port>`', () => {
+  it('--caspar carries its value as typed, in either spelling, with --fake', () => {
+    expect(parseArgs(['--fake', '--caspar', '127.0.0.1:5250'])).toEqual({
+      playout: undefined,
+      fake: true,
+      open: true,
+      caspar: '127.0.0.1:5250',
+    });
+    expect(parseArgs(['--fake', '--caspar=[::1]:5250', '--no-open'])).toMatchObject({
+      caspar: '[::1]:5250',
+      open: false,
+    });
+    // The loopback rule is NOT here: whatever was typed reaches the one rule the launcher asks.
+    expect(parseArgs(['--fake', '--caspar', '192.168.21.111:5250'])).toMatchObject({
+      caspar: '192.168.21.111:5250',
+    });
+    // Control: a run without it carries none.
+    expect(parseArgs(['--fake'])).toMatchObject({ caspar: undefined });
+  });
+
+  it('--caspar goes with --fake, and needs a value — each refused in one line', () => {
+    expect(parseArgs(['--caspar', '127.0.0.1:5250'])).toEqual({
+      error: '--caspar goes with --fake: pnpm dev:station --fake --caspar 127.0.0.1:5250.',
+    });
+    expect(parseArgs(['--fake', '--caspar'])).toEqual({
+      error: "--caspar needs this machine's CasparCG: --caspar 127.0.0.1:5250.",
+    });
+    expect(parseArgs(['--fake', '--caspar', '--no-open'])).toHaveProperty('error');
+    expect(parseArgs(['--fake', '--playout', 'x', '--caspar', '127.0.0.1:5250'])).toHaveProperty(
+      'error',
+    );
+  });
+
+  it('a local-core run keeps its own state folder, beside the fake one', () => {
+    expect(fakeStateName({ caspar: undefined })).toBe('fake');
+    expect(fakeStateName({ caspar: '127.0.0.1:5250' })).toBe('fake-local');
+  });
+
+  const LOCAL = {
+    version: '2.5.0 69e8ad5 Stable',
+    channels: [
+      { channel: 1, format: '1080i5000' },
+      { channel: 2, format: '720p5000' },
+    ],
+    mediaFolder: 'D:/CasparCG Server/Server/media/',
+    clips: 812,
+    stills: 3,
+  };
+
+  it('the start names the core, its version and its channels; its media; and where PROGRAM is seen', () => {
+    const lines = banner({
+      stateDir: 'C:\\x\\fake-local',
+      playout: 'http://127.0.0.1:63114',
+      fake: {
+        username: 'cg-admin',
+        password: 'pw',
+        caspar: '127.0.0.1:5250',
+        local: LOCAL,
+        notes: [],
+      },
+    });
+    expect(lines).toContain(
+      "  CasparCG 127.0.0.1:5250  (this machine's · 2.5.0 69e8ad5 Stable · CH 1 1080i5000, CH 2 720p5000)",
+    );
+    expect(lines).toContain(
+      '  media    812 clips, 3 stills in D:/CasparCG Server/Server/media/  (read again when the Media tab asks after 30 s)',
+    );
+    expect(lines).toContain("  PROGRAM  no return feed here — watch CasparCG's own window");
+    expect(lines).toContain('  Ctrl+C stops it — what is on air stays on CasparCG.');
+    // The same-machine warning is still said to be expected — it is true here too.
+    expect(
+      lines.filter((l) => l.includes('The Playout and CasparCG run on this machine')),
+    ).toHaveLength(1);
+    // No fake CasparCG, and no programme feed, is claimed.
+    expect(lines.join('\n')).not.toMatch(/fake · channels|programme feeds on/);
+  });
+
+  it('one clip, no still, and no media folder read at all', () => {
+    const one = banner({
+      stateDir: 'C:\\x',
+      playout: 'http://127.0.0.1:1',
+      fake: {
+        username: 'a',
+        password: 'b',
+        caspar: '127.0.0.1:5250',
+        local: { ...LOCAL, clips: 1, stills: 0 },
+      },
+    });
+    expect(one).toContain(
+      '  media    1 clip in D:/CasparCG Server/Server/media/  (read again when the Media tab asks after 30 s)',
+    );
+    const none = banner({
+      stateDir: 'C:\\x',
+      playout: 'http://127.0.0.1:1',
+      fake: {
+        username: 'a',
+        password: 'b',
+        caspar: '127.0.0.1:5250',
+        local: { ...LOCAL, mediaFolder: null, clips: 0, stills: 0 },
+        notes: [
+          'CasparCG did not name its media folder (INFO PATHS answered 404) — the Media tab is empty.',
+        ],
+      },
+    });
+    expect(none).toContain('  media    none — see the note below');
+    expect(none).toContain(
+      '  note     CasparCG did not name its media folder (INFO PATHS answered 404) — the Media tab is empty.',
+    );
   });
 });
 

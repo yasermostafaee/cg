@@ -8,6 +8,10 @@
  *   pnpm dev:station --playout <url>  change it
  *   pnpm dev:station --fake           a whole fake station on loopback — the Playout, CasparCG
  *                                     serving channels 1 and 2, and their programme feeds (Node 23+)
+ *   pnpm dev:station --fake --caspar 127.0.0.1:5250
+ *                                     the fake Playout in front of THIS machine's own CasparCG: its
+ *                                     channels, its media library, real video in its own window
+ *                                     (DEV-LOCAL-CASPAR-01; loopback only; Node 23+)
  *   pnpm dev:station --no-open        do not open the browser
  *
  * It runs INSTEAD of CG Control, never beside it: the Playout's CORS admits one origin, UDP 6250
@@ -31,6 +35,7 @@ import {
   buildArgs,
   devStateDir,
   fakeModulePaths,
+  fakeStateName,
   installedStateDir,
   isInside,
   parseArgs,
@@ -95,6 +100,16 @@ function setPlayoutAddress(paths, address) {
   if (written.status !== 0) throw new Error(said.replace(/^\[caspar-bridge\] /, ''));
 }
 
+/** The fakes are TypeScript, run by Node's type stripping: Node 23 or newer. */
+function typeStrippingRefusal(flag) {
+  const major = Number(process.versions.node.split('.')[0]);
+  return major >= 23
+    ? null
+    : `${flag} needs Node 23 or newer (it runs the test suite's fakes from their TypeScript) — this is Node ${process.versions.node}.`;
+}
+
+const load = (file) => import(pathToFileURL(file).href);
+
 /**
  * `DELTA-MULTI-CHANNEL-01-A` A1 — THE WHOLE FAKE STATION: `fake-station.ts`'s composition (the fake
  * Playout with its automatic path open to this loopback machine, CasparCG's stand-in behind that
@@ -102,13 +117,8 @@ function setPlayoutAddress(paths, address) {
  * reaches the product: the bridge meets this station exactly as it meets a real one.
  */
 async function startFake() {
-  const major = Number(process.versions.node.split('.')[0]);
-  if (!(major >= 23)) {
-    throw new Error(
-      `--fake needs Node 23 or newer (it runs the test suite's fakes from their TypeScript) — this is Node ${process.versions.node}.`,
-    );
-  }
-  const load = (file) => import(pathToFileURL(file).href);
+  const refusal = typeStrippingRefusal('--fake');
+  if (refusal !== null) throw new Error(refusal);
   const [playoutMod, feedMod, stationMod, casparMod] = await Promise.all([
     load(FAKES.playout),
     load(FAKES.pgmFeed),
@@ -132,6 +142,49 @@ async function startFake() {
     notes: station.notes,
     stop: () => station.stop(),
   };
+}
+
+/**
+ * 🔴 `DEV-LOCAL-CASPAR-01` — **`--fake --caspar <host:port>`: THE FAKE PLAYOUT IN FRONT OF THIS
+ * MACHINE'S OWN CASPARCG.** `local-caspar-station.ts` reads the core (five AMCP reads, nothing else)
+ * and shapes the fake Playout from it — D4 its channels, D10 empty, D11 its media. No stand-in and no
+ * programme feed start: the bridge's AMCP and OSC go to the real core, which first-run names from D4
+ * exactly as it would name a real Playout's. Its target was checked by the module's own loopback rule
+ * before anything else ran (`main`).
+ */
+async function startLocalCaspar(localMod, target) {
+  const playoutMod = await load(FAKES.playout);
+  const station = await localMod.startLocalCasparStation(
+    { startFakePlayout: playoutMod.startFakePlayout },
+    target,
+  );
+  return {
+    address: station.playout.baseUrl,
+    username: playoutMod.FAKE_ADMIN.username,
+    password: playoutMod.FAKE_PLAYOUT_PASSWORD,
+    caspar: station.core.address,
+    local: {
+      version: station.core.version,
+      channels: station.core.channels,
+      mediaFolder: station.core.mediaFolder,
+      clips: station.core.clips,
+      stills: station.core.stills,
+    },
+    notes: station.notes,
+    stop: () => station.stop(),
+  };
+}
+
+/**
+ * `DEV-LOCAL-CASPAR-01` — `--caspar`'s value through the ONE loopback rule, before anything is
+ * probed, built or started: this machine, on 5250, or a one-line refusal.
+ */
+async function localCasparTarget(given) {
+  const refusal = typeStrippingRefusal('--caspar');
+  if (refusal !== null) return { error: refusal };
+  const localMod = await load(FAKES.localCaspar);
+  const target = localMod.parseCasparTarget(given);
+  return 'error' in target ? target : { localMod, target };
 }
 
 /**
@@ -270,8 +323,19 @@ async function main() {
     process.exitCode = 2;
     return;
   }
+  // `DEV-LOCAL-CASPAR-01` — the core this station may reach, decided before anything else runs.
+  let local = null;
+  if (options.caspar !== undefined) {
+    const checked = await localCasparTarget(options.caspar);
+    if ('error' in checked) {
+      say(checked.error);
+      process.exitCode = 2;
+      return;
+    }
+    local = checked;
+  }
   // `--fake` keeps its own station, so a fake run never replaces the remembered Playout.
-  const stateDir = options.fake ? path.join(root, 'fake') : root;
+  const stateDir = options.fake ? path.join(root, fakeStateName(options)) : root;
   const paths = stationPaths(stateDir, platform);
   fs.mkdirSync(stateDir, { recursive: true });
 
@@ -285,7 +349,7 @@ async function main() {
       readPlayoutAddress: () => readPlayoutAddress(paths),
       setPlayoutAddress: async (address) => setPlayoutAddress(paths, address),
       freshFakeState: () => freshFakeState(stateDir),
-      startFake,
+      startFake: local === null ? startFake : () => startLocalCaspar(local.localMod, local.target),
       start: (playout) => start(paths, playout),
       open: openBrowser,
       print: say,

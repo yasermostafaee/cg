@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { defaultFixedLayerBank } from '@cg/shared-ipc';
 import { CONSOLE_HEALTH_APP, CONSOLE_HEALTH_PATH } from '../src/console-http-server.js';
+import { LOCAL_CASPAR_MARKER } from './support/local-caspar-station.js';
 import { LOCAL_PLAYOUT_SOURCES_MARKER } from './support/local-playout-sources.js';
 
 /**
@@ -170,6 +171,21 @@ describe('DESKTOP-APPS-01 — the bundled sidecar, started as the desktop shell 
     expect(shipped).not.toContain(LOCAL_PLAYOUT_SOURCES_MARKER);
     expect(shipped).not.toContain('STUDIO-PC (Cam 1)');
     expect(shipped).not.toContain('rtsp://cam:secret@');
+  });
+
+  it('`DEV-LOCAL-CASPAR-01` — `dev:station --caspar`’s local-core station is NOT in the bundle the installer ships', () => {
+    const shipped = fs.readFileSync(bundle, 'utf8');
+    // Positive control: the instrument reads the real bundle — the bridge's own D4 path and its
+    // send guard's refusal code are in it.
+    expect(shipped).toContain('/api/cg/channels');
+    expect(shipped).toContain('amcp-guard-forbidden');
+    // The absence: the station's marker, its loopback refusal, its D4 row id and its scanner note are
+    // nowhere in it. ⚠ ASCII only: esbuild writes the bundle in its default ASCII charset, so a
+    // non-ASCII pin (the row NAME's `·`) would be escaped in a leak and could never match.
+    expect(shipped).not.toContain(LOCAL_CASPAR_MARKER);
+    expect(shipped).not.toContain('--caspar never connects there');
+    expect(shipped).not.toContain('local-ch');
+    expect(shipped).not.toContain('casparcg_auto_restart.bat');
   });
 
   it('serves the console and answers the health identity on the console origin', async () => {

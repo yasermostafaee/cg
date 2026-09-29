@@ -16,7 +16,8 @@ import {
 /**
  * Built-in handler set. Models the subset of CasparCG 2.3.x AMCP that
  * @cg/caspar-client exercises: VERSION, INFO, PLAY [HTML], CG ADD,
- * CG INVOKE, CG STOP, CG REMOVE, CLEAR.
+ * CG INVOKE, CG STOP, CG REMOVE, CLEAR — and, for `DEV-LOCAL-CASPAR-01`'s
+ * reads of a real core, INFO PATHS and CLS.
  *
  * Anything else is a `400 ERROR`. Tests can override individual verbs via
  * `MockHandle.setHandler`.
@@ -25,6 +26,7 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
   const m = new Map<string, AmcpHandler>();
   m.set('VERSION', handleVersion);
   m.set('INFO', handleInfo);
+  m.set('CLS', handleCls);
   m.set('PLAY', handlePlay);
   m.set('LOAD', handleLoad);
   m.set('LOADBG', handleLoadBg);
@@ -198,6 +200,34 @@ function handleVersion(_req: AmcpRequest): AmcpResponse {
   return { kind: 'ok-line', code: 201, verb: 'VERSION', data: VERSION_STRING };
 }
 
+/**
+ * `DEV-LOCAL-CASPAR-01` — `CLS`, as a 2.5.0 core answers it. The core does not list media itself:
+ * it relays the media scanner's `/cls` body verbatim, and answers `501 CLS FAILED` when no scanner
+ * answers (`AMCPCommandsImpl.cpp` `make_request` / `cls_command`). The scanner's body is
+ * `200 CLS OK`, one line per file, and an empty line (`src/app.ts`); each line is `generateCinf`'s
+ * join, which puts TWO spaces on each side of the type (`" MOVIE "` joined with `' '`).
+ */
+function handleCls(_req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const files = ctx.mediaFiles();
+  if (files === null) return { kind: 'err', code: 501, verb: 'CLS' };
+  const lines = files.map((f) =>
+    [`"${f.id}"`, ` ${f.type} `, String(f.bytes), f.modified, String(f.frames), f.timebase].join(
+      ' ',
+    ),
+  );
+  return { kind: 'ok-multi', code: 200, verb: 'CLS', lines };
+}
+
+/** The five characters boost's `write_xml` writes as entities in a text node. */
+function xmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (req.args.length === 0) {
     const lines: string[] = [];
@@ -205,6 +235,26 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
       lines.push(`${String(ch)} PAL PLAYING`);
     }
     return { kind: 'ok-multi', code: 200, verb: 'INFO', lines };
+  }
+  /*
+    `DEV-LOCAL-CASPAR-01` — `INFO PATHS`, in the real dialect (`AMCPCommandsImpl.cpp`
+    `info_paths_command`): `201 INFO PATHS OK` and ONE chunk — boost's `write_xml` with a 3-space
+    indent, bare `\n` inside, one `\r\n` after it. `media-path` is the config's own value (`env.cpp`
+    keeps a relative one relative); `initial-path` is the start folder with `/` appended.
+  */
+  if (req.args[0]?.toUpperCase() === 'PATHS') {
+    const xml = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<paths>',
+      `   <media-path>${xmlText(ctx.paths.media)}</media-path>`,
+      '   <log-path>log/</log-path>',
+      '   <data-path>data/</data-path>',
+      '   <template-path>template/</template-path>',
+      `   <initial-path>${xmlText(ctx.paths.initial)}</initial-path>`,
+      '</paths>',
+      '',
+    ].join('\n');
+    return { kind: 'ok-line', code: 201, verb: 'INFO PATHS', data: xml };
   }
   /*
     🔴 `B-189` — `INFO <channel>` answers in the REAL server's dialect, because the old

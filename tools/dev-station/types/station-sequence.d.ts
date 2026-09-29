@@ -17,6 +17,14 @@ declare module '*station-sequence.mjs' {
     readonly caspar?: string;
     /** The programme feeds that started, by port. */
     readonly feeds?: readonly number[];
+    /** `DEV-LOCAL-CASPAR-01` — what the start read from this machine's own CasparCG (`--caspar`). */
+    readonly local?: {
+      readonly version: string;
+      readonly channels: readonly { readonly channel: number; readonly format: string }[];
+      readonly mediaFolder: string | null;
+      readonly clips: number;
+      readonly stills: number;
+    };
     /** One line per part that could not start. */
     readonly notes?: readonly string[];
     stop(): Promise<void>;

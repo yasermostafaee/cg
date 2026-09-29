@@ -13,6 +13,7 @@ import type {
   LayerState,
   MixerRect,
   MockHandle,
+  MockMediaFile,
   MockOptions,
   OscArgValue,
   ReceivedCommand,
@@ -71,15 +72,24 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   const deferredMixer = new Map<number, (() => void)[]>();
   // `PLAYOUT-SOURCES-01` — the files this server no longer has (`setMissingMedia`).
   let missingMedia = new Set<string>();
+  // `DEV-LOCAL-CASPAR-01` — the media scanner's library (`CLS`); `null` = no scanner running.
+  let mediaFiles: readonly MockMediaFile[] | null = opts.media ?? null;
 
   const ctx: HandlerContext = {
     channelCount,
     now,
+    paths: {
+      media: opts.paths?.media ?? 'media/',
+      initial: opts.paths?.initial ?? 'C:\\casparcg/',
+    },
     clipLengthOf(file: string): number | undefined {
       return clipLength(file);
     },
     isMissingMedia(file: string): boolean {
       return missingMedia.has(file);
+    },
+    mediaFiles(): readonly MockMediaFile[] | null {
+      return mediaFiles;
     },
     getLayer(slot: LayerSlot): LayerState {
       return registry.get(slot);
@@ -220,6 +230,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     setMissingMedia(paths: readonly string[]): void {
       missingMedia = new Set(paths);
+    },
+    setMedia(files: readonly MockMediaFile[] | null): void {
+      mediaFiles = files;
     },
     stagedMixerCount(channel: number): number {
       return deferredMixer.get(channel)?.length ?? 0;

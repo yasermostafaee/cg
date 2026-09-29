@@ -192,13 +192,19 @@ export function renumberHolders(inputs: readonly FakeInput[]): FakeInput[] {
   });
 }
 
-/** One D11 item as the Playout sends it (§2.1–§2.2). `clip` is ABSOLUTE, with `/`. */
+/**
+ * One D11 item as the Playout sends it (§2.1–§2.2). `clip` is ABSOLUTE, with `/`.
+ *
+ * `DEV-LOCAL-CASPAR-01` — `still` and a missing `durationMs` are there for the local-core station,
+ * whose library is a real core's `CLS`: an image is a `STILL` with no length, and a still shown as
+ * "0:00" in the picker would be a length nobody measured. The generated library below has neither.
+ */
 export interface FakeMediaItem {
   readonly id: string;
   readonly name: string;
   readonly clip: string;
-  readonly type: 'video' | 'audio';
-  readonly durationMs: number;
+  readonly type: 'video' | 'audio' | 'still';
+  readonly durationMs?: number;
   readonly width?: number;
   readonly height?: number;
   readonly folder: string;
@@ -1026,6 +1032,11 @@ export interface FakePlayout {
    * length and reports it over OSC (`file/time`), as a 2.5.0 core does.
    */
   clipLengthS(clip: string): number | undefined;
+  /**
+   * `DEV-LOCAL-CASPAR-01` — replace the WHOLE library D11 answers over (a removed item is forgotten
+   * too). The local-core station loads a real core's `CLS` here, at its start and on a re-read.
+   */
+  setMedia(items: readonly FakeMediaItem[]): void;
   /** Take one media item out of the library ("not playable now"); answers whether it was there. */
   removeMedia(id: string): boolean;
   /** Put a removed media item back. */
@@ -1212,6 +1223,8 @@ class FakePlayoutServer implements FakePlayout {
   #credentialFailure: FakeCredentialFailure | null = null;
   #port = 0;
   #listening = false;
+  /** `DEV-LOCAL-CASPAR-01` — awaited before a D11 SEARCH is answered ({@link FakePlayoutOptions}). */
+  readonly #beforeMediaSearch: (() => Promise<void>) | undefined;
 
   constructor(
     active: FakeSigningKey,
@@ -1222,6 +1235,7 @@ class FakePlayoutServer implements FakePlayout {
     this.#sealOnLoopback = options.sealOnLoopback ?? true;
     this.#listenHost = options.listenHost ?? '127.0.0.1';
     this.#grants = options.grants ?? {};
+    this.#beforeMediaSearch = options.beforeMediaSearch;
     this.#published = [active];
     this.#active = active;
     this.#unpublished = unpublished;
@@ -1400,9 +1414,16 @@ class FakePlayoutServer implements FakePlayout {
 
   clipLengthS(clip: string): number | undefined {
     for (const item of this.#library.values()) {
-      if (item.clip === clip) return item.durationMs / 1000;
+      if (item.clip === clip)
+        return item.durationMs === undefined ? undefined : item.durationMs / 1000;
     }
     return undefined;
+  }
+
+  setMedia(items: readonly FakeMediaItem[]): void {
+    this.#library.clear();
+    this.#removedMedia.clear();
+    for (const item of items) this.#library.set(item.id, item);
   }
 
   removeMedia(id: string): boolean {
@@ -1664,6 +1685,9 @@ class FakePlayoutServer implements FakePlayout {
       if (query.has('ids')) this.#counts.mediaIds += 1;
       else this.#counts.media += 1;
       this.#mediaQueries.push(query.toString());
+      // `DEV-LOCAL-CASPAR-01` — a SEARCH only: an `ids=` read is a take's re-check, whose budget is
+      // 1.5 s (`RETRY_READ_TIMEOUT_MS`), and it must never wait on a library re-read.
+      if (!query.has('ids')) await this.#beforeMediaSearch?.();
       this.#serveMedia(req, res, query);
       return;
     }
@@ -1884,6 +1908,12 @@ export interface FakePlayoutOptions {
    * real `cg-admin` holds channels 1 AND 2 of the test Playout, which `FAKE_ADMIN` does not.
    */
   readonly grants?: Partial<Record<FakeUserKey, FakeCgChannels>>;
+  /**
+   * `DEV-LOCAL-CASPAR-01` — awaited before every D11 SEARCH is answered (never before an `ids=`
+   * read). The local-core station re-reads the core's `CLS` here when 30 s have passed, so the Media
+   * tab lists what the core holds NOW. It must not reject: a failed re-read keeps the last library.
+   */
+  readonly beforeMediaSearch?: () => Promise<void>;
 }
 
 export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {

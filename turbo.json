@@ -105,7 +105,8 @@
         "tests/**",
         "vitest.config.*",
         "package.json",
-        "$TURBO_ROOT$/tools/caspar-bridge/bin/**"
+        "$TURBO_ROOT$/tools/caspar-bridge/bin/**",
+        "$TURBO_ROOT$/tools/caspar-bridge/tests/support/**"
       ],
       "passThroughEnv": [
         "VITEST_MAX_FORKS",

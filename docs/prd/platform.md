@@ -3597,3 +3597,29 @@ planted THEN that test is red.
 - **Linux CI** on `9d732331`: <https://github.com/yasermostafaee/cg/actions/runs/36436809766> — COMPLETED
   `success` on the first attempt; `Lint • Typecheck • Test • Build` RAN, `media-plates.integration.test.ts`
   21 ✓ and `route-plates.integration.test.ts` 26 ✓; `E2E (Playwright)` RAN, green.
+
+## [~] P-058 — `pnpm dev:station --fake --caspar 127.0.0.1:5250`: the fake Playout in front of this machine's own CasparCG ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `DEV-LOCAL-CASPAR-01` (v1) · `openspec/changes/dev-local-caspar` · the owner's local run still open
+
+**What.** A dev-only mode of the dev station. The bridge's AMCP and OSC go to the CasparCG running on
+this machine; the fake Playout stays in front (sign-in, D4, D10, D11), shaped from that core: D4 its
+channels from `INFO`, named `CH n · local` with `output: unknown`; D10 empty; D11 its media library from
+`CLS`, each clip's absolute path under the media folder `INFO PATHS` names, with its length — read at
+the start and again when the Media tab searches after 30 s. There is no programme feed: the core's own
+window shows the programme. The flag takes loopback only (`127.0.0.1`, `::1`, `localhost`, on 5250) and
+refuses every other host, the test Playout (`.111`) and the plant (`.114`) by name, in one line, before
+anything starts. The station sends only five reads (`VERSION`, `INFO`, `INFO PATHS`, `INFO CONFIG`,
+`CLS`) and writes no file; the bridge's send guard is unchanged. **Why.** `MEDIA-PLATES-01` (Pause,
+Restart, Loop, Ended, the remaining time) could not be checked with real video: `--fake` plays none, and
+`.111`'s engine service is stopped with `2.9.0` not installed (the Playout's reply of 2026-09-29,
+`PLAYOUT-CG-RESPONSE-ROUTE-ON-SOURCES-v1.md` §0, kept in the untracked `Claude outputs/`). **Acceptance:** WHEN the
+owner runs the command with his CasparCG running THEN the Media tab lists his clips, a take plays real
+video in CasparCG's window, and Pause, Restart, Loop, Ended and the remaining time can be checked;
+WHEN `--caspar` names any other machine THEN the station refuses in one line and starts nothing;
+WHEN the installer is built THEN none of this mode is in it.
+
+**Known limits, from source.** `CLS` is the media scanner's list relayed by the core; with no scanner
+running a 2.5.0 core answers `501 CLS FAILED` (`AMCPCommandsImpl.cpp` `make_request`), measured on the
+owner's core on 2026-09-28 — the Media tab is then empty and one start line says why. `CLS` gives names
+upper-cased and without their extension; a 2.5.0 core plays such a path (`src/common/filesystem.cpp`
+`probe_path`). The remaining time needs the core's OSC to its AMCP clients on 6250, its default
+(`src/shell/server.cpp` `setup_osc`); a start line says so when `INFO CONFIG` shows otherwise.

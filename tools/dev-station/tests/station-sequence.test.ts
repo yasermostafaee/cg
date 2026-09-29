@@ -289,3 +289,47 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` starts a whole station, fre
     expect(h.calls).not.toContain('fresh-fake');
   });
 });
+
+describe('`DEV-LOCAL-CASPAR-01` — `--fake --caspar`: the fake Playout in front of this machine’s CasparCG', () => {
+  it('a station that cannot start is ONE line — its own — and nothing else starts or opens', async () => {
+    const line =
+      'Nothing answers AMCP on 127.0.0.1:5250 (ECONNREFUSED) — start CasparCG, then run the command again.';
+    const h = harness({
+      startFake: async () => {
+        h.calls.push('start-fake');
+        throw new Error(line);
+      },
+    });
+    expect((await runDevStation({ ...OPTIONS, fake: true }, h.deps)).outcome).toBe('failed');
+    expect(h.printed).toEqual([line]);
+    expect(h.calls).toContain('start-fake');
+    expect(h.calls.some((c) => c.startsWith('set-address') || c.startsWith('start '))).toBe(false);
+    expect(h.opened).toEqual([]);
+  });
+
+  it('the banner carries what the start read from the core', async () => {
+    const h = harness({
+      startFake: async () => ({
+        address: 'http://127.0.0.1:43111',
+        username: 'cg-admin',
+        password: 'pw',
+        caspar: '127.0.0.1:5250',
+        local: {
+          version: '2.5.0 69e8ad5 Stable',
+          channels: [{ channel: 1, format: '1080i5000' }],
+          mediaFolder: 'D:/CasparCG/media/',
+          clips: 2,
+          stills: 0,
+        },
+        notes: [],
+        stop: async () => undefined,
+      }),
+    });
+    expect((await runDevStation({ ...OPTIONS, fake: true }, h.deps)).outcome).toBe('running');
+    expect(h.printed).toContain(
+      "  CasparCG 127.0.0.1:5250  (this machine's · 2.5.0 69e8ad5 Stable · CH 1 1080i5000)",
+    );
+    expect(h.printed).toContain("  PROGRAM  no return feed here — watch CasparCG's own window");
+    expect(h.calls).toContain('start http://127.0.0.1:43111');
+  });
+});

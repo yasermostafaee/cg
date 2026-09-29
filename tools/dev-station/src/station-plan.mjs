@@ -136,11 +136,14 @@ export function stationPaths(stateDir, platform) {
 }
 
 /**
- * 🔴 `DELTA-MULTI-CHANNEL-01-A` A1 — **THE FAKE STATION'S FOUR MODULES, LOADED BY PATH** (the dev
- * station is zero-dependency): the three fakes, and `fake-station.ts`, the one composition that wires
- * them — which the bridge's own suite drives against a real bridge. The TypeScript three run under
- * Node's type stripping, which is why `--fake` needs Node 23; CasparCG's stand-in runs from its build,
- * which `buildArgs()` already includes (`@cg/amcp-mock` is the bridge's own dependency).
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A1 — **THE FAKE STATION'S MODULES, LOADED BY PATH** (the dev station
+ * is zero-dependency): the three fakes, and `fake-station.ts`, the one composition that wires them —
+ * which the bridge's own suite drives against a real bridge. The TypeScript ones run under Node's
+ * type stripping, which is why `--fake` needs Node 23; CasparCG's stand-in runs from its build, which
+ * `buildArgs()` already includes (`@cg/amcp-mock` is the bridge's own dependency).
+ *
+ * `DEV-LOCAL-CASPAR-01` — and `local-caspar-station.ts`, the composition `--fake --caspar` runs
+ * instead: the fake Playout in front of this machine's own CasparCG, with no stand-in at all.
  */
 export function fakeModulePaths(repo) {
   const support = path.join(repo, 'tools', 'caspar-bridge', 'tests', 'support');
@@ -148,8 +151,18 @@ export function fakeModulePaths(repo) {
     playout: path.join(support, 'fake-playout.ts'),
     pgmFeed: path.join(support, 'fake-pgm-feed.ts'),
     station: path.join(support, 'fake-station.ts'),
+    localCaspar: path.join(support, 'local-caspar-station.ts'),
     caspar: path.join(repo, 'tools', 'amcp-mock', 'dist', 'index.js'),
   };
+}
+
+/**
+ * `DEV-LOCAL-CASPAR-01` — the state folder a `--fake` run keeps: `fake`, or `fake-local` when the
+ * fake Playout stands in front of this machine's own CasparCG — so the two kinds of run never
+ * replace each other's `.previous`.
+ */
+export function fakeStateName(options) {
+  return options.caspar === undefined ? 'fake' : 'fake-local';
 }
 
 /**
@@ -348,21 +361,58 @@ export function banner({ stateDir, playout, fake, log }) {
   lines.push(
     `  Playout  ${playout}${fake === undefined ? '' : `  (fake · sign in as ${fake.username} / ${fake.password})`}`,
   );
-  if (fake?.caspar !== undefined) {
+  const local = fake?.local;
+  if (fake?.caspar !== undefined && local !== undefined) {
+    lines.push(...localCasparLines(fake.caspar, local));
+  } else if (fake?.caspar !== undefined) {
     const feeds = fake.feeds ?? [];
     lines.push(
       `  CasparCG ${fake.caspar}  (fake · channels 1 and 2${feeds.length > 0 ? ` · programme feeds on ${feeds.join(', ')}` : ''})`,
+    );
+  }
+  if (fake?.caspar !== undefined) {
+    lines.push(
       '  check    "The Playout and CasparCG run on this machine" is expected here: they do.',
     );
   }
   for (const note of fake?.notes ?? []) lines.push(`  note     ${note}`);
-  lines.push('  Ctrl+C stops it.', '');
+  lines.push(
+    local === undefined
+      ? '  Ctrl+C stops it.'
+      : '  Ctrl+C stops it — what is on air stays on CasparCG.',
+    '',
+  );
   return lines;
 }
 
-/** The launcher's own flags: `--playout <url>`, `--fake`, `--no-open`. Anything else is refused. */
+const counted = (n, word) => `${String(n)} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * `DEV-LOCAL-CASPAR-01` — the start's lines about this machine's own CasparCG: the core, its version
+ * and its channels; its media library; and where the programme is seen — its own window, since this
+ * mode has no return feed.
+ */
+function localCasparLines(address, local) {
+  const channels = local.channels.map((c) => `CH ${String(c.channel)} ${c.format}`).join(', ');
+  return [
+    `  CasparCG ${address}  (this machine's · ${local.version} · ${channels})`,
+    local.mediaFolder === null
+      ? '  media    none — see the note below'
+      : `  media    ${counted(local.clips, 'clip')}${local.stills > 0 ? `, ${counted(local.stills, 'still')}` : ''} in ${local.mediaFolder}  (read again when the Media tab asks after 30 s)`,
+    "  PROGRAM  no return feed here — watch CasparCG's own window",
+  ];
+}
+
+/**
+ * The launcher's own flags: `--playout <url>`, `--fake`, `--caspar <host:port>`, `--no-open`.
+ * Anything else is refused.
+ *
+ * `DEV-LOCAL-CASPAR-01` — `--caspar` is carried as TYPED, and goes with `--fake` only. Whether it
+ * names this machine is not decided here: the ONE loopback rule is `parseCasparTarget` in
+ * `local-caspar-station.ts`, which the launcher asks before it probes, builds or starts anything.
+ */
 export function parseArgs(argv) {
-  const out = { playout: undefined, fake: false, open: true };
+  const out = { playout: undefined, fake: false, open: true, caspar: undefined };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--') continue;
@@ -375,9 +425,21 @@ export function parseArgs(argv) {
       out.playout = value;
       i++;
     } else if (arg.startsWith('--playout=')) out.playout = arg.slice('--playout='.length);
-    else return { error: `${arg} is not a dev:station flag (--playout <url>, --fake, --no-open).` };
+    else if (arg === '--caspar') {
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith('--'))
+        return { error: "--caspar needs this machine's CasparCG: --caspar 127.0.0.1:5250." };
+      out.caspar = value;
+      i++;
+    } else if (arg.startsWith('--caspar=')) out.caspar = arg.slice('--caspar='.length);
+    else
+      return {
+        error: `${arg} is not a dev:station flag (--playout <url>, --fake, --caspar <host:port>, --no-open).`,
+      };
   }
   if (out.fake && out.playout !== undefined)
     return { error: '--fake and --playout are one or the other.' };
+  if (out.caspar !== undefined && !out.fake)
+    return { error: '--caspar goes with --fake: pnpm dev:station --fake --caspar 127.0.0.1:5250.' };
   return out;
 }

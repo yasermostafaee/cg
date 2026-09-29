@@ -255,7 +255,11 @@ async function boot(
     `cg-media-plates-${String(process.pid)}-${String(Date.now())}-${String(Math.round(performance.now() * 1000))}.ndjson`,
   );
   traces.push(trace);
-  const lengths = new Map(MEDIA.map((m) => [m.clip, m.durationMs / 1000] as const));
+  const lengths = new Map(
+    MEDIA.map(
+      (m) => [m.clip, m.durationMs === undefined ? undefined : m.durationMs / 1000] as const,
+    ),
+  );
   const mock = await createMock({
     amcpPort: 0,
     oscPort,

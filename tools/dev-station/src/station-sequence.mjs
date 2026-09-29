@@ -5,8 +5,9 @@
  *   1. the installed CG Control in the way? ASK — and stop it only on a yes. Never without asking;
  *      any other program on the station's ports is NAMED and left alone;
  *   2. BUILD — before anything starts, so no stale compiled code ever runs;
- *   3. the Playout — `--fake`'s own (a whole fake station, started fresh), `--playout <url>`, the
- *      remembered one, or asked for ONCE;
+ *   3. the Playout — `--fake`'s own (a whole fake station, started fresh — or, with `--caspar`, the
+ *      fake Playout in front of this machine's own CasparCG), `--playout <url>`, the remembered one,
+ *      or asked for ONCE;
  *   4. START the bridge and the console, then the banner, then the browser.
  */
 import { ASK, CONSOLE_URL, DECLINED, answerIsYes, banner, blockedLine } from './station-plan.mjs';
@@ -56,7 +57,17 @@ export async function runDevStation(options, deps) {
       After the build, so a failed build leaves the last station as it was.
     */
     await deps.freshFakeState();
-    fake = await deps.startFake();
+    /*
+      `DEV-LOCAL-CASPAR-01` — a station that cannot start is ONE line: nothing answering AMCP on this
+      machine's CasparCG (`--caspar`), or the stand-in's port taken (`--fake`). The line is the
+      station's own; nothing else has started, so there is nothing to stop.
+    */
+    try {
+      fake = await deps.startFake();
+    } catch (err) {
+      deps.print(err instanceof Error ? err.message : String(err));
+      return { outcome: 'failed' };
+    }
     playout = fake.address;
     // Its port is new every start, so its issuer is too: the one writer clears the old one.
     try {

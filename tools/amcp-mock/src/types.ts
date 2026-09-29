@@ -260,6 +260,50 @@ export interface MockOptions {
    * the gap the bridge waited.
    */
   now?: () => number;
+  /**
+   * `DEV-LOCAL-CASPAR-01` — the media scanner's library, which `CLS` lists. ABSENT = no scanner is
+   * running, and `CLS` answers `501`, as a stock 2.5.0 core does then (`AMCPCommandsImpl.cpp`
+   * `make_request`: `501 CLS FAILED`). {@link MockHandle.setMedia} replaces it later.
+   */
+  media?: readonly MockMediaFile[];
+  /** `DEV-LOCAL-CASPAR-01` — what `INFO PATHS` answers. Each part defaults ({@link MockPaths}). */
+  paths?: MockPaths;
+}
+
+/**
+ * `DEV-LOCAL-CASPAR-01` — ONE media file as CasparCG's media scanner lists it on `CLS`
+ * (`CasparCG/media-scanner` v1.3.4, the scanner the 2.5.0 Windows package ships: `src/ffmpeg.ts`
+ * `generateCinf`, `src/util.ts` `getId`). The mock prints each field exactly as the scanner does.
+ */
+export interface MockMediaFile {
+  /**
+   * The scanner's ID: the path under the media folder, its last extension removed, `/`-separated
+   * and UPPER-CASED — `NEWS/2026/CLIP ONE` for `news\2026\clip one.mp4`.
+   */
+  readonly id: string;
+  readonly type: 'MOVIE' | 'STILL' | 'AUDIO';
+  /** The file's size in bytes. */
+  readonly bytes: number;
+  /** Its modified time as the scanner prints it: `YYYYMMDDHHmmss`, the scanner machine's local time. */
+  readonly modified: string;
+  /** The frame count `generateCinf` computes: `floor(duration × den / num)`; `0` for a still. */
+  readonly frames: number;
+  /** The time base `num/den` — `1/25` for a 25 fps clip, `1001/30000` for 29.97, `0/1` for a still. */
+  readonly timebase: string;
+}
+
+/**
+ * `DEV-LOCAL-CASPAR-01` — the two folders `INFO PATHS` names (`AMCPCommandsImpl.cpp`
+ * `info_paths_command`), as a 2.5.0 core spells them.
+ */
+export interface MockPaths {
+  /** `media-path` exactly as the config writes it — the RELATIVE `media/` on a stock install. Default `media/`. */
+  readonly media?: string;
+  /**
+   * `initial-path`: the core's start folder with `/` appended — on Windows the folder keeps its
+   * backslashes (`D:\CasparCG/`). Default `C:\casparcg/`.
+   */
+  readonly initial?: string;
 }
 
 /** `ROUTE-PLATES-01` — one AMCP line as the mock received it, and when (its `now`). */
@@ -339,6 +383,12 @@ export interface MockHandle {
    * the whole set; `[]` clears it.
    */
   setMissingMedia(paths: readonly string[]): void;
+  /**
+   * `DEV-LOCAL-CASPAR-01` — replace the scanner's library that `CLS` lists; `null` stops the scanner
+   * (`CLS` answers `501` from then on). Test hook: a file dropped into the media folder appears on
+   * the next `CLS`, as the real scanner's watcher adds it.
+   */
+  setMedia(files: readonly MockMediaFile[] | null): void;
   /**
    * B-038 — the last `CG ADD` seen on a slot: the template argument and the data
    * payload. Lets tests assert `CG ADD` carried a real URL + non-empty fields.
@@ -442,6 +492,10 @@ export interface HandlerContext {
   commitMixer(channel: number): number;
   /** `PLAYOUT-SOURCES-01` — is this file one the server no longer has ({@link MockHandle.setMissingMedia})? */
   isMissingMedia(file: string): boolean;
+  /** `DEV-LOCAL-CASPAR-01` — the scanner's library now, or `null` while no scanner is running. */
+  mediaFiles(): readonly MockMediaFile[] | null;
+  /** `DEV-LOCAL-CASPAR-01` — `INFO PATHS`' two folders, defaults applied. */
+  readonly paths: Required<MockPaths>;
   /** Channel count the mock was started with. */
   readonly channelCount: number;
 }

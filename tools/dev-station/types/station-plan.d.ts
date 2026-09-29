@@ -43,7 +43,17 @@ declare module '*station-plan.mjs' {
     readonly playout: string;
     readonly pgmFeed: string;
     readonly station: string;
+    /** `DEV-LOCAL-CASPAR-01` — the composition `--fake --caspar` runs. */
+    readonly localCaspar: string;
     readonly caspar: string;
+  }
+  /** `DEV-LOCAL-CASPAR-01` — what the start read from this machine's own CasparCG. */
+  export interface LocalCasparBanner {
+    readonly version: string;
+    readonly channels: readonly { readonly channel: number; readonly format: string }[];
+    readonly mediaFolder: string | null;
+    readonly clips: number;
+    readonly stills: number;
   }
   export interface StationPortOverrides {
     readonly bridge?: number;
@@ -77,6 +87,8 @@ declare module '*station-plan.mjs' {
   export function isInside(child: string, parent: string, platform: string): boolean;
   export function stationPaths(stateDir: string, platform: string): StationPaths;
   export function fakeModulePaths(repo: string): FakeModulePaths;
+  /** `DEV-LOCAL-CASPAR-01` — `fake`, or `fake-local` with `--caspar`. */
+  export function fakeStateName(options: { readonly caspar: string | undefined }): string;
   export function previousStateDir(stateDir: string): string;
   export function bridgeArgs(
     paths: StationPaths,
@@ -109,6 +121,8 @@ declare module '*station-plan.mjs' {
           password: string;
           caspar?: string;
           feeds?: readonly number[];
+          /** `DEV-LOCAL-CASPAR-01` — present when `caspar` is this machine's own CasparCG. */
+          local?: LocalCasparBanner;
           notes?: readonly string[];
         }
       | undefined;
@@ -116,5 +130,7 @@ declare module '*station-plan.mjs' {
   }): string[];
   export function parseArgs(
     argv: readonly string[],
-  ): { playout: string | undefined; fake: boolean; open: boolean } | { error: string };
+  ):
+    | { playout: string | undefined; fake: boolean; open: boolean; caspar: string | undefined }
+    | { error: string };
 }
