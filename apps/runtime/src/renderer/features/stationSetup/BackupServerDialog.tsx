@@ -69,7 +69,8 @@ export function BackupServerDialog({
           dir="ltr"
           value={host}
           aria-label="New backup host"
-          placeholder="192.168.21.115"
+          /* `CLIENT-TEST-RELEASE-01` — a documentation address (RFC 5737), never a real station's. */
+          placeholder="192.0.2.11"
           onChange={(e) => setHost(hostValue(e.target.value))}
         />
       </DialogField>

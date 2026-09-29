@@ -191,7 +191,9 @@ export function hostError(
   if (value === '') {
     return blankAllowed
       ? null
-      : `${label} is required — a name or an address, e.g. 192.168.21.114.`;
+      : // `CLIENT-TEST-RELEASE-01` — the example is a documentation address (RFC 5737), never a
+        // real station's: this sentence ships to every client.
+        `${label} is required — a name or an address, e.g. 192.0.2.10.`;
   }
   if (/\s/.test(value)) return `${label} cannot contain a space.`;
   /*

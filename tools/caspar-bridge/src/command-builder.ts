@@ -601,9 +601,9 @@ export class CommandBuilder {
    * is written where an installer meets it (`docs/operator-guide/README.md`, "Air-critical
    * contracts").
    *
-   * **As of 2026-09-05 it is DORMANT.** Over every retained CasparCG log on the playout machine
-   * (`192.168.21.114`), exactly TWO senders have ever issued an AMCP command: this bridge at
-   * `192.168.21.93`, and the server's own `Console`. No second client has ever connected, so no
+   * **As of 2026-09-05 it is DORMANT.** Over every retained CasparCG log on the plant's playout
+   * machine, exactly TWO senders have ever issued an AMCP command: this bridge's own host, and the
+   * server's own `Console`. No second client has ever connected, so no
    * foreign `DEFER` or `COMMIT` has ever existed on that server. ⚠ Retained logs, not the
    * machine's whole history — strong evidence of current practice, not proof about the past.
    * The enumeration, run by the owner and to be re-run in a PowerShell window ON the playout
