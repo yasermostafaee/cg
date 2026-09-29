@@ -3672,3 +3672,36 @@ and every station port, and no CasparCG was running. Recorded by `CLIENT-TEST-RE
   <https://github.com/yasermostafaee/cg/actions/runs/36544178635>,
   <https://github.com/yasermostafaee/cg/actions/runs/36546022440>,
   <https://github.com/yasermostafaee/cg/actions/runs/36550551264>.
+
+## [~] P-059 — The first client test release, `0.9.0`: one version, two installers with no manual side step, a Persian install guide, a draft release ⟨priority: high⟩ — FILED 2026-09-29 by `CLIENT-TEST-RELEASE-01` (v1) · `openspec/changes/client-test-release/`
+
+**What.** The first build a client installs by itself, on its own machines and addresses, with nobody
+from our side there (the owner's decisions of 2026-09-23). **B1** — one version, `0.9.0`, for CG
+Control, CG Designer and the bridge, in all nine files that carry it (`tools/release` refuses a build
+whose files disagree); it shows in both installers' names, in Windows' Installed apps, in one line in
+each app (CG Control: Station setup's rail; CG Designer: its start screen, as it has no settings or
+about place) and in the bridge's first start line. It sets [[P-031]]'s compatibility floor. **B2** —
+the CG Control installer's inbound rules for UDP 6250 (OSC) and TCP 7911 (templates), scoped to
+`cg-bridge.exe`, already exist (`DESKTOP-APPS-01`); the clean-Windows smoke now judges each rule by
+its fields, not its name. **No real address, no test secret** — two plant addresses in console copy
+and one in a bridge comment are replaced, and the installer workflow scans what both installers are
+built from. **B3** — a short Persian install guide, `docs/release/0.9.0/install-guide.fa.md`, built by
+Chromium into a PDF in the repo's Vazirmatn, right to left, with screenshots taken by the e2e harness.
+**B4** — a `v*` tag builds both installers from the tagged commit, runs the clean-Windows smoke, and
+opens a DRAFT pre-release with exactly four files: the two installers, `SHA256SUMS.txt` and the guide.
+
+**Why.** No manual side steps: the client installs alone, from two unsigned installers, and the only
+steps allowed are inside an app's own UI.
+
+**Acceptance:** WHEN either installer is built THEN its name and Installed apps carry the one release
+version, and each app names it in one line; WHEN the nine version files disagree THEN the build
+stops; WHEN the bridge starts THEN its first line names its version; WHEN CG Control is installed THEN
+exactly two inbound rules exist, each for `cg-bridge.exe`, on its one port and protocol, AND WHEN it
+is uninstalled THEN neither does; WHEN the installers are built THEN nothing they ship carries a
+private address or a test secret; WHEN `v0.9.0` is pushed THEN a draft pre-release holds exactly the
+four files, and nothing is published by CI. **Shared CI config** (`.github/workflows/desktop.yml`,
+`turbo.json`, `pnpm-lock.yaml`).
+
+**Established first (A0 / B0, 2026-09-29):** the splash still frame the owner saw was the browser's
+reduced-motion setting, not code (his Chrome, started inside a Remote Desktop session, reports
+`prefers-reduced-motion: reduce`); nothing was changed for it. The rest is in the change's design.
