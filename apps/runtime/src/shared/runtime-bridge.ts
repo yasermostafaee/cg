@@ -36,6 +36,7 @@ import type {
   FixedLayersStateChannel,
   FixedSlotState,
   LayersClearChannel,
+  LayersClearedOutsideChannel,
   LayersOrphansChannel,
   LayersOwnedOccupancyChannel,
   EmptiedAirDismissChannel,
@@ -45,6 +46,7 @@ import type {
   PgmReturnStatus,
   PgmReturnStatusChannel,
   LockEngageChannel,
+  ClearedOutsideLayer,
   OrphanLayer,
   OwnedOccupancyWarning,
   LockReleaseChannel,
@@ -562,6 +564,13 @@ export interface RuntimeBridge {
      */
     ownedOccupancy(): Promise<ChannelResponse<typeof LayersOwnedOccupancyChannel>>;
     onOwnedOccupancyChanged(handler: (warnings: OwnedOccupancyWarning[]) => void): Unsubscribe;
+    /**
+     * `B-292` — the layers of OURS that something outside CG Control cleared (another AMCP client,
+     * the Playout, CasparCG itself), still to be said. Their rows are already off air; nothing was
+     * re-sent. Pushed whenever the list changes.
+     */
+    clearedOutside(): Promise<ChannelResponse<typeof LayersClearedOutsideChannel>>;
+    onClearedOutsideChanged(handler: (cleared: ClearedOutsideLayer[]) => void): Unsubscribe;
   };
 
   /**

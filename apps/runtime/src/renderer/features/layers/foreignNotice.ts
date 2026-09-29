@@ -1,5 +1,10 @@
 import { useSyncExternalStore } from 'react';
-import { isInCgBands, type OrphanLayer } from '@cg/shared-ipc';
+import {
+  inAnyLayerBand,
+  isInCgBands,
+  type ClearedOutsideLayer,
+  type OrphanLayer,
+} from '@cg/shared-ipc';
 
 /**
  * 🔴 `FIELD-FIXES-01` L — **WHICH OF ANOTHER SYSTEM'S LAYERS A CHANNEL'S NOTICE SPEAKS FOR, AND
@@ -18,6 +23,10 @@ import { isInCgBands, type OrphanLayer } from '@cg/shared-ipc';
  *
  * ⚠ The dismissal is this BROWSER's (`localStorage`, guarded): hearing a notice is a fact about the
  * person at this console, not about the station. It survives a reload.
+ *
+ * `B-292` (`RELEASE-091-01` DELTA B) adds two things the owner asked for in this family: a CLEAR on
+ * every listed layer inside the three bands, whatever its producer ({@link offersClear}), and a third
+ * strip for a layer of OURS that something else cleared ({@link noticedClearedOutside}).
  */
 
 /**
@@ -26,6 +35,26 @@ import { isInCgBands, type OrphanLayer } from '@cg/shared-ipc';
  */
 export function isOrphanedGraphic(o: OrphanLayer): boolean {
   return o.producer === 'html';
+}
+
+/**
+ * 🔴 `B-292` (`RELEASE-091-01` DELTA B, B3) — **DOES A LISTED LAYER CARRY A CLEAR?** An orphaned
+ * graphic always has (`R-009`); anything else only inside the three bands (50–99,
+ * `inAnyLayerBand`) — the bridge's own `layers.clear` rule, read here rather than copied, so the
+ * button and the door cannot disagree about a layer. A plate another station or a lost ledger left in
+ * our bands had no surface that could clear it; above the bands the row still offers none.
+ */
+export function offersClear(o: OrphanLayer): boolean {
+  return isOrphanedGraphic(o) || inAnyLayerBand(o.layer);
+}
+
+/**
+ * `B-292` — what one strip's CLEAR ALL LISTED sends: its listed layers inside the three bands, one
+ * `layers.clear` each. Never a layer outside 50–99 (an orphaned graphic above them keeps its own row's
+ * Clear, and only that), and never a channel-wide `CLEAR`.
+ */
+export function clearAllListed(items: readonly OrphanLayer[]): OrphanLayer[] {
+  return items.filter((o) => inAnyLayerBand(o.layer));
 }
 
 /** The two strips a channel's notice is shown in. */
@@ -148,6 +177,60 @@ export function dismissedStrip(
 /** Dismiss one strip of each channel it shows, for what it shows now — in this browser. */
 export function dismissForeignStrip(orphans: readonly OrphanLayer[], strip: ForeignStrip): void {
   write(dismissedStrip(current, orphans, strip));
+}
+
+// ── `B-292` — the layers cleared outside CG Control: the same family, the same store ──────────────
+
+/**
+ * 🔴 `B-292` (`RELEASE-091-01` DELTA B, B1) — **A LAYER THIS STATION HELD ON AIR THAT SOMETHING ELSE
+ * CLEARED** is said in this family's third strip — _"Layer 60 on CH 2 was cleared outside CG
+ * Control"_ — and is dismissed the same way: per channel, remembered in this browser, until the strip
+ * holds something the dismissal did not record. Each clear is its own news, so an item is recorded
+ * with WHEN the bridge learned it: the same layer cleared again later brings the strip back.
+ */
+function clearedItemKey(e: ClearedOutsideLayer): string {
+  return `${String(e.layer)}@${e.at}`;
+}
+
+function clearedDismissalKey(channel: number): string {
+  return `${String(channel)}:cleared`;
+}
+
+/** The cleared-outside items the notice shows now: those on channels whose strip stands. */
+export function noticedClearedOutside(
+  cleared: readonly ClearedOutsideLayer[],
+  dismissals: ForeignDismissals,
+): ClearedOutsideLayer[] {
+  const standing = new Set(
+    [...new Set(cleared.map((e) => e.channel))].filter((channel) => {
+      const heard = new Set(
+        (dismissals[clearedDismissalKey(channel)] ?? '').split(' ').filter((k) => k !== ''),
+      );
+      return cleared.some((e) => e.channel === channel && !heard.has(clearedItemKey(e)));
+    }),
+  );
+  return cleared.filter((e) => standing.has(e.channel));
+}
+
+/** `dismissals`, with the cleared-outside strip of each channel dismissed for what it shows now. */
+export function dismissedClearedOutside(
+  dismissals: ForeignDismissals,
+  cleared: readonly ClearedOutsideLayer[],
+): ForeignDismissals {
+  const next: Record<string, string> = { ...dismissals };
+  for (const channel of new Set(cleared.map((e) => e.channel))) {
+    next[clearedDismissalKey(channel)] = [
+      ...new Set(cleared.filter((e) => e.channel === channel).map(clearedItemKey)),
+    ]
+      .sort()
+      .join(' ');
+  }
+  return next;
+}
+
+/** Dismiss the cleared-outside strip of each channel it shows — in this browser. */
+export function dismissClearedOutside(cleared: readonly ClearedOutsideLayer[]): void {
+  write(dismissedClearedOutside(current, cleared));
 }
 
 /** The dismissals, as React state. */

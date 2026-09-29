@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
+import { AmcpTransport, CommandQueue, DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import {
   AUTHZ_ROLE_REFUSAL,
   LOCK_ENGAGED_REFUSAL,
@@ -20,7 +20,7 @@ import {
   type SourceCatalog,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import type { AuditEntry } from '@cg/shared-schema';
+import { isOnAirStatus, type AuditEntry } from '@cg/shared-schema';
 import type { BridgeHandle } from '../src/index.js';
 import { CasparRuntime, PLATE_VOLUME_RAMP_FRAMES } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
@@ -576,6 +576,101 @@ describe('RELEASE-091-01 §2 — a media plate starts silent, and the operator�
     const pageLines = on(all, BED.layer).filter((l) => / VOLUME /.test(l));
     expect(pageLines.at(-1)).toBe(`MIXER 2-${String(BED.layer)} VOLUME 1`);
     expect(mock.layerState(BED)?.volume).toBe(1);
+  });
+});
+
+/*
+  🔴 `RELEASE-091-01` (DELTA B, B1–B4, `B-292`) — **A LAYER OF OURS CLEARED FROM OUTSIDE.** The owner's
+  station B cleared station A's pages and left A showing ON AIR over empty layers, and left A's plates
+  on air with no surface that could clear them. One bridge plus a second RAW AMCP client, as the delta
+  asks; the mock goes silent on a cleared layer as the core does (`stage-fidelity.test.ts`).
+*/
+async function foreign(mock: MockHandle, line: string): Promise<void> {
+  const transport = new AmcpTransport();
+  await transport.connect(mock.host, mock.amcpPort);
+  const queue = new CommandQueue(transport);
+  try {
+    await queue.enqueue(line);
+  } finally {
+    queue.dispose();
+    transport.destroy();
+  }
+}
+
+const statusOf = (r: CasparRuntime, itemId: string) =>
+  r.stackSnapshot().find((i) => i.itemId === itemId)?.status;
+/** On air by the ONE canonical predicate — the truth decays from `on-air` to the `playing` ack after a second. */
+const onAir = (r: CasparRuntime, itemId: string): boolean => {
+  const item = r.stackSnapshot().find((i) => i.itemId === itemId);
+  return item !== undefined && isOnAirStatus(item);
+};
+
+describe('RELEASE-091-01 DELTA B — a layer of ours cleared from outside', () => {
+  it('🔴 another client CLEARs the page and one plate: both leave ON AIR within 2 s, with the notice, and nothing is re-sent — control: the other plate and another row stay ON AIR', async () => {
+    const { r, mock, mark, sentSince } = await boot();
+    await take(r);
+    await take(r, 'single', BED_2, ROW_2);
+    const clip = layerOf(r, 'l2');
+    const other = layerOf(r, 'l1');
+    await waitFor(() => onAir(r, ROW) && onAir(r, ROW_2), 'both rows on air');
+    // The silence question needs the layers HEARD first: let the OSC report them.
+    await delay(300);
+
+    const from = await mark();
+    const t0 = Date.now();
+    await foreign(mock, `CLEAR 2-${String(BED.layer)}`);
+    await foreign(mock, `CLEAR 2-${String(clip)}`);
+    await waitFor(
+      () => statusOf(r, ROW) === 'idle' && recordOf(r, 'l2') === undefined,
+      'the row and the cleared plate off air',
+      5_000,
+    );
+    const took = Date.now() - t0;
+    expect(took, `measured: ${String(took)} ms`).toBeLessThan(2_000);
+    expect(
+      r
+        .clearedOutside()
+        .map((e) => `${String(e.channel)}-${String(e.layer)}`)
+        .sort(),
+    ).toEqual([`2-${String(BED.layer)}`, `2-${String(clip)}`].sort());
+
+    // CONTROL — the page's other plate is still seated, and the other row is still ON AIR.
+    expect(recordOf(r, 'l1')?.slot.layer).toBe(other);
+    expect(onAir(r, ROW_2), String(statusOf(r, ROW_2))).toBe(true);
+    // Nothing was put back: no PLAY, no CG ADD, no LOADBG from the bridge after the clears.
+    const after = (await sentSince(from)).filter((l) => !l.startsWith('CLEAR 2-'));
+    expect(after.filter((l) => /^(PLAY|LOADBG|CG \d+-\d+ ADD)/.test(l))).toEqual([]);
+  });
+
+  it('🔴 a plate left in our band by another client is listed and clears from the strip’s door — controls: a plate this bridge holds is not listed and is refused, and a video above the bands is refused', async () => {
+    const { r, mock, mark, sentSince } = await boot();
+    await take(r);
+    const held = layerOf(r, 'l1');
+    await foreign(mock, 'PLAY 2-70 "C:/Media/sting.mov"');
+    await waitFor(
+      () => r.orphans().some((o) => o.channel === 2 && o.layer === 70),
+      'the leftover plate surfaces as an orphan',
+    );
+    expect(r.orphans().some((o) => o.channel === 2 && o.layer === held)).toBe(false);
+
+    expect(await r.clearLayer(2, 70)).toEqual({ ok: true });
+    await waitFor(
+      () => !r.orphans().some((o) => o.channel === 2 && o.layer === 70),
+      'the leftover resolves once cleared',
+    );
+    // CONTROL — the plate this bridge's ledger holds is refused, with its own reason.
+    expect(await r.clearLayer(2, held)).toEqual({ ok: false, reason: 'live-source' });
+
+    // CONTROL — above the three bands the old rule stands: a video there is refused, and nothing is
+    // sent. Heard first (listed), so the refusal is the rule and not a blind tap.
+    await foreign(mock, 'PLAY 2-120 "C:/Media/promo.mov"');
+    await waitFor(
+      () => r.orphans().some((o) => o.channel === 2 && o.layer === 120),
+      'the layer above the bands is heard',
+    );
+    const from = await mark();
+    expect(await r.clearLayer(2, 120)).toEqual({ ok: false, reason: 'foreign' });
+    expect((await sentSince(from)).filter((l) => l.startsWith('CLEAR'))).toEqual([]);
   });
 });
 

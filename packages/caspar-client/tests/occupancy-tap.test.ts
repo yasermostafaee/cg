@@ -43,6 +43,22 @@ describe('OscOccupancyTap', () => {
     expect(tap.occupied(2500, 4000)).toEqual([]); // 3000ms old — aged out
   });
 
+  it('`B-292` — `lastProducerAt` is WHEN a layer last reported a producer; never heard, or last `empty`, is null', () => {
+    const tap = new OscOccupancyTap();
+    expect(tap.lastProducerAt(1, 60)).toBeNull();
+    tap.note(producer(1, 60, 'html'), 1000);
+    tap.note(producer(1, 60, 'html'), 1400);
+    expect(tap.lastProducerAt(1, 60)).toBe(1400);
+    // Silence does not move it: that is the whole point — the bridge measures the silence from it.
+    expect(tap.lastProducerAt(1, 60)).toBe(1400);
+    // Our own acknowledged CLEAR is noted `empty`: nothing left to ask about.
+    tap.note(producer(1, 60, 'empty'), 2000);
+    expect(tap.lastProducerAt(1, 60)).toBeNull();
+    // Control: another layer's report is its own.
+    tap.note(producer(1, 61, 'ffmpeg'), 2100);
+    expect(tap.lastProducerAt(1, 61)).toBe(2100);
+  });
+
   it('the latest observation wins and refreshes the timestamp', () => {
     const tap = new OscOccupancyTap();
     tap.note(producer(1, 60, 'html'), 1000);

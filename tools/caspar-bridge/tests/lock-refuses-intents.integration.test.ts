@@ -308,6 +308,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'fixedLayers.banks',
         'fixedLayers.config',
         'fixedLayers.state',
+        // `RELEASE-091-01` (DELTA B, B1) — a layer of ours cleared outside CG Control.
+        'layers.cleared-outside',
         'layers.orphans',
         'layers.owned-occupancy',
         // `MEDIA-PLATES-01` — a read: each seated clip's clock. Its two acts are refused locked.

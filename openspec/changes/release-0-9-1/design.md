@@ -159,15 +159,49 @@ does tell the two apart (`PLAYOUT-CG-RESPONSE-V13-STATE-v1.md` §1.1–§1.2: "a
    ledger, `layers.clear` refused them as non-`html` (`R-015`), and a row CLEAR refuses layers outside the
    declared rows.
 
-**Decisions.** (1) Silence is a question: a layer we hold on air whose OSC has stopped for 1 s, while the
-channel's own OSC still arrives, gets ONE `INFO <ch>-<L>` read; one read per silence episode, never a
-channel-wide poll. 1 s because the core reports every live layer every frame (25–50 times a second), so a
-second of silence is dozens of missed reports, while the owner's target is 2 s. (2) An empty answer takes
-the item off air through the reconcile's own empty path, with the notice; nothing is re-sent or put back.
-(3) `R-015`'s rule is narrowed inside our band: a layer in 50–99 that no ledger record holds may be
-cleared from the strip with a confirm, whatever its producer; below 50 nothing changes. (4) The mock drops
-a cleared layer from OSC and from `INFO`, and keeps its mixer state (the core keeps `tweens_` across a
-`CLEAR`).
+**Decisions.** (1) Silence is a question: a layer we hold on air that reported a producer and has then
+been silent for 1 s, while its channel still reports frames (`/channel/N/framerate` within 500 ms), gets
+ONE read per silence — never a poll, never for a channel that is quiet as a whole (golden rule 8). 1 s
+because the core reports every live layer every frame (25–50 times a second), so a second of silence is
+dozens of missed reports, while the owner's target is 2 s. The rule is the pure `silentLayersToAsk`
+(`tools/caspar-bridge/src/silent-layer-question.ts`), unit-tested with a positive control beside each
+refusal. (2) The read is `INFO <ch>`, not the `INFO <ch>-<L>` the delta named: the core ignores the layer
+and answers the whole channel (fact 2 above), and the bridge's own guard refuses layer-addressed `INFO`
+wire text (`BRIDGE-TRUTH-01` §3, `tests/info-readers.test.ts` — the first spelling tripped it), so the
+channel form is the same reply, spelled truthfully, and one read answers every silent layer of the channel.
+It goes to the primary only (`mirror: false`, unjournaled), at `low` priority so a take never queues
+behind it, with a 2 s timeout; no answer changes nothing. (3) An answer without the layer takes the item
+off air through the reconnect's own reset (`Reconciler.markLayersEmptied`, one spelling with
+`reconcileOnReconnect`) and drops a plate's seat through `reconcileLiveLayers`; the layer is published on
+`layers.cleared-outside` for the notice; nothing is re-sent or put back. Measured in
+`media-plates.integration.test.ts` (a foreign `CLEAR` of the page and one plate on a raw second client):
+1098, 1099, 1123, 1153, 1097 and 1147 ms from the clear to the row off air — against the 2 s target.
+(4) `R-015`'s rule is narrowed inside the three bands: a layer in 50–99 that no ledger record and no stack
+item holds may be cleared, whatever its producer, through `layers.clear`; outside them nothing changes
+(below 50 is refused as a request, `FOLLOWUPS-01` B; above 99 a non-`html` producer is still `foreign`).
+`inAnyLayerBand` (`@cg/shared-ipc`) is the one predicate the bridge's door, the strip's CLEAR and the
+offline mock all read; `isInCgBands` stays the floor-and-up rule the strips speak for. (5) The strip:
+a CLEAR on every listed row inside 50–99, and CLEAR ALL LISTED on a strip that lists two or more of them —
+one confirmation naming each layer, then one `layers.clear` per layer in turn (with one there is nothing
+for it to add to the row's own CLEAR). (6) The mock drops a cleared layer from OSC and from `INFO`, and
+keeps its mixer state (the core keeps `tweens_` across a `CLEAR`).
+
+**What the faithful mock broke (B2), and how.** 30 tests in 22 files went red the moment the mock stopped
+answering `empty` for a cleared layer (the list is in the report). None was edited, none deleted: every
+one was right about the product, and the product was what relied on `empty`. 28 read the bridge's OWN
+`CLEAR` through that `empty`; the bridge now counts its own acknowledged `CLEAR <ch>-<L>` (a `202` reply)
+as the layer emptied — `acknowledgedClearOf` → `OscTransport.noteCleared` → the reconciler — which is a
+fact, not a guess. The other 2 (`route-plates`, a core restart) showed the reply-watcher going deaf after
+a reconnect: `ServerSession` builds a new command queue per connection and the watcher was on the first
+one. `ServerSession` now forwards every queue's `exchange` — which also fixed the AMCP wire log, silent
+after any reconnect since it was written (`amcp-log.integration.test.ts`, red first). Two OTHER tests
+asserted `layers.clear` refusing a non-`html` bank layer as `foreign` (`clear-bank-scoped`,
+`declared-layer-classes`); (4) superseded them, and they now assert the clear, with the below-the-bands
+refusal kept as their control.
+
+**The offline mock.** Test mode has no CasparCG and no second client, so `layers.cleared-outside` is
+honestly always empty there. Its `clearLayer` follows (4): a bank row's listed orphan counts as its
+observation, as the bridge's sweep lists foreign producers on bank rows.
 
 ## B6
 

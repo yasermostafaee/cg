@@ -10,6 +10,7 @@ import {
   ServerSession,
   UnknownTemplateTypeError,
   type FailoverEvent,
+  type OscOccupancyTap,
   type LayerPolicy,
   type LayerSlot,
   type ServerLabel,
@@ -80,6 +81,7 @@ import {
   type PendingUpdate,
   type TemplateInfo,
   type TemplatePageRefusal,
+  type ClearedOutsideLayer,
   type TemplateLook,
   type ChannelSettings,
   type ChannelSettingsState,
@@ -134,8 +136,14 @@ import {
   type StationStray,
 } from '@cg/shared-ipc';
 import { randomBytes } from 'node:crypto';
-import { isInCgBands, ledgerChannels, templateAdmitsPassTiming } from '@cg/shared-ipc';
+import {
+  inAnyLayerBand,
+  isInCgBands,
+  ledgerChannels,
+  templateAdmitsPassTiming,
+} from '@cg/shared-ipc';
 import { operatorActor, operatorSub, runAsTemplate } from './actor-context.js';
+import { SILENCE_CHECK_MS, SILENT_LAYER_MS, silentLayersToAsk } from './silent-layer-question.js';
 import {
   ChannelSettingsStore,
   adoptionNotice,
@@ -781,6 +789,21 @@ export function startsSilentFromPlayout(origin: 'input' | 'media' | undefined): 
 }
 
 /**
+ * `RELEASE-091-01` (DELTA B, B1) — the layers an `INFO <channel>` reply lists on the stage, or `null`
+ * when the reply is not a channel's info at all. CasparCG 2.5 lists each live layer as
+ * `<stage><layer><layer_N>` and a channel with none has no `<stage>` (plant captures
+ * `b3-info-2-80-on-air`, `b5-teardown-info`), so no `<stage>` is an EMPTY channel, never "unknown".
+ */
+export function stageLayersOfInfo(xml: string): ReadonlySet<number> | null {
+  if (!/<channel>/.test(xml)) return null;
+  const stage = /<stage>([\s\S]*?)<\/stage>/.exec(xml);
+  const layers = new Set<number>();
+  if (stage === null) return layers;
+  for (const m of (stage[1] ?? '').matchAll(/<layer_(\d+)>/g)) layers.add(Number(m[1]));
+  return layers;
+}
+
+/**
  * `RELEASE-091-01` (DELTA B, B2) — the layer a settled exchange cleared: a `CLEAR <ch>-<L>` the core
  * answered `202`. Anything else — a refusal, a timeout, a channel-wide `CLEAR` — proves nothing
  * about one layer and answers `null`.
@@ -1229,6 +1252,8 @@ export class CasparRuntime {
    * browser asked for it, and the operator may be looking at the console when it lands.
    */
   readonly emptiedAirChanged = new Emitter<EmptiedAirNotice | null>();
+  /** `RELEASE-091-01` (DELTA B, B1) — the layers cleared outside CG Control, pushed on change. */
+  readonly clearedOutsideChanged = new Emitter<readonly ClearedOutsideLayer[]>();
   /**
    * `multibox-layout-switch` `tasks.md` 6.5 / §12.4 — emitted for EVERY plate the
    * reconcile releases, held or torn down.
@@ -1638,6 +1663,16 @@ export class CasparRuntime {
   // cleared in stop() (the B-053 dispose caution); the tick reads the
   // CURRENT primary dynamically, so failover/setConfig need no rewiring.
   #sweepTimer: ReturnType<typeof setInterval> | null = null;
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B1) — the SILENCE QUESTION's tick, and what it remembers: for each
+   * layer of ours already asked about, the last producer report its current silence began after (so
+   * one silence is asked about once); the channels with an `INFO` read in flight; and the layers
+   * found cleared outside CG Control, still to be said.
+   */
+  #silenceTimer: ReturnType<typeof setInterval> | null = null;
+  #silenceAsked: ReadonlyMap<string, number> = new Map();
+  readonly #silenceReading = new Set<number>();
+  #clearedOutside: ClearedOutsideLayer[] = [];
   readonly #sweepMs: number;
   readonly #occupancyStaleMs: number;
   readonly #channelTickStaleMs: number;
@@ -2466,6 +2501,11 @@ export class CasparRuntime {
       this.#sweepOccupancy();
     }, this.#sweepMs);
     this.#sweepTimer.unref?.();
+    // `RELEASE-091-01` (DELTA B, B1) — a layer of ours gone silent is a question; unref'd like the sweep.
+    this.#silenceTimer = setInterval(() => {
+      this.#questionSilentLayers();
+    }, SILENCE_CHECK_MS);
+    this.#silenceTimer.unref?.();
     // `MEDIA-PLATES-01` §1.E — the media clock: a passive read of the OSC tap, unref'd like the sweep.
     this.#mediaStateTimer = setInterval(() => {
       this.#publishMediaState();
@@ -2521,6 +2561,8 @@ export class CasparRuntime {
     this.#flushTimer = null;
     if (this.#sweepTimer !== null) clearInterval(this.#sweepTimer);
     this.#sweepTimer = null;
+    if (this.#silenceTimer !== null) clearInterval(this.#silenceTimer);
+    this.#silenceTimer = null;
     if (this.#mediaStateTimer !== null) clearInterval(this.#mediaStateTimer);
     this.#mediaStateTimer = null;
     for (const timer of this.#expiryTimers.values()) clearTimeout(timer);
@@ -11116,6 +11158,170 @@ export class CasparRuntime {
     this.emptiedAirChanged.emit(this.#emptiedAir);
   }
 
+  // ─────────── `RELEASE-091-01` (DELTA B, B1) — A LAYER OF OURS CLEARED FROM OUTSIDE ───────────
+
+  /** The layers cleared outside CG Control, still to be said. */
+  clearedOutside(): readonly ClearedOutsideLayer[] {
+    return [...this.#clearedOutside];
+  }
+
+  /**
+   * 🔴 **EVERY LAYER THIS BRIDGE HOLDS ON AIR**: each on-air item's page layer (the canonical
+   * `isOnAirStatus`, minus `exiting` — a CLEAR the operator asked for is in flight) and every seat in
+   * the live-layer ledger. Grouped by channel.
+   */
+  #heldOnAirLayers(): Map<number, Set<number>> {
+    const out = new Map<number, Set<number>>();
+    const add = (channel: number, layer: number): void => {
+      let set = out.get(channel);
+      if (set === undefined) {
+        set = new Set();
+        out.set(channel, set);
+      }
+      set.add(layer);
+    };
+    for (const item of this.#reconciler.snapshot()) {
+      if (!isOnAirStatus(item) || item.status === 'exiting' || item.slot === undefined) continue;
+      add(item.slot.channel, item.slot.layer);
+    }
+    for (const records of this.#liveLayers.values()) {
+      for (const r of records) add(r.slot.channel, r.slot.layer);
+    }
+    return out;
+  }
+
+  /**
+   * 🔴 `B-292` — **OSC SILENCE ON A LAYER WE HOLD ON AIR IS A QUESTION, NEVER "STILL PLAYING".**
+   *
+   * CasparCG 2.5 erases a cleared layer and simply stops reporting it (`stage.cpp` `clear`), so a row
+   * whose page — or a seat whose plate — another AMCP client, the Playout or the core itself cleared
+   * went on reading ON AIR: the bridge turned a row idle only on an explicit `empty` the core never
+   * sends. Every {@link SILENCE_CHECK_MS}, a layer of ours that has reported nothing for
+   * {@link SILENT_LAYER_MS} while its CHANNEL still ticks is asked about — ONE `INFO` read per
+   * silence, from the primary, never a channel-wide poll. Whole-channel silence asks nothing: that is
+   * a link or a channel question, not a layer's (golden rule 8 — probe the axis you judge).
+   *
+   * Sends nothing but that read, and never puts anything back.
+   */
+  #questionSilentLayers(): void {
+    const session = this.#adapter.primarySession;
+    if (session.state !== 'healthy') return;
+    const now = Date.now();
+    const occupancy = session.osc.occupancy;
+    this.#retireHeardAgain(occupancy, now);
+    // WHEN to ask is the pure rule in `silent-layer-question.ts`; this only asks.
+    const decision = silentLayersToAsk({
+      held: this.#heldOnAirLayers(),
+      readings: {
+        lastTickFor: (channel) => session.osc.channelTicks.lastTickFor(channel),
+        lastProducerAt: (channel, layer) => occupancy.lastProducerAt(channel, layer),
+      },
+      asked: this.#silenceAsked,
+      reading: this.#silenceReading,
+      now,
+    });
+    this.#silenceAsked = decision.asked;
+    for (const [channel, silent] of decision.ask) {
+      this.#silenceReading.add(channel);
+      void this.#askStage(session, channel, silent).finally(() => {
+        this.#silenceReading.delete(channel);
+      });
+    }
+  }
+
+  /**
+   * One `INFO` read of the silent layers' channel, and what it proves. Built by
+   * `CommandBuilder.info`, whose type cannot carry a layer: CasparCG 2.5 ignores an
+   * `INFO <ch>-<layer>`'s layer and answers with the whole channel (`BRIDGE-TRUTH-01` §3,
+   * `info-readers.test.ts`), so the channel form is the same reply spelled truthfully — and one read
+   * answers every silent layer on it. PRIMARY only (its OSC went silent) and never journaled; `low`,
+   * so an operator's take is never queued behind a question.
+   */
+  async #askStage(
+    session: ServerSession,
+    channel: number,
+    silent: readonly number[],
+  ): Promise<void> {
+    let xml: string | null = null;
+    try {
+      const label = this.#adapter.currentPrimary;
+      const result = await this.#adapter.send(this.#builder.info(channel), {
+        priority: 'low',
+        timeoutMs: 2000,
+        mirror: false,
+      });
+      // A failover meanwhile makes the answer about another server…
+      if (result.winner !== label) return;
+      const response = result.response;
+      xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+    } catch {
+      return; // no answer proves nothing; the next silence asks again
+    }
+    // …and so does one since it landed.
+    if (xml === null || session !== this.#adapter.primarySession) return;
+    const onStage = stageLayersOfInfo(xml);
+    if (onStage === null) return;
+    const held = this.#heldOnAirLayers().get(channel) ?? new Set<number>();
+    // Still ours, still silent, and not on the stage: cleared from outside.
+    const gone = silent.filter(
+      (layer) =>
+        held.has(layer) &&
+        !onStage.has(layer) &&
+        (session.osc.occupancy.lastProducerAt(channel, layer) ?? 0) <= Date.now() - SILENT_LAYER_MS,
+    );
+    if (gone.length > 0) this.#layersClearedOutside(session, channel, gone);
+  }
+
+  /**
+   * The layers CasparCG has just said are gone: the rows on them leave ON AIR through the same reset
+   * a reconnect uses, the ledger drops their seats through the same reconcile, the taps stop
+   * remembering their producers, and the notice names each one. NOTHING is re-sent to CasparCG and
+   * nothing is put back on air: the operator decides.
+   */
+  #layersClearedOutside(session: ServerSession, channel: number, layers: readonly number[]): void {
+    const keys = new Set(layers.map((layer) => adoptionKey({ channel, layer })));
+    for (const layer of layers) session.osc.noteCleared(channel, layer);
+    this.#reconciler.markLayersEmptied(keys);
+    if (this.#liveLayers.size > 0) {
+      const adoption = reconcileLiveLayers({
+        persisted: this.#liveLayers,
+        observe: (slot) => (keys.has(adoptionKey(slot)) ? 'empty' : 'occupied'),
+      });
+      for (const itemId of new Set(adoption.dropped.map((d) => d.itemId))) {
+        this.registerLiveLayers(itemId, adoption.adopted.get(itemId) ?? []);
+      }
+    }
+    const at = new Date().toISOString();
+    const rest = this.#clearedOutside.filter(
+      (e) => !(e.channel === channel && layers.includes(e.layer)),
+    );
+    this.#clearedOutside = [...rest, ...layers.map((layer) => ({ channel, layer, at }))].slice(-20);
+    this.clearedOutsideChanged.emit(this.clearedOutside());
+    for (const layer of layers) {
+      process.stderr.write(
+        `[caspar-bridge] layer ${String(channel)}-${String(layer)} was cleared outside CG Control ` +
+          `(it went silent and INFO no longer lists it) — its row is off air; nothing was re-sent\n`,
+      );
+    }
+  }
+
+  /** A layer said cleared that reports a producer again (a new take, or anyone's) is no longer news. */
+  #retireHeardAgain(occupancy: OscOccupancyTap, now: number): void {
+    if (this.#clearedOutside.length === 0) return;
+    const kept = this.#clearedOutside.filter((e) => {
+      const seen = occupancy.lastProducerAt(e.channel, e.layer);
+      return seen === null || now - seen >= SILENT_LAYER_MS || seen <= Date.parse(e.at);
+    });
+    if (kept.length === this.#clearedOutside.length) return;
+    this.#clearedOutside = kept;
+    this.clearedOutsideChanged.emit(this.clearedOutside());
+  }
+
   /** `B-225` — the standing notice, or `null`. */
   emptiedAir(): EmptiedAirNotice | null {
     return this.#emptiedAir;
@@ -11805,6 +12011,10 @@ export class CasparRuntime {
    * cannot license a CLEAR — which also covers the B-094 AMCP-alive/OSC-dead
    * install, where every layer would otherwise read clearable blind.
    *
+   * ⚠ `B-292` (`RELEASE-091-01` DELTA B, B3) NARROWS the `html` rule INSIDE the three bands
+   * (50–99, `inAnyLayerBand`): there a fresh non-`html` observation clears too, because plates made
+   * `html` no longer the only kind this system places. Outside them the paragraph above stands.
+   *
    * Touches no slots and no OSC interest (it owns neither); a CLEAR executed
    * on the current primary counts as adoption (consistent with out/remove).
    * The warning resolves via the next sweep's observed empty — never
@@ -11854,7 +12064,18 @@ export class CasparRuntime {
     const observed = this.#adapter.primarySession.osc.occupancy
       .occupied(this.#occupancyStaleMs)
       .find((o) => o.channel === channel && o.layer === layer);
-    if (observed === undefined || observed.producer !== 'html') {
+    /*
+      🔴 `RELEASE-091-01` (DELTA B, B3, `B-292`) — **R-015 NARROWED INSIDE OUR BANDS, by the owner.**
+      R-015's premise was that this system only ever places `html` — true when it was written, and not
+      since plates: a plate seated in 60–79 is `ffmpeg`, `route`, `ndi` or `decklink`, and one left
+      there by another station, a lost ledger or a crashed session had no surface that could clear it
+      (station B's CLEAR left station A's plates on air). So inside CG's bands (50–99, the canonical
+      `inAnyLayerBand`, which the strip's CLEAR reads too) a layer that is observed fresh, not
+      reserved, not a stack item's and not in this bridge's ledger may be cleared whatever its
+      producer. Everything else stands: outside the bands a non-`html` producer is still `foreign`,
+      and NO fresh observation still licenses nothing.
+    */
+    if (observed === undefined || (observed.producer !== 'html' && !inAnyLayerBand(layer))) {
       return { ok: false, reason: 'foreign' };
     }
     const slot: CommandSlot = { channel, layer };

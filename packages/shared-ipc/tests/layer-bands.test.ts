@@ -4,7 +4,9 @@ import {
   bandSize,
   bandText,
   FIRST_ALLOCATABLE_LAYER,
+  inAnyLayerBand,
   inBand,
+  isInCgBands,
   LAYER_BAND_ORDER,
   LAYER_BANDS,
   LayerBandError,
@@ -53,6 +55,14 @@ describe('the layer map', () => {
         expect(inBand(LAYER_BANDS[role], layer)).toBe(false);
       }
     }
+  });
+
+  it('🔴 `inAnyLayerBand` is 50–99 exactly — control: `isInCgBands` is the floor AND up', () => {
+    for (const layer of [50, 59, 60, 79, 80, 99]) expect(inAnyLayerBand(layer)).toBe(true);
+    for (const layer of [1, 5, 49, 100, 101, 250]) expect(inAnyLayerBand(layer)).toBe(false);
+    // The control: above the template band the two part company, which is why both exist.
+    expect(isInCgBands(100)).toBe(true);
+    expect(isInCgBands(49)).toBe(false);
   });
 
   it('renders one spelling of a band', () => {

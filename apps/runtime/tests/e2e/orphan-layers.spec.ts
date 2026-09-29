@@ -8,9 +8,10 @@ import { test, expect } from './fixtures/runtime.js';
  * idle-quiet: with no seed, the banner does not exist.
  *
  * R-015 — the seed also carries VIDEO layers: inside CG's bands one renders as
- * NEUTRAL information (role="status", never an alert) with NO Clear control,
- * and it survives the html orphan's Clear — a video layer is another
- * system's output and reads as a normal fact of the console.
+ * NEUTRAL information (role="status", never an alert), and it survives the html
+ * orphan's Clear — a video layer is another system's output and reads as a
+ * normal fact of the console. `B-292` superseded its "NO Clear control": inside
+ * 50–99 it carries its own confirm-gated CLEAR.
  *
  * `FIELD-FIXES-01` L — and the seed straddles CG's bands: `ffmpeg` on 1-5 is the Playout's
  * playlist, which is normal (no notice, no mark, listed on Station layers), and `ffmpeg` on 1-90
@@ -37,12 +38,13 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   await expect(banner).toContainText('Layer 1-60 is on air but not on your stack');
 
   // R-015 — the video layer inside the bands reads as NORMAL: a status strip, not an alert,
-  // naming the kind, with no Clear control in it. (L — the one on layer 5 is not in it at all.)
+  // naming the kind. (L — the one on layer 5 is not in it at all.) `B-292` SUPERSEDED "with no
+  // Clear control in it": inside 50–99 the row carries its own CLEAR.
   const videoStrip = page.getByRole('status', { name: 'Layers in use by other systems' });
   await expect(videoStrip).toBeVisible();
   await expect(videoStrip).toContainText('Layer 1-90 is carrying video (ffmpeg)');
   await expect(videoStrip).not.toContainText('Layer 1-5 ');
-  await expect(videoStrip.getByRole('button', { name: /clear/i })).toHaveCount(0);
+  await expect(videoStrip.getByRole('button', { name: 'Clear layer 1-90' })).toBeVisible();
 
   // The gate is the app's own modal. Cancel first — nothing happens.
   const confirmClear = page.getByRole('dialog', { name: 'Clear layer 1-60?' });
@@ -52,13 +54,19 @@ test('a seeded orphan surfaces the banner naming the layer; confirm-gated Clear 
   await expect(confirmClear).toHaveCount(0);
   await expect(banner).toBeVisible();
 
-  // Confirm: Clear resolves, the warning disappears — and the video layer
-  // is still there, still neutral, still without a Clear (R-015).
+  // Confirm: Clear resolves, the warning disappears — and the video layer is still there, still
+  // neutral, untouched by the html layer's Clear (R-015).
   await banner.getByRole('button', { name: 'Clear layer 1-60' }).click();
   await confirmClear.getByRole('button', { name: 'Clear layer', exact: true }).click();
   await expect(page.getByRole('alert', { name: 'Orphaned on-air layers' })).toHaveCount(0);
   await expect(videoStrip).toBeVisible();
-  await expect(videoStrip.getByRole('button', { name: /clear/i })).toHaveCount(0);
+
+  // `B-292` — and its own CLEAR takes it, behind the same confirm (the real bridge's half, with a
+  // raw second client, is `layers-cleared-outside.spec.ts`).
+  await videoStrip.getByRole('button', { name: 'Clear layer 1-90' }).click();
+  const confirmVideo = page.getByRole('dialog', { name: 'Clear layer 1-90?' });
+  await confirmVideo.getByRole('button', { name: 'Clear layer', exact: true }).click();
+  await expect(videoStrip).toHaveCount(0);
 });
 
 /** The strip marks another channel only on a station that declares more than one. */

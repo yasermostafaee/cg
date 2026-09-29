@@ -232,10 +232,14 @@ it('R-015 (6.3) — each class is refused for ITS OWN reason, and the undeclared
   // OUTSIDE every declared class, R-015 is UNCHANGED: a non-html producer is
   // provably not ours, and "not html" fails safe without enumerating video kinds.
   expect(await r.clearLayer(1, UNDECLARED_LAYER)).toEqual({ ok: false, reason: 'foreign' });
-  // An unbound BANK layer reaches the same R-015 rule through `layers.clear` —
-  // the operator's own bank-scoped door (`clearBankLayer`) is what b1 widened, and
-  // widening one door never loosened the other. Pinned in `clear-bank-scoped`.
-  expect(await r.clearLayer(1, BANK_LAYER)).toEqual({ ok: false, reason: 'foreign' });
+  /*
+    🔴 `RELEASE-091-01` (DELTA B, B3, `B-292`) — SUPERSEDES "an unbound BANK layer reaches R-015's
+    `foreign` through `layers.clear`". Inside CG's bands (50–99) a producer no ledger record holds is
+    ours to manage — a plate or a bed another station left there has no other surface — so
+    `layers.clear` now clears it whatever its kind. The playout and live-source classes above keep
+    their own refusals, and the undeclared layer below the bands keeps R-015's.
+  */
+  expect(await r.clearLayer(1, BANK_LAYER)).toEqual({ ok: true });
 });
 
 it('R-028 (7.1) — an item on an OLD DYNAMIC layer is not auto-relocated onto a row', async () => {

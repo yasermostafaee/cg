@@ -95,6 +95,17 @@ export function inBand(band: LayerBand, layer: number): boolean {
   return layer >= band.start && layer <= band.end;
 }
 
+/**
+ * 🔴 `RELEASE-091-01` (DELTA B, B3, `B-292`) — **IS THIS LAYER INSIDE ONE OF THE THREE BANDS** (50–99
+ * today)? Narrower than {@link isInCgBands}, which is the floor AND UP: a layer above the template
+ * band is not one of ours to allocate. The owner's bound for clearing what another client left in our
+ * bands whatever its producer — the bridge's `layers.clear` and the strip's CLEAR both read THIS, so
+ * the door and its button cannot disagree about a layer.
+ */
+export function inAnyLayerBand(layer: number): boolean {
+  return LAYER_BAND_ORDER.some((role) => inBand(LAYER_BANDS[role], layer));
+}
+
 /** `50-59`, for a message. ONE spelling, so two refusals cannot render the map differently. */
 export function bandText(band: LayerBand): string {
   return `${String(band.start)}-${String(band.end)}`;

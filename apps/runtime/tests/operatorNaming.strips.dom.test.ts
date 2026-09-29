@@ -269,7 +269,11 @@ describe('B-233 §2 — the owned-occupancy strip names the row that put it ther
       },
     });
     const el = await renderEl(
-      createElement(OrphanLayersBanner, { orphans: [], ownedOccupancy: [WARNING] }),
+      createElement(OrphanLayersBanner, {
+        orphans: [],
+        ownedOccupancy: [WARNING],
+        clearedOutside: [],
+      }),
     );
     const strip = el.querySelector<HTMLElement>('[aria-label="Owned-layer occupancy warnings"]');
     if (strip === null) throw new Error('the occupancy strip did not render');

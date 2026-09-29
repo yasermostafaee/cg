@@ -37,6 +37,34 @@ export const LayersOrphansChangedChannel = definePublishChannel(
 );
 
 /**
+ * 🔴 `RELEASE-091-01` (DELTA B, B1, `B-292`) — **A LAYER THIS STATION HELD ON AIR THAT SOMETHING ELSE
+ * EMPTIED**: another AMCP client, the Playout, or CasparCG itself. The bridge learns it when the
+ * layer's OSC stops while its channel still ticks and one `INFO` read shows the layer gone; its row
+ * is then off air, and nothing is re-sent or put back. Said in the orphan strips' family:
+ * `Layer <layer> on CH <channel> was cleared outside CG Control`.
+ */
+export const ClearedOutsideLayerSchema = z.object({
+  channel: z.number().int().positive(),
+  layer: z.number().int().nonnegative(),
+  /** When the bridge learned it (ISO). */
+  at: z.string().datetime(),
+});
+export type ClearedOutsideLayer = z.infer<typeof ClearedOutsideLayerSchema>;
+
+/** Pull the layers cleared outside CG Control that are still to be said (initial state on connect). */
+export const LayersClearedOutsideChannel = defineChannel(
+  'layers.cleared-outside',
+  z.void(),
+  z.array(ClearedOutsideLayerSchema),
+);
+
+/** Pushed whenever that list changes. */
+export const LayersClearedOutsideChangedChannel = definePublishChannel(
+  'layers.cleared-outside-changed',
+  z.array(ClearedOutsideLayerSchema),
+);
+
+/**
  * Every reason `layers.clear` can refuse for — ONE canonical list, so a caller
  * that maps reasons cannot silently miss one that was added later.
  *
@@ -45,7 +73,8 @@ export const LayersOrphansChangedChannel = definePublishChannel(
  * - `owned` — the bridge holds this layer for a stack item (`#slots`). Clearing
  *   owned layers is Out/Remove's job.
  * - `foreign` — R-015: no FRESH observation of an `html` producer here, so the
- *   layer is provably not ours (or silence is evidence of nothing).
+ *   layer is provably not ours (or silence is evidence of nothing). Inside the
+ *   three bands (50–99) only the second half stands — `B-292`, below.
  * - `reserved` — R-028: a DECLARED playout layer. Config is the identity,
  *   because OSC cannot tell a playout html graphic from ours.
  * - `live-source` — C-015 phase 5: a layer in the bridge's own Live Source
@@ -101,6 +130,14 @@ export type LayerClearReason = (typeof LAYER_CLEAR_REASONS)[number];
  * Below it another system's producer is the Playout's and NORMAL (`FIELD-FIXES-01` L), the notice
  * never offers a Clear there, and rule 3 (C5) forbids ours. A request below 50 is refused as a
  * request, before any gate — deliberately NOT a new reason word (`ROUTE-PLATES-01` §5.5).
+ *
+ * 🔴 `B-292` (`RELEASE-091-01` DELTA B, B3 — the owner, 2026-09-29) — **R-015 NARROWED INSIDE THE
+ * BANDS.** "This system only ever places HTML producers" stopped being true with plates: a plate is
+ * `ffmpeg`, `route`, `ndi` or `decklink`, and one left in 60–79 by another station or a lost ledger had
+ * no surface that could clear it. Inside 50–99 (`inAnyLayerBand`) a FRESH observation of ANY producer
+ * clears, when the layer is not reserved, not a stack item's and not in the ledger (`owned`,
+ * `reserved` and `live-source` still refuse first). Outside the bands the `html` rule above stands,
+ * and no fresh observation still licenses nothing. Never a channel-wide `CLEAR`: one layer per call.
  */
 export const LayersClearChannel = defineChannel(
   'layers.clear',

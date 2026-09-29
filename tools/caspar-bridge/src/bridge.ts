@@ -56,6 +56,8 @@ import {
   FixedLayersStateChangedChannel,
   FixedLayersStateChannel,
   LayersClearChannel,
+  LayersClearedOutsideChangedChannel,
+  LayersClearedOutsideChannel,
   LayersOrphansChangedChannel,
   LayersOrphansChannel,
   LayersOwnedOccupancyChangedChannel,
@@ -2878,6 +2880,10 @@ export function wirePublishes(
     // `DESKTOP-APPS-01-D` j — the strays Station setup shows.
     backing.straysChanged.subscribe((s) => push(StationStraysChangedChannel, s)),
     backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
+    // `RELEASE-091-01` (DELTA B, B1) — a layer of ours cleared outside CG Control.
+    backing.clearedOutsideChanged.subscribe((o) =>
+      push(LayersClearedOutsideChangedChannel, [...o]),
+    ),
     backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
     // B-225 — air was emptied under us (or the notice was acted on / dismissed).
     backing.emptiedAirChanged.subscribe((n) => push(EmptiedAirNoticeChangedChannel, n)),
@@ -3407,6 +3413,7 @@ export function buildRoutes(
 
     // R-009 — orphan-layer surface + explicit per-layer Clear.
     route(LayersOrphansChannel, 'read', 'read', () => b.orphans()),
+    route(LayersClearedOutsideChannel, 'read', 'read', () => [...b.clearedOutside()]),
     route(LayersClearChannel, 'operator', 'operator', (r: { channel: number; layer: number }) =>
       b.clearLayer(r.channel, r.layer),
     ),

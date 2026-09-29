@@ -65,6 +65,7 @@ import {
   SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
   DelimiterOptionSchema,
   fixedBankSlots,
+  inAnyLayerBand,
   isFixedBankLayer,
   describeTemplateReferences,
   type TemplateReference,
@@ -2002,10 +2003,15 @@ export class MockRuntime {
    * observation at all) refuses too — never a blind CLEAR.
    *
    * R-021 stage 2b parity — a FIXED-bank layer's observation lives in
-   * `#fixedObservations` instead (fixed layers never surface as orphans, 4.2a).
+   * `#fixedObservations` (4.2a once kept bank layers out of the orphan set; the
+   * bridge's sweep lists them again, so an orphan seeded there counts as well).
    * Same predicate, same refusal: only an observed `html` producer clears; the
    * cleared slot settles to observed-empty and republishes, which is the mock's
    * stand-in for the bridge's next-sweep resolve.
+   *
+   * `B-292` parity (`RELEASE-091-01` DELTA B, B3) — inside the three bands (50–99,
+   * `inAnyLayerBand`) an observed producer of ANY kind clears, as on the bridge; outside them the
+   * `html` rule above stands.
    */
   clearLayer(
     channel: number,
@@ -2017,15 +2023,26 @@ export class MockRuntime {
     if (bank !== null && isFixedBankLayer(bank, channel, layer)) {
       const key = coordinateKey(channel, layer);
       const observed = this.#fixedObservations.get(key);
-      if (observed?.kind !== 'producer' || observed.producer !== 'html') {
+      /*
+        `B-292` parity — the bridge's sweep LISTS a foreign producer on a bank row (its "bank layers
+        were once excluded" note), so the strip offers that row a CLEAR; the mock's orphan list is its
+        stand-in for the same tap, and a producer it holds for this coordinate counts here too.
+      */
+      const listed = this.#orphans.find((o) => o.channel === channel && o.layer === layer);
+      const producer = observed?.kind === 'producer' ? observed.producer : listed?.producer;
+      if (producer === undefined || (producer !== 'html' && !inAnyLayerBand(layer))) {
         return { ok: false, reason: 'foreign' };
       }
       this.#fixedObservations.set(key, { kind: 'empty' });
       this.fixedStateChanged.emit(this.fixedLayersState());
+      if (listed !== undefined) {
+        this.#orphans = this.#orphans.filter((o) => o !== listed);
+        this.orphansChanged.emit(this.orphans());
+      }
       return { ok: true };
     }
     const observed = this.#orphans.find((o) => o.channel === channel && o.layer === layer);
-    if (observed === undefined || observed.producer !== 'html') {
+    if (observed === undefined || (observed.producer !== 'html' && !inAnyLayerBand(layer))) {
       return { ok: false, reason: 'foreign' };
     }
     this.#orphans = this.#orphans.filter((o) => !(o.channel === channel && o.layer === layer));

@@ -72,15 +72,25 @@
 
 ## 9. Our layer cleared from outside (`B-292`)
 
-- [ ] 9.1 `@cg/amcp-mock`: a cleared layer goes silent on OSC (mixer state kept); `INFO <ch>` and
-      `INFO <ch>-<L>` answer per-layer stage data in the 2.5 shape. Every test that relied on the old
-      `empty` updated, and listed.
-- [ ] 9.2 Bridge: a silent layer we hold on air → one `INFO` read → off air with the notice; measured
-      time from the clear to the row.
-- [ ] 9.3 Strip: occupied layers in 50–99 no ledger record holds, each clearable, and "clear all listed";
-      bridge refusals unchanged outside that set.
-- [ ] 9.4 Tests: foreign `CLEAR` of a page and one plate (control: the other plates and another item stay
-      ON AIR); a leftover plate listed and cleared (control: a ledger plate is not listed).
+- [x] 9.1 `@cg/amcp-mock`: a cleared layer goes silent on OSC (mixer state kept); `INFO <ch>` and
+      `INFO <ch>-<L>` answer per-layer stage data in the 2.5 shape (`stage-fidelity.test.ts`). The 30
+      tests (22 files) that went red were fixed in the PRODUCT, none edited or deleted: the bridge counts
+      its own acknowledged `CLEAR`, and `ServerSession` forwards every queue's `exchange` (which also
+      fixed the AMCP log after a reconnect). Listed in `design.md` and the report. `b7844d2f`.
+- [x] 9.2 Bridge: a silent layer we hold on air → one `INFO <ch>` read (the channel form — `design.md`
+      B1–B3 (2)) → off air, published on `layers.cleared-outside`; nothing re-sent. The rule is
+      `silentLayersToAsk` (unit-tested: a quiet channel is never asked, one question per silence).
+      Measured 1098–1153 ms over six runs, clear to row.
+- [x] 9.3 Strip: a CLEAR on every listed layer in 50–99 whatever its producer, CLEAR ALL LISTED with two
+      or more (one confirm, one `CLEAR` per layer), and the "cleared outside CG Control" strip; one
+      predicate (`inAnyLayerBand`) for the bridge's door, the strip and the mock; refusals unchanged
+      outside 50–99.
+- [x] 9.4 Tests: foreign `CLEAR` of a page and one plate (control: the other plate and another item stay
+      ON AIR); a leftover plate listed and cleared (controls: a ledger plate is not listed and is refused
+      `live-source`; a video on 120 is refused `foreign`) — `media-plates.integration.test.ts`. Console:
+      `orphanLayersBanner.dom.test.ts`; e2e `layers-cleared-outside.spec.ts` (one real bridge, one raw
+      AMCP client) and `orphan-layers.spec.ts` (its two "no Clear on 1-90" pins superseded). Red first:
+      the silence question disarmed, and R-015 un-narrowed, each turns its test red.
 
 ## 10. Gate, CI, report
 

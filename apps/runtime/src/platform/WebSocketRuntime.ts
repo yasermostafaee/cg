@@ -14,6 +14,8 @@ import {
   LayersOrphansChannel,
   LayersOwnedOccupancyChangedChannel,
   LayersOwnedOccupancyChannel,
+  LayersClearedOutsideChangedChannel,
+  LayersClearedOutsideChannel,
   EmptiedAirDismissChannel,
   EmptiedAirNoticeChangedChannel,
   EmptiedAirNoticeChannel,
@@ -117,6 +119,7 @@ import {
   type FixedSlotState,
   type LockState,
   type OrphanLayer,
+  type ClearedOutsideLayer,
   type OwnedOccupancyWarning,
   type EmptiedAirNotice,
   type PendingUpdate,
@@ -463,6 +466,7 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #configSubs = new Subs<ConnectionConfig>();
   readonly #orphanSubs = new Subs<OrphanLayer[]>();
   readonly #ownedOccupancySubs = new Subs<OwnedOccupancyWarning[]>();
+  readonly #clearedOutsideSubs = new Subs<ClearedOutsideLayer[]>();
   // B-225 — the standing "air was emptied under us" notice (null when there is none).
   readonly #emptiedAirSubs = new Subs<EmptiedAirNotice | null>();
   // C-016 — the programme return's state per watched channel.
@@ -1366,6 +1370,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#ownedOccupancySubs.emit(p.data);
         break;
       }
+      case LayersClearedOutsideChangedChannel.name: {
+        const p = LayersClearedOutsideChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#clearedOutsideSubs.emit(p.data);
+        break;
+      }
       case EmptiedAirNoticeChangedChannel.name: {
         const p = EmptiedAirNoticeChangedChannel.payload.safeParse(payload);
         if (p.success) this.#emptiedAirSubs.emit(p.data);
@@ -1874,6 +1883,10 @@ export class WebSocketRuntime implements RuntimeBridge {
     ownedOccupancy: () => this.#invoke(LayersOwnedOccupancyChannel, undefined),
     onOwnedOccupancyChanged: (handler: (warnings: OwnedOccupancyWarning[]) => void) =>
       this.#ownedOccupancySubs.add(handler),
+    // `B-292` — a layer of ours cleared outside CG Control.
+    clearedOutside: () => this.#invoke(LayersClearedOutsideChannel, undefined),
+    onClearedOutsideChanged: (handler: (cleared: ClearedOutsideLayer[]) => void) =>
+      this.#clearedOutsideSubs.add(handler),
   };
 
   // B-225 — the notice, and the two acts an operator may take on it. `restore` is reachable

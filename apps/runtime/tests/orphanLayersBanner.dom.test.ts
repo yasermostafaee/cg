@@ -3,13 +3,14 @@ import { StrictMode, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
+import type { ClearedOutsideLayer, OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import {
   OrphanLayersBanner,
   orphanWarningChannels,
 } from '../src/renderer/features/layers/OrphanLayersBanner.js';
 import {
   __reloadForeignDismissalsForTest,
+  dismissedClearedOutside,
   dismissedStrip,
 } from '../src/renderer/features/layers/foreignNotice.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
@@ -109,6 +110,7 @@ function stubBridge(
 async function renderBanner(
   orphans: OrphanLayer[],
   ownedOccupancy: OwnedOccupancyWarning[] = [],
+  clearedOutside: ClearedOutsideLayer[] = [],
 ): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -118,7 +120,7 @@ async function renderBanner(
       createElement(
         StrictMode,
         null,
-        createElement(OrphanLayersBanner, { orphans, ownedOccupancy }),
+        createElement(OrphanLayersBanner, { orphans, ownedOccupancy, clearedOutside }),
       ),
     );
   });
@@ -288,59 +290,229 @@ describe('OrphanLayersBanner — §1 the Clear is gated on BOTH hops', () => {
   });
 });
 
-describe('OrphanLayersBanner — R-015 video layers read as NORMAL and can never be cleared', () => {
+/*
+  🔴 `B-292` (`RELEASE-091-01` DELTA B, B3 — the owner, 2026-09-29) SUPERSEDED this block's "can
+  never be cleared". Its three tests asserted NO Clear on a video layer at 1-90, 1-73 and beside an
+  html orphan; inside the three bands (50–99) each of those rows now carries one, because a plate
+  another station or a lost ledger left in our bands had no surface that could clear it. The neutral
+  strip itself — `role="status"`, never an alert, the kind named — is unchanged and still pinned, and
+  the old prohibition survives where it still holds: ABOVE the bands (the control at 1-120).
+*/
+describe('OrphanLayersBanner — R-015 video layers read as NORMAL; `B-292`: inside 50–99 they clear', () => {
   function video(channel: number, layer: number, producer = 'ffmpeg'): OrphanLayer {
     return { channel, layer, producer, since: '2026-07-19T12:00:00.000Z' };
   }
 
-  /** Every CLEAR control in the banner — the affordance R-015 keeps off a video layer. */
+  /** Every CLEAR control in a region — per row and CLEAR ALL LISTED alike. */
   const clears = (el: ParentNode): NodeListOf<HTMLButtonElement> =>
     el.querySelectorAll<HTMLButtonElement>('button[aria-label^="Clear"]');
+  const labels = (el: ParentNode): (string | null)[] =>
+    [...clears(el)].map((b) => b.getAttribute('aria-label'));
+  const neutralStrip = (el: ParentNode): Element | null =>
+    el.querySelector('[aria-label="Layers in use by other systems"]');
 
-  it('a video layer renders in the NEUTRAL strip: no alert role, no Clear control, kind named', async () => {
+  it('a video layer renders in the NEUTRAL strip — no alert role, kind named — and, inside the bands, carries a CLEAR', async () => {
     stubBridge();
     const el = await renderBanner([video(1, 90)]);
     // Not a problem: no alert strip exists at all for a video-only set.
     expect(el.querySelector('[role="alert"]')).toBeNull();
-    const neutral = el.querySelector('[aria-label="Layers in use by other systems"]');
+    const neutral = neutralStrip(el);
     expect(neutral).not.toBeNull();
     expect(neutral?.getAttribute('role')).toBe('status');
     expect(el.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
     expect(el.textContent).toContain('placed by another system');
-    // The affordance does not exist — not disabled, ABSENT. (`FIELD-FIXES-01` L: the strip's one
-    // control is its dismiss, which clears nothing.)
-    expect(clears(el)).toHaveLength(0);
+    expect(el.textContent).not.toContain('Not clearable from here');
     expect(
       [...(neutral?.querySelectorAll('button') ?? [])].map((b) => b.getAttribute('aria-label')),
-    ).toEqual(['Dismiss this notice']);
+    ).toEqual(['Clear layer 1-90', 'Dismiss this notice']);
+  });
+
+  it('🔴 CONTROL — above the bands a video layer offers NO Clear, and says so', async () => {
+    stubBridge();
+    const el = await renderBanner([video(1, 120)]);
+    const neutral = neutralStrip(el);
+    expect(neutral?.textContent).toContain('Layer 1-120 is carrying video (ffmpeg)');
+    expect(neutral?.textContent).toContain('Not clearable from here.');
+    // The affordance does not exist — not disabled, ABSENT.
+    expect(clears(el)).toHaveLength(0);
   });
 
   it('an unrecognised producer kind is presented exactly as video — "not html" fails safe', async () => {
     stubBridge();
     const el = await renderBanner([video(1, 73, 'decklink')]);
     expect(el.querySelector('[role="alert"]')).toBeNull();
-    expect(
-      el.querySelector('[aria-label="Layers in use by other systems"]')?.getAttribute('role'),
-    ).toBe('status');
+    expect(neutralStrip(el)?.getAttribute('role')).toBe('status');
     expect(el.textContent).toContain('Layer 1-73 is carrying video (decklink)');
-    expect(clears(el)).toHaveLength(0);
+    expect(labels(el)).toEqual(['Clear layer 1-73']);
   });
 
-  it('html and video coexist: the html orphan keeps its warning + Clear, the video row offers none', async () => {
+  it('html and video coexist: the html orphan keeps its warning + Clear, and the video row has its own', async () => {
     stubBridge();
     const el = await renderBanner([orphan(1, 60), video(1, 90)]);
     // The html orphan's R-009 surface is byte-for-byte alive…
     const alert = el.querySelector('[aria-label="Orphaned on-air layers"]');
     expect(alert?.getAttribute('role')).toBe('alert');
     expect(el.textContent).toContain('Layer 1-60 is on air but not on your stack');
-    expect(
-      el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 1-60"]'),
-    ).not.toBeNull();
-    // …the video row is neutral, and the ONLY Clear in the banner is the html one.
+    expect(labels(alert ?? el)).toEqual(['Clear layer 1-60']);
+    // …and the video row stays neutral, in its own strip, with its own Clear.
     expect(el.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
-    expect([...clears(el)].map((b) => b.getAttribute('aria-label'))).toEqual(['Clear layer 1-60']);
-    const neutral = el.querySelector('[aria-label="Layers in use by other systems"]');
-    expect(neutral === null ? 0 : clears(neutral).length).toBe(0);
+    expect(labels(neutralStrip(el) ?? el)).toEqual(['Clear layer 1-90']);
+  });
+
+  it('🔴 a video row’s CLEAR confirms, then sends exactly one `layers.clear` for that layer — cancel sends nothing', async () => {
+    const { clear } = stubBridge();
+    const el = await renderBanner([video(2, 70)]);
+    const btn = el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 2-70"]');
+    expect(btn).not.toBeNull();
+
+    await act(async () => {
+      btn?.click();
+      await Promise.resolve();
+    });
+    expect(openDialog()?.textContent).toContain('Clear layer 2-70');
+    await clickDialogButton('Cancel');
+    expect(clear).not.toHaveBeenCalled();
+
+    await act(async () => {
+      btn?.click();
+      await Promise.resolve();
+    });
+    await clickDialogButton('Clear layer');
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(clear).toHaveBeenCalledWith({ channel: 2, layer: 70 });
+  });
+
+  it('🔴 CLEAR ALL LISTED: one confirm naming every layer in 50–99, then one `layers.clear` per layer, in turn — never the layer above the bands, never a channel', async () => {
+    const { clear } = stubBridge();
+    const el = await renderBanner([video(2, 70), video(2, 71, 'route'), video(2, 120)]);
+    const all = neutralStrip(el)?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear all listed layers"]',
+    );
+    expect(all?.textContent).toBe('CLEAR ALL LISTED');
+
+    await act(async () => {
+      all?.click();
+      await Promise.resolve();
+    });
+    const dialog = openDialog();
+    expect(dialog?.textContent).toContain('Clear 2 layers?');
+    expect(dialog?.textContent).toContain('2-70, 2-71');
+    expect(dialog?.textContent, 'the layer above the bands is not in the batch').not.toContain(
+      '2-120',
+    );
+    // Cancel first — nothing is sent.
+    await clickDialogButton('Cancel');
+    expect(clear).not.toHaveBeenCalled();
+
+    await act(async () => {
+      all?.click();
+      await Promise.resolve();
+    });
+    await clickDialogButton('Clear 2 layers');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(clear.mock.calls).toEqual([[{ channel: 2, layer: 70 }], [{ channel: 2, layer: 71 }]]);
+  });
+
+  it('CLEAR ALL LISTED appears only when a strip lists two or more layers it may clear', async () => {
+    stubBridge();
+    const one = await renderBanner([video(1, 70), video(1, 120)]);
+    expect(labels(one)).toEqual(['Clear layer 1-70']);
+    container?.remove();
+    const two = await renderBanner([orphan(1, 60), orphan(1, 61)]);
+    expect(labels(two)).toEqual([
+      'Clear layer 1-60',
+      'Clear layer 1-61',
+      'Clear all listed layers',
+    ]);
+  });
+
+  it('with CasparCG unreachable every CLEAR — per row and all — is disabled', async () => {
+    stubBridge('caspar-down');
+    const el = await renderBanner([video(1, 70), video(1, 71)]);
+    const buttons = [...clears(el)];
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Clear layer 1-70',
+      'Clear layer 1-71',
+      'Clear all listed layers',
+    ]);
+    expect(buttons.every((b) => b.disabled)).toBe(true);
+  });
+});
+
+/**
+ * 🔴 `B-292` (`RELEASE-091-01` DELTA B, B1) — **A LAYER OF OURS CLEARED OUTSIDE CG CONTROL**, said in
+ * this family's own words and dismissed the same way. The bridge half (the silence question, the row
+ * off air, nothing re-sent) is `media-plates.integration.test.ts`.
+ */
+describe('OrphanLayersBanner — B-292 a layer of ours cleared outside CG Control', () => {
+  const cleared = (channel: number, layer: number, at = '2026-09-29T20:00:00.000Z') => ({
+    channel,
+    layer,
+    at,
+  });
+  const strip = (el: ParentNode): Element | null =>
+    el.querySelector('[aria-label="Layers cleared outside CG Control"]');
+
+  function freshStorage(): void {
+    const data = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        data.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        data.delete(key);
+      },
+    });
+    __reloadForeignDismissalsForTest();
+  }
+
+  it('🔴 names each layer in the owner’s sentence, as an alert — control: an empty list renders nothing', async () => {
+    stubBridge();
+    freshStorage();
+    const quiet = await renderBanner([], [], []);
+    expect(quiet.textContent).toBe('');
+    container?.remove();
+
+    const el = await renderBanner([], [], [cleared(2, 60), cleared(2, 71)]);
+    expect(strip(el)?.getAttribute('role')).toBe('alert');
+    expect(strip(el)?.textContent).toContain('Layer 60 on CH 2 was cleared outside CG Control');
+    expect(strip(el)?.textContent).toContain('Layer 71 on CH 2 was cleared outside CG Control');
+    // A statement, with nothing to press but its dismiss: nothing is put back from here.
+    expect(
+      [...(strip(el)?.querySelectorAll('button') ?? [])].map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Dismiss this notice']);
+  });
+
+  it('🔴 a dismissal holds across a reload — and the same layer cleared AGAIN brings the strip back', async () => {
+    stubBridge();
+    freshStorage();
+    const first = [cleared(2, 60)];
+    const el = await renderBanner([], [], first);
+    await act(async () => {
+      strip(el)
+        ?.querySelector<HTMLButtonElement>('button[aria-label="Dismiss this notice"]')
+        ?.click();
+    });
+    expect(strip(el)).toBeNull();
+    expect(orphanWarningChannels([], [], dismissedClearedOutside({}, first), first)).toEqual([]);
+
+    container?.remove();
+    __reloadForeignDismissalsForTest();
+    const reloaded = await renderBanner([], [], first);
+    expect(strip(reloaded), 'the dismissal survived the reload').toBeNull();
+
+    container?.remove();
+    const again = await renderBanner([], [], [cleared(2, 60, '2026-09-29T20:05:00.000Z')]);
+    expect(strip(again)?.textContent).toContain('Layer 60 on CH 2 was cleared outside CG Control');
+  });
+
+  it('marks its channel while it stands', () => {
+    const list = [cleared(2, 60)];
+    expect(orphanWarningChannels([], [], {}, list)).toEqual([2]);
+    expect(orphanWarningChannels([], [], dismissedClearedOutside({}, list), list)).toEqual([]);
   });
 });
 
@@ -390,7 +562,11 @@ describe('OrphanLayersBanner — FIELD-FIXES-01 L: CG’s bands, and a dismissal
           createElement(
             StrictMode,
             null,
-            createElement(OrphanLayersBanner, { orphans: next, ownedOccupancy: [] }),
+            createElement(OrphanLayersBanner, {
+              orphans: next,
+              ownedOccupancy: [],
+              clearedOutside: [],
+            }),
           ),
         );
       });

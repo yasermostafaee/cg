@@ -218,6 +218,8 @@ describe('C-038 — the census: every route, classified', () => {
       'fixedLayers.banks',
       'fixedLayers.config',
       'fixedLayers.state',
+      // `RELEASE-091-01` (DELTA B, B1) — a layer of ours cleared outside CG Control.
+      'layers.cleared-outside',
       'layers.orphans',
       'layers.owned-occupancy',
       // `MEDIA-PLATES-01` — each seated clip's remaining time, pause and end. A viewer may watch air.

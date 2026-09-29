@@ -12931,3 +12931,14 @@ cleared layer goes silent, and `INFO <ch>` / `INFO <ch>-<layer>` answer with per
 (both off air within the target, with the notice; control: the other plates and another item stay
 ON AIR); a leftover plate listed and cleared from the strip (control: a plate the ledger holds is
 not listed).
+
+**Closed in code (2026-09-30, `RELEASE-091-01`; not yet archived).** The read is `INFO <ch>`, not
+`INFO <ch>-<layer>`: the core ignores the layer and answers the whole channel, and the bridge's own
+guard refuses layer-addressed `INFO` (`BRIDGE-TRUTH-01` §3) — same reply, one read per channel. The
+rule for WHEN to ask is `silentLayersToAsk`. Measured clear → row off air: 1.10–1.15 s (six runs). The
+strip's CLEAR covers every listed layer in 50–99, CLEAR ALL LISTED appears with two or more, and one
+predicate (`inAnyLayerBand`) serves the bridge's door, the strip and the offline mock. The faithful mock
+turned 30 tests red; all were fixed in the product (the bridge counts its own acknowledged `CLEAR`), and
+the same work found and fixed the AMCP wire log going silent after any reconnect. Tests:
+`media-plates.integration.test.ts`, `silent-layer-question.test.ts`, `stage-fidelity.test.ts`,
+`orphanLayersBanner.dom.test.ts`, e2e `layers-cleared-outside.spec.ts`.

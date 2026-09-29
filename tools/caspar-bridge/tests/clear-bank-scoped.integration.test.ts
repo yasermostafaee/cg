@@ -188,7 +188,15 @@ it('a FOREIGN producer on a declared row is still clearable — and not one laye
   await new Promise((r) => setTimeout(r, 300));
 
   expect(await b.runtime.clearBankLayer(1, 72)).toEqual({ ok: true });
-  expect(await b.runtime.clearLayer(1, 69)).toEqual({ ok: false, reason: 'foreign' });
+  // The BANK door is bank-scoped: 69 is outside the declared rows, so it refuses it.
+  expect((await b.runtime.clearBankLayer(1, 69)).ok).toBe(false);
+  /*
+    🔴 `RELEASE-091-01` (DELTA B, B3, `B-292`) — SUPERSEDES `clearLayer(1, 69)` → `foreign`. Layer 69 is
+    inside CG's bands (the plate band), and a producer there that no ledger record holds — a plate
+    another station left behind — is now clearable through the strip's own door, `layers.clear`,
+    whatever its kind. The bank door above did not widen; the orphan door did, inside 50–99 only.
+  */
+  expect(await b.runtime.clearLayer(1, 69)).toEqual({ ok: true });
 });
 
 it('refuses a layer ONE BELOW the bank floor and ONE ABOVE its ceiling — and sends nothing', async () => {

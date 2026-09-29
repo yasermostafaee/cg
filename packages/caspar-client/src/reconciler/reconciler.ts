@@ -589,15 +589,40 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       const key = rec.slot !== undefined ? slotKey(rec.slot) : undefined;
       if (key !== undefined && occupiedSlotKeys.has(key)) continue; // still on air — OSC restores it
       // Silent layer — the producer is gone. Reset to the honest idle.
-      rec.played = false;
-      rec.intentStatus = 'idle';
-      delete rec.ackedStatus;
-      delete rec.settle;
-      rec.lastProducer = 'empty';
-      rec.lastOscAt = this.now();
-      changed.push(this.emitChange(rec));
+      changed.push(this.resetEmptied(rec));
     }
     return changed;
+  }
+
+  /**
+   * 🔴 `RELEASE-091-01` (DELTA B, B1) — **THE LAYERS CASPARCG HAS JUST SAID ARE EMPTY**: a played
+   * item on one of `emptiedSlotKeys` is reset to `idle`, exactly as {@link reconcileOnReconnect}
+   * resets one whose layer went silent across a reconnect — the same reset, one spelling.
+   *
+   * The bridge calls it when a layer it held on air went silent and an `INFO` read proved it gone:
+   * cleared by another AMCP client, the Playout, or CasparCG itself. A fresh `empty` observation
+   * alone would not do — the truth decays after `truthTtlMs` and the row would fall back to its
+   * `playing` ack, ON AIR again over an empty layer. That was `B-292`.
+   */
+  markLayersEmptied(emptiedSlotKeys: ReadonlySet<string>): readonly StackItemState[] {
+    const changed: StackItemState[] = [];
+    for (const rec of this.items.values()) {
+      if (!rec.played || rec.slot === undefined) continue;
+      if (!emptiedSlotKeys.has(slotKey(rec.slot))) continue;
+      changed.push(this.resetEmptied(rec));
+    }
+    return changed;
+  }
+
+  /** The one reset of a played item whose producer is gone: the honest `idle`. */
+  private resetEmptied(rec: ItemRecord): StackItemState {
+    rec.played = false;
+    rec.intentStatus = 'idle';
+    delete rec.ackedStatus;
+    delete rec.settle;
+    rec.lastProducer = 'empty';
+    rec.lastOscAt = this.now();
+    return this.emitChange(rec);
   }
 
   /** True iff `beginResync()` has been called and `endResync()` has not. */

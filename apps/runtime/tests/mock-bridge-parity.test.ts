@@ -206,7 +206,16 @@ const BRIDGE_SURFACE: {
       'onHealthChanged',
       'onConfigChanged',
     ],
-    layers: ['orphans', 'clear', 'onOrphansChanged', 'ownedOccupancy', 'onOwnedOccupancyChanged'],
+    layers: [
+      'orphans',
+      'clear',
+      'onOrphansChanged',
+      'ownedOccupancy',
+      'onOwnedOccupancyChanged',
+      // `B-292` — a layer of ours cleared outside CG Control. Offline: honestly never.
+      'clearedOutside',
+      'onClearedOutsideChanged',
+    ],
     /*
       B-225 — the playout server stopped carrying what this console put on air. Listed here
       for the reason this guard exists at all: the SPA's notice is developed and E2E'd against

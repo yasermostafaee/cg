@@ -18,6 +18,11 @@ import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
  *
  * The mock's media PLAY reports `ffmpeg` (matching real CasparCG), so the
  * refusal is exercised against the real wire signal, not a shim.
+ *
+ * ⚠ `B-292` (`RELEASE-091-01` DELTA B, B3) NARROWED this inside the three bands
+ * (50–99): there a fresh producer of any kind clears, because plates are not
+ * `html` (`media-plates.integration.test.ts` pins that half). Every video
+ * layer below is OUTSIDE them — 1-1 and 1-33 — where the rule stands as written.
  */
 
 let mock: MockHandle | null = null;
@@ -113,7 +118,7 @@ async function boot(): Promise<{ clears: string[] }> {
   return { clears };
 }
 
-it('a video layer surfaces with its ffmpeg kind and can NEVER be cleared — refused foreign, nothing on the wire', async () => {
+it('a video layer outside the bands surfaces with its ffmpeg kind and can NEVER be cleared — refused foreign, nothing on the wire', async () => {
   const { clears } = await boot();
 
   // Another system plays a program feed on layer 1 — a media file, no HTML

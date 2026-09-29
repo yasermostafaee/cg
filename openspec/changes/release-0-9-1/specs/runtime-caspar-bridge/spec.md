@@ -48,22 +48,33 @@ other shape SHALL never be changed by it.
 The bridge SHALL treat OSC silence on a layer it holds on air as a QUESTION, never as "still playing".
 CasparCG 2.5 erases a cleared layer from its stage, and its OSC for that layer simply stops
 (`stage.cpp` `clear`); it never reports it `empty`. So for a layer this bridge holds on air — an item's
-page or a plate seat — whose OSC has stopped for about 1 s, while the channel's own OSC still arrives, the
-bridge SHALL send ONE `INFO <channel>-<layer>` read for it (never a channel-wide
-poll, one read per silence) and, if CasparCG's answer has no such layer in its stage, SHALL take that item
-or seat off air through its reconcile, raise the notice `Layer <n> on CH <c> was cleared outside CG
-Control`, re-send nothing and put nothing back. An answer that still carries the layer, or no answer,
-SHALL change nothing. Whole-channel OSC silence SHALL never trigger the read.
+page or a plate seat — that reported a producer and has then been silent for 1 s, while its channel still
+reports frames (`/channel/N/framerate` within 500 ms), the bridge SHALL ask CasparCG ONCE per silence:
+one `INFO <channel>` read from the primary, answering every silent layer of that channel together. It is
+the `INFO <channel>-<layer>` the owner named, spelled truthfully — CasparCG 2.5 ignores the layer and
+answers the whole channel (`AMCPCommandsImpl.cpp` `info_channel_command`), which is why the bridge builds
+`INFO` only in the channel form (`BRIDGE-TRUTH-01` §3). The read SHALL go to the primary only, unjournaled,
+at the lowest priority, and SHALL never become a poll. If the answer's stage has no such layer, the bridge
+SHALL take that item or seat off air through its reconcile, publish the layer on `layers.cleared-outside`
+(pulled, and pushed on `layers.cleared-outside-changed`) for the notice `Layer <n> on CH <c> was cleared
+outside CG Control`, re-send nothing and put nothing back. An answer that still carries the layer, or no
+answer, SHALL change nothing. Whole-channel OSC silence SHALL never trigger the read. A layer that reports
+a producer again leaves the published list.
 
 #### Scenario: A foreign clear of a page and one plate
 
 - **WHEN** a second AMCP client clears the page layer and one plate layer of a multi-box row on air
-  **THEN** within 2 s both read off air and the notice names each layer
+  **THEN** within 2 s both read off air and the list names each layer (measured: 1.1–1.2 s)
 - **AND** the row's other plates, and another item on the channel, stay ON AIR (the control)
+- **AND** nothing is sent to put either back — no `PLAY`, `LOADBG` or `CG ADD`
 
 #### Scenario: A quiet channel is not a cleared layer
 
-- **WHEN** the whole channel's OSC stops **THEN** no `INFO` is sent and nothing leaves ON AIR
+- **WHEN** the whole channel stops reporting frames **THEN** no `INFO` is sent and nothing leaves ON AIR
+- **WHEN** the channel still reports frames and only the layer is silent **THEN** it is asked about (the
+  control)
+- **WHEN** the same silence goes on **THEN** it is not asked about again until the layer reports and falls
+  silent anew
 
 ### Requirement: The AMCP mock SHALL model a cleared layer and `INFO` as CasparCG 2.5 does
 
@@ -108,20 +119,22 @@ The orphan set SHALL be pullable (`layers.orphans`) and pushed on change
 
 A `layers.clear` request SHALL send an urgent `CLEAR <channel>-<layer>` ONLY
 for a layer whose foreground producer the current primary's occupancy tap has
-OBSERVED FRESH, and ONLY when that producer is `html`, or the layer lies inside
-CG's bands (50–99) — where every producer, `html` or not, may be this system's
-own or one left there by another station (`RELEASE-091-01`, DELTA B B3). It
-SHALL refuse, sending nothing:
+OBSERVED FRESH, and ONLY when that producer is `html` or the layer lies inside
+the three bands (50–99, `inAnyLayerBand`). Inside them any producer may be this
+system's own or one another station left there — plates are `ffmpeg`, `route`,
+`ndi` or `decklink`, never `html` — so the owner narrowed R-015 there
+(`RELEASE-091-01` DELTA B, B3, `B-292`). A request below 50 is refused as a
+request, before any gate (`FOLLOWUPS-01` B). It SHALL refuse, sending nothing:
 
-- `reason: 'owned'` — any layer the bridge owns (clearing owned layers is
-  Out/Remove's job, and a plate its ledger holds is owned), refused before
-  any occupancy check;
-- `reason: 'foreign'` — any layer below CG's bands whose fresh observation
-  reports a non-`html` producer kind (a video there is PROVABLY not ours), any
-  unrecognised kind there ("not html" fails safe), and any layer with NO fresh
-  observation at all (silence is evidence of nothing and cannot license a
-  CLEAR — including the B-094 AMCP-alive/OSC-dead install and entries aged past
-  the staleness bound).
+- `reason: 'owned'` — any layer a stack item holds (clearing owned layers is
+  Out/Remove's job), refused before any occupancy check; a declared playout
+  layer is refused `reserved`, and a plate this bridge's ledger holds
+  `live-source`, as their own requirements say;
+- `reason: 'foreign'` — any layer above the bands whose fresh observation
+  reports a non-`html` producer kind, any unrecognised kind there ("not html"
+  fails safe), and any layer with NO fresh observation at all (silence is
+  evidence of nothing and cannot license a CLEAR — including the B-094
+  AMCP-alive/OSC-dead install and entries aged past the staleness bound).
 
 The bridge SHALL never touch slots or interest it does not own; a CLEAR
 executed on the current primary counts as layer adoption. It SHALL never send
@@ -154,17 +167,19 @@ an explicit operator request.
 
 #### Scenario: A layer left in our band can be cleared
 
-- **WHEN** `layers.clear` names layer 61 carrying an `ffmpeg` producer that no
-  ledger record holds **THEN** the bridge sends `CLEAR <ch>-61` and the
+- **WHEN** `layers.clear` names layer 70 carrying an `ffmpeg` producer that no
+  ledger record holds **THEN** the bridge sends `CLEAR <ch>-70` and the
   warning resolves on observed empty
 - **WHEN** it names a plate layer this bridge's ledger holds **THEN** it is
-  refused `owned` and nothing is sent (the control)
+  refused `live-source` and nothing is sent (the control)
 
-#### Scenario: A video below our bands can never be cleared
+#### Scenario: Outside the bands a video can never be cleared
 
-- **WHEN** `layers.clear` names a layer below 50 whose fresh observation
-  reports a non-`html` producer (e.g. `ffmpeg` on 1-5) **THEN** the request is
-  refused with `reason: 'foreign'` and NO `CLEAR` reaches the wire
+- **WHEN** `layers.clear` names layer 120 whose fresh observation reports a
+  non-`html` producer **THEN** the request is refused with `reason: 'foreign'`
+  and NO `CLEAR` reaches the wire
+- **WHEN** it names a layer below 50 **THEN** it is refused as a request and
+  nothing is sent
 - **WHEN** `layers.clear` names a layer the occupancy tap has NO fresh
   observation for (never observed, aged out, or the tap is blind) **THEN**
   it is refused with `reason: 'foreign'` and nothing is sent

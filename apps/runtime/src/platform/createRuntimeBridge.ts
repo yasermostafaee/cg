@@ -331,6 +331,10 @@ export function createMockBridge(): RuntimeBridge {
       onOrphansChanged: (handler) => mock.orphansChanged.subscribe(handler),
       ownedOccupancy: () => Promise.resolve(mock.ownedOccupancy()),
       onOwnedOccupancyChanged: (handler) => mock.ownedOccupancyChanged.subscribe(handler),
+      // `B-292` — offline parity by honest absence: there is no CasparCG and no other client in
+      // test mode, so nothing outside CG Control can clear a layer of ours, and nothing ever will.
+      clearedOutside: () => Promise.resolve([]),
+      onClearedOutsideChanged: () => () => undefined,
     },
 
     /*

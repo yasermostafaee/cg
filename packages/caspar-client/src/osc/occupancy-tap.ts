@@ -142,6 +142,16 @@ export class OscOccupancyTap {
   }
 
   /**
+   * `RELEASE-091-01` (DELTA B, B1) — when this layer last reported a producer (any but `empty`), or
+   * `null` when it never did or last reported `empty`. The bridge asks it of the layers it holds on
+   * air: a layer that stopped reporting while its channel still ticks may have been cleared.
+   */
+  lastProducerAt(channel: number, layer: number): number | null {
+    const entry = this.entries.get(`${String(channel)}:${String(layer)}`);
+    return entry === undefined || entry.producer === 'empty' ? null : entry.at;
+  }
+
+  /**
    * Forget everything — called on session resync so ghosts die with the cycle.
    *
    * `everReceived` resets WITH the entries, deliberately: the question it

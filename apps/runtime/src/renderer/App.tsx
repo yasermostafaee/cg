@@ -55,6 +55,7 @@ import { initSources } from './features/sources/sourceStore.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
 import { useLock, useLockCoverage } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
+import { useClearedOutside } from './hooks/useClearedOutside.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
 import { useEmptiedAir } from './hooks/useEmptiedAir.js';
 import { useStack } from './hooks/useStack.js';
@@ -130,6 +131,8 @@ export function App(): JSX.Element {
   const lockCovers = useLockCoverage().kind === 'all';
   const health = useConnections();
   const orphans = useOrphans();
+  // `B-292` — a layer of ours cleared outside CG Control: the banner's third strip, and its mark.
+  const clearedOutside = useClearedOutside();
   // `FIELD-FIXES-01` L — the same dismissals the orphan strips read, so a mark and its notice agree.
   const foreignDismissals = useForeignDismissals();
   const ownedOccupancy = useOwnedOccupancy();
@@ -180,7 +183,7 @@ export function App(): JSX.Element {
             ],
             warnings: [
               ...emptiedAirChannels(emptiedAir),
-              ...orphanWarningChannels(orphans, ownedOccupancy, foreignDismissals),
+              ...orphanWarningChannels(orphans, ownedOccupancy, foreignDismissals, clearedOutside),
               ...(standingRefusal?.channel != null ? [standingRefusal.channel] : []),
               // `FIELD-FIXES-01` B — a row carrying a refused take's line, shown in ITS view only.
               ...takeRefusalChannels(items, fixedSlots),
@@ -198,6 +201,7 @@ export function App(): JSX.Element {
       orphans,
       foreignDismissals,
       ownedOccupancy,
+      clearedOutside,
       standingRefusal,
       items,
       fixedSlots,
@@ -471,6 +475,7 @@ export function App(): JSX.Element {
                       <OrphanLayersBanner
                         orphans={inScope(orphans, (o) => o.channel, verbScope)}
                         ownedOccupancy={inScope(ownedOccupancy, (w) => w.channel, verbScope)}
+                        clearedOutside={inScope(clearedOutside, (e) => e.channel, verbScope)}
                       />
                     </div>
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed

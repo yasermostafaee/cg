@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
+import type { ClearedOutsideLayer, OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { NoticeDismiss } from '../../ui/Notice.js';
@@ -14,10 +14,14 @@ import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { runCommand } from '../status/commandFeedback.js';
 import {
+  clearAllListed,
+  dismissClearedOutside,
   dismissForeignStrip,
   foreignNoticeChannels,
   isOrphanedGraphic,
+  noticedClearedOutside,
   noticedForeign,
+  offersClear,
   useForeignDismissals,
   type ForeignDismissals,
 } from './foreignNotice.js';
@@ -29,16 +33,20 @@ import {
  * video, because inside the bands both are a conflict with ours. Below the bands it is the
  * Playout's, and marks nothing. One rule with the strips below (`foreignNotice.ts`), never a
  * second copy.
+ *
+ * `B-292` — and a layer of ours cleared outside CG Control, while its strip stands.
  */
 export function orphanWarningChannels(
   orphans: readonly OrphanLayer[],
   ownedOccupancy: readonly OwnedOccupancyWarning[],
   dismissals: ForeignDismissals,
+  clearedOutside: readonly ClearedOutsideLayer[] = [],
 ): number[] {
   return [
     ...new Set([
       ...foreignNoticeChannels(orphans, dismissals),
       ...ownedOccupancy.map((w) => w.channel),
+      ...noticedClearedOutside(clearedOutside, dismissals).map((e) => e.channel),
     ]),
   ];
 }
@@ -48,6 +56,8 @@ interface Props {
   orphans: readonly OrphanLayer[];
   /** B-056 — owned-slot occupancy warnings (distinct variant, no Clear). */
   ownedOccupancy: readonly OwnedOccupancyWarning[];
+  /** `B-292` — layers of ours cleared outside CG Control (the channel on screen's, like `orphans`). */
+  clearedOutside: readonly ClearedOutsideLayer[];
 }
 
 const styles = {
@@ -100,6 +110,8 @@ const styles = {
     minWidth: 0,
   },
   detail: { color: colors.textMuted, fontSize: '0.78rem' },
+  // `B-292` — a strip's CLEAR ALL LISTED sits under its rows, at the inline end.
+  allRow: { display: 'flex', justifyContent: 'flex-end' },
 } as const;
 
 /**
@@ -115,10 +127,19 @@ const styles = {
  *     warning strip and the explicit, confirm-gated Clear — R-009's case,
  *     unchanged.
  *   - anything else (`ffmpeg`, `decklink`, … — "not html" fails safe) —
- *     PROVABLY another system's output: a video, a program feed. Rendered as
- *     NEUTRAL information with NO Clear control at all — the affordance does
- *     not exist (and the bridge refuses `layers.clear` besides). A graphics
- *     operator must never be able to clear a video layer.
+ *     another system's output: a video, a program feed. Rendered as NEUTRAL
+ *     information, never an alert.
+ *
+ * 🔴 `B-292` (`RELEASE-091-01` DELTA B, B3 — the owner, 2026-09-29) SUPERSEDES R-015's "no Clear on a
+ * video layer" INSIDE THE THREE BANDS: "this system only ever places HTML" stopped being true with
+ * plates, and a plate another station or a lost ledger left in 60–79 had no surface that could clear
+ * it. Every listed layer inside 50–99 carries a confirm-gated CLEAR (`offersClear`, the bridge's own
+ * rule), and a strip listing two or more of them carries CLEAR ALL LISTED (`clearAllListed`: one
+ * confirm, one `layers.clear` per layer, never a channel-wide `CLEAR`). Above the bands a non-`html`
+ * row still offers none. A ledger plate or a stack item's layer is never listed here at all.
+ *
+ * `B-292` (B1) — and a third strip, first: a layer of OURS that something else cleared, in the
+ * owner's words ("Layer 60 on CH 2 was cleared outside CG Control"), dismissible like the others.
  *
  * Renders NOTHING when there are no orphans (idle-quiet), persists while the
  * orphan persists (never auto-dismissed), and every html Clear is an
@@ -137,7 +158,11 @@ const styles = {
  * owned (the bridge refuses `layers.clear` on it); the remedy is Out/Remove
  * of the item, and the row disappears only on the bridge's provable resolve.
  */
-export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Element | null {
+export function OrphanLayersBanner({
+  orphans,
+  ownedOccupancy,
+  clearedOutside,
+}: Props): JSX.Element | null {
   // Above the idle-quiet early return: a hook cannot be called conditionally.
   const { confirm, confirmDialog } = useConfirm();
   /**
@@ -224,14 +249,140 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
     bands, in a strip the operator has not dismissed.
   */
   const noticed = noticedForeign(orphans, dismissals);
-  if (noticed.length === 0 && ownedOccupancy.length === 0) return null;
+  // `B-292` — a layer of ours cleared outside CG Control, in a strip the operator has not dismissed.
+  const cleared = noticedClearedOutside(clearedOutside, dismissals);
+  if (noticed.length === 0 && ownedOccupancy.length === 0 && cleared.length === 0) return null;
 
   // R-015 — the discriminator between the two strips is the OBSERVED kind, never a layer number.
   const htmlOrphans = noticed.filter(isOrphanedGraphic);
   const foreignLayers = noticed.filter((o) => !isOrphanedGraphic(o));
 
+  /**
+   * One layer's Clear. Explicit and confirm-gated (the B-048 principle: the operator decides, never
+   * a heuristic). Errors surface via the command-error toast; success shows as the row disappearing
+   * when the sweep observes the layer empty — never optimistically.
+   */
+  const clearOne = (o: OrphanLayer): void => {
+    const name = `${String(o.channel)}-${String(o.layer)}`;
+    void (async () => {
+      const ok = await confirm({
+        title: `Clear layer ${name}?`,
+        body: 'This removes whatever is on that layer from air.',
+        confirmLabel: 'Clear layer',
+        tone: 'clear',
+      });
+      if (!ok) return;
+      runCommand(
+        `Clear layer ${name}`,
+        window.cg.layers
+          .clear({ channel: o.channel, layer: o.layer })
+          .then((r) => ({ accepted: r.ok })),
+      );
+    })();
+  };
+
+  /**
+   * 🔴 `B-292` (`RELEASE-091-01` DELTA B, B3) — **CLEAR ALL LISTED**: ONE confirm naming every layer
+   * it will send, then one `layers.clear` per layer, in turn — never a channel-wide `CLEAR`, never a
+   * layer outside 50–99 ({@link clearAllListed}). A layer the bridge refuses does not stop the rest;
+   * the toast says the batch was not wholly accepted.
+   */
+  const clearListed = (targets: readonly OrphanLayer[]): void => {
+    const names = targets.map((o) => `${String(o.channel)}-${String(o.layer)}`);
+    const count = String(targets.length);
+    void (async () => {
+      const ok = await confirm({
+        title: `Clear ${count} layers?`,
+        body: `This removes whatever is on layers ${names.join(', ')} from air.`,
+        confirmLabel: `Clear ${count} layers`,
+        tone: 'clear',
+      });
+      if (!ok) return;
+      runCommand(
+        `Clear layers ${names.join(', ')}`,
+        (async () => {
+          let accepted = true;
+          for (const o of targets) {
+            const r = await window.cg.layers.clear({ channel: o.channel, layer: o.layer });
+            if (!r.ok) accepted = false;
+          }
+          return { accepted };
+        })(),
+      );
+    })();
+  };
+
+  const clearButton = (o: OrphanLayer): JSX.Element => {
+    const name = `${String(o.channel)}-${String(o.layer)}`;
+    return (
+      <Button
+        variant="caution"
+        aria-label={`Clear layer ${name}`}
+        disabled={clearRefusal !== undefined}
+        title={
+          clearRefusal ?? `Send CLEAR ${name} — removes whatever is on that layer from the output`
+        }
+        onClick={() => {
+          clearOne(o);
+        }}
+      >
+        CLEAR
+      </Button>
+    );
+  };
+
+  /** `B-292` — a strip's CLEAR ALL LISTED, when it lists two or more layers it may clear. */
+  const clearAllRow = (rows: readonly OrphanLayer[]): JSX.Element | null => {
+    const targets = clearAllListed(rows);
+    if (targets.length < 2) return null;
+    return (
+      <div style={styles.allRow}>
+        <Button
+          variant="caution"
+          aria-label="Clear all listed layers"
+          disabled={clearRefusal !== undefined}
+          title={
+            clearRefusal ??
+            `Send CLEAR ${targets.map((o) => `${String(o.channel)}-${String(o.layer)}`).join(', ')}`
+          }
+          onClick={() => {
+            clearListed(targets);
+          }}
+        >
+          CLEAR ALL LISTED
+        </Button>
+      </div>
+    );
+  };
+
   return (
     <>
+      {cleared.length > 0 && (
+        <div
+          style={{ ...styles.strip, ...styles.dismissible }}
+          role="alert"
+          aria-label="Layers cleared outside CG Control"
+        >
+          <div style={styles.lines}>
+            {cleared.map((e) => {
+              const name = `${String(e.channel)}-${String(e.layer)}`;
+              return (
+                <div key={name} style={styles.row} data-cleared-outside={name}>
+                  <span>
+                    Layer {e.layer} on CH {e.channel} was cleared outside CG Control
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <NoticeDismiss
+            label="Dismiss this notice"
+            onDismiss={() => {
+              dismissClearedOutside(clearedOutside);
+            }}
+          />
+        </div>
+      )}
       {htmlOrphans.length > 0 && (
         <div
           style={{ ...styles.strip, ...styles.dismissible }}
@@ -249,41 +400,11 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
                       ({o.producer} producer — likely left by a previous session)
                     </span>
                   </span>
-                  <Button
-                    variant="caution"
-                    aria-label={`Clear layer ${name}`}
-                    disabled={clearRefusal !== undefined}
-                    title={
-                      clearRefusal ??
-                      `Send CLEAR ${name} — removes whatever is on that layer from the output`
-                    }
-                    onClick={() => {
-                      // Explicit, confirm-gated operator act (the B-048 principle:
-                      // the operator decides, never a heuristic). Errors surface
-                      // via the command-error toast; success shows as the row
-                      // disappearing when the sweep observes the layer empty.
-                      void (async () => {
-                        const ok = await confirm({
-                          title: `Clear layer ${name}?`,
-                          body: 'This removes whatever is on that layer from air.',
-                          confirmLabel: 'Clear layer',
-                          tone: 'clear',
-                        });
-                        if (!ok) return;
-                        runCommand(
-                          `Clear layer ${name}`,
-                          window.cg.layers
-                            .clear({ channel: o.channel, layer: o.layer })
-                            .then((r) => ({ accepted: r.ok })),
-                        );
-                      })();
-                    }}
-                  >
-                    CLEAR
-                  </Button>
+                  {clearButton(o)}
                 </div>
               );
             })}
+            {clearAllRow(htmlOrphans)}
           </div>
           <NoticeDismiss
             label="Dismiss this notice"
@@ -304,13 +425,28 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
               const name = `${String(o.channel)}-${String(o.layer)}`;
               return (
                 <div key={name} style={styles.row}>
-                  <span>
-                    Layer {name} is carrying video ({o.producer}) — placed by another system.{' '}
-                    <span style={styles.detail}>Not clearable from here.</span>
-                  </span>
+                  {/*
+                    🔴 `B-292` — inside the three bands this row carries a CLEAR, whatever the
+                    producer (`offersClear`, the bridge's own rule). Above them it still offers
+                    none, and says so.
+                  */}
+                  {offersClear(o) ? (
+                    <>
+                      <span>
+                        Layer {name} is carrying video ({o.producer}) — placed by another system.
+                      </span>
+                      {clearButton(o)}
+                    </>
+                  ) : (
+                    <span>
+                      Layer {name} is carrying video ({o.producer}) — placed by another system.{' '}
+                      <span style={styles.detail}>Not clearable from here.</span>
+                    </span>
+                  )}
                 </div>
               );
             })}
+            {clearAllRow(foreignLayers)}
           </div>
           <NoticeDismiss
             label="Dismiss this notice"
