@@ -12843,3 +12843,91 @@ byte-identical, since the adapter never read it; their comments now say what rea
 `mirror-sync` the read fans out, and each fact is filed under `result.winner`, the server that
 answered, which is what already kept it correct. **Verified:** a `target: 'primary'` planted back at
 one site fails the bridge's typecheck (`TS2353`, not a property of `SendOptions`); removed → clean.
+
+## [~] B-288 — PVW needed its own copy of the page in the browser: a template imported anywhere else could not be rehearsed ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §1 · `openspec/changes/release-0-9-1/`
+
+**Repro:** import a template from one browser — another machine, another profile, another channel;
+open CG Control where the channel's list carries it but that browser did not import it (a fresh
+profile, the installed app, another channel); put the row ON PVW. **Actual:** "REHEARSAL
+UNAVAILABLE IN THIS BROWSER — This browser has no local copy of the rendered page … Re-import it in
+this browser to rehearse it." A re-import in that browser made it work — a manual side step.
+**Expected:** PVW renders the page the bridge already stores and serves to CasparCG
+(`/template/<id>~<version>`), on any machine, in any browser or the installed app, with no import
+there. **Cause (§0):** `window.cg.templates.html` was a deliberately LOCAL read
+(`WebSocketRuntime.ts`, "never a bridge round trip") of the browser's own OPFS library
+(`LibraryStore`: `library/<channel>@<id>.json`, or a pre-channel `library/<id>.json`), written only by
+an import in that browser; OPFS belongs to one profile and one origin. Not a regression of
+`CHANNEL-TEMPLATES-01`'s `~version` key — the browser's store never carried a version — nor of the
+installed app's origin, which has been `http://127.0.0.1:5174/` since the first installer (`42af1a96`);
+`FIELD-FIXES-01` H's localhost → `127.0.0.1` redirect does send a dev-station page opened at
+`localhost` to another origin, whose OPFS starts empty. **Fix:** a read-class `templates.page` asks
+the bridge for the page of the version the row's channel lists; the browser's copy is a fallback
+only when the bridge cannot be reached; when the bridge has no file, PVW says so in one line naming
+the template and the reason. Nothing stored is deleted, and PVW still sends nothing to CasparCG.
+**Regression tests:** the page-source unit, the bridge's `templates.page` integration, and the e2e
+(profile A imports; a fresh profile B rehearses; control: with the file gone from the bridge's store,
+B shows the one line).
+
+## [~] B-289 — A media plate's raise jumped where a Playout input ramps; "AUDIO → ON gave no sound" was not reproduced ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §2 · `openspec/changes/release-0-9-1/`
+
+**Seen (owner, 2026-09-29):** on his local CasparCG a media clip played with no sound, and AUDIO → ON
+on its row changed nothing. **Established (§0, measured on his CasparCG 2.5.0 through the real
+console):** a D11 plate was already seated silent — `MIXER <ch>-<L> VOLUME 0 DEFER` committed before
+its `PLAY` — and ON reached CasparCG on the plate's own layer and was HEARD (`MIXER 1-61 VOLUME 1`;
+the channel's OSC audio peak 0 → about 1.1×10⁸ with `m1.mkv`); the reveal after a `pause` or
+`continue` hide restored it and PANIC silenced it. Two differences from a D10 input: the raise was a
+bare JUMP where a D10 raise ramps 25 frames, and a clip swapped in place was not muted before its
+`PLAY`. His own session's wire (CasparCG's log, 14:25–14:28) carries no raise for layers 60–61; audio
+presses are not audited, so the records cannot say whether ON was pressed — the one press consistent
+with that silence is box 2's while the one-box look hid it (a hidden plate stays muted and takes its
+level when shown again, and it was cleared before that). PVW has never played audio (plates are
+placeholders; a template's own video is created muted, `c41bba8e`) — unchanged: hearing a source
+before air is PFL. **Fix (the owner's decision, 2026-09-29):** a D11 clip starts silent EXACTLY like a
+D10 input, contract v1.3 rule 2 — one predicate (`startsSilentFromPlayout`) for both the mute before
+an in-place `PLAY` and the 25-frame ramp. **Regression tests:** `media-plates.integration.test.ts`
+(`VOLUME 0` before `PLAY`; ON → `VOLUME 1 25` on the plate's own layer; a `pause` switch-away sends 0
+and the way back the declared volume; control: the page layer's `VOLUME 1`), and
+`playout-sources.integration.test.ts` (the old media control, superseded).
+
+## [~] B-291 — A station set up before the five-row default kept showing every row ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §7 · `openspec/changes/release-0-9-1/`
+
+**Seen (owner, installed `0.9.0` over the older install):** at start every row was shown again, where
+`FIELD-FIXES-01` I ([[R-070]]) gives five template rows (99–95) and five beds (59–55). **Cause (§0):**
+by design — [[R-070]] changed only the bank built for a NEW channel and kept a saved bank as written
+(`default-bank-boot.integration.test.ts` pinned 30 rows shown after an upgrade), and a first-run that
+could not read the channel's occupancy within 3 s also saves every row shown. Not another station
+(the console shows a bound or occupied row whatever the ticks say), and not a regression. **Fix (the
+owner's decision, 2026-09-29 — nothing has been delivered, so no compatibility is owed):** a bank that
+no operator has applied since first-run declared it with every row shown — every template row an
+explicit `true`; an operator's Apply writes hidden rows only — is brought ONCE to the five-row rule:
+the bridge waits until the channel's occupancy is known, keeps every occupied row shown, and applies
+the change through the same validated door (a row is hidden only while provably empty), then
+persists it. An operator's own Show choices are never touched. **Regression tests:** a bank saved in
+the old shape opens as 5 + 5; control: an occupied row 90 stays shown; control: with occupancy
+unknown, nothing changes.
+
+## [~] B-292 — A layer of ours cleared from outside stayed ON AIR, and plates left in our band could not be cleared ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (DELTA B, B1–B3) · `openspec/changes/release-0-9-1/`
+
+**Seen (owner, installed `0.9.0` against `.111`):** station A had templates on air; station B, a second
+install on the same channel, cleared them — and on a multi-box page B's CLEAR removed the page but
+left its plates (60–79) on air, while A went on showing everything ON AIR. Two stations on one
+channel stop being a supported case ([[R-068]], `CENTRAL-BRIDGE-01`); what is fixed here holds
+whoever clears our layer — another AMCP client, the Playout, or CasparCG itself. **Cause (§0):**
+CasparCG 2.5 erases a cleared layer from its stage, so its OSC simply stops (`stage.cpp:314-316`, the
+monitor state is rebuilt from the layers that exist, `:219-223`; measured on the plant's core,
+`docs/recon/2026-09-22-apasai-core-validation.md` §5), and the bridge only turned a row idle on an
+explicit `producer "empty"` — which the real core never sends for a cleared layer and `@cg/amcp-mock`
+sent on every tick, hiding the gap from every test. A plate not in this bridge's ledger could be
+cleared from no surface: the "not on your stack" strip refused anything but an `html` page, and an
+empty row's CLEAR refuses layers outside the declared rows. **Fix:** OSC silence on a layer we hold
+on air is a QUESTION — after about 1 s of silence while the channel's OSC is still arriving, one
+`INFO <ch>-<layer>` read; if CasparCG says the layer is empty, the row goes off air with a notice in
+the existing family ("Layer 60 on CH 2 was cleared outside CG Control"); nothing is re-sent, nothing
+is put back. The strip also lists occupied layers in 50–99 that nothing in this bridge's ledger holds,
+each clearable, and "clear all listed", both confirmed. Never a layer outside 50–99, never a
+channel-wide `CLEAR`, never a layer the ledger holds. `@cg/amcp-mock` now behaves like the core: a
+cleared layer goes silent, and `INFO <ch>` / `INFO <ch>-<layer>` answer with per-layer stage data.
+**Regression tests:** one bridge plus a raw AMCP client — a foreign `CLEAR` of the page and one plate
+(both off air within the target, with the notice; control: the other plates and another item stay
+ON AIR); a leftover plate listed and cleared from the strip (control: a plate the ledger holds is
+not listed).

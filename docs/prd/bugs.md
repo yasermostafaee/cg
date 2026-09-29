@@ -1361,3 +1361,20 @@ weaker claim than it sounds, since CI runs the same suite far less contended.
   reminder that the answer is never a longer timeout), [[B-097]] (the other gate collision that
   fails an innocent suite), [[B-078]] (the stale-process Playwright collision the repair rules
   already carve out as "not a code bug").
+
+## [~] B-290 — CG Control and CG Designer showed the same icon in the Windows taskbar ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §3 · `openspec/changes/release-0-9-1/`
+
+**Seen (owner, installed `0.9.0`):** the desktop shortcuts carry different icons — CG Control dark, CG
+Designer light — but in the taskbar both apps show the same light icon. **Cause (§0):** both apps'
+five icon files (`src-tauri/icons/*`) are byte-identical since `FIELD-FIXES-01` G ([[B-281]],
+`f9c9b816`), so both executables embed the same icon and both windows — title bar, taskbar, Alt+Tab
+— show it; nothing sets an icon at run time. The first installer (`42af1a96`) had given each app its
+own tile, CG Control dark and CG Designer light, both from the Apasai logo; the shortcuts the owner
+sees still show those from Windows' icon cache (inferred — his machine was not read). The two apps do
+NOT share an AppUserModelID: Tauri 2.11.5's NSIS writes each shortcut's ID from its bundle identifier
+(`utils.nsh`, `SetLnkAppUserModelId`), `app.cgbroadcast.control` and `app.cgbroadcast.designer`, and
+neither process sets one of its own. **Fix:** each app gets its own icon set again — CG Control the
+dark tile, CG Designer the light one — so every place Windows draws an app (taskbar, Alt+Tab, title
+bar, Start menu, desktop shortcut, Installed apps) shows that app's own. **Regression test:** the
+clean-Windows smoke reads each installed exe's icon resource, each shortcut's icon and each
+shortcut's AppUserModelID; control: the two apps' values differ.

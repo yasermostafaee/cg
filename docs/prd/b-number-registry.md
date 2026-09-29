@@ -3053,3 +3053,22 @@ free before use: the highest `B` heading under `docs/prd/` was `B-285`, and none
 and no stash claims `B-286`.
 
 ⇒ **Next free after this session is `B-287`** and **`C-045`**.
+
+### 2026-09-29 — `RELEASE-091-01` (v2) + DELTA A + DELTA B take `B-288`…`B-292`, `D-161`, `P-060`, `R-075`…`R-077`
+
+- `B-288` — PVW needed its own copy of the page in the browser (§1).
+- `B-289` — a media plate's raise jumped where a Playout input ramps (§2).
+- `B-290` — both apps showed the same taskbar icon (§3; in [bugs.md](bugs.md)).
+- `B-291` — a station set up before the five-row default kept showing every row (DELTA A §7).
+- `B-292` — a layer of ours cleared from outside stayed ON AIR; band leftovers could not be cleared
+  (DELTA B, B1–B3 — one number, as the delta asks).
+- `D-161` — Help → About (§4, [designer.md](designer.md)). DELTA A §10 had offered `D-161` for the
+  central bridge; DELTA B withdrew that: the central bridge is [[R-068]]'s, noted there.
+- `P-060` — release `0.9.1` ([platform.md](platform.md)).
+- `R-075`, `R-076`, `R-077` — filed only, blocked on the Playout's answers (§6).
+
+Measured free before use: the highest headings under `docs/prd/` were `B-287`, `D-160`, `P-059`
+and `R-074`; no ref (two) and no stash claims any of them; `B-289` and `D-161` appeared only in this
+file's range and pointer lines.
+
+⇒ **Next free after this session is `B-293`**, **`D-162`**, **`P-061`**, **`R-078`** and **`C-046`**.

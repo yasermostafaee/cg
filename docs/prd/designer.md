@@ -5616,3 +5616,14 @@ content from chrome before a single key can be assigned.
   the registry's pointer, `D-159`'s own sweep note, and the two `docs/handoff/` mentions already
   recorded as a DOCUMENTED PHANTOM (session AX) — never a heading. The registry's dated pointer
   reads `D-160` — headings and pointer AGREE.
+
+## [~] D-161 — Help → About names CG Designer's version and build ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §4 · `openspec/changes/release-0-9-1/`
+
+**What.** The Designer's existing Help menu carries an `About` item that has been disabled since the
+menu bar was built (`TopToolbar.tsx`). It now opens a dialog that names the app — `CG Designer` — its
+release version and its exact build (`<sha> · <date>`), from the same build stamp the start screen's
+version line reads (`appVersion.ts`, `CLIENT-TEST-RELEASE-01`). The start screen's line stays; CG
+Control is unchanged (its version is in SETTINGS). **Why.** The owner asked for the Designer's version
+inside the app, where users look for it. **Acceptance:** WHEN Help → About is chosen THEN a dialog
+names CG Designer, `Version <release>` and the build; WHEN the release version is read through
+`tools/release` THEN the dialog shows the same; control: a planted wrong version does not match.

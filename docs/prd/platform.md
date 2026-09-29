@@ -3705,3 +3705,27 @@ four files, and nothing is published by CI. **Shared CI config** (`.github/workf
 **Established first (A0 / B0, 2026-09-29):** the splash still frame the owner saw was the browser's
 reduced-motion setting, not code (his Chrome, started inside a Remote Desktop session, reports
 `prefers-reduced-motion: reduce`); nothing was changed for it. The rest is in the change's design.
+
+## [~] P-060 — Release `0.9.1`: the fixes the owner's `0.9.0` check found, one `SHA256SUMS.txt`, a draft release ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (v2) + DELTA A + DELTA B · `openspec/changes/release-0-9-1/` · `0.9.0` is never delivered
+
+**What.** One version, `0.9.1`, for CG Control, CG Designer and the bridge, through `tools/release`;
+a `v0.9.1` tag builds, smokes and opens a DRAFT pre-release with the same four files as [[P-059]]. It
+carries [[B-288]] (PVW from the bridge's store), [[B-289]] (a media plate starts silent and its raise
+ramps), [[B-290]] (each app its own icon), [[B-291]] (rows at start), [[B-292]] (our layer cleared
+from outside) and [[D-161]] (Help → About). **One `SHA256SUMS.txt`:** the draft's own file already
+named each asset by its release name; the copy the owner holds with a space (`CG Control_0.9.0_x64-
+setup.exe`) is the INSTALLER JOB's, which the workflow wrote over Tauri's built names and uploaded
+inside both CI artifacts — it is no longer written, so the only `SHA256SUMS.txt` is the release's, and
+the release job now checks it against the uploaded assets (a line naming a file the release does not
+hold, a missing line or a wrong hash stops it). The `v0.9.0` draft is retitled `v0.9.0 — superseded,
+do not use` and stays a draft. [[P-031]]'s floor moves to `0.9.1`. The install guide for `0.9.1`
+states the one limit that stands until `CENTRAL-BRIDGE-01`: one channel is driven from one CG Control
+at a time ([[R-068]]).
+
+**Why.** The owner's check of the installed `0.9.0` (2026-09-29) found each of the above; `0.9.0` is
+not handed to the client.
+
+**Acceptance:** WHEN the parts are built THEN they carry `0.9.1`; WHEN `v0.9.1` is pushed THEN a draft
+pre-release holds exactly four files and every line of its `SHA256SUMS.txt` names one of them with its
+hash; WHEN a sums line names a file the release does not hold THEN the release job stops (the control);
+WHEN a CI run builds the installers THEN no artifact carries a `SHA256SUMS.txt`.

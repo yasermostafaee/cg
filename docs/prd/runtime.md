@@ -4036,6 +4036,15 @@ running AND the next window attaches to it rather than starting a second one.
 ledgers, and neither knows of the other. **Why.** Recorded, not solved: the install-time rule
 (ADR 0011) is one CG Control per channel. **Acceptance:** WHEN a second station declares a channel
 another already drives THEN the second is told so before it can take.
+**→ Built by `CENTRAL-BRIDGE-01` (`0.10.0`), the owner's decision of 2026-09-29:** one bridge per
+Playout — a Windows service on the Playout machine or a server beside it, started with the system —
+that every CG Control connects to with the Playout's sign-in; CG Control becomes the console only, and
+the operator still types only the Playout address. Two bridges on one channel stop being a supported
+case. Open for its design: the Playout team's agreement to host it; the console ↔ bridge connection
+over the network (authentication, [[B-262]]); two operators on one channel (the lock); the backup
+Playout. Until then the `0.9.1` install guide states the limit: one channel is driven from one CG
+Control at a time. `RELEASE-091-01` (DELTA B) fixes the part that holds whoever clears our layer
+([[B-292]]); what the owner saw station B show at its start is recorded as UNCONFIRMED until he says.
 
 ## [x] R-069 — Choosing a channel that is already on air warns first ⟨priority: high⟩ — FILED AND DONE 2026-09-23 by `DESKTOP-APPS-01-D` d
 
@@ -4167,3 +4176,42 @@ CH 2 leaves its serve path byte for byte. **Open for the owner:** a "Change chan
 channel empty (the old list stays dormant); template audit rows name no channel; same-channel re-delivery is
 still local-wins (`B-085`); a browser's record from before the change re-delivers only as a restore (never
 a replacement), and not at all once a channel has removed it.
+
+## [!] R-075 — The Playout's running playlist as a plate source ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.1 · BLOCKED on the Playout team's answer to `CG-CONTROL-ASK-PLAYLIST-AUDIO-2026-09-29.md` §1
+
+**What.** A channel's running playlist appears inside a CG box — a squeeze-back or an L-shaped look —
+with our graphics around it. It comes from the Playout as a D10 input (for example a `route` to the
+layer the playlist plays on), the operator picks it in the Inputs tab like any input, and it starts
+silent under rule 2 ([[B-289]]). **Why.** The owner asked for it on 2026-09-29. **Depends on:** the
+Playout's answers — whether D10 can list "the playlist output of channel N", what the route points at
+when the playlist uses several layers, the delay on the same channel, the route across an event
+change, a pause and a core reset, the D10 shape and the build. Nothing is built before them.
+**Acceptance (to confirm with the answer):** WHEN the operator binds a plate to a channel's playlist
+output THEN the box shows what the playlist airs, never our own layers 50–99, and it is silent until
+raised.
+
+## [!] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · BLOCKED on the Playout team's answer to `CG-CONTROL-ASK-PLAYLIST-AUDIO-2026-09-29.md` §2
+
+**What.** The programme's sound in CG Control, in sync with the PGM monitor's picture, and a VU meter
+like the Playout's own. It REUSES the Playout's way of syncing audio and its level source — no second
+method is invented. **Why.** The owner asked for it on 2026-09-29; the PGM monitor today shows the
+Playout's return picture without sound. **Depends on:** the Playout's answers — how its client keeps
+sound and picture together (one stream or two, buffering, timestamps, latency), where its meter reads
+levels (OSC, an endpoint, or the stream), the scale and ballistics, and whether CG Control may read
+the same audio and levels with D4/D10's authentication. **Acceptance (to confirm):** WHEN the PGM
+monitor shows a channel THEN its sound plays in sync and the meter moves as the Playout's does.
+
+## [!] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · BLOCKED on the Playout team's answer to `CG-CONTROL-ASK-LICENSE-2026-09-29.md`
+
+**What.** CG Control works with a Playout only if that Playout's license includes CG Control. The
+Playout is the only license authority: it refuses an unlicensed CG Control at the `cg-admin` sign-in
+and at the AMCP approval; CG Control holds no license file and no dongle; CG Designer needs no
+license. CG Control shows the refusal in one line of words. **Losing the license on air (proposed):**
+nothing on air is cleared; new takes are refused with the reason; removals still work; the full
+refusal applies at the next sign-in. The fake Playout will model "licensed" and "not licensed" when
+this is built. **Why.** The owner asked for it on 2026-09-29. **Depends on:** the Playout's answers —
+whether the dongle can carry a CG Control feature (and a count), the refusal's error code, a claim or
+an endpoint for the state, their own rule when the dongle goes, a development license for CI, and
+the build. **Acceptance (to confirm):** WHEN the Playout's license lacks CG Control THEN the sign-in is
+refused in one line and nothing can be taken; WHEN the license goes while graphics are on air THEN
+nothing is cleared, new takes are refused with the reason, and removals still work.
