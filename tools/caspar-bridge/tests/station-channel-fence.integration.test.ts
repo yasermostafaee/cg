@@ -670,6 +670,8 @@ describe('the census: every route that names a channel, classified', () => {
       'templates.get': ['req.channel'],
       'templates.import': ['req.channel'],
       'templates.list': ['req.channel'],
+      // `RELEASE-091-01` §1 — PVW reads the page of the version this channel lists.
+      'templates.page': ['req.channel'],
       'templates.remove': ['req.channel'],
     });
   });
@@ -705,6 +707,7 @@ describe('the census: every route that names a channel, classified', () => {
       'templates.get',
       'templates.import',
       'templates.list',
+      'templates.page',
       'templates.remove',
     ]);
     for (const [name, route] of fenced) {

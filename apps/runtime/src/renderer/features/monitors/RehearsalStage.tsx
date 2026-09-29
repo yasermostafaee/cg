@@ -18,6 +18,7 @@ import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
 import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
 import { frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
+import type { PvwPage } from '../../../shared/pvwPage.js';
 
 /**
  * R-022 — the rehearsal render: EVERY rehearsing row's graphic, with the
@@ -293,6 +294,27 @@ const styles = {
     textAlign: 'center' as const,
     padding: '0.75rem',
   },
+  /**
+   * `RELEASE-091-01` §1 — the rows that have no page, one line each: in the empty stage it sits in
+   * the middle (the `missing` box centres it); over a stage with frames it stands at the top-left,
+   * above every frame, in the stamp's own muted ink.
+   */
+  missingLines: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.2rem',
+    color: colors.offline,
+    fontSize: '0.7rem',
+    zIndex: 60,
+    pointerEvents: 'none' as const,
+  },
+  missingOverlay: {
+    position: 'absolute' as const,
+    insetInlineStart: cssVars['--r-stage-note-inset'],
+    insetBlockStart: cssVars['--r-stage-note-inset'],
+    zIndex: 60,
+    pointerEvents: 'none' as const,
+  },
 } as const satisfies Record<string, CSSProperties>;
 
 /** Ties the caveats disclosure to its toggle for assistive tech. */
@@ -306,11 +328,14 @@ interface Props {
    */
   subjects: readonly RehearsalSubject[];
   /**
-   * The retained self-contained HTML per item id, or null/absent when this
-   * browser holds no copy. A null renders that row's honest empty state — never
-   * a blank box that could be mistaken for a rendered graphic.
+   * 🔴 `RELEASE-091-01` §1 (`B-288`) — each rehearsing row's page ({@link PvwPage}): the one the
+   * bridge serves CasparCG, this browser's copy when the bridge cannot be reached, or why there is
+   * none. Absent or `null` while it is still being read. A row with no page renders no frame — never a
+   * blank box that could be mistaken for a rendered graphic — and one line saying why.
    */
-  htmlByItem: ReadonlyMap<string, string | null>;
+  pageByItem: ReadonlyMap<string, PvwPage | null>;
+  /** Each rehearsing row's template, in the operator's words (`templateName`), or null when unknown. */
+  templateNames: ReadonlyMap<string, string | null>;
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
   /**
@@ -351,9 +376,48 @@ const REHEARSAL_CAVEATS =
   'render. A Live Source region paints nothing in the page; the marked box over it is a ' +
   'placeholder this app draws, naming the plate and its source — it is not the live picture.';
 
+/**
+ * 🔴 `RELEASE-091-01` §1 (`B-288`) — WHY A ROW HAS NO PAGE, in one line that names its template.
+ * "Re-import it in this browser" is gone: the page comes from the bridge, so there is nothing to
+ * re-import here.
+ */
+function MissingPageLine({
+  reason,
+  name,
+  channel,
+}: {
+  reason: Extract<PvwPage, { kind: 'missing' }>['reason'];
+  name: string | null;
+  channel: number;
+}): JSX.Element {
+  const who = name === null ? "this row's template" : <bdi>{name}</bdi>;
+  const ch = `CH ${String(channel)}`;
+  switch (reason) {
+    case 'not-listed':
+      return (
+        <span data-pvw-missing="not-listed">
+          {who} is not on {ch}’s list.
+        </span>
+      );
+    case 'no-file':
+      return (
+        <span data-pvw-missing="no-file">
+          The bridge holds no page for {who} on {ch}.
+        </span>
+      );
+    case 'unreachable':
+      return (
+        <span data-pvw-missing="unreachable">
+          {who}: the bridge cannot be reached, and this browser holds no copy of its page.
+        </span>
+      );
+  }
+}
+
 export function RehearsalStage({
   subjects,
-  htmlByItem,
+  pageByItem,
+  templateNames,
   raster,
   showGuides = false,
   onTransport,
@@ -376,11 +440,34 @@ export function RehearsalStage({
   /** The rows that actually have a page to render, in stacking order. */
   const renderable = useMemo(
     () =>
-      subjects
-        .map((s) => ({ subject: s, html: htmlByItem.get(s.itemId) ?? null }))
-        .filter((r): r is { subject: RehearsalSubject; html: string } => r.html !== null),
-    [subjects, htmlByItem],
+      subjects.flatMap((s) => {
+        const page = pageByItem.get(s.itemId) ?? null;
+        return page?.kind === 'page' ? [{ subject: s, html: page.html }] : [];
+      }),
+    [subjects, pageByItem],
   );
+  /** `RELEASE-091-01` §1 — the rows that have NO page, each with its reason (loading is neither). */
+  const missing = useMemo(
+    () =>
+      subjects.flatMap((s) => {
+        const page = pageByItem.get(s.itemId) ?? null;
+        return page?.kind === 'missing' ? [{ subject: s, reason: page.reason }] : [];
+      }),
+    [subjects, pageByItem],
+  );
+  const missingLines =
+    missing.length === 0 ? null : (
+      <div style={styles.missingLines} data-pvw-missing-lines>
+        {missing.map(({ subject, reason }) => (
+          <MissingPageLine
+            key={subject.itemId}
+            reason={reason}
+            name={templateNames.get(subject.itemId) ?? null}
+            channel={subject.channel}
+          />
+        ))}
+      </div>
+    );
 
   /**
    * R-049 — every live plate of every RENDERABLE row, in raster pixels.
@@ -493,17 +580,11 @@ export function RehearsalStage({
   }, [onTransport, driveAll, allReady, renderable.length]);
 
   if (renderable.length === 0) {
+    // Nothing to draw: the one line per row that has no page, or — while the pages are still being
+    // read — the empty ground, never a sentence about a state that is not settled yet.
     return (
-      <div style={styles.missing} role="img" aria-label="Rehearsal unavailable in this browser">
-        <span>REHEARSAL UNAVAILABLE IN THIS BROWSER</span>
-        <span>
-          This browser has no local copy of the rendered page for{' '}
-          {subjects.length === 1 ? 'that template' : 'those templates'}, so there is nothing to
-          render here. Re-import{' '}
-          {subjects.length === 1 ? 'it in this browser' : 'them in this browser'} to rehearse
-          {subjects.length === 1 ? ' it' : ' them'}. The layers themselves are unaffected — they are
-          still loaded and still muted.
-        </span>
+      <div style={styles.missing} data-pvw-no-page>
+        {missingLines}
       </div>
     );
   }
@@ -602,6 +683,8 @@ export function RehearsalStage({
         >
           {stampText}
         </span>
+        {/* `RELEASE-091-01` §1 — a row that has no page, beside the ones that do. */}
+        {missingLines !== null && <div style={styles.missingOverlay}>{missingLines}</div>}
         {/*
           R-049 — the live-plate markers, ABOVE every frame. See `LivePlateOverlay`
           for why they are drawn over rather than behind, and for the standing note

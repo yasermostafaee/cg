@@ -5,9 +5,9 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
  * R-022 — the REHEARSE surface's LAYOUT, which is a separate failure class from
  * its behaviour and was not covered at all when the feature landed.
  *
- * Why it escaped: the offline mock retains no rendered page (`templates.html`
- * resolves `null` — deliberately, see `createRuntimeBridge`), so PREVIEW renders
- * its "unavailable in this browser" text and the rehearsal IFRAME never exists in
+ * Why it escaped: the offline mock retains no rendered page (`templates.page`
+ * answers `unreachable` — deliberately, see `createRuntimeBridge`), so PREVIEW
+ * renders its one-line reason and the rehearsal IFRAME never exists in
  * test mode. Every geometry defect below lives in that iframe's box. These specs
  * therefore stub the retained page — a TEST-ONLY override of one bridge method,
  * not a change to what the mock honestly holds.
@@ -30,9 +30,13 @@ function previewTransport(page: Page) {
 async function stubRetainedPage(page: Page): Promise<void> {
   await page.evaluate(() => {
     (
-      window as unknown as { cg: { templates: { html: () => Promise<string> } } }
-    ).cg.templates.html = () =>
-      Promise.resolve('<!doctype html><html><body style="margin:0;background:#123"></body></html>');
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () =>
+      Promise.resolve({
+        kind: 'page',
+        source: 'bridge',
+        html: '<!doctype html><html><body style="margin:0;background:#123"></body></html>',
+      });
   });
 }
 

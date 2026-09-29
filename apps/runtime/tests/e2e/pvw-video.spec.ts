@@ -83,8 +83,8 @@ function stubPageWithVideo(dataUri: string): string {
 async function stubRetainedPage(page: Page, html: string): Promise<void> {
   await page.evaluate((h: string) => {
     (
-      window as unknown as { cg: { templates: { html: () => Promise<string> } } }
-    ).cg.templates.html = () => Promise.resolve(h);
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () => Promise.resolve({ kind: 'page', html: h, source: 'bridge' });
   }, html);
 }
 

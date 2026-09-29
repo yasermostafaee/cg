@@ -9,15 +9,15 @@
 
 ## 1. PVW from the bridge's store (`B-288`)
 
-- [ ] 1.1 `@cg/shared-ipc`: `templates.page` (read-class) — `{ ok: true, html }` or
+- [x] 1.1 `@cg/shared-ipc`: `templates.page` (read-class) — `{ ok: true, html }` or
       `{ ok: false, reason: 'not-listed' | 'no-file' }`.
-- [ ] 1.2 Bridge route → `CasparRuntime.templatePage(id, channel)`; integration test (listed; not listed;
+- [x] 1.2 Bridge route → `CasparRuntime.templatePage(id, channel)`; integration test (listed; not listed;
       listed with no file).
-- [ ] 1.3 Console: `templates.page` asks the bridge first; `LibraryStore` only when the bridge cannot be
+- [x] 1.3 Console: `templates.page` asks the bridge first; `LibraryStore` only when the bridge cannot be
       reached (`pvwPageSource`, unit-tested); the mock bridge answers the same shape.
-- [ ] 1.4 PVW: one line per missing template, naming it and the reason; "re-import it in this browser"
+- [x] 1.4 PVW: one line per missing template, naming it and the reason; "re-import it in this browser"
       gone (swept by string and by component).
-- [ ] 1.5 e2e: profile A imports; a fresh profile B rehearses; control: the file gone from the bridge's
+- [x] 1.5 e2e: profile A imports; a fresh profile B rehearses; control: the file gone from the bridge's
       store → the one line.
 
 ## 2. A media plate starts silent and rises by the ramp (`B-289`)

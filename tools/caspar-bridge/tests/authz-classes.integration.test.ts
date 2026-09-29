@@ -248,6 +248,8 @@ describe('C-038 — the census: every route, classified', () => {
       'station.strays',
       'templates.get',
       'templates.list',
+      // `RELEASE-091-01` §1 — PVW's page from the bridge's store.
+      'templates.page',
       'update.state',
     ]);
   });

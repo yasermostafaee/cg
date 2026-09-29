@@ -447,6 +447,33 @@ export const TemplatesListChannel = defineChannel(
   z.array(TemplateInfoSchema),
 );
 
+/** `RELEASE-091-01` §1 (`B-288`) — why the bridge has no page to give for a template. */
+export const TEMPLATE_PAGE_REFUSALS = ['not-listed', 'no-file'] as const;
+export type TemplatePageRefusal = (typeof TEMPLATE_PAGE_REFUSALS)[number];
+
+/**
+ * 🔴 `RELEASE-091-01` §1 (`B-288`) — **THE PAGE THE BRIDGE SERVES CASPARCG, FOR PVW.**
+ *
+ * PVW rendered only a page THIS browser had imported (`LibraryStore`, OPFS — one profile, one
+ * origin), so a template imported on another machine, in another browser or on another channel
+ * could not be rehearsed until it was re-imported here: a manual side step. The bridge already holds
+ * every page and serves it to CasparCG at `/template/<id>~<version>`; this read hands PVW the same
+ * bytes — the version `channel` lists (absent: the station-wide reading's) — over the control
+ * socket, so the frame keeps this document's origin, which is what lets PVW drive the page's
+ * lifecycle. A read: it writes nothing and sends nothing to CasparCG.
+ *
+ * - `not-listed` — the channel's list does not hold the template;
+ * - `no-file` — it does, and the store holds no file for that version.
+ */
+export const TemplatesPageChannel = defineChannel(
+  'templates.page',
+  z.object({ templateId: IdSchema, channel: TemplateChannelSchema.optional() }),
+  z.union([
+    z.object({ ok: z.literal(true), html: z.string() }),
+    z.object({ ok: z.literal(false), reason: z.enum(TEMPLATE_PAGE_REFUSALS) }),
+  ]),
+);
+
 /**
  * Register a template in the runtime library (R-001). The `.vcg` is verified
  * (`@cg/vcg-format.verify`) and unpacked in the browser before this call — the

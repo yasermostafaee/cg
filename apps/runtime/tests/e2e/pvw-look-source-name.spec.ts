@@ -41,17 +41,19 @@ const FULL = { x: 0, y: 0, width: 1920, height: 1080 };
 async function stubRetainedPage(page: Page): Promise<void> {
   await page.evaluate(() => {
     (
-      window as unknown as { cg: { templates: { html: () => Promise<string> } } }
-    ).cg.templates.html = () =>
-      Promise.resolve(
-        `<!doctype html><html><head><style>
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () =>
+      Promise.resolve({
+        kind: 'page',
+        source: 'bridge',
+        html: `<!doctype html><html><head><style>
            html,body{width:1920px;height:1080px;margin:0;overflow:hidden;background:transparent}
            .cg-stage{position:absolute;inset:0}
          </style></head><body><div class="cg-stage"></div>
          <script>window.play=function(){};window.stop=function(){};
                  window.update=function(){};window.next=function(){};</script>
          </body></html>`,
-      );
+      });
   });
 }
 

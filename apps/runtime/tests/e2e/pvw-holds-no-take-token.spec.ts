@@ -67,8 +67,8 @@ function recordingPage(): string {
 async function stubRetainedPage(page: Page): Promise<void> {
   await page.evaluate((html: string) => {
     (
-      window as unknown as { cg: { templates: { html: () => Promise<string> } } }
-    ).cg.templates.html = () => Promise.resolve(html);
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () => Promise.resolve({ kind: 'page', html, source: 'bridge' });
   }, recordingPage());
 }
 

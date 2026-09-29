@@ -257,12 +257,11 @@ const BRIDGE_SURFACE: {
     liveLayers: ['state', 'onStateChanged', 'onPlateReleased', 'mediaState', 'onMediaStateChanged'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
-    // R-022 — `html` is the RETAINED self-contained page for a template, read from
-    // THIS browser's local library. Declared here like every other method because
-    // both implementations must answer it: the live one from its `LibraryStore`, the
-    // mock with `null` (it retains no rendered page, so the rehearsal panel shows
-    // its honest "unavailable in this browser" state).
-    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'html'],
+    // `RELEASE-091-01` §1 — `page` is PVW's page: the live one asks the bridge first and
+    // falls back to its `LibraryStore` only when the bridge cannot be reached; the mock answers
+    // `unreachable` (it retains no rendered page), so the rehearsal panel shows its one-line
+    // reason. It replaced R-022's `html`, a read of this browser's copy alone.
+    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'page'],
     /*
       🔴 `OPERATOR-NAME-SWEEP-01` — **`operatorName` / `setOperatorName` LEFT THIS LIST, and
       this guard is the reason the removal is safe.**

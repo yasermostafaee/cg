@@ -12,9 +12,9 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
  * asserted in the unit tests, where it is cheaper and sharper.
  *
  * Why the retained page has to be stubbed: the offline mock retains no rendered
- * page (`templates.html` resolves `null` — deliberately, see
- * `createRuntimeBridge`), so PREVIEW would render its "unavailable in this
- * browser" text and no iframe would exist at all. The stub is a TEST-ONLY
+ * page (`templates.page` answers `unreachable` — deliberately, see
+ * `createRuntimeBridge`), so PREVIEW would render its one-line reason and no
+ * iframe would exist at all. The stub is a TEST-ONLY
  * override of one bridge method, not a change to what the mock honestly holds.
  */
 
@@ -52,8 +52,8 @@ function stubPage(marker: string): string {
 async function stubRetainedPage(page: Page): Promise<void> {
   await page.evaluate((html: string) => {
     (
-      window as unknown as { cg: { templates: { html: () => Promise<string> } } }
-    ).cg.templates.html = () => Promise.resolve(html);
+      window as unknown as { cg: { templates: { page: () => Promise<unknown> } } }
+    ).cg.templates.page = () => Promise.resolve({ kind: 'page', html, source: 'bridge' });
   }, stubPage('rehearsal'));
 }
 
@@ -499,8 +499,10 @@ test('the scene is byte-identical after a position rehearsal', async ({ app }) =
 
   const servedBefore = await page.evaluate(() =>
     (
-      window as unknown as { cg: { templates: { html: (id: string) => Promise<string> } } }
-    ).cg.templates.html('tpl-bytes'),
+      window as unknown as {
+        cg: { templates: { page: (id: string) => Promise<{ kind: string; html?: string }> } };
+      }
+    ).cg.templates.page('tpl-bytes'),
   );
   /*
     🔴 POLLED, not read once. `frames(page)` having count 1 is a fact about the OUTER document —
@@ -549,10 +551,12 @@ test('the scene is byte-identical after a position rehearsal', async ({ app }) =
   // rather than arguing.
   const servedAfter = await page.evaluate(() =>
     (
-      window as unknown as { cg: { templates: { html: (id: string) => Promise<string> } } }
-    ).cg.templates.html('tpl-bytes'),
+      window as unknown as {
+        cg: { templates: { page: (id: string) => Promise<{ kind: string; html?: string }> } };
+      }
+    ).cg.templates.page('tpl-bytes'),
   );
-  expect(servedAfter).toBe(servedBefore);
+  expect(servedAfter).toEqual(servedBefore);
 
   // And the scene's own authored footprint — the stage's inline resolution — is
   // untouched. Only the placement moved.

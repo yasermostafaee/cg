@@ -52,8 +52,13 @@ function blankPage(): string {
 async function stubPagesByTemplate(page: Page, pages: Record<string, string>): Promise<void> {
   await page.evaluate((byId: Record<string, string>) => {
     (
-      window as unknown as { cg: { templates: { html: (id: string) => Promise<string | null> } } }
-    ).cg.templates.html = (id: string) => Promise.resolve(byId[id] ?? null);
+      window as unknown as { cg: { templates: { page: (id: string) => Promise<unknown> } } }
+    ).cg.templates.page = (id: string) =>
+      Promise.resolve(
+        byId[id] === undefined
+          ? { kind: 'missing', reason: 'no-file' }
+          : { kind: 'page', html: byId[id], source: 'bridge' },
+      );
   }, pages);
 }
 

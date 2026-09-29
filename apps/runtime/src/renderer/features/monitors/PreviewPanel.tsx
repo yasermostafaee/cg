@@ -36,6 +36,8 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { RehearsalStage } from './RehearsalStage.js';
+import { templateName } from '../../ui/operatorNaming.js';
+import type { PvwPage } from '../../../shared/pvwPage.js';
 import { rowNameFor, subjectsFor, type RehearsalSubject } from './rehearsalFrames.js';
 
 /**
@@ -123,8 +125,10 @@ export function PreviewPanel(): JSX.Element {
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
   const { bank, viewChannel } = useChannelBankState();
   const slots = useFixedSlots();
-  const [htmlByItem, setHtmlByItem] = useState<ReadonlyMap<string, string | null>>(
-    () => new Map<string, string | null>(),
+  // `RELEASE-091-01` §1 — each rehearsing row's page: the bridge's first, this browser's copy only
+  // when the bridge cannot be reached, or why there is none (`templates.page`).
+  const [pageByItem, setPageByItem] = useState<ReadonlyMap<string, PvwPage | null>>(
+    () => new Map<string, PvwPage | null>(),
   );
 
   // Re-read on every staged edit, so a value the operator has typed but not
@@ -341,7 +345,7 @@ export function PreviewPanel(): JSX.Element {
       subjects.map((s) => ({
         itemId: s.itemId,
         templateId: items.find((i) => i.itemId === s.itemId)?.templateId ?? null,
-        // `CHANNEL-TEMPLATES-01` — the page this browser imported on the row's channel.
+        // `CHANNEL-TEMPLATES-01` — the page of the version the row's channel lists (`RELEASE-091-01` §1).
         channel: s.channel,
       })),
     [subjects, items],
@@ -357,12 +361,12 @@ export function PreviewPanel(): JSX.Element {
     }[];
     void Promise.all(
       wanted.map(async ({ itemId, templateId, channel }) => {
-        const html =
-          templateId === null ? null : await window.cg.templates.html(templateId, channel);
-        return [itemId, html] as const;
+        const page =
+          templateId === null ? null : await window.cg.templates.page(templateId, channel);
+        return [itemId, page] as const;
       }),
     ).then((entries) => {
-      if (!cancelled) setHtmlByItem(new Map(entries));
+      if (!cancelled) setPageByItem(new Map(entries));
     });
     return () => {
       cancelled = true;
@@ -401,9 +405,14 @@ export function PreviewPanel(): JSX.Element {
     up from the stage, which would be a fact about the caption that only exists while the
     caption's own component is mounted.
   */
-  const renderableCount = subjects.filter(
-    (s) => (htmlByItem.get(s.itemId) ?? null) !== null,
-  ).length;
+  const renderableCount = subjects.filter((s) => pageByItem.get(s.itemId)?.kind === 'page').length;
+  // Each row's template in the operator's words — the one naming rule (`templateName`, rule 11).
+  const templateNames = new Map(
+    subjects.map((s) => {
+      const templateId = items.find((i) => i.itemId === s.itemId)?.templateId;
+      return [s.itemId, templateName(templateId, templates, s.channel)] as const;
+    }),
+  );
 
   return (
     <Panel
@@ -532,7 +541,8 @@ export function PreviewPanel(): JSX.Element {
       ) : (
         <RehearsalStage
           subjects={subjects}
-          htmlByItem={htmlByItem}
+          pageByItem={pageByItem}
+          templateNames={templateNames}
           raster={raster}
           showGuides={showGuides}
           onTransport={setTransport}

@@ -93,11 +93,12 @@ function movingAuth(initial: AuthSessionState): {
 }
 
 /**
- * What the live console answers from the BROWSER, never the bridge (B-085: the template library
- * is browser-local — `WebSocketRuntime`'s `templates.list/get/html` read `#library`). Not gated:
- * no bridge can refuse them.
+ * What the live console answers even when the bridge refuses (B-085: the template library is
+ * browser-local — `WebSocketRuntime`'s `templates.list/get` fall back to `#library`, and
+ * `RELEASE-091-01` §1's `templates.page` asks the bridge first and falls back to it). Not gated:
+ * no bridge refusal reaches the caller.
  */
-const LOCAL = new Set(['templates.list', 'templates.get', 'templates.html']);
+const LOCAL = new Set(['templates.list', 'templates.get', 'templates.page']);
 
 /**
  * The mock bridge behind the auth gate: every request (not a subscription, not the link, not the

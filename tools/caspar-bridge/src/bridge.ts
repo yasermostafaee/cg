@@ -127,6 +127,7 @@ import {
   SourcesSetConfigChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
+  TemplatesPageChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
   TemplatesRemoveChannel,
@@ -1219,7 +1220,14 @@ export function channelsForRequest(
     read — it is `read` class for everybody. The station fence still refuses a channel this
     station does not declare, because it reads the coordinate itself (`stationRefusal`).
   */
-  if (name === TemplatesListChannel.name || name === TemplatesGetChannel.name) return [];
+  if (
+    name === TemplatesListChannel.name ||
+    name === TemplatesGetChannel.name ||
+    // `RELEASE-091-01` §1 — PVW's page is a read of the same list, for the same reason.
+    name === TemplatesPageChannel.name
+  ) {
+    return [];
+  }
 
   // (a) the request carries the coordinate itself.
   const explicit = explicitChannel(req);
@@ -3521,6 +3529,10 @@ export function buildRoutes(
     ),
     route(TemplatesListChannel, 'read', 'read', (r: { channel?: number } | undefined) =>
       b.templateList(r?.channel),
+    ),
+    // `RELEASE-091-01` §1 (`B-288`) — the page this bridge serves CasparCG, for PVW: a read.
+    route(TemplatesPageChannel, 'read', 'read', (r: { templateId: string; channel?: number }) =>
+      b.templatePage(r.templateId, r.channel),
     ),
     // B-038 Phase 2 — retain the browser-produced self-contained HTML alongside
     // the TemplateInfo (held, not served yet).

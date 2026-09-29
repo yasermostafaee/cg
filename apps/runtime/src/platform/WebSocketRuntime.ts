@@ -90,6 +90,7 @@ import {
   TemplatesGetChannel,
   TemplatesImportChannel,
   TemplatesListChannel,
+  TemplatesPageChannel,
   TemplatesRemoveChannel,
   UpdateCancelChannel,
   UpdateRequestChannel,
@@ -138,6 +139,7 @@ import type {
 } from '../shared/runtime-bridge.js';
 import * as ipcChannels from '@cg/shared-ipc';
 import { bridgeErrorFrom, BridgeSkewError } from '../shared/bridgeSkew.js';
+import { pvwPageSource, type BridgePageAnswer, type PvwPage } from '../shared/pvwPage.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import {
   loadPlayoutSession,
@@ -1993,9 +1995,27 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
       return this.#library.list(req?.channel);
     },
-    // R-022 — a LOCAL read. The page is already here; never a bridge round trip.
-    html: (templateId: string, channel?: number) =>
-      Promise.resolve(this.#library.html(templateId, channel)),
+    /*
+      🔴 `RELEASE-091-01` §1 (`B-288`) — THE BRIDGE FIRST, this browser's copy only when the bridge
+      cannot be reached. It was a local read ("the page is already here; never a bridge round
+      trip"), which is exactly why a template imported anywhere else could not be rehearsed here.
+      Unreachable means: the link is not live, the request failed in flight, or the bridge does not
+      know the route (an older bridge) — never a bridge that ANSWERED it holds no page.
+    */
+    page: async (templateId: string, channel?: number): Promise<PvwPage> => {
+      let answer: BridgePageAnswer = 'unreachable';
+      if (this.#status === 'live') {
+        try {
+          answer = await this.#invoke(TemplatesPageChannel, {
+            templateId,
+            ...(channel !== undefined && { channel }),
+          });
+        } catch {
+          answer = 'unreachable';
+        }
+      }
+      return pvwPageSource(answer, this.#library.html(templateId, channel));
+    },
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
       // Register LOCALLY first (the source of truth) — this is what makes import
       // succeed offline. Then, when live, deliver to the bridge so it can serve

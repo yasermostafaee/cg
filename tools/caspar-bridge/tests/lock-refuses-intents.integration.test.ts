@@ -336,6 +336,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'station.strays',
         'templates.get',
         'templates.list',
+        'templates.page',
         'update.state',
       ].sort(),
     );

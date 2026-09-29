@@ -50,7 +50,7 @@ async function registerTemplate(page: Page): Promise<void> {
       cg: {
         templates: {
           import: (req: { template: unknown; html: string }) => Promise<unknown>;
-          html?: () => Promise<string>;
+          page?: () => Promise<unknown>;
         };
       };
     };
@@ -66,8 +66,12 @@ async function registerTemplate(page: Page): Promise<void> {
     });
     // The rehearsal renders the RETAINED page; stub it so a frame has something
     // to show and actually mounts.
-    w.cg.templates.html = () =>
-      Promise.resolve('<!doctype html><html><body>divider fixture</body></html>');
+    w.cg.templates.page = () =>
+      Promise.resolve({
+        kind: 'page',
+        source: 'bridge',
+        html: '<!doctype html><html><body>divider fixture</body></html>',
+      } as const);
   }, TEMPLATE_ID);
 }
 

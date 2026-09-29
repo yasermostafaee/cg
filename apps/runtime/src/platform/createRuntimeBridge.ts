@@ -272,7 +272,7 @@ export function createMockBridge(): RuntimeBridge {
        * reports too, so the surface behaves identically in both backends instead of
        * being absent in one.
        *
-       * This is the same shape as `templates.html` returning `null` here: the mock
+       * This is the same shape as `templates.page` answering `unreachable` here: the mock
        * answers the contract with the true value for a session that has no such
        * thing, rather than dropping the method and forcing every consumer to branch.
        */
@@ -419,10 +419,11 @@ export function createMockBridge(): RuntimeBridge {
       // R-028 (o1) — the catalogue push, mirrored by the mock's own emitter.
       onChanged: (handler) => mock.templatesChanged.subscribe(handler),
       // R-022 — the mock retains no rendered page (it accepts and ignores `html`
-      // at import, per the note above), so it honestly holds none. The rehearsal
-      // panel renders its "unavailable in this browser" state rather than a blank
-      // box — which is the truthful answer in test mode, not a degradation.
-      html: () => Promise.resolve(null),
+      // at import, per the note above), and test mode has no bridge to ask, so it
+      // honestly holds none: `RELEASE-091-01` §1's `unreachable`. The rehearsal panel
+      // says so in one line rather than showing a blank box — the truthful answer
+      // in test mode, not a degradation.
+      page: () => Promise.resolve({ kind: 'missing', reason: 'unreachable' } as const),
     },
 
     audit: {

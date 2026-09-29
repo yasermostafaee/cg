@@ -156,7 +156,7 @@ function stubBridge(f: Fixture): void {
       onChanged: noop,
     },
     templates: {
-      html: () => Promise.resolve(PAGE),
+      page: () => Promise.resolve({ kind: 'page' as const, html: PAGE, source: 'bridge' as const }),
       list: () => Promise.resolve(f.templates ?? [templateWithPlates()]),
       onChanged: noop,
     },

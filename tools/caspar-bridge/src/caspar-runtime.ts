@@ -79,6 +79,7 @@ import {
   type OwnedOccupancyWarning,
   type PendingUpdate,
   type TemplateInfo,
+  type TemplatePageRefusal,
   type TemplateLook,
   type ChannelSettings,
   type ChannelSettingsState,
@@ -12826,11 +12827,27 @@ export class CasparRuntime {
    * channel, of the station-wide reading's version.
    */
   templateHtml(templateId: string, channel?: number): string | null {
+    const page = this.templatePage(templateId, channel);
+    return page.ok ? page.html : null;
+  }
+
+  /**
+   * 🔴 `RELEASE-091-01` §1 (`B-288`) — **THE PAGE THIS BRIDGE SERVES CASPARCG, for PVW**: the HTML of
+   * the version `channel` lists (no channel: the station-wide reading's) — the bytes
+   * `/template/<id>~<version>` returns — or why there is none: the list does not hold the template
+   * (`not-listed`), or it does and the store has no file for that version (`no-file`). A read.
+   */
+  templatePage(
+    templateId: string,
+    channel?: number,
+  ): { ok: true; html: string } | { ok: false; reason: TemplatePageRefusal } {
     const versionId =
       channel === undefined
         ? this.#templates.versionAny(templateId)
         : this.#templates.versionOn(channel, templateId);
-    return versionId === null ? null : this.#templates.htmlOf(versionId);
+    if (versionId === null) return { ok: false, reason: 'not-listed' };
+    const html = this.#templates.htmlOf(versionId);
+    return html === null ? { ok: false, reason: 'no-file' } : { ok: true, html };
   }
 
   /**

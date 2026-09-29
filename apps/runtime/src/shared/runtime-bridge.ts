@@ -111,6 +111,7 @@ import type {
   StackMediaPlateTransportChannel,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
+import type { PvwPage } from './pvwPage.js';
 
 export interface AppInfo {
   name: string;
@@ -718,23 +719,18 @@ export interface RuntimeBridge {
      */
     onChanged(handler: (templates: TemplateInfo[]) => void): Unsubscribe;
     /**
-     * R-022 — the RETAINED self-contained page for a template, from THIS browser's
-     * local library, or null when it holds none.
+     * 🔴 `RELEASE-091-01` §1 (`B-288`) — **THE PAGE PVW RENDERS**: the one the bridge serves
+     * CasparCG for the version `channel` lists (`templates.page`), on any machine and in any
+     * browser; THIS browser's own copy only when the bridge cannot be reached; or why there is none
+     * ({@link PvwPage}). The decision is `pvwPageSource`, one pure function.
      *
-     * Browser-local by nature and deliberately NOT an `@cg/shared-ipc` channel:
-     * the page is already in this browser (the SPA produces it at import and keeps
-     * it to re-deliver on reconnect), so routing the read through the bridge would
-     * be a round trip to fetch something we hold — and would fail with the bridge
-     * down, when rehearse is exactly the thing that should still work.
-     *
-     * `null` is the honest "not in this browser": a template imported on another
-     * machine has metadata from the bridge's catalogue but no local page here, and
-     * the rehearsal panel says so instead of showing a blank box.
-     *
-     * `CHANNEL-TEMPLATES-01` — the page this browser imported ON `channel`, so a row
-     * rehearses the version its own channel lists.
+     * SUPERSEDES R-022's `html()`, which read this browser's copy ALONE — "never a bridge round
+     * trip" — so a template imported on another machine, in another browser or on another channel
+     * could only be rehearsed after a re-import here. The round trip that note avoided is what makes
+     * the page the same everywhere; the fallback keeps rehearse working with the bridge down, which
+     * was that note's real concern.
      */
-    html(templateId: string, channel?: number): Promise<string | null>;
+    page(templateId: string, channel?: number): Promise<PvwPage>;
   };
 
   /**
