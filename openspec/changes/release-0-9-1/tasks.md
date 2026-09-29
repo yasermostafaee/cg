@@ -38,10 +38,14 @@
 ## 3. Each app its own icon (`B-290`)
 
 - [x] 3.1 CG Control: `42af1a96`'s dark icon set; CG Designer: its light set (restored byte for byte).
-- [ ] 3.2 The clean-Windows smoke reads each installed exe's icon, each shortcut's icon and each
-      shortcut's AppUserModelID; control: the two apps' values differ. Written
-      (`app-identity.mjs`, the drive phase's `identities` step; `installerAppIdentity.test.ts`); the
-      smoke's run on the pushed commit is owed.
+- [x] 3.2 The clean-Windows smoke reads each installed exe's icon, each shortcut's icon and each
+      shortcut's AppUserModelID; control: the two apps' values differ (`app-identity.mjs`, the drive
+      phase's `identities` step; `installerAppIdentity.test.ts`). **Ran on `cfad5d6b`**, Desktop run
+      https://github.com/yasermostafaee/cg/actions/runs/36634928239 (installers + all three smoke phases
+      success, 63/63 checks): exe icons `fa1bfbc8…` (CG Control) / `3f0f4d76…` (CG Designer); the Start and
+      desktop shortcuts of each show their own exe's icon and carry `app.cgbroadcast.control` /
+      `app.cgbroadcast.designer` (read from the shortcut itself); Installed apps names each app's own exe;
+      the three controls pass.
 
 CI read for the commits already pushed (step level, jobs RAN): `4b247b54` (§2, §7) — PR
 https://github.com/yasermostafaee/cg/actions/runs/36618175517 (E2E step success), Desktop
@@ -64,6 +68,8 @@ smoke phases success; draft skipped, not a tag).
 ## 5. Release `0.9.1` (`P-060`)
 
 - [x] 5.1 No `SHA256SUMS.txt` in the installer job's artifacts (its hashes go to the job's log only).
+      Read in run https://github.com/yasermostafaee/cg/actions/runs/36634928239 (`cfad5d6b`): both
+      installers built as `0.9.1`, the hashes printed, and each upload "there will be 1 file uploaded".
 - [x] 5.2 `release-files.mjs verify` (`sumsProblems`, `verifyDownloaded`) + the release job's step after
       the read-back: `gh release download` + `gh release view --json assets` → `verify`. Control: the
       `0.9.0` job's own sums (`CG Control_0.9.1_x64-setup.exe`, a space) fails naming line 2; red first
@@ -74,8 +80,19 @@ smoke phases success; draft skipped, not a tag).
       pin moved with it); `docs/release/0.9.1/` guide — the known limit (one CG Control per channel), and
       Help → About for the Designer's version, both labels checked by `guide.test.ts`; `P-031`'s floor at
       `0.9.1` — with DELTA B's "`0.9.1` is never delivered" left to the owner.
-- [ ] 5.4 Tag `v0.9.1` → a draft with the four files, read back; the `v0.9.0` draft retitled
+- [x] 5.4 Tag `v0.9.1` → a draft with the four files, read back; the `v0.9.0` draft retitled
       `v0.9.0 — superseded, do not use`, still a draft.
+      Tag `v0.9.1` (annotated) → `cfad5d6b`. Run https://github.com/yasermostafaee/cg/actions/runs/36638504802
+      — installers, smoke and `Draft release` success, every step run; its new step printed "SHA256SUMS.txt
+      matches every asset the release holds". The draft, read back from outside CI:
+      https://github.com/yasermostafaee/cg/releases/tag/untagged-4d853e2c1ce249813637 — `APASAI CG 0.9.1
+  (test build)`, draft, pre-release, tag `v0.9.1`: `CG-Control_0.9.1_x64-setup.exe` 240,555,030 ·
+      `CG-Designer_0.9.1_x64-setup.exe` 226,312,074 · `APASAI-CG-0.9.1-install-guide-fa.pdf` 168,492 ·
+      `SHA256SUMS.txt` 298. All four downloaded here and `verify` run on them: every line matches; both
+      installers' version resource is `0.9.1`; the guide is 2 pages with Vazirmatn embedded. The `v0.9.0`
+      draft: title `v0.9.0 — superseded, do not use`, still a draft and a pre-release with its four files
+      (read back; GitHub moved its draft link to
+      https://github.com/yasermostafaee/cg/releases/tag/untagged-19fc726d8fd1565f99f8).
 
 ## 7. Rows at start (`B-291`)
 
@@ -114,6 +131,14 @@ smoke phases success; draft skipped, not a tag).
 
 ## 10. Gate, CI, report
 
-- [ ] 10.1 `pnpm gate` green per push; `openspec validate --all --strict`.
-- [ ] 10.2 CI: `e2e`, installers and smoke COMPLETED green with the jobs RAN — run URLs beside the tasks.
-- [ ] 10.3 Report `Claude outputs/REPORT-RELEASE-091-01-v2-2026-09-29.md`.
+- [x] 10.1 `pnpm gate` green per push (the pre-push gate: 99/99 tasks for `9f04b1eb` and for `cfad5d6b`,
+      control-bytes clean); `openspec validate --all --strict` — 92 passed.
+- [x] 10.2 CI: `e2e`, installers and smoke COMPLETED green with the jobs RAN — run URLs beside the tasks.
+      The release commit `cfad5d6b` (it carries every change above): PR
+      https://github.com/yasermostafaee/cg/actions/runs/36634928228 — the `E2E` step ran and passed
+      (runtime 310 passed, designer 293 passed; among them `layers-cleared-outside.spec.ts`,
+      `orphan-layers.spec.ts`, `pvw-from-bridge.spec.ts` and the Designer's Help → About); Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36634928239 — installers and all three smoke
+      phases (63/63).
+- [x] 10.3 Report `Claude outputs/REPORT-RELEASE-091-01-v2-2026-09-30.md` (`v2`: the prompt is v2, though
+      its text names `-v1-`).
