@@ -163,6 +163,7 @@ import {
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
 import { currentAuthSession, runAsActor } from './actor-context.js';
 import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
+import { startBankBringIn } from './bank-bring-in.js';
 import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
@@ -2272,6 +2273,32 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     process.stderr.write(templateServeUnreachableWarning(unreachable, serve));
   }
 
+  /*
+    🔴 `RELEASE-091-01` §7 (`B-291`) — a bank no operator ever applied is brought to the five-row rule
+    once, as soon as its channel reads. Only on a station that PERSISTS its banks: an embedder that
+    hands the bank in (`fixedLayers`) owns it, and nothing here writes to a file it did not name.
+  */
+  const fixedLayersFile = options.fixedLayersPath;
+  const bankBringIn =
+    fixedLayersFile === undefined
+      ? null
+      : startBankBringIn({
+          banks: () => runtime.fixedLayerBanks(),
+          occupancy: (channel) => runtime.channelOccupancy(channel, 0),
+          apply: (next) => runtime.setFixedLayerBanks(next),
+          persist: () => {
+            try {
+              saveFixedLayerBanks(fixedLayersFile, runtime.fixedLayerBanks());
+            } catch (err) {
+              process.stderr.write(
+                `[caspar-bridge] ⚠ failed to persist fixed layers to ${fixedLayersFile}: ` +
+                  `${err instanceof Error ? err.message : String(err)}\n`,
+              );
+            }
+          },
+          log: (line) => process.stderr.write(`${line}\n`),
+        });
+
   return {
     host,
     port,
@@ -2310,6 +2337,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutSources?.dispose();
       // `C-016` — every upstream feed socket and every relayed viewer.
       pgmReturn.dispose();
+      // `RELEASE-091-01` §7 — and the bank bring-in's tick.
+      bankBringIn?.dispose();
       await runtime.stop();
       await new Promise<void>((resolve, reject) => {
         wss.close((err) => (err ? reject(err) : resolve()));

@@ -3,10 +3,7 @@ import {
   CONNECTION_CHECK_IDS,
   connectionCheckSubject,
   defaultFixedLayerBank,
-  fixedBankEnd,
-  fixedBankSlots,
-  isLowBankLayer,
-  lowBankEnd,
+  fiveRowVisibility,
   type CatalogueChannel,
   type ChannelOccupancy,
   type ConnectionCheckId,
@@ -30,8 +27,12 @@ import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
 export const AMCP_PORT = 5250;
 export const OSC_PORT = 6250;
 
-/** `FIELD-FIXES-01` I — how many rows of each band a NEW bank shows: the highest of each band. */
-export const NEW_BANK_SHOWN_PER_BAND = 5;
+/**
+ * `FIELD-FIXES-01` I — how many rows of each band a NEW bank shows: the highest of each band. The
+ * rule itself lives in `@cg/shared-ipc` (`fiveRowVisibility`) since `RELEASE-091-01` §7, because the
+ * bridge applies it too.
+ */
+export { NEW_BANK_SHOWN_PER_BAND } from '@cg/shared-ipc';
 
 /**
  * 🔴 `FIELD-FIXES-01` I — **THE BANK A NEW CHANNEL GETS** (first-run, and a channel Station setup's
@@ -52,19 +53,12 @@ export function newChannelBank(
   channel: number,
   occupancy: ChannelOccupancy | null,
 ): FixedLayerBank {
-  const base = defaultFixedLayerBank();
   const known = occupancy !== null && occupancy.state !== 'unknown';
-  const occupied = new Set(known ? occupancy.layers.map((l) => l.layer) : []);
-  // Each band's rows through the ONE enumeration, and each band's top through its own end.
-  const visibility: Record<string, boolean> = {};
-  const low: Record<string, boolean> = {};
-  for (const { layer } of fixedBankSlots(base)) {
-    const bed = isLowBankLayer(base, layer);
-    const top = bed ? lowBankEnd(base) : fixedBankEnd(base);
-    (bed ? low : visibility)[String(layer)] =
-      !known || layer > top - NEW_BANK_SHOWN_PER_BAND || occupied.has(layer);
-  }
-  return { ...base, channel, visibility, low: { ...base.low, visibility: low } };
+  // `RELEASE-091-01` §7 — the ONE rule the bridge also applies, never a second spelling of it.
+  return fiveRowVisibility(
+    { ...defaultFixedLayerBank(), channel },
+    known ? new Set(occupancy.layers.map((l) => l.layer)) : null,
+  );
 }
 
 /**

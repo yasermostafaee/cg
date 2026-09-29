@@ -436,6 +436,56 @@ export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
   return ticks?.[String(layer)] !== false;
 }
 
+/** `FIELD-FIXES-01` I — how many rows of each band a new bank shows: the highest of each band. */
+export const NEW_BANK_SHOWN_PER_BAND = 5;
+
+/**
+ * 🔴 `FIELD-FIXES-01` I — **THE FIVE-ROW RULE, for any bank**: the highest
+ * {@link NEW_BANK_SHOWN_PER_BAND} rows of each band shown (templates 99–95 and beds 59–55 on the
+ * default bands), every `occupied` layer shown, the rest hidden — each key written out, `true` or
+ * `false`. `occupied` is `null` when the channel's occupancy is not known, and then EVERY row is
+ * shown: unknown is never treated as empty (`untick-unknown`).
+ *
+ * `RELEASE-091-01` §7 (`B-291`) moved it here from the console's first-run, because the bridge now
+ * applies the same rule to a bank no operator ever applied ({@link isUnappliedAllShownBank}) — one
+ * rule, one spelling, two callers.
+ */
+export function fiveRowVisibility(
+  bank: FixedLayerBank,
+  occupied: ReadonlySet<number> | null,
+): FixedLayerBank {
+  const visibility: Record<string, boolean> = {};
+  const low: Record<string, boolean> = {};
+  // Each band's rows through the ONE enumeration, and each band's top through its own end.
+  for (const { layer } of fixedBankSlots(bank)) {
+    const bed = isLowBankLayer(bank, layer);
+    const top = bed ? lowBankEnd(bank) : fixedBankEnd(bank);
+    (bed ? low : visibility)[String(layer)] =
+      occupied === null || layer > top - NEW_BANK_SHOWN_PER_BAND || occupied.has(layer);
+  }
+  return { ...bank, visibility, low: { ...bank.low, visibility: low } };
+}
+
+/**
+ * 🔴 `RELEASE-091-01` §7 (`B-291`) — **A BANK NO OPERATOR HAS EVER APPLIED**: every row of its
+ * TEMPLATE band carries an explicit `true`.
+ *
+ * That shape has exactly two writers, and neither is an operator's choice: first-run before
+ * `FIELD-FIXES-01` I (every row shown), and first-run since, when it could not read the channel's
+ * occupancy (the unknown case of {@link fiveRowVisibility}). An operator's Apply writes HIDDEN rows
+ * only — `false` keys, a shown row carries none — so a bank anyone applied can never match, and the
+ * five-row result carries `false` keys, so a bank brought in once can never match again. The file
+ * has no version or provenance field; the shape is the only signature, and it is enough.
+ */
+export function isUnappliedAllShownBank(bank: FixedLayerBank): boolean {
+  const ticks = bank.visibility;
+  if (ticks === undefined) return false;
+  for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
+    if (ticks[String(layer)] !== true) return false;
+  }
+  return true;
+}
+
 /**
  * THE canonical position of a candidate layer within its bank: 1-based, counting
  * DOWN from the bank's HIGHEST layer. For a 70–73 bank, layer 73 is 1 and layer 70

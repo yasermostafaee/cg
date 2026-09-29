@@ -148,12 +148,18 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
 });
 
 /*
-  `FIELD-FIXES-01` I — A STATION SET UP BEFORE THE FIVE-ROW DEFAULT KEEPS ITS ROWS. First-run used to
-  declare every row shown — twenty template rows and ten beds, the owner's "30/30 rows" — and a new
-  bank now shows five of each. That is the CONSOLE's choice, made at first-run and when a channel is
-  added; a saved bank is the station's, and an upgrade boots it exactly as written.
+  `FIELD-FIXES-01` I — A STATION SET UP BEFORE THE FIVE-ROW DEFAULT. First-run used to declare every
+  row shown — twenty template rows and ten beds, the owner's "30/30 rows" — and a new bank shows five
+  of each.
+
+  🔴 `RELEASE-091-01` §7 (`B-291`) — SUPERSEDES this test's old claim that "an upgrade boots it exactly
+  as written". The owner's decision (2026-09-29): such a bank is brought ONCE to five rows of each band,
+  plus every occupied row — but only once the channel's occupancy is KNOWN
+  (`bank-bring-in.integration.test.ts`). This boot is against a DEAD server, where it can never be
+  known, so what it pins now is the other half of the rule: unknown changes nothing, on screen or on
+  disk.
 */
-it('a bank saved before the five-row default boots unchanged — every row still shown', async () => {
+it('a bank saved before the five-row default is left exactly as written while the channel cannot be read', async () => {
   const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
   const base = defaultFixedLayerBank();
   // Every row of each band ticked, enumerated as the bank enumerates them.

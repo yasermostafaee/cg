@@ -30,7 +30,10 @@
 - [x] 2.3 `playout-sources.integration.test.ts`: the media control ("no in-place mute and no ramp")
       superseded — a media swap is muted before its `PLAY` and ramps back; control: no origin keeps the
       bare line. Full bridge suite green (157 files, 1453 tests).
-- [ ] 2.4 After the fix, the same live run on the owner's CasparCG: ON → `VOLUME 1 25`, heard.
+- [x] 2.4 After the fix, the same live run on the owner's CasparCG (2026-09-29 19:00Z, `44905af2`): the
+      take `VOLUME 0 DEFER` before `PLAY`; ON → `MIXER 1-61 VOLUME 1 25`, the channel's peak 0 → ~1.27×10⁸;
+      each reveal (`pause`, `restart`, `continue`) → `VOLUME 1 25 DEFER`, heard; PANIC → `VOLUME 0` at
+      once, ON again → `VOLUME 1 25`; `INFO 1` changed on 59–61 only, and ended empty.
 
 ## 3. Each app its own icon (`B-290`)
 
@@ -56,11 +59,11 @@
 
 ## 7. Rows at start (`B-291`)
 
-- [ ] 7.1 `@cg/shared-ipc`: `fiveRowVisibility`, `isUnappliedAllShownBank`; first-run's `newChannelBank`
+- [x] 7.1 `@cg/shared-ipc`: `fiveRowVisibility`, `isUnappliedAllShownBank`; first-run's `newChannelBank`
       uses them.
-- [ ] 7.2 The bridge brings an unapplied all-shown bank in once, when occupancy is known, through
+- [x] 7.2 The bridge brings an unapplied all-shown bank in once, when occupancy is known, through
       `setFixedLayerBanks`, and persists it.
-- [ ] 7.3 Tests: an old-shape bank opens as 5 + 5; control: an occupied row 90 stays shown; control:
+- [x] 7.3 Tests: an old-shape bank opens as 5 + 5; control: an occupied row 90 stays shown; control:
       occupancy unknown changes nothing (`default-bank-boot` reworded, not deleted).
 
 ## 8. Channel dots
