@@ -119,8 +119,17 @@ describe('the loopback rule — this machine, and only this machine', () => {
     expect('error' in result ? result.error : null).toMatch(reason);
   });
 
-  it('every refusal is ONE line', () => {
-    for (const given of ['192.168.21.111:5250', '10.0.0.5', '::1:5250', '127.0.0.1:1', '']) {
+  it('every refusal is ONE line — even when what was typed holds a newline', () => {
+    for (const given of [
+      '192.168.21.111:5250',
+      '10.0.0.5',
+      '::1:5250',
+      '127.0.0.1:1',
+      '',
+      '10.0.0.5\n:5250',
+      '127.0.0.1:52\r\n50',
+      'a:b:c\nd',
+    ]) {
       const result = parseCasparTarget(given);
       expect('error' in result, given).toBe(true);
       if ('error' in result) expect(result.error).not.toMatch(/[\r\n]/);

@@ -80,6 +80,16 @@ const PLANT_HOSTS: ReadonlyMap<string, string> = new Map([
 
 const TAKES = `--caspar takes this machine's CasparCG only: ${LOCAL_CASPAR_HOST}:${String(LOCAL_CASPAR_PORT)}`;
 
+/** What was typed, safe to echo in ONE line: a control character (a pasted newline) shows as `?`. */
+function echo(typed: string): string {
+  return [...typed]
+    .map((c) => {
+      const code = c.charCodeAt(0);
+      return code < 0x20 || code === 0x7f ? '?' : c;
+    })
+    .join('');
+}
+
 /**
  * 🔴 **THE LOOPBACK RULE** — the ONE reading of `--caspar <host:port>`. `127.0.0.1`, `::1` (`[::1]`
  * with a port) and `localhost` are accepted, each as {@link LOCAL_CASPAR_HOST}; `.111` and `.114` are
@@ -103,7 +113,7 @@ export function parseCasparTarget(text: string): LocalCasparTarget | { readonly 
     // An IPv6 address without brackets: its last group cannot be told from a port.
     if (given.toLowerCase() !== '::1') {
       return {
-        error: `${given}: write an IPv6 address in brackets, as [::1]:${String(LOCAL_CASPAR_PORT)}.`,
+        error: `${echo(given)}: write an IPv6 address in brackets, as [::1]:${String(LOCAL_CASPAR_PORT)}.`,
       };
     }
     host = given;
@@ -119,11 +129,13 @@ export function parseCasparTarget(text: string): LocalCasparTarget | { readonly 
     return { error: `${lower} is ${plant} — --caspar never connects there. ${TAKES}.` };
   }
   if (!LOCAL_CASPAR_SPELLINGS.includes(lower)) {
-    return { error: `${host} is not this machine — ${TAKES} (127.0.0.1, ::1 or localhost).` };
+    return { error: `${echo(host)} is not this machine — ${TAKES} (127.0.0.1, ::1 or localhost).` };
   }
   if (portText === undefined) return { host: LOCAL_CASPAR_HOST, port: LOCAL_CASPAR_PORT };
   if (!/^\d{1,5}$/.test(portText)) {
-    return { error: `${portText === '' ? 'An empty port' : portText} is not a port — ${TAKES}.` };
+    return {
+      error: `${portText === '' ? 'An empty port' : echo(portText)} is not a port — ${TAKES}.`,
+    };
   }
   if (Number(portText) !== LOCAL_CASPAR_PORT) {
     return {
