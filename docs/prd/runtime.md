@@ -4059,7 +4059,7 @@ of sight. **Acceptance:** WHEN first-run declares two channels the tap reads THE
 59–55 and the rest hidden; WHEN a layer carries a producer at the read THEN its row stays shown; WHEN
 the channel cannot be read THEN every row is shown. An existing station's saved rows are unchanged.
 
-## [x] R-071 — Media plates — when hidden, loop, freeze at end, transport ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `MEDIA-PLATES-01` (v2) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-media-plates`) · the owner's real-video check still open (`P-058`)
+## [x] R-071 — Media plates — when hidden, loop, freeze at end, transport ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `MEDIA-PLATES-01` (v2) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-media-plates`) · the owner's real-video check PASSED 2026-09-29 (`P-058`)
 
 **What.** Each bound clip carries two settings, station-wide, on its bound-media reference: `loop`
 (default off) and `whenHidden` — `pause` (the default: paused and muted, still seated, resumed from
@@ -4082,6 +4082,9 @@ air, a viewer, another channel's operator and a locked console. WHEN the server 
 no number is shown. A live-input plate's hold, release and wire are byte-identical to before.
 **The owner's decisions (2026-09-28, `FOLLOWUPS-01` D — recorded, no code change):** `Loop` stays a
 checkbox; a clip on air across the upgrade gets its transport record at its next take.
+**The owner's real-video check — PASSED (2026-09-29):** on `pnpm dev:station --fake --caspar
+127.0.0.1:5250` against his own CasparCG ([[P-058]], task 5.4 of the archived `dev-local-caspar`), real
+clips load, and he then asked for the archive. Recorded by `CLIENT-TEST-RELEASE-01` (v1) B5.
 
 ## [x] R-072 — Each channel keeps its own Source defaults; a take refused for having no band is a row line ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `CHANNEL-SOURCES-01` (v1) · decision 1 STOPPED, then decided → `R-073` · archived 2026-09-29 (`openspec/changes/archive/2026-09-28-channel-sources`)
 

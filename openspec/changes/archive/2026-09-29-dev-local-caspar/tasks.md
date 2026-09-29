@@ -68,11 +68,13 @@
     designer 288 passed, 12 skipped, 3 flaky that passed on retry — `preview-field-update.spec.ts:12`,
     `repeater.spec.ts:50`, `sequence-composition-item-fields.spec.ts:13`, none in this diff's reach); Desktop
     <https://github.com/yasermostafaee/cg/actions/runs/36550551264>.
-- [ ] 5.4 The owner's local run (bind a real clip to plate 2 of a two-box template on CH 1 and take it;
+- [x] 5.4 The owner's local run (bind a real clip to plate 2 of a two-box template on CH 1 and take it;
       switch looks — Paused, then continuing from the same frame; Restart; Ended with Loop off; `INFO 1`
       before and after, our layers 50–99 only). Not run by CC: on 2026-09-29 the owner's own
       `dev:station --fake` held every station port and `127.0.0.1:5250` (its stand-in), and no
-      CasparCG process was running.
+      CasparCG process was running. **PASSED — the owner, 2026-09-29:** real clips load, and he then
+      asked for the archive; which of the steps above he ran one by one is not recorded. Recorded by
+      `CLIENT-TEST-RELEASE-01` (v1) B5.
 
 ## 6. Independent review (after the first push)
 
