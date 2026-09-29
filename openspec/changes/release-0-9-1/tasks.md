@@ -85,8 +85,8 @@ smoke phases success; draft skipped, not a tag).
       Tag `v0.9.1` (annotated) → `cfad5d6b`. Run https://github.com/yasermostafaee/cg/actions/runs/36638504802
       — installers, smoke and `Draft release` success, every step run; its new step printed "SHA256SUMS.txt
       matches every asset the release holds". The draft, read back from outside CI:
-      https://github.com/yasermostafaee/cg/releases/tag/untagged-4d853e2c1ce249813637 — `APASAI CG 0.9.1
-  (test build)`, draft, pre-release, tag `v0.9.1`: `CG-Control_0.9.1_x64-setup.exe` 240,555,030 ·
+      https://github.com/yasermostafaee/cg/releases/tag/untagged-4d853e2c1ce249813637 —
+      `APASAI CG 0.9.1 (test build)`, draft, pre-release, tag `v0.9.1`: `CG-Control_0.9.1_x64-setup.exe` 240,555,030 ·
       `CG-Designer_0.9.1_x64-setup.exe` 226,312,074 · `APASAI-CG-0.9.1-install-guide-fa.pdf` 168,492 ·
       `SHA256SUMS.txt` 298. All four downloaded here and `verify` run on them: every line matches; both
       installers' version resource is `0.9.1`; the guide is 2 pages with Vazirmatn embedded. The `v0.9.0`
