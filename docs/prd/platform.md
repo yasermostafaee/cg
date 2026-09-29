@@ -3623,3 +3623,24 @@ owner's core on 2026-09-28 — the Media tab is then empty and one start line sa
 upper-cased and without their extension; a 2.5.0 core plays such a path (`src/common/filesystem.cpp`
 `probe_path`). The remaining time needs the core's OSC to its AMCP clients on 6250, its default
 (`src/shell/server.cpp` `setup_osc`); a start line says so when `INFO CONFIG` shows otherwise.
+
+**Closed in code (2026-09-29):** `84751dfd` (the mode), `40a0cfe4`, `4414bd3b` and `ae5e6c32` (a one-line
+refusal whatever was typed; five findings of an independent review, one of them a regression of `84751dfd`'s
+own: a failed `--fake` start hung, because the stand-in left its OSC socket open on a failed listen).
+
+**Open:** the owner's run on his own core (`openspec/changes/dev-local-caspar/tasks.md` 5.4). It was not run
+here: his `dev:station --fake` held `127.0.0.1:5250` and every station port, and no CasparCG was running.
+
+**Evidence (2026-09-29):**
+
+- **Local.** The pre-push gate of each push was green, 96/96, 0 cached: `gate-20260929T083245Z-7860.log`,
+  `gate-20260929T084923Z-8504.log`, `gate-20260929T093143Z-18284.log`.
+- **Linux CI** — every run COMPLETED `success` on attempt 1, `ci` and `E2E (Playwright)` both RAN:
+  <https://github.com/yasermostafaee/cg/actions/runs/36544178627> (`84751dfd`),
+  <https://github.com/yasermostafaee/cg/actions/runs/36546022415> (`40a0cfe4`),
+  <https://github.com/yasermostafaee/cg/actions/runs/36550551130> (`ae5e6c32`: 3 Designer specs flaked and
+  passed on retry, none in this diff's reach).
+- **Installers** — every run COMPLETED `success`, both jobs RAN:
+  <https://github.com/yasermostafaee/cg/actions/runs/36544178635>,
+  <https://github.com/yasermostafaee/cg/actions/runs/36546022440>,
+  <https://github.com/yasermostafaee/cg/actions/runs/36550551264>.

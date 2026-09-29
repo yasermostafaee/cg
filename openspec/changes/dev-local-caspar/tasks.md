@@ -54,12 +54,40 @@
 
 ## 5. Gate, CI, the owner's run
 
-- [ ] 5.1 `pnpm gate` green (full, uncached).
-- [ ] 5.2 Pushed; the `dev` head matches `origin/dev`.
-- [ ] 5.3 CI on the pushed commit: `ci` and `e2e` COMPLETED green with both jobs RAN; the Desktop
-      installers COMPLETED green.
+- [x] 5.1 `pnpm gate` green, full and uncached (96/96, 0 cached), as the pre-push gate of each push:
+      `gate-20260929T083245Z-7860.log` (`84751dfd`, 438.5 s), `gate-20260929T084923Z-8504.log`
+      (`40a0cfe4`, 483.6 s), `gate-20260929T093143Z-18284.log` (`ae5e6c32`, 448.5 s).
+- [x] 5.2 Pushed; `origin/dev` read back with `git ls-remote` at `ae5e6c32`.
+- [x] 5.3 CI — every run COMPLETED `success` on attempt 1, and every job in it RAN (none skipped):
+  - `84751dfd` — PR <https://github.com/yasermostafaee/cg/actions/runs/36544178627> (`ci`; `E2E`: runtime
+    306 passed, designer 291 passed, 12 skipped); Desktop
+    <https://github.com/yasermostafaee/cg/actions/runs/36544178635> (installers + clean-Windows smoke).
+  - `40a0cfe4` — PR <https://github.com/yasermostafaee/cg/actions/runs/36546022415> (`E2E`: runtime 306,
+    designer 291, 12 skipped); Desktop <https://github.com/yasermostafaee/cg/actions/runs/36546022440>.
+  - `ae5e6c32` — PR <https://github.com/yasermostafaee/cg/actions/runs/36550551130> (`E2E`: runtime 306;
+    designer 288 passed, 12 skipped, 3 flaky that passed on retry — `preview-field-update.spec.ts:12`,
+    `repeater.spec.ts:50`, `sequence-composition-item-fields.spec.ts:13`, none in this diff's reach); Desktop
+    <https://github.com/yasermostafaee/cg/actions/runs/36550551264>.
 - [ ] 5.4 The owner's local run (bind a real clip to plate 2 of a two-box template on CH 1 and take it;
       switch looks — Paused, then continuing from the same frame; Restart; Ended with Loop off; `INFO 1`
       before and after, our layers 50–99 only). Not run by CC: on 2026-09-29 the owner's own
       `dev:station --fake` held every station port and `127.0.0.1:5250` (its stand-in), and no
       CasparCG process was running.
+
+## 6. Independent review (after the first push)
+
+- [x] 6.1 A failed `--fake` start HUNG instead of exiting: `createMock` left its OSC socket and tick timer
+      open when its AMCP listen failed, and 4.1's one-line failure no longer crashed the process out.
+      `4414bd3b`: the mock stops them before it rethrows; `tools/amcp-mock/tests/failed-start.test.ts`
+      (red on the old mock — one UDP socket still open after 1 s; control: a started mock holds one
+      until stopped); the reviewer's real-module probe now exits by itself.
+- [x] 6.2 A refusal could still break a line on NEL (U+0085) or U+2028/U+2029 (`40a0cfe4` had covered
+      C0 only). `ae5e6c32`: C0, DEL, C1 and both separators show as `?`; red first with the C0-only rule.
+      The spec builds those characters from code points — a literal U+2028 had reached its source
+      through an edit (`TS1161`).
+- [x] 6.3 On Node 23.0–23.5 (TypeScript still behind a flag) `--caspar` died with a stack. `ae5e6c32`: a
+      one-line refusal (shown with the load pointed at a missing file: one line, exit 2, no folder).
+- [x] 6.4 `oscOf` read `True` as true; the core's boost `bool` takes `1` or `true` exactly. `ae5e6c32`,
+      with a spec.
+- [x] 6.5 The host-guard spec named the plant's address, which a regressed guard would have dialled.
+      `ae5e6c32`: `127.0.0.2:1`.
