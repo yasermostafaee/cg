@@ -27,6 +27,17 @@ import { LOCAL_PLAYOUT_SOURCES_MARKER } from './support/local-playout-sources.js
 
 const DIST = fileURLToPath(new URL('../dist/index.js', import.meta.url));
 const BUNDLE_SCRIPT = fileURLToPath(new URL('../scripts/bundle.mjs', import.meta.url));
+const BIN = fileURLToPath(new URL('../bin/caspar-bridge.mjs', import.meta.url));
+/** `CLIENT-TEST-RELEASE-01` B1 — the version this package's manifest carries: the one it must name. */
+const MANIFEST_VERSION = (
+  JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+    version: string;
+  }
+).version;
+/** The first line of a start, for this manifest's version. */
+const VERSION_LINE = new RegExp(
+  `^\\[caspar-bridge\\] bridge ${MANIFEST_VERSION.replaceAll('.', '\\.')} starting \\(node v\\d+\\.\\d+\\.\\d+, pid \\d+\\)$`,
+);
 
 let work: string;
 let bundle: string;
@@ -159,6 +170,47 @@ describe('DESKTOP-APPS-01 — the bundled sidecar, started as the desktop shell 
     }
     // The absence: nothing the sidecar printed points at the home directory it was given.
     expect(stderr).not.toContain(fakeHome);
+  });
+
+  it('`CLIENT-TEST-RELEASE-01` B1 — the first line of the shipped bundle’s start names its version', () => {
+    // Positive control: the instrument reads a real start — its boot went on to serve the console.
+    expect(stderr).toContain('console on http://127.0.0.1:');
+    expect(MANIFEST_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(stderr.split(/\r?\n/)[0]).toMatch(VERSION_LINE);
+    // Once, not once per section of the boot.
+    expect(stderr.split(/\r?\n/).filter((line) => VERSION_LINE.test(line))).toHaveLength(1);
+  });
+
+  it('`CLIENT-TEST-RELEASE-01` B1 — the one-shot `--set-playout-address` prints no version line (the shell reads its last line)', () => {
+    const oneShot = spawnSync(
+      process.execPath,
+      [
+        bundle,
+        '--state-home',
+        path.join(work, 'one-shot'),
+        '--set-playout-address',
+        'http://127.0.0.1:59999',
+      ],
+      { encoding: 'utf8', env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome } },
+    );
+    expect(oneShot.status).toBe(0);
+    const lines = oneShot.stderr.split(/\r?\n/).filter((line) => line !== '');
+    // Control: it ran and said what it wrote — as its one line.
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/Playout address set to http:\/\/127\.0\.0\.1:59999/);
+  });
+
+  it('`CLIENT-TEST-RELEASE-01` B1 — from source, a REFUSED start still names the version first', () => {
+    // `--state-home` with no value is refused before anything is read, bound or written.
+    const refused = spawnSync(process.execPath, [BIN, '--state-home'], {
+      encoding: 'utf8',
+      env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome },
+    });
+    expect(refused.status).toBe(1);
+    const lines = refused.stderr.split(/\r?\n/).filter((line) => line !== '');
+    expect(lines[0]).toMatch(VERSION_LINE);
+    // Control: the refusal itself is the line after it.
+    expect(lines[1]).toMatch(/--state-home needs a value/);
   });
 
   it('`PLAYOUT-SOURCES-01` §1.G — the auth-off provider is NOT in the bundle the installer ships', () => {

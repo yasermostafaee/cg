@@ -91,6 +91,7 @@
 // there as a template, so a config file placed beside the templates warns
 // "skipping unusable persisted template" on every boot (B-116).
 
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
@@ -111,6 +112,31 @@ import {
 } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
+
+/*
+  🔴 `CLIENT-TEST-RELEASE-01` B1 — THE FIRST LINE OF EVERY START NAMES THE BRIDGE'S VERSION. A
+  support call starts from CG Control's log folder, and every later line of `bridge.log` is read
+  against which build wrote it — so the version comes before anything else, a refused start
+  included. The bundle the installer ships has it inlined (`scripts/bundle.mjs` defines
+  `__CG_BRIDGE_VERSION__`); a run from source reads this package's own manifest. The one-shot
+  `--set-playout-address` is not a start, and the shell reads its LAST line, so it prints none.
+*/
+/* global __CG_BRIDGE_VERSION__ -- defined by `scripts/bundle.mjs`; undeclared from source. */
+function bridgeVersion() {
+  // Asked with `typeof`, because from source the name is not declared at all.
+  if (typeof __CG_BRIDGE_VERSION__ === 'string') return __CG_BRIDGE_VERSION__;
+  try {
+    const manifest = fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    return String(JSON.parse(manifest).version);
+  } catch {
+    return 'unknown';
+  }
+}
+if (args['set-playout-address'] === undefined) {
+  console.error(
+    `[caspar-bridge] bridge ${bridgeVersion()} starting (node ${process.version}, pid ${String(process.pid)})`,
+  );
+}
 
 /*
   🔴 `DESKTOP-APPS-01` — WHOSE `.cg-runtime` THIS STATION USES.

@@ -20,6 +20,7 @@
  *
  * Usage: `node scripts/bundle.mjs <outfile>`
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -28,6 +29,14 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 /** The CLI a station runs — the bundle's single entry. */
 export const BRIDGE_ENTRY = path.join(here, '..', 'bin', 'caspar-bridge.mjs');
+
+/**
+ * `CLIENT-TEST-RELEASE-01` B1 — the version the bundle's first start line names, inlined here
+ * because the installed bundle finds no file beside it (see above): this package's own manifest.
+ */
+export const BRIDGE_VERSION = JSON.parse(
+  fs.readFileSync(path.join(here, '..', 'package.json'), 'utf8'),
+).version;
 
 /** Bundle the CLI and everything it imports into `outfile`. */
 export async function bundleBridge(outfile) {
@@ -39,6 +48,7 @@ export async function bundleBridge(outfile) {
     format: 'esm',
     target: 'node22',
     external: ['bufferutil', 'utf-8-validate'],
+    define: { __CG_BRIDGE_VERSION__: JSON.stringify(BRIDGE_VERSION) },
     banner: {
       js:
         "import { createRequire as __cgCreateRequire } from 'node:module';\n" +
@@ -49,7 +59,10 @@ export async function bundleBridge(outfile) {
   });
 }
 
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] !== undefined &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   const out = process.argv[2];
   if (out === undefined) {
     console.error('usage: node scripts/bundle.mjs <outfile>');
