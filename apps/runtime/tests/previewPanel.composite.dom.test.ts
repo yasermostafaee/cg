@@ -74,7 +74,7 @@ interface Fixture {
   rehearsals: Rehearsal[];
   items?: StackItemState[];
   slots?: FixedSlotState[];
-  /** Item ids whose page this browser does NOT hold. */
+  /** Item ids whose page the bridge answers it holds no file for (`B-288`: `no-file`). */
   missingPages?: string[];
   /**
    * R-049 — the registry entries PVW joins each row against for its live-plate
@@ -107,11 +107,19 @@ function stubBridge(f: Fixture): void {
       onChanged: noop,
     },
     templates: {
-      html: (templateId: string) => Promise.resolve(missing.has(templateId) ? null : PAGE),
+      // `B-288` — PVW asks the BRIDGE for the page it serves CasparCG (`templates.page`); this stub
+      // answers as the bridge does, a page or the reason there is none. (It stubbed the retired
+      // `html` read until `RELEASE-091-01` §1, and went red with it.)
+      page: (templateId: string) =>
+        Promise.resolve(
+          missing.has(templateId)
+            ? ({ kind: 'missing', reason: 'no-file' } as const)
+            : ({ kind: 'page', html: PAGE, source: 'bridge' } as const),
+        ),
       // R-049 — PVW now also reads the REGISTRY, for each template's Live Source
       // carrier (the plate rects its placeholders are drawn over). Both members
       // are required: `useTemplateIndex` pulls once and re-pulls on every
-      // catalogue push, so a stub with only `html` leaves the panel calling
+      // catalogue push, so a stub with only `page` leaves the panel calling
       // through an undefined.
       list: () => Promise.resolve(f.templates ?? []),
       onChanged: noop,
@@ -241,7 +249,7 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
    * rehearsing rows, it must say so ON THE SURFACE — not inside a collapsed
    * disclosure. A quiet drop is the bug this whole change fixes.
    */
-  it('states a shortfall as "showing N of M" when a page is missing in this browser', async () => {
+  it('states a shortfall as "showing N of M" when the bridge holds no page for one', async () => {
     const el = await render({
       rehearsals: [
         { itemId: 'a', channel: 1, layer: 99 },
