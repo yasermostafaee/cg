@@ -560,7 +560,7 @@ candidate shapes.
       ⚠ **Corrected by `MEDIA-PLATES-01` (2026-09-28).** Its premise — a held clip "runs to its
       end and comes back black" — is false on 2.5.0: a clip that is not looping freezes on its
       last frame. A clip now follows its own `whenHidden`: `pause` and `continue` are held, and
-      `restart` keeps this teardown (`openspec/changes/media-plates`).
+      `restart` keeps this teardown (`openspec/changes/archive/2026-09-29-media-plates`).
 - [x] 6.6 **A test per inverse in §4's audit table** — plate set, mask, fit, layer allocation.
       ✅ **Session BC.** `tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts` —
       four `INVERSE n/4` tests, plus the 6-box fixture and the position-only / size-only / both

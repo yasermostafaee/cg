@@ -3598,7 +3598,7 @@ planted THEN that test is red.
   `success` on the first attempt; `Lint • Typecheck • Test • Build` RAN, `media-plates.integration.test.ts`
   21 ✓ and `route-plates.integration.test.ts` 26 ✓; `E2E (Playwright)` RAN, green.
 
-## [~] P-058 — `pnpm dev:station --fake --caspar 127.0.0.1:5250`: the fake Playout in front of this machine's own CasparCG ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `DEV-LOCAL-CASPAR-01` (v1) · `openspec/changes/dev-local-caspar` · the owner's local run still open
+## [x] P-058 — `pnpm dev:station --fake --caspar 127.0.0.1:5250`: the fake Playout in front of this machine's own CasparCG ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `DEV-LOCAL-CASPAR-01` (v1) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-dev-local-caspar`) · the owner's local run still open
 
 **What.** A dev-only mode of the dev station. The bridge's AMCP and OSC go to the CasparCG running on
 this machine; the fake Playout stays in front (sign-in, D4, D10, D11), shaped from that core: D4 its
@@ -3628,7 +3628,7 @@ upper-cased and without their extension; a 2.5.0 core plays such a path (`src/co
 refusal whatever was typed; five findings of an independent review, one of them a regression of `84751dfd`'s
 own: a failed `--fake` start hung, because the stand-in left its OSC socket open on a failed listen).
 
-**Open:** the owner's run on his own core (`openspec/changes/dev-local-caspar/tasks.md` 5.4). It was not run
+**Open:** the owner's run on his own core (`openspec/changes/archive/2026-09-29-dev-local-caspar/tasks.md` 5.4). It was not run
 here: his `dev:station --fake` held `127.0.0.1:5250` and every station port, and no CasparCG was running.
 
 **Evidence (2026-09-29):**

@@ -928,7 +928,7 @@ is written in, and the Inspector writes each digit in that choice as it is typed
 box is in the field's digits — Latin for a number field that carries no setting (what air draws for
 it), as typed only while the template schema is unresolved. Console numbers are unchanged.
 
-⭐ **AMENDED A THIRD TIME 2026-09-27 by `openspec/changes/text-digits/` (`TEXT-DIGITS-01`, pending archive).**
+⭐ **AMENDED A THIRD TIME 2026-09-27 by `openspec/changes/archive/2026-09-29-text-digits/` (`TEXT-DIGITS-01`, archived 2026-09-29).**
 "As typed" is now **Keyboard**: a TYPED digit in a text field is written in the digits of the keyboard
 language active as it is typed (Persian → Persian, English → Latin; unknown → left as the key sent it),
 and a paste keeps its digits — so this item's "text-type content is untouched" holds for a paste and
@@ -4059,7 +4059,7 @@ of sight. **Acceptance:** WHEN first-run declares two channels the tap reads THE
 59–55 and the rest hidden; WHEN a layer carries a producer at the read THEN its row stays shown; WHEN
 the channel cannot be read THEN every row is shown. An existing station's saved rows are unchanged.
 
-## [~] R-071 — Media plates — when hidden, loop, freeze at end, transport ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `MEDIA-PLATES-01` (v2) · `openspec/changes/media-plates`
+## [x] R-071 — Media plates — when hidden, loop, freeze at end, transport ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-28 by `MEDIA-PLATES-01` (v2) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-media-plates`) · the owner's real-video check still open (`P-058`)
 
 **What.** Each bound clip carries two settings, station-wide, on its bound-media reference: `loop`
 (default off) and `whenHidden` — `pause` (the default: paused and muted, still seated, resumed from
@@ -4139,7 +4139,7 @@ refused that rewrite. **Acceptance:** WHEN a station-admin holding CH 2 only cha
 is refused and nothing changes there; WHEN it changes CH 2's THEN they change; WHEN a `"*"` station-admin
 changes both THEN both change.
 
-## [~] R-074 — Each channel has its own template list: import, delete and re-import act on the current channel only ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `CHANNEL-TEMPLATES-01` (v1) · `openspec/changes/channel-templates`
+## [x] R-074 — Each channel has its own template list: import, delete and re-import act on the current channel only ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `CHANNEL-TEMPLATES-01` (v1) · archived 2026-09-29 (`openspec/changes/archive/2026-09-29-channel-templates`) · its open points for the owner stay open
 
 **What.** Each CasparCG channel keeps its own template list over one shared store of versions. The picker
 shows the current channel's list; `Import a .vcg` (or a dropped `.vcg`) adds to it only; the row's delete
