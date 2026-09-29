@@ -111,3 +111,8 @@ refusal wording and remedies (`B-212`); the served page's contents.
 3. **Same-channel re-delivery is still local-wins.** A second browser holding an older copy for the SAME
    channel re-delivers it on reconnect and wins (`B-085`, unchanged; now per channel, so never across
    channels). Recorded, not changed.
+4. **A browser's records from before this change.** Such a record re-delivers naming no channel, and the
+   bridge now only RESTORES the template when no channel lists it; it never overwrites a version (before,
+   it overwrote the station-wide entry) — a channel-less copy cannot say whose version it repairs. Once a
+   removal on one channel has acted on the record, it is not re-delivered at all (decision 9): a bridge
+   that has lost its store gets such a template back only by a re-import on each channel that wants it.

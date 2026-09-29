@@ -65,7 +65,19 @@
 
 ## 5. Gate and CI
 
-- [ ] 5.1 `pnpm gate` green.
-- [ ] 5.2 Pushed to `dev`; `ls-remote` matches.
-- [ ] 5.3 CI `ci` + `e2e` COMPLETED and GREEN on the pushed commit, both jobs RAN — run URL:
-- [ ] 5.4 Installer workflow COMPLETED and GREEN, the job RAN — run URL:
+- [x] 5.1 `pnpm gate` green, uncached. `9a457684`: 96/96 tasks, 0 cached, before the commit (6 m 47 s) and in
+      the pre-push hook (6 m 43 s). `43f06e63`: the pre-push gate, 96/96, 0 cached, 6 m 42 s, exit 0. Both:
+      format check, control bytes and `openspec validate --all --strict` (92/92) clean.
+- [x] 5.2 Pushed to `dev` (`88110506..9a457684`, then `9a457684..43f06e63`); `git ls-remote origin dev` read
+      `43f06e63c5fea2674e7d7e13b52f5c86bc6bd689`, matching local.
+- [x] 5.3 CI `ci` + `e2e` COMPLETED and GREEN on `43f06e63`, which carries the whole change; both jobs RAN,
+      read step by step: `Lint • Typecheck • Test • Build` (Format check, Typecheck, Lint, Test, Build — each
+      `success`) and `E2E (Playwright)` (step `E2E` `success`: runtime 306 passed, `channel-templates.spec.ts`
+      2/2; Designer 290 passed, 12 skipped, 1 flaky `live-source.spec.ts:610` green on retry, a Designer spec
+      this change does not touch) — run URL: <https://github.com/yasermostafaee/cg/actions/runs/36499497786>.
+      The first commit's own run, also completed green with both jobs run:
+      <https://github.com/yasermostafaee/cg/actions/runs/36498064547>.
+- [x] 5.4 Installer workflow COMPLETED and GREEN on `43f06e63`; both jobs RAN — `Installers (Windows)` (Build CG
+      Control, Build CG Designer, both uploaded) and `Installer smoke (clean Windows)` (install, launch and
+      drive both apps, uninstall) — run URL: <https://github.com/yasermostafaee/cg/actions/runs/36499497792>.
+      The first commit's: <https://github.com/yasermostafaee/cg/actions/runs/36498064745>.

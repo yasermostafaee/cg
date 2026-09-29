@@ -4162,4 +4162,5 @@ THEN the file goes; WHEN a row on CH 2 holds it THEN its removal on CH 2 is refu
 loads THEN every declared channel lists today's library once; WHEN a page is on air on CH 1 THEN every act on
 CH 2 leaves its serve path byte for byte. **Open for the owner:** a "Change channel…" move starts the new
 channel empty (the old list stays dormant); template audit rows name no channel; same-channel re-delivery is
-still local-wins (`B-085`).
+still local-wins (`B-085`); a browser's record from before the change re-delivers only as a restore (never
+a replacement), and not at all once a channel has removed it.
