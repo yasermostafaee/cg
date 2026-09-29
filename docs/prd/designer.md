@@ -5627,3 +5627,9 @@ Control is unchanged (its version is in SETTINGS). **Why.** The owner asked for 
 inside the app, where users look for it. **Acceptance:** WHEN Help → About is chosen THEN a dialog
 names CG Designer, `Version <release>` and the build; WHEN the release version is read through
 `tools/release` THEN the dialog shows the same; control: a planted wrong version does not match.
+
+**Built (2026-09-30, `RELEASE-091-01` §4; not yet archived).** `AboutModal.tsx` — `CG Designer`,
+`Version <release>`, `Build <sha> · <date>`, three `Tag`s in the shell's `Modal` (its close and
+Escape). Tests: `about-version.dom.test.ts` (the release read through `tools/release`; the control, a
+dialog planted with `0.0.1`, fails the same check) and `app-version.spec.ts` (the built app).
+`turbo.json`'s new `@cg/designer#test` hashes the version files the spec reads.

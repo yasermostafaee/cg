@@ -16,4 +16,6 @@ controls, and the dialog SHALL close by its own close control and Escape.
 
 #### Scenario: A wrong version is caught
 
-- **WHEN** the build stamp carries another version than `tools/release` reads **THEN** the check fails
+- **WHEN** the dialog shows another version than `tools/release` reads (a planted `0.0.1`) **THEN** the
+  same check the real dialog passes fails
+- **WHEN** Escape is pressed, or the dialog's own close **THEN** it closes

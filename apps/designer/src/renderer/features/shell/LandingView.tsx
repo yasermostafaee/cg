@@ -118,9 +118,9 @@ export function LandingView(): JSX.Element {
           Broadcast template builder — pick a demo, open a recent project, or start fresh.
         </p>
         {/*
-          `CLIENT-TEST-RELEASE-01` B1 — THE ONE LINE THAT NAMES THIS RELEASE. The Designer has no
-          settings or about place; this start screen is where it introduces itself, and the first
-          thing on screen at every launch. A fact, so a `Tag`, in the line above's own treatment.
+          `CLIENT-TEST-RELEASE-01` B1 — THE LINE THAT NAMES THIS RELEASE on the start screen, where the
+          Designer introduces itself and the first thing on screen at every launch (Help → About,
+          `D-161`, names it too, with the build). A fact, so a `Tag`, in the line above's own treatment.
         */}
         <Tag className={s.brandSub} title={APP_BUILD} data-testid="app-version">
           Version {APP_VERSION}

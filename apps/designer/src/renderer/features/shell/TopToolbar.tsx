@@ -6,6 +6,7 @@ import { cx } from '../../cx.js';
 import { comboKey } from '../../keyboard.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { AboutModal } from './AboutModal.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { ShortcutsModal } from './ShortcutsModal.js';
@@ -37,6 +38,8 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
   const [openMenu, setOpenMenu] = useState<'file' | 'edit' | 'view' | 'help' | null>(null);
   const [hoverNav, setHoverNav] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // `D-161` — Help → About.
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [newModalOpen, setNewModalOpen] = useState(false);
   // Queues a switch action (Close / New / Open) when there's already a
   // scene loaded — the SaveBeforeSwitchModal runs first and only then
@@ -417,7 +420,13 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
                 }}
               />
               <FileMenuItem label="Documentation" disabled onClick={() => undefined} />
-              <FileMenuItem label="About" disabled onClick={() => undefined} />
+              <FileMenuItem
+                label="About"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setAboutOpen(true);
+                }}
+              />
               <FileMenuItem label="Changelog" disabled onClick={() => undefined} />
             </div>
           )}
@@ -476,6 +485,7 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
         </Button>
       </div>
       {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)} />}
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
       {newModalOpen && <NewProjectModal onClose={() => setNewModalOpen(false)} />}
       {pendingSwitch !== null && scene !== null && (
         <SaveBeforeSwitchModal

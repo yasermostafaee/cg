@@ -152,6 +152,37 @@
         "VITEST_MIN_THREADS"
       ]
     },
+    "@cg/designer#test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "bin/**",
+        "scripts/**",
+        "vitest.config.*",
+        "vite.config.*",
+        "package.json",
+        "src-tauri/tauri.conf.json",
+        "src-tauri/Cargo.toml",
+        "src-tauri/starting/**",
+        "index.html",
+        "brand/**",
+        "public/favicon.svg",
+        "$TURBO_ROOT$/tools/release/src/release-version.mjs",
+        "$TURBO_ROOT$/apps/runtime/package.json",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/tauri.conf.json",
+        "$TURBO_ROOT$/apps/runtime/src-tauri/Cargo.toml",
+        "$TURBO_ROOT$/Cargo.lock",
+        "$TURBO_ROOT$/tools/caspar-bridge/package.json"
+      ],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
+      ]
+    },
     "test:integration": {
       "dependsOn": ["^build", "@cg/amcp-mock#build"],
       "outputs": ["coverage/**"],

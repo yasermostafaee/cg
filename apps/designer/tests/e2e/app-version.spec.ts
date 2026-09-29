@@ -40,3 +40,32 @@ test('B1 — the start screen reads "Version <release>" under its tagline, above
   expect(lineBox.y + lineBox.height).toBeLessThanOrEqual(newBox.y);
   expect(Math.round(lineBox.x)).toBe(Math.round(taglineBox.x));
 });
+
+/**
+ * 🔴 `D-161` (`RELEASE-091-01` §4) — Help → About, in the built app: the name, the release and the
+ * build, each visible, and Escape closes it. The dom spec reads the release through `tools/release`
+ * (`about-version.dom.test.ts`); this is the rendering half golden rule 12 owes.
+ */
+test('D-161 — Help → About names CG Designer, Version <release> and the build, and Escape closes it', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await app.newProject('About');
+  await page.getByRole('button', { name: 'Help', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'About', exact: true }).click();
+
+  const about = page.getByRole('dialog', { name: 'About' });
+  await expect(about).toBeVisible();
+  await expect(about.getByTestId('about-name')).toHaveText('CG Designer');
+  await expect(about.getByTestId('about-version')).toHaveText(`Version ${VERSION}`);
+  await expect(about.getByTestId('about-build')).toHaveText(
+    /^Build [0-9a-z]+ · \d{4}-\d{2}-\d{2}$/,
+  );
+  for (const id of ['about-name', 'about-version', 'about-build']) {
+    await expect(about.getByTestId(id)).toBeVisible();
+  }
+
+  await page.keyboard.press('Escape');
+  await expect(about).toHaveCount(0);
+});

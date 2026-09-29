@@ -9,8 +9,8 @@ import { LandingView } from '../src/renderer/features/shell/LandingView.js';
 
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` B1 — **CG DESIGNER NAMES ITS RELEASE IN ONE LINE**: its start screen,
- * under the line that says what the page is for. The Designer has no settings or about place; the
- * start screen is where it introduces itself, first on screen at every launch.
+ * under the line that says what the page is for — where it introduces itself, first on screen at every
+ * launch. (Help → About names it too, since `D-161`: `about-version.dom.test.ts`.)
  *
  * The version is read from this app's own `package.json`, the same file the build stamp reads.
  */

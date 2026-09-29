@@ -45,9 +45,14 @@
 
 ## 4. Help → About (`D-161`)
 
-- [ ] 4.1 Help → About enabled; a dialog names `CG Designer`, `Version <release>` and the build.
-- [ ] 4.2 dom spec: opens Help → About and reads the version through `tools/release`; control: a planted
-      wrong version fails; `turbo.json` hashes what the spec reads.
+- [x] 4.1 Help → About enabled; a dialog names `CG Designer`, `Version <release>` and the build
+      (`AboutModal.tsx`, three `Tag`s; closes by its own close and Escape).
+- [x] 4.2 dom spec `about-version.dom.test.ts`: opens Help → About through the toolbar and reads the
+      version through `tools/release` (`releaseVersion`); control: a dialog planted with `0.0.1` fails
+      the same check; red first (About disabled again → red). `turbo.json` gains `@cg/designer#test`,
+      hashing `release-version.mjs` and the seven version files outside the app (dry run: all seven
+      hashed). e2e `app-version.spec.ts` adds the dialog in the built app (local Windows pass; the
+      Linux run is owed).
 
 ## 5. Release `0.9.1` (`P-060`)
 
