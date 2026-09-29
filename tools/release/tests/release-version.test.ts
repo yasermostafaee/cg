@@ -19,7 +19,8 @@ import {
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const RELEASE = '0.9.0';
+// The release this tree is — moved by hand with each bump (`P-060`: `0.9.1`), which is the point.
+const RELEASE = '0.9.1';
 
 let scratch: string | null = null;
 
@@ -54,10 +55,12 @@ describe('CLIENT-TEST-RELEASE-01 B1 — one version for CG Control, CG Designer 
   it('CONTROL — one file drifting is refused, and the refusal names every file and its value', () => {
     const root = copyOfTheSources();
     const conf = path.join(root, 'apps/designer/src-tauri/tauri.conf.json');
-    fs.writeFileSync(conf, fs.readFileSync(conf, 'utf8').replace(`"${RELEASE}"`, '"0.9.1"'));
+    fs.writeFileSync(conf, fs.readFileSync(conf, 'utf8').replace(`"${RELEASE}"`, '"0.9.2"'));
     expect(() => releaseVersion(root)).toThrow(/do not carry one version/);
-    expect(() => releaseVersion(root)).toThrow(/apps\/designer\/src-tauri\/tauri\.conf\.json: 0\.9\.1/);
-    expect(() => releaseVersion(root)).toThrow(/tools\/caspar-bridge\/package\.json: 0\.9\.0/);
+    expect(() => releaseVersion(root)).toThrow(
+      /apps\/designer\/src-tauri\/tauri\.conf\.json: 0\.9\.2/,
+    );
+    expect(() => releaseVersion(root)).toThrow(/tools\/caspar-bridge\/package\.json: 0\.9\.1/);
   });
 
   it('CONTROL — the parts agreeing on a placeholder is not a release', () => {
@@ -74,7 +77,10 @@ describe('CLIENT-TEST-RELEASE-01 B1 — one version for CG Control, CG Designer 
     const lock = VERSION_SOURCES.find((s) => s.kind === 'cargo-lock' && s.crate === 'cg-control');
     if (toml === undefined || lock === undefined) throw new Error('the Cargo sources are listed');
     expect(
-      versionIn('[package]\nname = "x"\nversion = "1.2.3"\n\n[dependencies]\ntauri = { version = "2.11" }\n', toml),
+      versionIn(
+        '[package]\nname = "x"\nversion = "1.2.3"\n\n[dependencies]\ntauri = { version = "2.11" }\n',
+        toml,
+      ),
     ).toBe('1.2.3');
     expect(
       versionIn(

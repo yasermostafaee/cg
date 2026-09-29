@@ -21,4 +21,18 @@ declare module '*release-files.mjs' {
     guidePdf: string;
     outDir: string;
   }): string[];
+  /** `P-060` — one asset of a release as uploaded. */
+  export interface UploadedAsset {
+    readonly name: string;
+    /** SHA-256 (hex) of the file downloaded back from the release; `null` when it could not be. */
+    readonly sha256: string | null;
+    /** GitHub's own digest, `sha256:<hex>`, when the API reports one. */
+    readonly digest: string | null;
+  }
+  export function sumsProblems(
+    sumsText: string,
+    assets: readonly UploadedAsset[],
+    sumsName?: string,
+  ): string[];
+  export function verifyDownloaded(options: { dir: string; assetsJson?: string }): string[];
 }

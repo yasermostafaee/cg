@@ -142,6 +142,7 @@
         "$TURBO_ROOT$/apps/runtime/src/renderer/features/audit/AuditPanel.tsx",
         "$TURBO_ROOT$/apps/runtime/src/renderer/ui/Tabs.tsx",
         "$TURBO_ROOT$/apps/designer/src/renderer/features/shell/LandingView.tsx",
+        "$TURBO_ROOT$/apps/designer/src/renderer/features/shell/TopToolbar.tsx",
         "$TURBO_ROOT$/apps/designer/src/renderer/features/compositions/**",
         "$TURBO_ROOT$/tools/caspar-bridge/src/connection-check.ts"
       ],

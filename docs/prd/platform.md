@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS SET: `0.9.0`** (2026-09-29, the first client delivery — see the section at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS SET: `0.9.1`** (moved from `0.9.0`, never delivered, on 2026-09-30 by [[P-060]] — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1776,6 +1776,16 @@ Every record or comment that cites this item's licence ("nothing has shipped", "
 owed") was written before `0.9.0` and is history from this date. `CG_RUNTIME_VERSION`
 (`packages/shared-schema/src/runtime-version.ts`) is a rendering-CONTRACT version and is untouched by
 this release, as its header prescribes for an ordinary release.
+
+### 🔴 THE FLOOR MOVES TO `0.9.1` (2026-09-30, `RELEASE-091-01` §5, [[P-060]])
+
+**`0.9.0` was never delivered** — the owner's own check of it found the faults [[P-060]] carries, and
+its draft is retitled `v0.9.0 — superseded, do not use`. The floor is therefore `0.9.1`: everything
+above that `0.9.0` would open, `0.9.1` opens identically (no format moved between them), and it is
+from `0.9.1` that nothing may stop opening. ⚠ **Open for the owner:** `RELEASE-091-01` DELTA B (B0)
+says `0.9.1` is not delivered either — `CENTRAL-BRIDGE-01` (`0.10.0`) comes first. By this section's
+own reasoning the floor would then be the first release a client actually holds; it is moved to
+`0.9.1` because §5 says so, and moves again only on the owner's word.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
@@ -3729,3 +3739,10 @@ not handed to the client.
 pre-release holds exactly four files and every line of its `SHA256SUMS.txt` names one of them with its
 hash; WHEN a sums line names a file the release does not hold THEN the release job stops (the control);
 WHEN a CI run builds the installers THEN no artifact carries a `SHA256SUMS.txt`.
+
+**Built (2026-09-30, not yet archived).** The nine files carry `0.9.1` (`release-version.mjs`); the
+installers job logs its hashes and uploads no sums; the release job runs `release-files.mjs verify` over
+the assets downloaded back from the draft (`sumsProblems` — the `0.9.0` job's own sums fail it, naming
+the line). The `0.9.1` guide adds the one-CG-Control-per-channel limit and Help → About. [[P-031]]'s floor
+is `0.9.1`, with DELTA B's "`0.9.1` is never delivered" left to the owner (see [[P-031]]). The draft
+itself is read back in the change's `tasks.md` (5.4).

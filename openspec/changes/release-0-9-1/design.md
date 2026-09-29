@@ -116,6 +116,14 @@ The menu bar exists (`TopToolbar.tsx`, D-008: Home / File / Edit / View / Help) 
 - The release job checks the sums after upload: every line names an uploaded asset, every asset but the
   sums is listed, and each hash matches the file uploaded (and GitHub's own asset digest, when it reports
   one). `release-files.mjs verify`; its control: a wrong name fails.
+- **Rehearsed before CI ran it** (read-only, against the `v0.9.0` draft, 2026-09-30): `gh release
+download <tag>` finds a DRAFT by its tag and serves its assets; `gh release view --json assets` on
+  `gh` 2.71 carries no `digest` field, so the authoritative half is hashing the bytes downloaded back,
+  and GitHub's digest is compared only where a newer `gh` reports it; the guide's line verified against
+  GitHub's bytes (the installers were not fetched).
+- **The floor (`P-031`).** §5 moves it to `0.9.1` because `0.9.0` was never delivered. DELTA B (B0)
+  says `0.9.1` is not delivered either (`CENTRAL-BRIDGE-01`, `0.10.0`, comes first); by the same reasoning
+  the floor would be the first release a client holds. Moved as §5 says; left to the owner.
 
 ## §7 — rows at start (`B-291`)
 

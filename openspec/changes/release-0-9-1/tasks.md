@@ -43,6 +43,13 @@
       (`app-identity.mjs`, the drive phase's `identities` step; `installerAppIdentity.test.ts`); the
       smoke's run on the pushed commit is owed.
 
+CI read for the commits already pushed (step level, jobs RAN): `4b247b54` (§2, §7) — PR
+https://github.com/yasermostafaee/cg/actions/runs/36618175517 (E2E step success), Desktop
+https://github.com/yasermostafaee/cg/actions/runs/36618175551 (installers + smoke success);
+`9f04b1eb` (§1, B2, B-292) — PR https://github.com/yasermostafaee/cg/actions/runs/36630372512 (E2E step
+success), Desktop https://github.com/yasermostafaee/cg/actions/runs/36630372380 (installers + all three
+smoke phases success; draft skipped, not a tag).
+
 ## 4. Help → About (`D-161`)
 
 - [x] 4.1 Help → About enabled; a dialog names `CG Designer`, `Version <release>` and the build
@@ -56,11 +63,17 @@
 
 ## 5. Release `0.9.1` (`P-060`)
 
-- [ ] 5.1 No `SHA256SUMS.txt` in the installer job's artifacts.
-- [ ] 5.2 `release-files.mjs verify` + the release job's check against the uploaded assets; control: a
-      wrong name fails.
-- [ ] 5.3 `0.9.1` in all nine files; `docs/release/0.9.1/` guide with the known limit (one channel, one
-      CG Control); `P-031`'s floor at `0.9.1`.
+- [x] 5.1 No `SHA256SUMS.txt` in the installer job's artifacts (its hashes go to the job's log only).
+- [x] 5.2 `release-files.mjs verify` (`sumsProblems`, `verifyDownloaded`) + the release job's step after
+      the read-back: `gh release download` + `gh release view --json assets` → `verify`. Control: the
+      `0.9.0` job's own sums (`CG Control_0.9.1_x64-setup.exe`, a space) fails naming line 2; red first
+      (a name-blind check → red). Rehearsed read-only against the `v0.9.0` draft: a draft downloads by
+      its tag, and the guide's line verifies against GitHub's bytes; `gh` 2.71 reports no `digest`, so
+      that half applies only where a newer `gh` gives one.
+- [x] 5.3 `0.9.1` in all nine files (`release-version.mjs` reads `0.9.1` and accepts `v0.9.1`; its test
+      pin moved with it); `docs/release/0.9.1/` guide — the known limit (one CG Control per channel), and
+      Help → About for the Designer's version, both labels checked by `guide.test.ts`; `P-031`'s floor at
+      `0.9.1` — with DELTA B's "`0.9.1` is never delivered" left to the owner.
 - [ ] 5.4 Tag `v0.9.1` → a draft with the four files, read back; the `v0.9.0` draft retitled
       `v0.9.0 — superseded, do not use`, still a draft.
 

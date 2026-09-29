@@ -27,31 +27,93 @@ const source = fs.readFileSync(GUIDE, 'utf8');
  */
 const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   { shown: 'STARTING BRIDGE', file: 'apps/runtime/src-tauri/starting/start.js' },
-  { shown: 'Set up CG Control', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
-  { shown: 'PLAYOUT', text: '>Playout<', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
-  { shown: 'Check', text: 'Check', file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx' },
+  {
+    shown: 'Set up CG Control',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
+  {
+    shown: 'PLAYOUT',
+    text: '>Playout<',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
+  {
+    shown: 'Check',
+    text: 'Check',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
   { shown: 'Connect', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'waiting for sign-in', file: 'tools/caspar-bridge/src/connection-check.ts' },
-  { shown: 'SIGN IN', text: '>Sign in<', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
+  {
+    shown: 'SIGN IN',
+    text: '>Sign in<',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
   { shown: 'Username', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'Password', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'Sign in', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'waiting for approval', file: 'tools/caspar-bridge/src/connection-check.ts' },
-  { shown: 'CHANNEL', text: '>Channel<', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
-  { shown: 'SERVE ADDRESS', text: '>Serve address<', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
-  { shown: 'Use this channel', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
-  { shown: 'Use these channels', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
-  { shown: 'LOAD', text: "'LOAD'", file: 'apps/runtime/src/renderer/features/layers/layerRowActions.ts' },
-  { shown: 'Import a .vcg', file: 'apps/runtime/src/renderer/features/fixedLayers/useTemplatePicker.tsx' },
+  {
+    shown: 'CHANNEL',
+    text: '>Channel<',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
+  {
+    shown: 'SERVE ADDRESS',
+    text: '>Serve address<',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
+  {
+    shown: 'Use this channel',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
+  {
+    shown: 'Use these channels',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
+  {
+    shown: 'LOAD',
+    text: "'LOAD'",
+    file: 'apps/runtime/src/renderer/features/layers/layerRowActions.ts',
+  },
+  {
+    shown: 'Import a .vcg',
+    file: 'apps/runtime/src/renderer/features/fixedLayers/useTemplatePicker.tsx',
+  },
   { shown: 'LOG', file: 'apps/runtime/src/renderer/features/shell/AppHeader.tsx' },
   { shown: 'Audit log', file: 'apps/runtime/src/renderer/features/audit/AuditPanel.tsx' },
   { shown: 'Open log folder', file: 'apps/runtime/src/renderer/features/audit/AuditPanel.tsx' },
   { shown: 'SETTINGS', file: 'apps/runtime/src/renderer/features/shell/AppHeader.tsx' },
-  { shown: `Version ${VERSION}`, text: 'Version {version.release}', file: 'apps/runtime/src/renderer/ui/Tabs.tsx' },
+  {
+    shown: `Version ${VERSION}`,
+    text: 'Version {version.release}',
+    file: 'apps/runtime/src/renderer/ui/Tabs.tsx',
+  },
+  // `D-161` — the Designer's version is in Help → About too. `Help` is the menu button's own JSX line
+  // (the file says "Help" in comments as well, so the bare word would prove nothing).
+  {
+    shown: 'Help',
+    text: '\n            Help\n',
+    file: 'apps/designer/src/renderer/features/shell/TopToolbar.tsx',
+  },
+  {
+    shown: 'About',
+    text: 'label="About"',
+    file: 'apps/designer/src/renderer/features/shell/TopToolbar.tsx',
+  },
   { shown: '+ New project', file: 'apps/designer/src/renderer/features/shell/LandingView.tsx' },
-  { shown: 'START FROM A TEMPLATE', file: 'apps/designer/src/renderer/features/shell/LandingView.tsx' },
-  { shown: 'Compositions', text: '>Compositions<', file: 'apps/designer/src/renderer/features/compositions/CompositionsPanel.tsx' },
-  { shown: 'Export (.vcg)', file: 'apps/designer/src/renderer/features/compositions/CompositionActionBar.tsx' },
+  {
+    shown: 'START FROM A TEMPLATE',
+    file: 'apps/designer/src/renderer/features/shell/LandingView.tsx',
+  },
+  {
+    shown: 'Compositions',
+    text: '>Compositions<',
+    file: 'apps/designer/src/renderer/features/compositions/CompositionsPanel.tsx',
+  },
+  {
+    shown: 'Export (.vcg)',
+    file: 'apps/designer/src/renderer/features/compositions/CompositionActionBar.tsx',
+  },
 ];
 
 describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
@@ -173,7 +235,10 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the page Chromium prints', () => {
   });
 
   it('counts a PDF’s pages from its page objects, never its page tree', () => {
-    const pdf = Buffer.from('<< /Type /Pages /Count 2 >> << /Type /Page >> << /Type/Page >>', 'latin1');
+    const pdf = Buffer.from(
+      '<< /Type /Pages /Count 2 >> << /Type /Page >> << /Type/Page >>',
+      'latin1',
+    );
     expect(pdfPageCount(pdf)).toBe(2);
   });
 });

@@ -101,6 +101,9 @@ jobs:
       - name: Build CG Designer
         run: pnpm --filter @cg/designer tauri build
 
+      # P-060 — the hashes go to the LOG only. This job used to write installers/SHA256SUMS.txt over
+      # Tauri's built names (with a space) and ship it inside both artifacts; the owner took that for
+      # the release's. The release's own SHA256SUMS.txt (release-files.mjs) is the only file of that name.
       - name: Collect the installers
         shell: pwsh
         run: |
@@ -108,16 +111,14 @@ jobs:
           Copy-Item target/release/bundle/nsis/*-setup.exe installers/
           Get-ChildItem installers | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$hash  $($_.Name)" | Tee-Object -FilePath installers/SHA256SUMS.txt -Append
+            "$hash  $($_.Name)"
           }
 
       - name: Upload CG Control
         uses: actions/upload-artifact@v7
         with:
           name: CG-Control-installer
-          path: |
-            installers/CG Control_*-setup.exe
-            installers/SHA256SUMS.txt
+          path: installers/CG Control_*-setup.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -125,9 +126,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: CG-Designer-installer
-          path: |
-            installers/CG Designer_*-setup.exe
-            installers/SHA256SUMS.txt
+          path: installers/CG Designer_*-setup.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -299,3 +298,19 @@ jobs:
           $release.assets | ForEach-Object { "{0,12}  {1}" -f $_.size, $_.name }
           if (-not $release.isDraft -or -not $release.isPrerelease) { throw 'the release is not a draft pre-release' }
           if (($names -join '|') -ne ($expected -join '|')) { throw "assets are [$($names -join ', ')], not [$($expected -join ', ')]" }
+
+      # P-060 — SHA256SUMS.txt against what was UPLOADED, never the local copy: every line names an asset
+      # of the release exactly, every asset but the sums has a line, and each hash is the file's as
+      # GitHub serves it (and GitHub's own digest of it, when it reports one). A wrong name stops here.
+      - name: Check SHA256SUMS.txt against the uploaded assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release download $env:TAG --dir uploaded
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          gh release view $env:TAG --json assets | Out-File -Encoding utf8 uploaded-assets.json
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node tools/release/src/release-files.mjs verify uploaded --assets uploaded-assets.json
+          if ($LASTEXITCODE -ne 0) { exit 1 }
