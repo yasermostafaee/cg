@@ -7,11 +7,17 @@ name: Desktop
 # A separate workflow from `pr.yml`: that file's jobs, its `required` aggregation and the
 # P-030 reuse guard are keyed to their job names and are untouched. This one is the record of
 # the installers — its artifacts are what the owner downloads.
+#
+# CLIENT-TEST-RELEASE-01 B4 — a tag `v<version>` runs the same two jobs from the tagged commit,
+# and then `release` opens a DRAFT pre-release holding exactly the two installers, SHA256SUMS.txt
+# and the Persian install guide. CI never publishes it: the owner does, or hands the files over.
 
 on:
   workflow_dispatch:
   push:
     branches: [main, dev]
+    # A release tag. GitHub does not evaluate path filters for a tag push, so every tag runs.
+    tags: ['v*']
     # A docs-only push cannot change what the installers contain.
     paths-ignore:
       - 'docs/**'
@@ -40,6 +46,24 @@ jobs:
         with:
           fetch-depth: 1
 
+      # CLIENT-TEST-RELEASE-01 B1 — ONE version for CG Control, CG Designer and the bridge, read
+      # from every file that carries it; a build whose files disagree stops here, before anything
+      # is built. On a tag (B4), a tag that does not name that version stops it too. Zero-dependency,
+      # so the runner's own Node runs it.
+      - name: The release version
+        id: version
+        shell: pwsh
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $tag = @()
+          if ($env:REF_TYPE -eq 'tag') { $tag = @('--tag', $env:REF_NAME) }
+          $version = node tools/release/src/release-version.mjs @tag
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Release version: $version"
+
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
 
@@ -59,17 +83,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # CLIENT-TEST-RELEASE-01 B1 — ONE version for CG Control, CG Designer and the bridge, read
-      # from every file that carries it; a build whose files disagree stops here.
-      - name: The release version
-        id: version
-        shell: pwsh
-        run: |
-          $version = node tools/release/src/release-version.mjs
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "Release version: $version"
 
       - name: Build (workspace)
         run: pnpm build
@@ -186,3 +199,98 @@ jobs:
           name: installer-smoke
           path: smoke/
           retention-days: 14
+
+  # CLIENT-TEST-RELEASE-01 B4 — ON A TAG ONLY, and only once both installers are built from the
+  # tagged commit and the clean-Windows smoke has passed: a DRAFT pre-release with exactly four
+  # files. Never published here.
+  release:
+    name: Draft release (tag only)
+    if: ${{ github.ref_type == 'tag' }}
+    needs: [installers, smoke]
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # For Playwright, which prints the guide with the runner's installed Chrome (nothing fetched).
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: Build the Persian install guide (PDF)
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          node tools/release/src/build-guide.mjs "docs/release/$env:VERSION/install-guide.fa.md" --out guide/install-guide.pdf
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # Exactly four files (tools/release/src/release-files.mjs): both installers under names with no
+      # space (GitHub would rewrite one, and SHA256SUMS.txt would name a file nobody downloads), the
+      # guide, and SHA256SUMS.txt over the other three in sha256sum's own format.
+      - name: Assemble the release's four files
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          node tools/release/src/release-files.mjs assemble $env:VERSION installers guide/install-guide.pdf release
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Open the DRAFT pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          $notes = @(
+            "APASAI CG $env:VERSION - the first client test build. DRAFT: published by hand, never by CI.",
+            '',
+            '- CG Control installer (per machine; the bridge included; opens UDP 6250 and TCP 7911 for it).',
+            '- CG Designer installer (per user; no administrator).',
+            '- SHA256SUMS.txt - the SHA-256 of the other three files.',
+            '- The Persian install guide (PDF).',
+            '',
+            'Unsigned test build: Windows SmartScreen warns before installing - the guide says what to press.'
+          ) -join "`n"
+          $files = (Get-ChildItem release -File).FullName
+          gh release create $env:TAG --draft --prerelease --verify-tag --title "APASAI CG $env:VERSION (test build)" --notes $notes @files
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      # Read back, never trust the exit code (CLAUDE.md "Verify before claiming"): a draft, a
+      # pre-release, and exactly these four assets.
+      - name: Read the draft back
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.installers.outputs.version }}
+        run: |
+          $release = gh release view $env:TAG --json isDraft,isPrerelease,assets,url | ConvertFrom-Json
+          $names = @($release.assets | ForEach-Object { $_.name } | Sort-Object)
+          $expected = @(node tools/release/src/release-files.mjs expect $env:VERSION | Sort-Object)
+          "draft=$($release.isDraft) prerelease=$($release.isPrerelease) url=$($release.url)"
+          $release.assets | ForEach-Object { "{0,12}  {1}" -f $_.size, $_.name }
+          if (-not $release.isDraft -or -not $release.isPrerelease) { throw 'the release is not a draft pre-release' }
+          if (($names -join '|') -ne ($expected -join '|')) { throw "assets are [$($names -join ', ')], not [$($expected -join ', ')]" }
