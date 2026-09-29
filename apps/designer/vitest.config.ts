@@ -1,10 +1,21 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
+import { createBuildStamp } from '@cg/splash-kit/build-stamp';
+
+/**
+ * `CLIENT-TEST-RELEASE-01` B1 — the build stamp the app is built with (`vite.config.ts`), so a dom
+ * spec renders the version line from the same `__CG_BUILD__` object the bundle carries.
+ */
+const { stamp } = createBuildStamp(fileURLToPath(new URL('.', import.meta.url)));
 
 export default defineConfig({
   // Tests import components that pull their co-located `*.css.ts` stylesheets;
   // the plugin lets vanilla-extract's `style()` resolve under Vitest too.
   plugins: [vanillaExtractPlugin()],
+  define: {
+    __CG_BUILD__: JSON.stringify(stamp),
+  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],

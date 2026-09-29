@@ -3,6 +3,8 @@ import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
 import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
+import { Tag } from '../../ui/Tag.js';
+import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
 import { playoutBadge } from './playout-badge.js';
@@ -115,6 +117,14 @@ export function LandingView(): JSX.Element {
         <p className={s.brandSub}>
           Broadcast template builder — pick a demo, open a recent project, or start fresh.
         </p>
+        {/*
+          `CLIENT-TEST-RELEASE-01` B1 — THE ONE LINE THAT NAMES THIS RELEASE. The Designer has no
+          settings or about place; this start screen is where it introduces itself, and the first
+          thing on screen at every launch. A fact, so a `Tag`, in the line above's own treatment.
+        */}
+        <Tag className={s.brandSub} title={APP_BUILD} data-testid="app-version">
+          Version {APP_VERSION}
+        </Tag>
       </div>
 
       <Button

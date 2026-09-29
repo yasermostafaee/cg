@@ -36,6 +36,7 @@ import { hostError, hostValue, portError } from '../../ui/fieldValue.js';
 import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
+import { APP_BUILD, APP_VERSION } from '../../appVersion.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import {
   CandidateLayersHelper,
@@ -1104,6 +1105,8 @@ export function StationSetupDialog({
                     ? loaded.servers.B.host
                     : loaded.servers.A.host
               }
+              /* `CLIENT-TEST-RELEASE-01` B1 — the one line in CG Control that names its release. */
+              version={{ release: APP_VERSION, build: APP_BUILD }}
             />
           }
         />

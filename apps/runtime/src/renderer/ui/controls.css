@@ -4174,7 +4174,10 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text);
 }
 
-.cg-rail-station__host {
+/* `CLIENT-TEST-RELEASE-01` B1 — the version line under the station wears the host line's
+   treatment: a quiet fact at the rail's foot. */
+.cg-rail-station__host,
+.cg-rail-foot__version {
   display: block;
   margin-top: var(--r-setup-station-host-gap);
   font-family: var(--r-font-mono);

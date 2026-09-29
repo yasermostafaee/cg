@@ -2,6 +2,7 @@ import { Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { Lock, OctagonAlert, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
+import { Tag } from './Tag.js';
 
 /**
  * R-028 part B — a minimal tab strip, for the Layers / Playout split.
@@ -366,10 +367,16 @@ export function RailStationCard({
   label,
   name,
   host,
+  version,
 }: {
   label: string;
   name: string;
   host: string | null;
+  /**
+   * 🔴 `CLIENT-TEST-RELEASE-01` B1 — the app's release version, in one line under the station, and
+   * the exact build (`0.9.0 · 5f3c2a1 · 2026-09-29`) in its `title`. A fact, so a `Tag`.
+   */
+  version?: { readonly release: string; readonly build: string } | undefined;
 }): JSX.Element {
   return (
     <div className="cg-rail-foot">
@@ -386,6 +393,11 @@ export function RailStationCard({
           )}
         </span>
       </div>
+      {version !== undefined && (
+        <Tag className="cg-rail-foot__version" title={version.build} data-testid="app-version">
+          Version {version.release}
+        </Tag>
+      )}
     </div>
   );
 }
