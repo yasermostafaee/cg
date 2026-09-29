@@ -31,6 +31,8 @@ jobs:
     name: Installers (Windows)
     runs-on: windows-latest
     timeout-minutes: 75
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
@@ -58,11 +60,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # CLIENT-TEST-RELEASE-01 B1 — ONE version for CG Control, CG Designer and the bridge, read
+      # from every file that carries it; a build whose files disagree stops here.
+      - name: The release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = node tools/release/src/release-version.mjs
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "Release version: $version"
+
       - name: Build (workspace)
         run: pnpm build
 
       - name: Stage CG Control's payload (bridge bundle, console, node.exe)
         run: node tools/caspar-bridge/scripts/stage-control.mjs
+
+      # CLIENT-TEST-RELEASE-01 — the installers carry no real address and no test secret: every text
+      # file the two installers are built from, scanned before either is built.
+      - name: Scan what the installers ship
+        run: node tools/release/src/scan-payload.mjs apps/runtime/src-tauri/payload apps/runtime/src-tauri/starting-dist apps/designer/dist
 
       - name: Build CG Control
         run: pnpm --filter @cg/runtime tauri build
@@ -133,7 +151,8 @@ jobs:
         shell: pwsh
         run: |
           $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
-          node apps/runtime/tests/desktop/installer-smoke.mjs --phase install --control "$control" --out smoke
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          node apps/runtime/tests/desktop/installer-smoke.mjs --phase install --control "$control" --designer-installer "$designer" --version "${{ needs.installers.outputs.version }}" --out smoke
 
       # WebView2 ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in an elevated process (wry#1782),
       # and the runner is elevated — so the apps are driven at medium integrity, as an operator
@@ -152,7 +171,7 @@ jobs:
           Copy-Item $designer installers\cg-designer-setup.exe
           $designer = (Resolve-Path installers\cg-designer-setup.exe).Path
           icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
-          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer $designer --out smoke
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer $designer --version ${{ needs.installers.outputs.version }} --out smoke
           exit $LASTEXITCODE
 
       - name: Uninstall CG Control (elevated), and sum every phase

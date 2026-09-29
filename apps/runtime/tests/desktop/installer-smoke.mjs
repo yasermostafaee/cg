@@ -24,8 +24,13 @@
  *   uninstall (elevated) — CG Control's uninstall, then every phase's results summed
  * A phase that never ran leaves no results file, and the summary counts that as a failure.
  *
- * Usage: node installer-smoke.mjs --phase <install|drive|uninstall> --out <dir>
- *          [--control <setup.exe>] [--designer <setup.exe>]
+ * Usage: node installer-smoke.mjs --phase <install|drive|uninstall> --out <dir> --version <x.y.z>
+ *          [--control <setup.exe>] [--designer-installer <setup.exe>] [--designer <setup.exe>]
+ *
+ * `CLIENT-TEST-RELEASE-01` — `--version` is the release version the build read from every file
+ * that carries it (`tools/release/src/release-version.mjs`): the installers' names and what Windows
+ * lists under Installed apps are checked against it (B1), and each firewall rule is judged by the
+ * fields `netsh` prints, never by its name (B2, `firewall-rule.mjs`).
  */
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes below run INSIDE the installed apps (serialised through CDP), not in Node.
@@ -34,6 +39,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { ruleProblems } from './firewall-rule.mjs';
 
 const args = Object.fromEntries(
   process.argv
@@ -143,6 +149,37 @@ function firewallRule(name) {
   } catch {
     return null;
   }
+}
+/**
+ * `CLIENT-TEST-RELEASE-01` B1 — what Windows lists under Installed apps for a product: the uninstall
+ * key the NSIS installer writes (`Software\Microsoft\Windows\CurrentVersion\Uninstall\<productName>`,
+ * in HKLM for a per-machine install and HKCU for a per-user one). Both registry views are asked, so a
+ * 32-bit-view write is not read as absent. `null` when neither holds it.
+ */
+function installedEntry(hive, product) {
+  const key = `${hive}\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${product}`;
+  for (const view of ['/reg:64', '/reg:32']) {
+    let text;
+    try {
+      text = run('reg', ['query', key, view]);
+    } catch {
+      continue;
+    }
+    const value = (name) =>
+      new RegExp(`^\\s+${name}\\s+REG_SZ\\s+(.*?)\\s*$`, 'm').exec(text)?.[1] ?? null;
+    return { displayName: value('DisplayName'), displayVersion: value('DisplayVersion') };
+  }
+  return null;
+}
+/** `CLIENT-TEST-RELEASE-01` B1 — the release version this build must carry everywhere. */
+const RELEASE = typeof args.version === 'string' ? args.version : null;
+function releaseGiven() {
+  check(
+    'the smoke was given the release version (the build read it from every file that carries it)',
+    RELEASE !== null && /^\d+\.\d+\.\d+$/.test(RELEASE),
+    String(args.version),
+  );
+  return RELEASE !== null;
 }
 async function health() {
   const res = await fetch(`${CONSOLE}/__cg/health`, { signal: AbortSignal.timeout(2000) });
@@ -417,6 +454,15 @@ async function designer() {
     'CG Designer installs no bridge',
     !fs.existsSync(path.join(path.dirname(exe), 'cg-bridge.exe')),
   );
+  // `CLIENT-TEST-RELEASE-01` B1 — Windows lists it under Installed apps as this release, per user.
+  if (releaseGiven()) {
+    const entry = installedEntry('HKCU', 'CG Designer');
+    check(
+      `Installed apps lists CG Designer ${String(RELEASE)}, for this user`,
+      entry?.displayName === 'CG Designer' && entry.displayVersion === RELEASE,
+      JSON.stringify(entry),
+    );
+  }
 
   launch(exe, 9231);
   const page = await Cdp.attach(9231, 'http://tauri.localhost', 90_000).catch(async (err) => {
@@ -472,6 +518,20 @@ async function designer() {
 // ── CG Control ───────────────────────────────────────────────────────────────
 
 function controlInstall() {
+  // `CLIENT-TEST-RELEASE-01` B1 — both installers are NAMED for the release, before either runs.
+  if (releaseGiven()) {
+    for (const [product, file] of [
+      ['CG Control', args.control],
+      ['CG Designer', args['designer-installer']],
+    ]) {
+      const name = path.basename(String(file));
+      check(
+        `the ${product} installer is named for ${RELEASE}`,
+        name === `${product}_${RELEASE}_x64-setup.exe`,
+        name,
+      );
+    }
+  }
   run(args.control, ['/S']);
   for (const file of [
     CONTROL_EXE,
@@ -481,16 +541,31 @@ function controlInstall() {
   ]) {
     check(`CG Control installs ${path.relative(CONTROL_DIR, file)}`, fs.existsSync(file), file);
   }
-  for (const [rule, port, proto] of [
+  // `CLIENT-TEST-RELEASE-01` B2 — each rule by its FIELDS: one rule, enabled, inbound, allowing, on
+  // every profile, for exactly this protocol and port, for the installed sidecar alone.
+  for (const [rule, port, protocol] of [
     [RULE_OSC, '6250', 'UDP'],
     [RULE_TEMPLATES, '7911', 'TCP'],
   ]) {
-    const text = firewallRule(rule) ?? '';
+    const problems = ruleProblems(firewallRule(rule), {
+      name: rule,
+      protocol,
+      port,
+      program: SIDECAR_EXE,
+    });
     check(
-      `firewall rule "${rule}" allows ${port}/${proto.toLowerCase()} inbound for the sidecar only`,
-      text.includes(port) &&
-        text.toUpperCase().includes(proto) &&
-        text.toLowerCase().includes(SIDECAR_EXE.toLowerCase()),
+      `firewall rule "${rule}" allows ${port}/${protocol.toLowerCase()} inbound for the sidecar only`,
+      problems.length === 0,
+      problems.join('; '),
+    );
+  }
+  // `CLIENT-TEST-RELEASE-01` B1 — Windows lists it under Installed apps as this release.
+  if (RELEASE !== null) {
+    const entry = installedEntry('HKLM', 'CG Control');
+    check(
+      `Installed apps lists CG Control ${RELEASE}, for every user of this machine`,
+      entry?.displayName === 'CG Control' && entry.displayVersion === RELEASE,
+      JSON.stringify(entry),
     );
   }
 }
@@ -681,6 +756,12 @@ async function controlUninstall() {
   check(
     'uninstalling removes both firewall rules',
     firewallRule(RULE_OSC) === null && firewallRule(RULE_TEMPLATES) === null,
+  );
+  // `CLIENT-TEST-RELEASE-01` B1 — and Installed apps no longer lists it (the install phase's reading of
+  // the same key is this absence's positive control).
+  check(
+    'uninstalling removes CG Control from Installed apps',
+    installedEntry('HKLM', 'CG Control') === null,
   );
 }
 
