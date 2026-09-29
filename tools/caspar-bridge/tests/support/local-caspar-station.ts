@@ -80,12 +80,18 @@ const PLANT_HOSTS: ReadonlyMap<string, string> = new Map([
 
 const TAKES = `--caspar takes this machine's CasparCG only: ${LOCAL_CASPAR_HOST}:${String(LOCAL_CASPAR_PORT)}`;
 
-/** What was typed, safe to echo in ONE line: a control character (a pasted newline) shows as `?`. */
+/**
+ * What was typed, safe to echo in ONE line: anything a terminal may break a line on — a C0 or C1 control
+ * (a pasted newline; NEL, U+0085), DEL, or a Unicode line or paragraph separator (U+2028, U+2029) —
+ * shows as `?`.
+ */
 function echo(typed: string): string {
   return [...typed]
     .map((c) => {
       const code = c.charCodeAt(0);
-      return code < 0x20 || code === 0x7f ? '?' : c;
+      const breaks =
+        code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029;
+      return breaks ? '?' : c;
     })
     .join('');
 }
@@ -442,9 +448,12 @@ export function oscOf(infoConfigXml: string): CoreOsc {
   const block = /<osc(?:\s[^>]*)?>([\s\S]*?)<\/osc>/.exec(infoConfigXml)?.[1] ?? '';
   const portText = xmlTextOf(block, 'default-port')?.trim() ?? '';
   const port = /^\d{1,5}$/.test(portText) ? Number(portText) : CORE_OSC_DEFAULT_PORT;
-  const disabled = /^(true|1)$/i.test(
-    xmlTextOf(block, 'disable-send-to-amcp-clients')?.trim() ?? '',
-  );
+  /*
+    Read as the core reads it: boost's `bool` — a number, then `boolalpha` in the C locale — takes `1`
+    or `true` exactly; anything else, `True` included, fails to parse and the default (false) stands.
+  */
+  const disabledText = xmlTextOf(block, 'disable-send-to-amcp-clients')?.trim();
+  const disabled = disabledText === 'true' || disabledText === '1';
   return { toClients: !disabled, port };
 }
 

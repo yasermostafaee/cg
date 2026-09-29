@@ -119,7 +119,11 @@ describe('the loopback rule — this machine, and only this machine', () => {
     expect('error' in result ? result.error : null).toMatch(reason);
   });
 
-  it('every refusal is ONE line — even when what was typed holds a newline', () => {
+  it('every refusal is ONE line — even when what was typed holds a newline, a NEL or a Unicode separator', () => {
+    // Built from code points: a literal U+2028 in this file would itself end a line of source.
+    const NEL = String.fromCodePoint(0x85);
+    const LS = String.fromCodePoint(0x2028);
+    const PS = String.fromCodePoint(0x2029);
     for (const given of [
       '192.168.21.111:5250',
       '10.0.0.5',
@@ -129,10 +133,16 @@ describe('the loopback rule — this machine, and only this machine', () => {
       '10.0.0.5\n:5250',
       '127.0.0.1:52\r\n50',
       'a:b:c\nd',
+      `10.0.0.5${LS}:5250`,
+      `10.0.0.5${NEL}:5250`,
+      `127.0.0.1:52${PS}50`,
     ]) {
       const result = parseCasparTarget(given);
       expect('error' in result, given).toBe(true);
-      if ('error' in result) expect(result.error).not.toMatch(/[\r\n]/);
+      if (!('error' in result)) continue;
+      for (const breaks of ['\r', '\n', NEL, LS, PS]) {
+        expect(result.error.includes(breaks), `${given} → ${result.error}`).toBe(false);
+      }
     }
   });
 });
@@ -252,8 +262,10 @@ describe('readCore — five reads, on one connection, and nothing else', () => {
 
   it('refuses any host but 127.0.0.1, whatever the caller’s types said', async () => {
     await expect(
-      readCore({ host: '192.168.21.114' as '127.0.0.1', port: 5250 }, ['VERSION']),
-    ).rejects.toThrow(/read on 127\.0\.0\.1 only — refused 192\.168\.21\.114/);
+      // Never a plant address here: were the guard to regress, this spec would dial the host it names.
+      // 127.0.0.2 is this machine, and nothing listens on its port 1.
+      readCore({ host: '127.0.0.2' as '127.0.0.1', port: 1 }, ['VERSION']),
+    ).rejects.toThrow(/read on 127\.0\.0\.1 only — refused 127\.0\.0\.2/);
   });
 
   it('a 501 is that read failed, and the next read is still asked', async () => {
@@ -363,6 +375,15 @@ describe('INFO CONFIG — whether the remaining time can show', () => {
         '<osc><predefined-clients><predefined-client><address>127.0.0.1</address><port>5253</port></predefined-client></predefined-clients></osc>',
       ),
     ).toEqual({ toClients: true, port: 6250 });
+  });
+
+  it('the setting is read as the core reads it: `1` and `true` turn OSC off; `True` does not parse, so it stays on', () => {
+    const osc = (value: string) =>
+      oscOf(`<osc><disable-send-to-amcp-clients>${value}</disable-send-to-amcp-clients></osc>`);
+    expect(osc('1')).toEqual({ toClients: false, port: 6250 });
+    expect(osc(' true ')).toEqual({ toClients: false, port: 6250 });
+    expect(osc('True')).toEqual({ toClients: true, port: 6250 });
+    expect(osc('false')).toEqual({ toClients: true, port: 6250 });
   });
 });
 

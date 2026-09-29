@@ -182,7 +182,16 @@ async function startLocalCaspar(localMod, target) {
 async function localCasparTarget(given) {
   const refusal = typeStrippingRefusal('--caspar');
   if (refusal !== null) return { error: refusal };
-  const localMod = await load(FAKES.localCaspar);
+  let localMod;
+  try {
+    localMod = await load(FAKES.localCaspar);
+  } catch (err) {
+    // Node 23.0–23.5 still needs a flag to run TypeScript: one line, never a stack.
+    const why = (err instanceof Error ? err.message : String(err)).split(/\r?\n/)[0];
+    return {
+      error: `--caspar could not load its station (${why}) — Node 23.6 or newer runs it without a flag.`,
+    };
+  }
   const target = localMod.parseCasparTarget(given);
   return 'error' in target ? target : { localMod, target };
 }
