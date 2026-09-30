@@ -209,7 +209,14 @@
       save; the restart refreshes with T1 and is signed in; D2 saw `[T0, T1]` — T0 once, never again.
       The residual the Playout's letter names is pinned beside it: a crash BEFORE the save leaves the
       spent T0, the restart presents it once, is refused, and says it needs an admin.
-- [ ] 5.3 A take on an `unlicensed` channel refused with the reason; control: a licensed channel takes.
+- [x] 5.3 A take on an `unlicensed` channel refused with the reason; control: a licensed channel takes.
+      `isUnlicensedPlaylist` and `unlicensedTakeRefusal` live once in `@cg/shared-ipc`; the console's
+      line (`channelAir.isUnlicensed`) now asks the same predicate; the runtime refuses FIRST in
+      `#takeImpl` (after the rehearse interlock, before any mutation or send), so `PUT BACK ON AIR` is
+      refused the same way; the verdict is read at take time from the D4 reader's rows through
+      `joinedPlaylist` — `stationChannelsFor`'s join. Tests: `unlicensed.integration` (the take
+      refused with the sentence, no channel-2 write, audited `failed`/`unlicensed` — control: channel 1
+      takes and `CG 1-80 PLAY` is on the wire; a removal passes; shown red first).
 - [ ] 5.4 A backup's loopback `casparHost` reaches the backup's host (pinned).
 - [ ] 5.5 No `Origin` and no `X-Apasai-Mirrored` on any request to the Playout (bridge and native).
       The BRIDGE half is done: `bridge-session.integration` reads every request the fake Playout

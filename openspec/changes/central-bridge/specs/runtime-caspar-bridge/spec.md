@@ -203,6 +203,21 @@ Playout SHALL carry no `Origin` and no `X-Apasai-Mirrored`. The sign-in SHALL be
 - **WHEN** the bridge signs in, polls D9 and reads D4 **THEN** no request the Playout received carries
   either header — control: the same log holds the bridge's D1 and a request carrying a bearer
 
+### Requirement: A take on a channel the Playout reports unlicensed SHALL be refused before anything is sent
+
+The bridge SHALL refuse a take — the operator's own and `PUT BACK ON AIR`'s — on a channel whose joined D4
+row reports `playlist: unlicensed`, before any command is sent and before anything mutates, answering
+`CH <n> is unlicensed in the Playout: it clears this channel every minute — nothing was sent.` and
+recording it as a failed take with the code `unlicensed`. A clear and a removal SHALL pass. The verdict
+SHALL come from the one predicate the console's unlicensed line uses, over the same join. With no
+catalogue read, nothing SHALL be refused on this ground.
+
+#### Scenario: Unlicensed refused, licensed takes
+
+- **WHEN** channel 2 is unlicensed in the Playout and rows are loaded on channels 1 and 2 **THEN** a take of
+  channel 2's row is refused with the sentence and nothing reaches channel 2 — control: channel 1's row
+  takes and `CG 1-80 PLAY` reaches the core; and a removal of channel 2's row passes
+
 ### Requirement: Every console on one CG Bridge SHALL see a press made on another within a second
 
 CG Bridge SHALL hold the one state every console acts on — there is no per-console copy to disagree —

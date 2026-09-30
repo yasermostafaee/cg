@@ -29,6 +29,7 @@ import {
   type StationChannelSource,
   type PermissionClass,
   grantsChannel,
+  isUnlicensedPlaylist,
   grantedChannels,
   holdsPermissionClass,
   AuthSignInFailureChannel,
@@ -1330,6 +1331,24 @@ export function stationChannelsFor(
 }
 
 /**
+ * 🔴 `CENTRAL-BRIDGE-01` (D12, rule 11) — **THE PLAYOUT'S `playlist` FOR ONE OF THIS STATION'S
+ * CHANNELS**, from the D4 row that JOINS it — the join {@link stationChannelsFor} makes (this
+ * station's host; the first row naming the channel wins), so the channel line the console shows
+ * and the take the bridge refuses read the same row. `null` with no catalogue or no joined row.
+ */
+export function joinedPlaylist(
+  catalogue: readonly CatalogueRow[] | null,
+  hosts: readonly string[],
+  channel: number,
+): string | null {
+  for (const row of catalogue ?? []) {
+    if (!hostJoinsStation(row.casparHost, hosts)) continue;
+    if (row.casparChannel === channel) return row.playlist ?? null;
+  }
+  return null;
+}
+
+/**
  * 🔴 `C-038` — **WHICH CHANNELS A REQUEST TOUCHES. The ONE resolver.**
  *
  * Exported for the census in `tests/authz-classes.integration.test.ts`, which walks every
@@ -2023,6 +2042,21 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
     ...(options.runtimeTuning ?? {}),
   });
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D12, rule 11) — a take on a channel the Playout reports `unlicensed` is
+    refused before anything is sent. The verdict is read at TAKE time from the D4 reader's last rows,
+    joined as the console's line joins them; with no catalogue (auth OFF, the Playout unread)
+    nothing is unlicensed and nothing changes.
+  */
+  runtime.useUnlicensedCheck((channel) =>
+    isUnlicensedPlaylist(
+      joinedPlaylist(
+        playoutCatalogue?.rows() ?? null,
+        configuredCasparHosts(runtime.config()),
+        channel,
+      ),
+    ),
+  );
   /*
     🔴 `PLAYOUT-SOURCES-01` — THE STATION'S SOURCES, FROM THE PLAYOUT. D10 and the bound media are
     read with the signed-in operator's bearer, checked at use (D4's rule 3); with auth off a test

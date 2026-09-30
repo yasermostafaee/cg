@@ -71,6 +71,25 @@ export type ChannelOutput = z.infer<typeof ChannelOutputSchema>;
 /** The playlist state, in the Playout's word. A string, not an enum — see above. */
 export const ChannelPlaylistSchema = z.string().min(1);
 
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D12, the Playout team's rule 11) — **THE ONE PLAYLIST STATE THAT IS NOT
+ * JUST INFORMATION.** The Playout clears an unlicensed channel every minute (`CLEAR <ch>`), our
+ * layers with it. ONE predicate, for the console's line and strip mark AND the bridge's take
+ * refusal, so what the console warns of and what the bridge refuses cannot come apart (golden rule
+ * 6).
+ */
+export function isUnlicensedPlaylist(playlist: string | null | undefined): boolean {
+  return playlist === 'unlicensed';
+}
+
+/**
+ * The refusal of a take on an unlicensed channel: it names the channel, says why, and says nothing
+ * was sent (`R-006`). Built once, for the bridge and any surface quoting it (`R-017`).
+ */
+export function unlicensedTakeRefusal(channel: number): string {
+  return `CH ${String(channel)} is unlicensed in the Playout: it clears this channel every minute — nothing was sent.`;
+}
+
 /** Where a discovered channel came from, in the order the sources are consulted. */
 export const STATION_CHANNEL_SOURCES = ['catalogue', 'bank', 'channel-settings'] as const;
 export type StationChannelSource = (typeof STATION_CHANNEL_SOURCES)[number];

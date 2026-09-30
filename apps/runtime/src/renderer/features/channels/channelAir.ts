@@ -1,4 +1,4 @@
-import type { ChannelOutput } from '@cg/shared-ipc';
+import { isUnlicensedPlaylist, type ChannelOutput } from '@cg/shared-ipc';
 
 /**
  * 🔴 `UI-POLISH-01` G — **A CHANNEL'S AIR, AS THE PLAYOUT STATES IT: two facts, and only one of
@@ -74,9 +74,11 @@ export function airLabel(air: ChannelAir): string {
  * our air, so the channel gets the AMBER strip mark (`MULTI-CHANNEL-01` L) and one channel-scoped
  * line. We have asked the Playout whether clearing our layers is intended; if they stop, this
  * becomes an ordinary neutral tag and this predicate goes.
+ *
+ * `CENTRAL-BRIDGE-01` (D12) — through the ONE predicate the bridge's take refusal asks too.
  */
 export function isUnlicensed(air: ChannelAir): boolean {
-  return air.playlist === 'unlicensed';
+  return isUnlicensedPlaylist(air.playlist);
 }
 
 /** The channel-scoped line an unlicensed channel's view carries. */

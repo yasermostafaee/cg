@@ -144,6 +144,7 @@ import {
   isInCgBands,
   ledgerChannels,
   templateAdmitsPassTiming,
+  unlicensedTakeRefusal,
 } from '@cg/shared-ipc';
 import {
   operatorActor,
@@ -4509,6 +4510,17 @@ export class CasparRuntime {
     }
   }
 
+  /**
+   * `CENTRAL-BRIDGE-01` (D12) — whether the Playout reports a channel `unlicensed` (the bridge's D4
+   * reader, joined to this station's host). Absent — no Playout, a test — nothing is unlicensed.
+   */
+  #unlicensed: (channel: number) => boolean = () => false;
+
+  /** `CENTRAL-BRIDGE-01` (D12) — hand the runtime the Playout's unlicensed verdict. */
+  useUnlicensedCheck(check: (channel: number) => boolean): void {
+    this.#unlicensed = check;
+  }
+
   async take(itemId: string): Promise<TakeVerdict> {
     const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
       this.#takeImpl(itemId),
@@ -4586,6 +4598,22 @@ export class CasparRuntime {
      * mutate nothing, and retiring a parked restore is a mutation.
      */
     if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D12, the Playout team's rule 11) — AN UNLICENSED CHANNEL. The Playout
+      clears it every minute (`CLEAR <ch>`), ours with it, so a take there puts a graphic on air for
+      at most a minute and then loses it with no word from anyone. Refused HERE, before anything is
+      sent and before anything mutates, with the reason; a clear or a removal is not a take and
+      passes. `PUT BACK ON AIR` re-takes through this method, so it is refused the same way. The ONE
+      predicate (`isUnlicensedPlaylist`) is the console's line's too.
+    */
+    const unlicensed = this.channelsForItem(itemId).find((channel) => this.#unlicensed(channel));
+    if (unlicensed !== undefined) {
+      return {
+        accepted: false,
+        errorCode: 'unlicensed',
+        message: unlicensedTakeRefusal(unlicensed),
+      };
+    }
     /*
       🔴 `FIELD-FIXES-01-A` DECISION 2 — **A ROW ALREADY ON AIR IS NOT TAKEN, and neither is one
       whose previous take has not resolved.** Refused HERE, for every console, with nothing sent.
