@@ -30,7 +30,11 @@
       `6250` refused; the bridge-wide port over A and B; an undeclared channel's occupancy from `INFO`.
       Tests that built a deaf bridge by pointing the core elsewhere now also have the core refuse the
       subscribe (their intent kept); three restart tests gained the core restart their "next take" needs.
-      Bridge suite 1479/1479, Runtime 2120/2120, dev station 54/54.
+      Bridge suite 1479/1479, Runtime 2120/2120, dev station 54/54. **Linux e2e discharged** on `668faa8b`
+      (carries `4d7d1bfd` and `5b54c84f`): https://github.com/yasermostafaee/cg/actions/runs/36664145921 —
+      `completed`/`success`, the `ci` job's `Test` step and the `e2e` job's `E2E` step both RAN. (The first
+      run, on `4d7d1bfd`, was red on the Runtime suite's 10-min budget — 307 passed, 3 never ran; `668faa8b`
+      measured and raised it.)
 
 ## 2. The start check and a core restart (rules 2–3, `C-047`)
 
