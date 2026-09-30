@@ -702,6 +702,20 @@ async function controlDrive() {
     return null;
   });
   if (page !== null) {
+    /*
+      Wait for the console to COMMIT, never a fixed time. `/json/list` names the console URL as soon
+      as the shell navigates, while the window still holds its initial blank document (origin "null",
+      not secure, no text). Run 36691878177 was a slow runner — its bridge answered 16 s after launch,
+      against 4.7 s the run before — and the fixed 4 s sleep probed THAT document; three seconds later
+      first-run passed on the same page. The origin is still asserted below: a console that never
+      commits fails it with whatever the window holds.
+    */
+    await until(
+      'the console to commit its own origin',
+      () => page.evaluate(() => location.origin).then((origin) => origin === CONSOLE),
+      60_000,
+    ).catch(() => null);
+    // Then the settle the probe always had: fonts and the first keyboard asks.
     await sleep(4000);
     const facts = await page.evaluate(consoleProbe);
     fs.writeFileSync(path.join(out, 'control-facts.json'), JSON.stringify(facts, null, 2));
