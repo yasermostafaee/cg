@@ -468,20 +468,58 @@ function localCasparLines(address, local) {
 }
 
 /**
- * The launcher's own flags: `--playout <url>`, `--fake`, `--caspar <host:port>`, `--no-open`.
- * Anything else is refused.
+ * 🔴 `CENTRAL-BRIDGE-01` — **`--playout-only`: THE FAKE PLAYOUT ALONE**, in front of this machine's own
+ * CasparCG, for a CG Bridge INSTALLED here (the service) to use. The station runs instead of CG Bridge
+ * (they bind the same ports), so a machine testing the installed service had no Playout at all: this
+ * starts the fake one without a bridge or a console, where the service looks for its Playout when the
+ * installer is given no `/PLAYOUT=` — `http://127.0.0.1:8080` — unless `--playout-port` says otherwise.
+ */
+export const PLAYOUT_ONLY_PORT = 8080;
+
+/** What `--playout-only` prints: where the fake is, who signs in, and what it stands in front of. */
+export function playoutOnlyLines(fake) {
+  return [
+    '[dev-station] the fake Playout ALONE — for CG Bridge installed on this machine; no bridge, no console here',
+    `  Playout  ${fake.address}`,
+    `  sign in  ${fake.username} · ${fake.password}  (a station admin: sign CG Bridge in with it once)`,
+    ...localCasparLines(fake.caspar, fake.local),
+    `  CG Bridge finds it with no /PLAYOUT= on port ${String(PLAYOUT_ONLY_PORT)}; on any other, install with /PLAYOUT=${fake.address}`,
+    '  Its signing keys are new on every start: sign CG Bridge and the consoles in again after one.',
+    '  Ctrl+C stops it.',
+  ];
+}
+
+/**
+ * The launcher's own flags: `--playout <url>`, `--fake`, `--caspar <host:port>`, `--no-open`,
+ * `--playout-only`, `--playout-port <port>`. Anything else is refused.
  *
  * `DEV-LOCAL-CASPAR-01` — `--caspar` is carried as TYPED, and goes with `--fake` only. Whether it
  * names this machine is not decided here: the ONE loopback rule is `parseCasparTarget` in
  * `local-caspar-station.ts`, which the launcher asks before it probes, builds or starts anything.
  */
 export function parseArgs(argv) {
-  const out = { playout: undefined, fake: false, open: true, caspar: undefined };
+  const out = {
+    playout: undefined,
+    fake: false,
+    open: true,
+    caspar: undefined,
+    playoutOnly: false,
+    playoutPort: undefined,
+  };
+  let port;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--') continue;
     if (arg === '--fake') out.fake = true;
     else if (arg === '--no-open') out.open = false;
+    else if (arg === '--playout-only') out.playoutOnly = true;
+    else if (arg === '--playout-port') {
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith('--'))
+        return { error: '--playout-port needs a port: --playout-port 8080.' };
+      port = value;
+      i++;
+    } else if (arg.startsWith('--playout-port=')) port = arg.slice('--playout-port='.length);
     else if (arg === '--playout') {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--'))
@@ -498,12 +536,26 @@ export function parseArgs(argv) {
     } else if (arg.startsWith('--caspar=')) out.caspar = arg.slice('--caspar='.length);
     else
       return {
-        error: `${arg} is not a dev:station flag (--playout <url>, --fake, --caspar <host:port>, --no-open).`,
+        error:
+          `${arg} is not a dev:station flag (--playout <url>, --fake, --caspar <host:port>, ` +
+          '--no-open, --playout-only, --playout-port <port>).',
       };
   }
   if (out.fake && out.playout !== undefined)
     return { error: '--fake and --playout are one or the other.' };
   if (out.caspar !== undefined && !out.fake)
     return { error: '--caspar goes with --fake: pnpm dev:station --fake --caspar 127.0.0.1:5250.' };
+  if (out.playoutOnly && out.caspar === undefined)
+    return {
+      error:
+        '--playout-only goes with --fake --caspar: ' +
+        'pnpm dev:station --fake --caspar 127.0.0.1:5250 --playout-only.',
+    };
+  if (port !== undefined) {
+    if (!out.playoutOnly) return { error: '--playout-port goes with --playout-only.' };
+    const n = /^\d{1,5}$/.test(port) ? Number(port) : NaN;
+    if (!(n >= 1 && n <= 65535)) return { error: `${port} is not a port — --playout-port 8080.` };
+    out.playoutPort = n;
+  }
   return out;
 }

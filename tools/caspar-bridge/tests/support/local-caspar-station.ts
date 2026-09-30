@@ -596,6 +596,11 @@ export interface LocalCasparModules {
 export interface LocalCasparOptions {
   /** TEST-ONLY — the clock the 30 s re-read counts on. `Date.now` by default. */
   readonly now?: () => number;
+  /**
+   * `CENTRAL-BRIDGE-01` — the fake Playout's port (ephemeral by default). `pnpm dev:station
+   * --playout-only` fixes it where an installed CG Bridge looks for its Playout.
+   */
+  readonly playoutPort?: number;
 }
 
 /** What the start's reads found — the banner's line about the core. */
@@ -731,6 +736,7 @@ export async function startLocalCasparStation(
     // As `fake-station.ts`: on an all-loopback station the admin's sign-in lets this machine in.
     sealOnLoopback: false,
     beforeMediaSearch: reread,
+    ...(options.playoutPort !== undefined ? { port: options.playoutPort } : {}),
   });
   served = playout;
   playout.setChannels(catalogueFrom(channels));

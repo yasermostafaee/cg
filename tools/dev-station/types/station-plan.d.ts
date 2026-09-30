@@ -140,9 +140,24 @@ declare module '*station-plan.mjs' {
       | undefined;
     log?: string | undefined;
   }): string[];
-  export function parseArgs(
-    argv: readonly string[],
-  ):
-    | { playout: string | undefined; fake: boolean; open: boolean; caspar: string | undefined }
+  export function parseArgs(argv: readonly string[]):
+    | {
+        playout: string | undefined;
+        fake: boolean;
+        open: boolean;
+        caspar: string | undefined;
+        /** `CENTRAL-BRIDGE-01` — the fake Playout alone, for an installed CG Bridge. */
+        playoutOnly: boolean;
+        playoutPort: number | undefined;
+      }
     | { error: string };
+  /** `CENTRAL-BRIDGE-01` — where `--playout-only` listens unless told: CG Bridge's default Playout. */
+  export const PLAYOUT_ONLY_PORT: number;
+  export function playoutOnlyLines(fake: {
+    address: string;
+    username: string;
+    password: string;
+    caspar: string;
+    local: LocalCasparBanner;
+  }): string[];
 }

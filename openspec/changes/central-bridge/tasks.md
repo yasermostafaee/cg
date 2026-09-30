@@ -459,6 +459,18 @@
 - [x] 8.2 The fake Playout: loopback AMCP, `OSC SUBSCRIBE`, a rotating refresh token, an `unlicensed` channel.
       Built with 1.1 (`OSC SUBSCRIBE` on `@cg/amcp-mock`), 5.3 (an `unlicensed` channel), 5.1 and A.1
       (the rotating refresh token, `2.9.2`'s reuse window) — the same fakes `--fake` composes.
+- [x] 8.3 The fake Playout ALONE for CG Bridge installed on the same machine (`R-067`; the report's
+      "on his own PC"):
+      `pnpm dev:station --fake --caspar 127.0.0.1:5250 --playout-only [--playout-port <port>]`
+      starts only the fake Playout shaped from this machine's CasparCG — no
+      bridge, no console, no state folder — on `127.0.0.1:8080` (where the service looks with no
+      `/PLAYOUT=`) unless told, prints its address and the station admin, and stops on Ctrl+C. Found
+      while writing the owner's test: the station runs INSTEAD of CG Bridge, so a machine testing the
+      installed service had no Playout at all. `FakePlayoutOptions.port`, `LocalCasparOptions.playoutPort`.
+      Tests: `station-plan` (the flags and each misuse; what it prints), `local-caspar-station` (the port
+      asked for is the fake's, and it answers there — control: none asked, another). Spec:
+      `platform-dev-station` ADDED. Not run on the dev host: it reads the core on 5250, which is the
+      owner's.
 - **The Linux e2e for 6.5–8.1 WENT RED** on `c7509207`:
   https://github.com/yasermostafaee/cg/actions/runs/36719814205 — the `E2E` step RAN and failed (6
   failed, 1 flaky, 303 passed); the `ci` job was green. Two causes, both in test code, both fixed in

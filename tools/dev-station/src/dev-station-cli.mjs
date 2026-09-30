@@ -12,6 +12,10 @@
  *                                     the fake Playout in front of THIS machine's own CasparCG: its
  *                                     channels, its media library, real video in its own window
  *                                     (DEV-LOCAL-CASPAR-01; loopback only; Node 23+)
+ *   pnpm dev:station --fake --caspar 127.0.0.1:5250 --playout-only [--playout-port 8080]
+ *                                     that fake Playout ALONE, on a fixed port, for CG Bridge
+ *                                     INSTALLED on this machine to use — no bridge, no console
+ *                                     (CENTRAL-BRIDGE-01)
  *   pnpm dev:station --no-open        do not open the browser
  *
  * It runs INSTEAD of CG Bridge on this machine, never beside it: they bind the same ports (UDP 6251
@@ -34,12 +38,14 @@ import { probeStation, writeConsoleStub } from './station-processes.mjs';
 import {
   BRIDGE_CONSOLE_PORT,
   CONSOLE_URL,
+  PLAYOUT_ONLY_PORT,
   bridgeArgs,
   buildArgs,
   devStateDir,
   fakeModulePaths,
   fakeStateName,
   parseArgs,
+  playoutOnlyLines,
   previousStateDir,
   setAddressArgs,
   stateOverlap,
@@ -154,11 +160,12 @@ async function startFake() {
  * exactly as it would name a real Playout's. Its target was checked by the module's own loopback rule
  * before anything else ran (`main`).
  */
-async function startLocalCaspar(localMod, target) {
+async function startLocalCaspar(localMod, target, options = {}) {
   const playoutMod = await load(FAKES.playout);
   const station = await localMod.startLocalCasparStation(
     { startFakePlayout: playoutMod.startFakePlayout },
     target,
+    options,
   );
   return {
     address: station.playout.baseUrl,
@@ -318,6 +325,35 @@ function openBrowser(url) {
   child.unref();
 }
 
+/**
+ * `CENTRAL-BRIDGE-01` — `--fake --caspar … --playout-only`: the fake Playout in front of this machine's
+ * CasparCG on a FIXED loopback port, until Ctrl+C. Nothing else starts, so it can run beside the CG
+ * Bridge service instead of in its place.
+ */
+async function playoutOnly(local, port) {
+  let fake;
+  try {
+    fake = await startLocalCaspar(local.localMod, local.target, { playoutPort: port });
+  } catch (err) {
+    const why = (err instanceof Error ? err.message : String(err)).split(/\r?\n/)[0];
+    say(
+      `[dev-station] the fake Playout did not start on 127.0.0.1:${String(port)} (${why}) — ` +
+        'if that port is taken, --playout-port <port> picks another.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  for (const line of playoutOnlyLines(fake)) say(line);
+  await new Promise((resolve) => {
+    process.once('SIGINT', resolve);
+    process.once('SIGTERM', resolve);
+  });
+  say('[dev-station] stopping the fake Playout');
+  await fake.stop();
+  say('[dev-station] stopped.');
+  process.exit(0);
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if ('error' in options) {
@@ -345,6 +381,12 @@ async function main() {
       return;
     }
     local = checked;
+  }
+  // `CENTRAL-BRIDGE-01` — the fake Playout alone, for the CG Bridge installed here: no build, no
+  // bridge, no console and no state folder of its own (`playoutOnlyLines` says what it is).
+  if (options.playoutOnly && local !== null) {
+    await playoutOnly(local, options.playoutPort ?? PLAYOUT_ONLY_PORT);
+    return;
   }
   // `--fake` keeps its own station, so a fake run never replaces the remembered Playout.
   const stateDir = options.fake ? path.join(root, fakeStateName(options)) : root;

@@ -1287,6 +1287,7 @@ class FakePlayoutServer implements FakePlayout {
   ) {
     this.#sealOnLoopback = options.sealOnLoopback ?? true;
     this.#listenHost = options.listenHost ?? '127.0.0.1';
+    this.#port = options.port ?? 0;
     this.#now = options.now ?? ((): number => Date.now());
     this.#grants = options.grants ?? {};
     this.#beforeMediaSearch = options.beforeMediaSearch;
@@ -1313,9 +1314,9 @@ class FakePlayoutServer implements FakePlayout {
     });
   }
 
-  /** Bind an ephemeral loopback port. Called once, by {@link startFakePlayout}. */
+  /** Bind the port asked for — an ephemeral one unless told. Called once, by {@link startFakePlayout}. */
   async start(): Promise<void> {
-    await listen(this.#server, 0, this.#listenHost);
+    await listen(this.#server, this.#port, this.#listenHost);
     // Flagged BEFORE the address is read, so the failure path below can actually close the
     // listener it just opened — `stop()` is a no-op while this flag is false.
     this.#listening = true;
@@ -2066,6 +2067,12 @@ export interface FakePlayoutOptions {
    * so a spec can put a stale refresh past the 10 s window without sleeping.
    */
   readonly now?: () => number;
+  /**
+   * `CENTRAL-BRIDGE-01` — listen on THIS port rather than an ephemeral one: `pnpm dev:station
+   * --playout-only` puts the fake where an installed CG Bridge's configuration names its Playout
+   * (`http://127.0.0.1:8080` by default), so its address does not change between runs.
+   */
+  readonly port?: number;
 }
 
 export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {

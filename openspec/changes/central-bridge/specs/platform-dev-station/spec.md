@@ -26,3 +26,24 @@ folder SHALL overlap neither CG Control's (`%APPDATA%\CG Control`) nor CG Bridge
 
 - **WHEN** a dev run ends **THEN** CG Control's and CG Bridge's folders are byte-identical to before, and
   the dev station's own folder holds its state
+
+### Requirement: The dev station SHALL run the fake Playout alone for a CG Bridge installed on the same machine
+
+`pnpm dev:station --fake --caspar <this machine's core> --playout-only` SHALL start ONLY the fake
+Playout shaped from this machine's own CasparCG — no bridge, no console and no state folder — on a fixed
+loopback port: `8080`, where an installed CG Bridge looks for its Playout when its installer is given no
+`/PLAYOUT=`, unless `--playout-port <port>` names another. It SHALL print the Playout's address and the
+station admin who signs in, and SHALL stop on Ctrl+C. `CENTRAL-BRIDGE-01`: the station runs instead of CG
+Bridge (the two bind the same ports), so without this a machine testing the installed service had no
+Playout at all. `--playout-only` SHALL go with `--fake --caspar` only, and `--playout-port` with
+`--playout-only` only; a misuse SHALL be refused in one line.
+
+#### Scenario: The fake Playout where CG Bridge looks for it
+
+- **WHEN** the station is started with `--playout-only` and a port **THEN** the fake Playout answers on
+  that port — control: started without one, it takes another
+
+#### Scenario: Misuse
+
+- **WHEN** `--playout-only` is given without `--fake --caspar`, or `--playout-port` without
+  `--playout-only`, or a port that is not one **THEN** the start is refused in one line

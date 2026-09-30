@@ -131,6 +131,17 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
+function freeTcpPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as net.AddressInfo;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function waitFor(cond: () => boolean, what: string, ms = 10_000): Promise<void> {
@@ -306,6 +317,21 @@ describe('the station, read from the core', () => {
     });
     expect(station.notes).toEqual([]);
     expect(station.marker).toBe('cg-dev-local-caspar-dev-only');
+  });
+
+  it('`CENTRAL-BRIDGE-01` — a port asked for is the fake Playout’s (`--playout-only`); CONTROL: none asked, another', async () => {
+    const { core } = await ownersCore();
+    const port = await freeTcpPort();
+    const target = { host: '127.0.0.1', port: core.amcpPort } as const;
+    station = await startLocalCasparStation(MODULES, target, { playoutPort: port });
+    expect(station.playout.baseUrl).toBe(`http://127.0.0.1:${String(port)}`);
+    // …and it answers there: what an installed CG Bridge configured with that address reads.
+    expect((await fetch(station.playout.jwksUrl)).status).toBe(200);
+    await station.stop();
+    station = null;
+
+    station = await startLocalCasparStation(MODULES, target);
+    expect(station.playout.baseUrl).not.toBe(`http://127.0.0.1:${String(port)}`);
   });
 
   it('🔴 D4 is the core’s channels — CH n · local, output unknown — and D10 is empty, as the console sees them', async () => {

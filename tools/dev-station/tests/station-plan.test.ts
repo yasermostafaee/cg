@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BRIDGE_CONSOLE_PORT,
   CONSOLE_URL,
+  PLAYOUT_ONLY_PORT,
   STATION_PORTS,
   assess,
   banner,
@@ -20,6 +21,7 @@ import {
   parseArgs,
   parseNetstat,
   parseTasklist,
+  playoutOnlyLines,
   previousStateDir,
   setAddressArgs,
   stateOverlap,
@@ -398,7 +400,12 @@ describe('who holds what — the Windows readers', () => {
 
 describe('the flags', () => {
   it('--playout <url>, --fake, --no-open; anything else refused', () => {
-    expect(parseArgs([])).toEqual({ playout: undefined, fake: false, open: true });
+    expect(parseArgs([])).toEqual({
+      playout: undefined,
+      fake: false,
+      open: true,
+      playoutOnly: false,
+    });
     expect(parseArgs(['--', '--playout', '192.168.21.111'])).toMatchObject({
       playout: '192.168.21.111',
     });
@@ -416,6 +423,7 @@ describe('`DEV-LOCAL-CASPAR-01` — `--fake --caspar <host:port>`', () => {
       fake: true,
       open: true,
       caspar: '127.0.0.1:5250',
+      playoutOnly: false,
     });
     expect(parseArgs(['--fake', '--caspar=[::1]:5250', '--no-open'])).toMatchObject({
       caspar: '[::1]:5250',
@@ -531,5 +539,66 @@ describe('`FIELD-FIXES-01` H — what the console server is started with', () =>
       CG_BRIDGE_CONSOLE: 'http://127.0.0.1:5175',
       CG_CONSOLE_HOST: '127.0.0.1',
     });
+  });
+});
+
+describe('`CENTRAL-BRIDGE-01` — `--playout-only`: the fake Playout alone, for CG Bridge installed here', () => {
+  const local = ['--fake', '--caspar', '127.0.0.1:5250'];
+
+  it('goes with --fake --caspar, on CG Bridge’s default Playout port unless --playout-port says', () => {
+    expect(parseArgs([...local, '--playout-only'])).toMatchObject({
+      caspar: '127.0.0.1:5250',
+      playoutOnly: true,
+      playoutPort: undefined,
+    });
+    expect(PLAYOUT_ONLY_PORT).toBe(8080);
+    expect(parseArgs([...local, '--playout-only', '--playout-port', '18080'])).toMatchObject({
+      playoutPort: 18080,
+    });
+    expect(parseArgs([...local, '--playout-only', '--playout-port=18080'])).toMatchObject({
+      playoutPort: 18080,
+    });
+    // Control: without it, the same flags are a whole station.
+    expect(parseArgs(local)).toMatchObject({ playoutOnly: false, playoutPort: undefined });
+  });
+
+  it('each misuse is refused in one line', () => {
+    expect(parseArgs(['--playout-only'])).toEqual({
+      error:
+        '--playout-only goes with --fake --caspar: ' +
+        'pnpm dev:station --fake --caspar 127.0.0.1:5250 --playout-only.',
+    });
+    expect(parseArgs(['--fake', '--playout-only'])).toHaveProperty('error');
+    expect(parseArgs([...local, '--playout-port', '8080'])).toEqual({
+      error: '--playout-port goes with --playout-only.',
+    });
+    expect(parseArgs([...local, '--playout-only', '--playout-port'])).toEqual({
+      error: '--playout-port needs a port: --playout-port 8080.',
+    });
+    for (const bad of ['0', '65536', 'eighty', '-1'])
+      expect(parseArgs([...local, '--playout-only', `--playout-port=${bad}`]), bad).toEqual({
+        error: `${bad} is not a port — --playout-port 8080.`,
+      });
+  });
+
+  it('says where the fake is, who signs it in, and that no bridge runs here', () => {
+    const text = playoutOnlyLines({
+      address: 'http://127.0.0.1:8080',
+      username: 'cg-admin',
+      password: 'fixture-password',
+      caspar: '127.0.0.1:5250',
+      local: {
+        version: '2.5.0 69e8ad5 Stable',
+        channels: [{ channel: 1, format: '1080i5000' }],
+        mediaFolder: null,
+        clips: 0,
+        stills: 0,
+      },
+    }).join('\n');
+    expect(text).toContain('Playout  http://127.0.0.1:8080');
+    expect(text).toContain('cg-admin · fixture-password');
+    expect(text).toContain('no bridge, no console here');
+    expect(text).toContain('CasparCG 127.0.0.1:5250');
+    expect(text).toContain('Ctrl+C stops it.');
   });
 });
