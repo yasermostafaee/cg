@@ -70,7 +70,7 @@ export function ConnectionBanner({
 }: {
   /** Start the console again (a test passes its own: jsdom's `location.reload` is fixed). */
   reload?: () => void;
-} = {}): JSX.Element | null {
+}): JSX.Element | null {
   const link = useLink();
   // `CENTRAL-BRIDGE-01` §1 C — WHERE CG Bridge was looked for, and why it did not answer.
   const address = window.cg.link.bridgeAddress?.() ?? null;
