@@ -4,6 +4,7 @@ import { decodeCgData } from './cg-data.js';
 import { clipElapsedAt } from './layer-state.js';
 import {
   FULL_FRAME,
+  type AmcpConnection,
   type AmcpHandler,
   type AmcpRequest,
   type HandlerContext,
@@ -17,7 +18,7 @@ import {
  * Built-in handler set. Models the subset of CasparCG 2.3.x AMCP that
  * @cg/caspar-client exercises: VERSION, INFO, PLAY [HTML], CG ADD,
  * CG INVOKE, CG STOP, CG REMOVE, CLEAR — and, for `DEV-LOCAL-CASPAR-01`'s
- * reads of a real core, INFO PATHS and CLS.
+ * reads of a real core, INFO PATHS and CLS; for `CENTRAL-BRIDGE-01`, OSC SUBSCRIBE.
  *
  * Anything else is a `400 ERROR`. Tests can override individual verbs via
  * `MockHandle.setHandler`.
@@ -38,7 +39,37 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
   m.set('MIXER', handleMixer);
   m.set('ADD', handleAdd);
   m.set('REMOVE', handleRemove);
+  m.set('OSC', handleOsc);
   return m;
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` rule 7 — **`OSC SUBSCRIBE <port>` / `OSC UNSUBSCRIBE <port>`, as a stock
+ * 2.5.0 core has them** (`AMCPCommandsImpl.cpp` `osc_subscribe_command`): the core sends its WHOLE
+ * OSC stream — every channel, no filter — to `<the connection's own address>:<port>`, bound to the
+ * connection as a lifecycle object, so it ends when the connection does and a client re-sends it
+ * after every reconnect. The reply is `202 OSC SUBSCRIBE OK`. A second `SUBSCRIBE` of the same port
+ * on one connection replaces the first (one subscription, not two); `UNSUBSCRIBE` releases it.
+ *
+ * On the Playout's machine this is how a bridge gets OSC at all: UDP `127.0.0.1:6250` belongs to
+ * the Playout's engine, so the bridge binds another port (default `6251`) and asks for it here.
+ */
+function handleOsc(req: AmcpRequest, ctx: HandlerContext, conn?: AmcpConnection): AmcpResponse {
+  const sub = (req.args[0] ?? '').toUpperCase();
+  if (sub !== 'SUBSCRIBE' && sub !== 'UNSUBSCRIBE') return { kind: 'err', code: 400, verb: 'OSC' };
+  const portText = req.args[1];
+  if (portText === undefined) return { kind: 'err', code: 402, verb: `OSC ${sub}` };
+  const port = Number(portText);
+  if (!/^\d+$/.test(portText) || port < 1 || port > 65535 || conn === undefined) {
+    return { kind: 'err', code: 403, verb: `OSC ${sub}` };
+  }
+  const key = `osc_subscribe_${String(port)}`;
+  if (sub === 'SUBSCRIBE') {
+    conn.bindLifecycle(key, ctx.subscribeOsc(conn.remoteAddress, port));
+  } else {
+    conn.unbindLifecycle(key);
+  }
+  return { kind: 'ok', code: 202, verb: `OSC ${sub} OK` };
 }
 
 /**

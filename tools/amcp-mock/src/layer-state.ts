@@ -75,6 +75,14 @@ export class LayerRegistry {
   onStage(): readonly LayerState[] {
     return [...this.slots.values()].filter((l) => l.onStage);
   }
+
+  /**
+   * `CENTRAL-BRIDGE-01` rule 3 — a restarted core is a new process: no layer, no producer and no
+   * mixer transform survives it, 50–99 included.
+   */
+  reset(): void {
+    this.slots.clear();
+  }
 }
 
 function keyOf(slot: LayerSlot): string {

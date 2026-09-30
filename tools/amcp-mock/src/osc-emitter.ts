@@ -24,7 +24,13 @@ import type { OscArgValue } from './types.js';
 export class OscEmitter {
   private socket: dgram.Socket | null = null;
   private timer: NodeJS.Timeout | null = null;
-  private readonly observers = new Set<{ host: string; port: number }>();
+  /**
+   * `CENTRAL-BRIDGE-01` — every destination, keyed by `host:port` and REFERENCE-COUNTED, as the
+   * core's OSC client keeps its subscribers (`osc::client::get_subscription_token`): two holders of
+   * one endpoint — a predefined client and an `OSC SUBSCRIBE` to the same address — get ONE copy
+   * of each packet, and the endpoint stops only when its last holder lets go.
+   */
+  private readonly observers = new Map<string, { host: string; port: number; holders: number }>();
   private boundPort = 0;
 
   constructor(
@@ -45,7 +51,7 @@ export class OscEmitter {
         this.socket = sock;
         this.boundPort = addr.port;
         if (defaultPort > 0) {
-          this.observers.add({ host: defaultHost, port: defaultPort });
+          this.subscribe(defaultHost, defaultPort);
         }
         this.startTimer();
         resolve(this.boundPort);
@@ -55,14 +61,40 @@ export class OscEmitter {
 
   /** Add a UDP destination. CasparCG's `<osc><predefined-clients>` analogue. */
   addObserver(host: string, port: number): void {
-    this.observers.add({ host, port });
+    this.subscribe(host, port);
+  }
+
+  /**
+   * `CENTRAL-BRIDGE-01` — hold `host:port` as a destination until the returned release is called:
+   * what `OSC SUBSCRIBE` and the core's per-client default subscription each take, and give back
+   * when their AMCP connection ends. Releasing twice releases once.
+   */
+  subscribe(host: string, port: number): () => void {
+    const key = `${host}:${String(port)}`;
+    const held = this.observers.get(key);
+    if (held === undefined) this.observers.set(key, { host, port, holders: 1 });
+    else held.holders += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const entry = this.observers.get(key);
+      if (entry === undefined) return;
+      entry.holders -= 1;
+      if (entry.holders <= 0) this.observers.delete(key);
+    };
+  }
+
+  /** `CENTRAL-BRIDGE-01` — every destination now, one per endpoint (a test's instrument). */
+  destinations(): readonly { host: string; port: number }[] {
+    return [...this.observers.values()].map((o) => ({ host: o.host, port: o.port }));
   }
 
   /** Encode + send `messages` as one bundle to every observer. */
   sendBundle(messages: readonly OscMessage[]): void {
     if (this.socket === null || messages.length === 0) return;
     const buf = encodeBundle(messages);
-    for (const obs of this.observers) {
+    for (const obs of this.observers.values()) {
       this.socket.send(buf, obs.port, obs.host);
     }
   }

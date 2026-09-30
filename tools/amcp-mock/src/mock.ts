@@ -78,6 +78,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   const ctx: HandlerContext = {
     channelCount,
     now,
+    subscribeOsc(oscSubscriberHost: string, oscSubscriberPort: number): () => void {
+      return emitter.subscribe(oscSubscriberHost, oscSubscriberPort);
+    },
     paths: {
       media: opts.paths?.media ?? 'media/',
       initial: opts.paths?.initial ?? 'C:\\casparcg/',
@@ -195,9 +198,24 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
 
   // `ROUTE-PLATES-01` — every received line, stamped with the mock's clock (the timing instrument).
   const received: ReceivedCommand[] = [];
-  const server = new AmcpServer(handlers, ctx, onTrace, (line) => {
-    received.push({ at: now(), line });
-  });
+  // `CENTRAL-BRIDGE-01` — the core's default per-client subscription, when this mock models one.
+  const clientOscPort = opts.oscToAmcpClientsPort;
+  const server = new AmcpServer(
+    handlers,
+    ctx,
+    onTrace,
+    (line) => {
+      received.push({ at: now(), line });
+    },
+    clientOscPort === undefined
+      ? undefined
+      : (conn) => {
+          conn.bindLifecycle(
+            'osc_default_client',
+            emitter.subscribe(conn.remoteAddress, clientOscPort),
+          );
+        },
+  );
   server.setAdmission(opts.admit ?? null);
   let boundAmcp: number;
   try {
@@ -316,6 +334,25 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     get amcpClientCount(): number {
       return server.clientCount;
+    },
+    oscDestinations(): readonly { host: string; port: number }[] {
+      return emitter.destinations();
+    },
+    async restartCore(options: { readonly downMs?: number } = {}): Promise<void> {
+      await server.suspend();
+      registry.reset();
+      deferredMixer.clear();
+      cgAdds.clear();
+      cgUpdates.clear();
+      addTokens.clear();
+      pageTokens.clear();
+      const downMs = options.downMs ?? 0;
+      if (downMs > 0) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, downMs);
+        });
+      }
+      await server.resume();
     },
     async stop(): Promise<void> {
       await server.stop();

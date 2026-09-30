@@ -1,7 +1,36 @@
 import * as net from 'node:net';
 import { parseAmcpLine } from './amcp-parser.js';
 import { serializeAmcpResponse } from './amcp-response.js';
-import type { AmcpHandler, HandlerContext } from './types.js';
+import type { AmcpConnection, AmcpHandler, HandlerContext } from './types.js';
+
+/**
+ * `CENTRAL-BRIDGE-01` — one connection's lifecycle objects (`AmcpConnection`), released together
+ * when the socket goes, however it goes.
+ */
+class Connection implements AmcpConnection {
+  private readonly bound = new Map<string, () => void>();
+
+  constructor(readonly remoteAddress: string) {}
+
+  bindLifecycle(key: string, release: () => void): void {
+    this.bound.get(key)?.();
+    this.bound.set(key, release);
+  }
+
+  unbindLifecycle(key: string): boolean {
+    const release = this.bound.get(key);
+    if (release === undefined) return false;
+    this.bound.delete(key);
+    release();
+    return true;
+  }
+
+  releaseAll(): void {
+    const all = [...this.bound.values()];
+    this.bound.clear();
+    for (const release of all) release();
+  }
+}
 
 /**
  * Owns the AMCP TCP listener. Per Phase 5 §3.1, framing is `\r\n`-terminated
@@ -11,10 +40,12 @@ import type { AmcpHandler, HandlerContext } from './types.js';
  */
 export class AmcpServer {
   private server: net.Server | null = null;
-  private readonly sockets = new Set<net.Socket>();
+  private readonly sockets = new Map<net.Socket, Connection>();
   /** `DESKTOP-APPS-01-B` — who may connect; `null` admits everyone. */
   private admit: ((sourceAddress: string) => boolean) | null = null;
   private refused = 0;
+  /** `CENTRAL-BRIDGE-01` — where the listener was, so a restarted core listens there again. */
+  private listening: { host: string; port: number } | null = null;
 
   constructor(
     private readonly handlers: Map<string, AmcpHandler>,
@@ -22,6 +53,11 @@ export class AmcpServer {
     private readonly onTrace?: (entry: TraceEntry) => void,
     /** `ROUTE-PLATES-01` — every received line, before it is parsed (the command log). */
     private readonly onReceive?: (line: string) => void,
+    /**
+     * `CENTRAL-BRIDGE-01` — called for every admitted connection before its first line is read:
+     * where the core's default per-client OSC subscription is bound to it.
+     */
+    private readonly onConnect?: (conn: AmcpConnection) => void,
   ) {}
 
   setAdmission(admit: ((sourceAddress: string) => boolean) | null): void {
@@ -47,6 +83,7 @@ export class AmcpServer {
           return;
         }
         this.server = server;
+        this.listening = { host, port: addr.port };
         resolve(addr.port);
       });
     });
@@ -59,13 +96,35 @@ export class AmcpServer {
 
   /** Force-close every connection; used by tests to simulate TCP reset. */
   closeAll(): void {
-    for (const sock of this.sockets) {
+    for (const [sock, conn] of this.sockets) {
       sock.destroy();
+      // Released here as well as on `close`: a restarted core has no subscriber left by the time
+      // it listens again, whatever order the socket events arrive in.
+      conn.releaseAll();
     }
     this.sockets.clear();
   }
 
+  /**
+   * `CENTRAL-BRIDGE-01` — a core going DOWN: stop listening (a connect is then refused, as a core
+   * that is not up refuses one) and drop every connection. {@link resume} listens again.
+   */
+  async suspend(): Promise<void> {
+    await this.closeListener();
+  }
+
+  /** `CENTRAL-BRIDGE-01` — the core is up again: listen on the host and port it had. */
+  async resume(): Promise<void> {
+    const at = this.listening;
+    if (at === null || this.server !== null) return;
+    await this.start(at.host, at.port);
+  }
+
   async stop(): Promise<void> {
+    await this.closeListener();
+  }
+
+  private async closeListener(): Promise<void> {
     this.closeAll();
     const server = this.server;
     if (server === null) return;
@@ -86,7 +145,9 @@ export class AmcpServer {
       sock.resetAndDestroy();
       return;
     }
-    this.sockets.add(sock);
+    const conn = new Connection(source);
+    this.sockets.set(sock, conn);
+    this.onConnect?.(conn);
     sock.setEncoding('utf-8');
 
     let buf = '';
@@ -97,21 +158,20 @@ export class AmcpServer {
       while (idx !== null) {
         const line = buf.slice(0, idx.start);
         buf = buf.slice(idx.end);
-        void this.dispatch(sock, line);
+        void this.dispatch(sock, conn, line);
         idx = findLineEnd(buf);
       }
     });
 
-    sock.on('close', () => {
+    const gone = (): void => {
       this.sockets.delete(sock);
-    });
-
-    sock.on('error', () => {
-      this.sockets.delete(sock);
-    });
+      conn.releaseAll();
+    };
+    sock.on('close', gone);
+    sock.on('error', gone);
   }
 
-  private async dispatch(sock: net.Socket, line: string): Promise<void> {
+  private async dispatch(sock: net.Socket, conn: Connection, line: string): Promise<void> {
     if (line.length === 0) return;
     if (this.onTrace) this.onTrace({ dir: 'recv', line });
     this.onReceive?.(line);
@@ -129,7 +189,7 @@ export class AmcpServer {
     }
 
     try {
-      const resp = await handler(req, this.ctx);
+      const resp = await handler(req, this.ctx, conn);
       this.write(sock, serializeAmcpResponse(resp));
     } catch {
       this.write(sock, serializeAmcpResponse({ kind: 'err', code: 500, verb: req.verb }));

@@ -279,6 +279,15 @@ export interface MockOptions {
   media?: readonly MockMediaFile[];
   /** `DEV-LOCAL-CASPAR-01` — what `INFO PATHS` answers. Each part defaults ({@link MockPaths}). */
   paths?: MockPaths;
+  /**
+   * `CENTRAL-BRIDGE-01` — **THE CORE'S DEFAULT PER-CLIENT SUBSCRIPTION.** When set, every AMCP
+   * connection is sent the OSC stream at `<its own address>:<this port>` for as long as it is open,
+   * as a stock core does with `<osc><default-port>` and `disable-send-to-amcp-clients` false. On the
+   * Playout's machine that port is 6250 and belongs to the Playout's engine, which is why a bridge
+   * there never binds it and asks for its own port with `OSC SUBSCRIBE`. Absent: no connection is
+   * sent anything it did not subscribe to (every mock before this one).
+   */
+  oscToAmcpClientsPort?: number;
 }
 
 /**
@@ -438,6 +447,20 @@ export interface MockHandle {
   stagedMixerCount(channel: number): number;
   /** Number of currently-connected AMCP clients. */
   readonly amcpClientCount: number;
+  /**
+   * `CENTRAL-BRIDGE-01` — every OSC destination now, one per endpoint: the predefined ones, and
+   * each live `OSC SUBSCRIBE` or per-client default subscription. Test instrument.
+   */
+  oscDestinations(): readonly { host: string; port: number }[];
+  /**
+   * `CENTRAL-BRIDGE-01` rule 3 — **A CORE RESTART.** A crash, «ریستِ پلی‌اوت» or an engine restart
+   * clears EVERY layer (50–99 included) and every connection; the core then refuses AMCP until it is
+   * up again (2–6 s on the Playout's machine). Modelled as: stop listening, drop every connection
+   * (and with it every subscription bound to one), empty the stage, the mixer queues and the
+   * received-template records, wait `downMs` (default 0) refusing connections, listen again on the
+   * same port. The command log ({@link receivedCommands}) is kept: it is the test's, not the core's.
+   */
+  restartCore(options?: { readonly downMs?: number }): Promise<void>;
   /** Shut down both servers and resolve when fully closed. */
   stop(): Promise<void>;
 }
@@ -445,11 +468,43 @@ export interface MockHandle {
 export type AmcpHandler = (
   req: AmcpRequest,
   ctx: HandlerContext,
+  /**
+   * `CENTRAL-BRIDGE-01` — the AMCP connection the line arrived on. Only a command whose effect is
+   * bound to its connection reads it (`OSC SUBSCRIBE`); every other handler ignores it. Optional so
+   * a test that wraps a built-in handler and delegates `(req, ctx)` keeps compiling; the server
+   * always passes it.
+   */
+  conn?: AmcpConnection,
 ) => AmcpResponse | Promise<AmcpResponse>;
+
+/**
+ * `CENTRAL-BRIDGE-01` — ONE AMCP connection, as a command handler sees it: the peer's address, and
+ * the objects whose lifetime is the connection's. CasparCG keeps both on its `client_connection`
+ * (`add_lifecycle_bound_object` / `remove_lifecycle_bound_object`): an `OSC SUBSCRIBE` is such an
+ * object, so the subscription ends when the connection does — which is why a client re-sends it
+ * after every reconnect.
+ */
+export interface AmcpConnection {
+  /** The peer's IPv4 address, `a.b.c.d` (a dual-stack `::ffff:` prefix removed). */
+  readonly remoteAddress: string;
+  /**
+   * Bind `release` to this connection under `key`: it runs when the connection ends, or when the
+   * key is bound again or unbound. A second bind of the same key releases the first, as the core's
+   * map of lifecycle objects replaces an entry.
+   */
+  bindLifecycle(key: string, release: () => void): void;
+  /** Release and forget the object under `key`; `false` when there was none. */
+  unbindLifecycle(key: string): boolean;
+}
 
 export interface HandlerContext {
   /** `MEDIA-PLATES-01` — the mock clock (ms), the one {@link MockOptions.now} names. */
   now(): number;
+  /**
+   * `CENTRAL-BRIDGE-01` — send the OSC stream to `host:port` until the returned release is called
+   * (`OSC SUBSCRIBE`). Reference-counted per endpoint, as the core's OSC client is.
+   */
+  subscribeOsc(host: string, port: number): () => void;
   /** `MEDIA-PLATES-01` — a media file's length in seconds, when the mock was told it. */
   clipLengthOf(file: string): number | undefined;
   /** Get a layer's current state (creates an `'empty'` entry on first read). */
