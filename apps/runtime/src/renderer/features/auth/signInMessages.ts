@@ -1,7 +1,7 @@
 import type { SignInFailure } from '../../../platform/playoutSession.js';
 
 /**
- * 🔴 `R-066` — **WHAT THE SIGN-IN SAYS WHEN IT DID NOT WORK. Seven sentences, and no eighth.**
+ * 🔴 `R-066` — **WHAT THE SIGN-IN SAYS WHEN IT DID NOT WORK. Eight sentences, and no ninth.**
  *
  * ── WHY THE CONSOLE WRITES THEM AND NOT THE PLAYOUT ─────────────────────────
  *
@@ -12,6 +12,12 @@ import type { SignInFailure } from '../../../platform/playoutSession.js';
  * code shown raw is worse, because `no_cg_access` tells the one person who cannot fix it
  * nothing they can act on. The Playout's own answer is kept for the RECORD instead — the
  * bridge's log, `playoutSession.ts`'s `detail`.
+ *
+ * ⚠ **ONE EXCEPTION, decided by the owner (`CENTRAL-BRIDGE-01-A` A4): `cg_not_licensed`.** Which
+ * licence condition failed — no CG Control on the dongle, an expired licence, an unreadable dongle,
+ * no channel inside the CG cap — only the Playout knows, and it words it for the operator (its
+ * §2). So its `message` is shown AS IT IS, in one line, in a bidi isolate; this file's sentence is
+ * the fallback for a refusal that carried none. See {@link signInFailureLine}.
  *
  * ── WHY THEY ARE IN ENGLISH ─────────────────────────────────────────────────
  *
@@ -56,6 +62,12 @@ const MESSAGES: Readonly<Record<SignInFailure, string>> = {
    */
   invalid_refresh_token: 'This session is no longer valid. Sign in again.',
   /**
+   * `CENTRAL-BRIDGE-01-A` A4 — `403 cg_not_licensed` (Playout `2.9.2`). The FALLBACK: the Playout's
+   * own message is shown instead whenever it sent one ({@link signInFailureLine}). Not a password
+   * error, and retyping cannot fix it.
+   */
+  cg_not_licensed: 'The Playout’s licence does not allow CG Control.',
+  /**
    * Anything else: a shape the contract does not define, a proxy page, a 500.
    *
    * ⚠ It says the sign-in did not happen and names NO mechanism. Naming the wrong mechanism
@@ -77,4 +89,36 @@ export function signInMessage(code: SignInFailure): string {
  */
 export function signInMarksField(code: SignInFailure): boolean {
   return code === 'invalid_credentials';
+}
+
+/** What a failed sign-in puts on screen, and what it does to the form. */
+export interface SignInFailureLine {
+  readonly text: string;
+  /** The Playout's own words: rendered in a bidi isolate, because their language is not ours. */
+  readonly fromPlayout: boolean;
+  /** Only a wrong username or password marks a field (B2). */
+  readonly marksField: boolean;
+  /** The form keeps what was typed: nothing in it was wrong. */
+  readonly keepsForm: boolean;
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01-A` A4 — **THE ONE LINE A FAILED SIGN-IN SHOWS**, for every sign-in surface
+ * (the gate, first-run, CG Bridge's own sign-in). This file's sentence for the code — except
+ * `cg_not_licensed`, whose Playout `message` is shown as it is (already one line: the parser
+ * collapses its whitespace). A licence refusal is not a password error: it marks no field, counts
+ * toward nothing on this side, and leaves the form as it was typed.
+ */
+export function signInFailureLine(
+  code: SignInFailure,
+  playoutMessage: string | null,
+): SignInFailureLine {
+  const licence = code === 'cg_not_licensed';
+  const fromPlayout = licence && playoutMessage !== null;
+  return {
+    text: fromPlayout ? playoutMessage : signInMessage(code),
+    fromPlayout,
+    marksField: signInMarksField(code),
+    keepsForm: licence,
+  };
 }

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PLAYOUT_MESSAGE_MAX,
   PlayoutSignInError,
   REFRESH_LEAD_MS,
   RECORD_BODY_MAX,
   refreshDelayMs,
   refreshPlayoutToken,
+  refreshTokenFate,
   signInToPlayout,
   type PlayoutFetchLike,
   type PlayoutResponseLike,
@@ -168,6 +170,108 @@ describe('D2 — refresh', () => {
       nowMs: () => NOW,
     });
     expect(kept).toEqual({ accessToken: 'a', refreshToken: null, expiresAtMs: NOW + 60_000 });
+  });
+});
+
+/**
+ * `CENTRAL-BRIDGE-01-A` (Playout `2.9.2` §2, §8) — `cg_not_licensed`, the Playout's own message, and
+ * what a failed D2 did to its token.
+ */
+describe('CENTRAL-BRIDGE-01-A — `cg_not_licensed`', () => {
+  const MESSAGE = 'لایسنسِ این Playout شاملِ CG Control نیست.';
+
+  it('D1 and D2 read the code AND keep the Playout’s message', async () => {
+    const body = { error: 'cg_not_licensed', message: MESSAGE };
+    const d1 = await failureOf(
+      signInToPlayout('u', 'a', 'b', { fetchImpl: scripted(answer(403, body)) }),
+    );
+    expect(d1.code).toBe('cg_not_licensed');
+    expect(d1.playoutMessage).toBe(MESSAGE);
+    const d2 = await failureOf(
+      refreshPlayoutToken('u', 'r', { fetchImpl: scripted(answer(403, body)) }),
+    );
+    expect(d2.code).toBe('cg_not_licensed');
+    expect(d2.playoutMessage).toBe(MESSAGE);
+  });
+
+  it('the message is kept as it is, in ONE line and one line’s length — and absent when blank', async () => {
+    const of = async (message: unknown): Promise<string | null> =>
+      (
+        await failureOf(
+          signInToPlayout('u', 'a', 'b', {
+            fetchImpl: scripted(answer(403, { error: 'cg_not_licensed', message })),
+          }),
+        )
+      ).playoutMessage;
+    expect(await of(`  لایسنس\n  منقضی   شده است.\r\n`)).toBe('لایسنس منقضی شده است.');
+    expect((await of('x'.repeat(PLAYOUT_MESSAGE_MAX + 40)))?.length).toBe(PLAYOUT_MESSAGE_MAX);
+    expect(await of('   ')).toBeNull();
+    expect(await of(42)).toBeNull();
+  });
+
+  it('a request that failed carries WHY — the caller tells "never reached" from "answer lost"', async () => {
+    const refused = new Error('connect ECONNREFUSED');
+    const err = await failureOf(refreshPlayoutToken('u', 'r', { fetchImpl: scripted(refused) }));
+    expect(err.code).toBe('unreachable');
+    expect(err.cause).toBe(refused);
+  });
+
+  it('a bounded wait: a Playout that never answers is given up on, as `unreachable`', async () => {
+    /** The part of an `AbortSignal` this reads — typed structurally, as the package does. */
+    interface SignalLike {
+      readonly reason: unknown;
+      addEventListener(type: 'abort', listener: () => void, options: { once: boolean }): void;
+    }
+    const hanging: PlayoutFetchLike = (_url, init) =>
+      new Promise((_resolve, reject) => {
+        const { signal } = init as { signal?: SignalLike };
+        if (signal === undefined) return; // unbounded: hangs, and the test times out
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    const err = await failureOf(
+      refreshPlayoutToken('u', 'r', { fetchImpl: hanging, timeoutMs: 20 }),
+    );
+    expect(err.code).toBe('unreachable');
+    expect((err.cause as Error).name).toBe('TimeoutError');
+  });
+});
+
+describe('CENTRAL-BRIDGE-01-A — what a failed D2 did to its token', () => {
+  async function fateOf(reply: PlayoutResponseLike | Error): Promise<string> {
+    try {
+      await refreshPlayoutToken('u', 'r', { fetchImpl: scripted(reply) });
+    } catch (err) {
+      return refreshTokenFate(err);
+    }
+    return 'resolved';
+  }
+
+  it('401 is SPENT — gone; only a full sign-in goes on', async () => {
+    expect(await fateOf(answer(401, { error: 'invalid_refresh_token' }))).toBe('spent');
+  });
+
+  it('🔴 the contract’s OTHER refusals are KEPT — their §2: a D2 refusal comes before the token is used', async () => {
+    for (const [status, error] of [
+      [403, 'cg_not_licensed'],
+      [403, 'no_cg_access'],
+      [423, 'account_locked'],
+      [429, 'rate_limited'],
+    ] as const) {
+      expect(await fateOf(answer(status, { error })), `${String(status)} ${error}`).toBe('kept');
+    }
+  });
+
+  it('🔴 an answer that does not say is UNKNOWN — never sent again', async () => {
+    expect(await fateOf(answer(500, 'boom')), '5xx').toBe('unknown');
+    expect(await fateOf(answer(502, '')), 'a gateway').toBe('unknown');
+    // A status the contract does not define is not assumed to be a refusal before use: a wrong
+    // `kept` resends a used token past the 10 s grace, and that signs the whole account out.
+    expect(await fateOf(answer(400, { error: 'bad_request' })), '400').toBe('unknown');
+    expect(await fateOf(answer(404, '')), '404').toBe('unknown');
+    expect(await fateOf(new Error('socket hang up')), 'no answer').toBe('unknown');
+    // A 200 the Playout sent means it USED the token — and the successor could not be read.
+    expect(await fateOf(answer(200, { expires_in: 60 })), 'an unreadable 200').toBe('unknown');
+    expect(refreshTokenFate(new Error('not ours')), 'not a sign-in failure').toBe('unknown');
   });
 });
 

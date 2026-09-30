@@ -150,12 +150,19 @@ import {
   loadPlayoutSession,
   PlayoutSignInError,
   refreshDelayMs,
-  refreshPlayoutToken,
   savePlayoutSession,
   sessionExpired,
   signInToPlayout,
+  type SignInFailure,
   type StoredSession,
 } from './playoutSession.js';
+import {
+  newTabId,
+  pageLocks,
+  probePlayout,
+  refreshConsoleSession,
+  type ConsoleRefreshOutcome,
+} from './playoutRefresh.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
 import {
   canOpenBridgeLog,
@@ -178,10 +185,18 @@ const REQUEST_TIMEOUT_MS = 8000;
  * left; it only stops the degenerate case being a hot loop.
  */
 const MIN_REFRESH_DELAY_MS = 30_000;
-/** First retry after a failed refresh; doubled per consecutive failure. */
+/**
+ * First retry after a refresh that could not be SENT (the Playout did not answer); doubled per
+ * consecutive one. `CENTRAL-BRIDGE-01-A` — only a token that never left is ever retried: one that may
+ * have reached the Playout is never sent again (`playoutRefresh.ts`).
+ */
 const REFRESH_RETRY_BASE_MS = 15_000;
 /** …and capped, so a long Playout outage settles into a poll rather than growing unbounded. */
 const REFRESH_RETRY_MAX_MS = 5 * 60_000;
+/** `CENTRAL-BRIDGE-01-A` A2 — a refresh the Playout refused before using the token: asked again. */
+const REFRESH_REFUSED_RETRY_MS = 60_000;
+/** Another tab is refreshing the same stored session: look again, and adopt what it stored. */
+const REFRESH_BUSY_RETRY_MS = 5_000;
 const RECONNECT_DELAY_MS = 1000;
 
 /** The slice of the browser `WebSocket` API the runtime uses (so tests can inject a fake). */
@@ -382,8 +397,14 @@ export class WebSocketRuntime implements RuntimeBridge {
    * lands after it and RESURRECTS the session: timer, persisted key and bridge principal.
    */
   #authGeneration = 0;
-  /** Consecutive failed refreshes, so the retry backs off instead of hammering the Playout. */
+  /** Consecutive refreshes that could not be sent, so the retry backs off instead of hammering. */
   #refreshFailures = 0;
+  /** `CENTRAL-BRIDGE-01-A` — the refresh this tab has out; a second is never started beside it. */
+  #refreshing: Promise<void> | null = null;
+  /** `CENTRAL-BRIDGE-01-A` A2 — why the Playout refuses to renew this session, while it does. */
+  #renewalRefused: { readonly code: SignInFailure; readonly message: string | null } | null = null;
+  /** Tells this tab's in-flight mark from another tab's (`playoutRefresh.ts`). */
+  readonly #tabId = newTabId();
   /**
    * 🔴 `DELTA A` — **THE CONNECT-TIME HANDSHAKE, AND EVERY OTHER FRAME WAITS BEHIND IT.**
    *
@@ -750,7 +771,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       refusal arrives: {@link #noteAuthRefused}.
     */
     if (this.#bridgeRefusesUs) return { kind: 'expired', name: principal.name };
-    return { kind: 'signed-in', principal, permittedChannels: this.#permittedChannels };
+    return {
+      kind: 'signed-in',
+      principal,
+      permittedChannels: this.#permittedChannels,
+      ...(this.#renewalRefused !== null ? { renewalRefused: this.#renewalRefused } : {}),
+    };
   }
 
   /**
@@ -785,55 +811,98 @@ export class WebSocketRuntime implements RuntimeBridge {
     );
   }
 
-  async #refreshNow(): Promise<void> {
+  /** `CENTRAL-BRIDGE-01-A` — one refresh at a time in this tab: a second call joins the first. */
+  #refreshNow(): Promise<void> {
+    if (this.#refreshing === null) {
+      this.#refreshing = this.#refreshOnce().finally(() => {
+        this.#refreshing = null;
+      });
+    }
+    return this.#refreshing;
+  }
+
+  async #refreshOnce(): Promise<void> {
     const session = this.#session;
     const refreshUrl = this.#authCaps?.refreshUrl ?? null;
     if (session === null || session.refreshToken === null || refreshUrl === null) return;
     // Which session this refresh belongs to. Compared after the await: a sign-out (or a fresh
     // sign-in) that lands first must not be undone by a reply that was already in flight.
     const generation = this.#authGeneration;
+    let outcome: ConsoleRefreshOutcome;
     try {
-      // A rotated `refresh_token` replaces the old one — the contract SHOULDs rotation, and a
-      // console that kept the spent one would be refused at the next refresh with
-      // `invalid_refresh_token` and no way to tell that from a revocation.
-      const next = await refreshPlayoutToken(refreshUrl, session.refreshToken);
       /*
-        🔴 THE GENERATION GUARD. Without it, a refresh in flight when the operator pressed
-        Sign out lands afterwards and RESURRECTS the session: it writes the storage key back,
-        re-arms the timer and re-presents a token to a bridge that was just told to drop it —
-        so the console reads signed-out while the bridge holds a principal.
+        🔴 `CENTRAL-BRIDGE-01-A` — the Playout's reuse detection (`2.9.2` §8) makes a second send of
+        a used token revoke every session of the account. `refreshConsoleSession` serialises across
+        tabs, sends only the latest token, marks it before it leaves and sends it only to a Playout
+        that answers; it stores the successor itself, BEFORE anything here uses it.
       */
-      if (generation !== this.#authGeneration) return;
-      this.#refreshFailures = 0;
-      this.#session = next;
-      savePlayoutSession(next);
-      await this.#presentToken();
-      this.#scheduleRefresh();
+      outcome = await refreshConsoleSession(session, {
+        refreshUrl,
+        tabId: this.#tabId,
+        probe: () => probePlayout(refreshUrl),
+        locks: pageLocks(),
+      });
     } catch {
-      if (generation !== this.#authGeneration) return;
-      /*
-        🔴 **RETRY, BACKING OFF — one blink must not end the shift.**
-
-        The first spelling re-armed nothing, so a Playout unreachable for thirty seconds at
-        T−10min meant no further attempt was ever made and the session simply died at `exp`.
-        That is precisely the coupling ADR 0010 refused when it kept the token lifetime long:
-        the console must survive the Playout being briefly away.
-
-        Quiet on the surface, because the access token is still valid until `exp` and what the
-        operator needs — "this session ends at ⟨time⟩" — is already on the pill's `title`.
-      */
-      this.#refreshFailures += 1;
-      const backoff = Math.min(
-        REFRESH_RETRY_BASE_MS * 2 ** (this.#refreshFailures - 1),
-        REFRESH_RETRY_MAX_MS,
-      );
-      if (this.#refreshTimer !== null) clearTimeout(this.#refreshTimer);
-      this.#refreshTimer = setTimeout(() => {
-        this.#refreshTimer = null;
-        void this.#refreshNow();
-      }, backoff);
-      this.#authStateSubs.emit(this.#authState());
+      // Not a D2 failure (those are outcomes): the guard itself failed, so nothing is known about
+      // the token — it is not sent again from this tab. The access token lives to `exp`.
+      outcome = { kind: 'dropped', session: { ...session, refreshToken: null }, why: 'unknown' };
     }
+    /*
+      🔴 THE GENERATION GUARD. Without it, a refresh in flight when the operator pressed Sign out
+      lands afterwards and RESURRECTS the session: re-arms the timer and re-presents a token to a
+      bridge that was just told to drop it — so the console reads signed-out while the bridge holds
+      a principal. (The store half is `refreshConsoleSession`'s: it writes the successor only while
+      the store still carries this tab's own mark, which a sign-out removes.)
+    */
+    if (generation !== this.#authGeneration) return;
+    switch (outcome.kind) {
+      case 'rotated':
+      case 'adopted':
+        this.#refreshFailures = 0;
+        this.#renewalRefused = null;
+        this.#session = outcome.session;
+        await this.#presentToken();
+        this.#scheduleRefresh();
+        break;
+      case 'busy':
+        this.#retryRefresh(REFRESH_BUSY_RETRY_MS);
+        break;
+      case 'not-sent': {
+        /*
+          🔴 **RETRY, BACKING OFF — one blink must not end the shift.** A Playout unreachable for
+          thirty seconds at T−10min must not leave the session to die at `exp`. Safe because the
+          token never left: only a refresh that was NOT SENT comes back here.
+        */
+        this.#refreshFailures += 1;
+        this.#retryRefresh(
+          Math.min(REFRESH_RETRY_BASE_MS * 2 ** (this.#refreshFailures - 1), REFRESH_RETRY_MAX_MS),
+        );
+        break;
+      }
+      case 'refused':
+        // `2.9.2` §2 — refused BEFORE use: the token is kept and asked again; the reason is said.
+        this.#renewalRefused = { code: outcome.code, message: outcome.message };
+        this.#retryRefresh(REFRESH_REFUSED_RETRY_MS);
+        break;
+      case 'dropped':
+        // Spent, or it may have been used: never sent again. The access token lives to `exp`.
+        this.#renewalRefused = null;
+        this.#session = outcome.session;
+        break;
+      case 'gone':
+        // Signed out in another tab: this tab renews nothing more, and its token lives to `exp`.
+        this.#session = { ...session, refreshToken: null };
+        break;
+    }
+    this.#authStateSubs.emit(this.#authState());
+  }
+
+  #retryRefresh(delayMs: number): void {
+    if (this.#refreshTimer !== null) clearTimeout(this.#refreshTimer);
+    this.#refreshTimer = setTimeout(() => {
+      this.#refreshTimer = null;
+      void this.#refreshNow();
+    }, delayMs);
   }
 
   /**
@@ -1511,6 +1580,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
       this.#authGeneration += 1;
       this.#refreshFailures = 0;
+      this.#renewalRefused = null;
       this.#session = session;
       savePlayoutSession(session);
       /*
@@ -1535,6 +1605,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       // session back after the sign-out has cleared it.
       this.#authGeneration += 1;
       this.#refreshFailures = 0;
+      this.#renewalRefused = null;
       if (this.#refreshTimer !== null) clearTimeout(this.#refreshTimer);
       this.#refreshTimer = null;
       if (this.#expiryTimer !== null) clearTimeout(this.#expiryTimer);

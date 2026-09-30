@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
-import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import type { CryptoKey, JWK, JWTPayload } from 'jose';
 
 /**
@@ -760,6 +760,8 @@ const ERROR_STATUS = {
   rate_limited: 429,
   invalid_refresh_token: 401,
   invalid_token: 401,
+  /** `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` §2: the licence does not include CG Control. */
+  cg_not_licensed: 403,
   not_found: 404,
   /** `PLAYOUT-SOURCES-01` — D11's bad parameter (§3 of their answer): a stale cursor, a bad limit. */
   invalid_query: 400,
@@ -788,6 +790,8 @@ const ERROR_MESSAGES: Readonly<Record<FakePlayoutErrorCode, string>> = {
   rate_limited: 'تعداد تلاش های ناموفق بیش از حد مجاز است.',
   invalid_refresh_token: 'توکن تازه سازی نامعتبر یا مصرف شده است.',
   invalid_token: 'توکن نامعتبر است.',
+  // Playout `2.9.2` §2's own sentence, verbatim.
+  cg_not_licensed: 'لایسنسِ این Playout شاملِ CG Control نیست.',
   not_found: 'چنین مسیری وجود ندارد.',
   invalid_query: 'پارامتر نامعتبر است.',
 };
@@ -858,8 +862,14 @@ export interface IssueTokenOptions {
   readonly name?: string;
   /** `roles`. Default: the chosen user's. Pass `[]` to mint the empty-roles refusal case. */
   readonly roles?: readonly string[];
-  /** `cg_channels`. Default: the chosen user's. */
-  readonly cgChannels?: FakeCgChannels;
+  /**
+   * `cg_channels`. Default: the chosen user's.
+   *
+   * ⚠ Widened past the contract's shape for ONE named case (`CENTRAL-BRIDGE-01-A` A3): a lone grant
+   * OBJECT — what a Playout before `2.9.2` answered on D8 for a multi-channel account. Every reader
+   * of the claim must take that form, so a test mints it into a token as well.
+   */
+  readonly cgChannels?: FakeCgChannels | FakeChannelGrant;
   /** Sign with a specific PUBLISHED `kid`. Throws if that kid is not in the JWKS. */
   readonly kid?: string;
   /**
@@ -989,6 +999,21 @@ export interface FakePlayout {
   setCredentialFailure(code: FakeCredentialFailure | null): void;
   /** Mint a token directly, bypassing D1 — the only way to reach the malformed/expired cases. */
   issueToken(options?: IssueTokenOptions): Promise<IssuedToken>;
+
+  // ── `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` ─────────────────────────────────────────────────
+  /**
+   * §2 — CG Control not licensed: D1 (after the credentials) and D2 (BEFORE the token is used)
+   * answer `403 cg_not_licensed` with this message. `null` restores the licence.
+   */
+  setCgNotLicensed(message: string | null): void;
+  /** §2 — D2 refused before use for another cause (`no_cg_access`); `null` clears it. */
+  setRefreshRefusal(code: 'no_cg_access' | null): void;
+  /** §9 — D8 as before `2.9.2`: a list's first grant, as a lone object. */
+  setMeLegacy(legacy: boolean): void;
+  /** §8 — how many refresh-token theft trips have run (a spec's instrument). LIVE. */
+  readonly theftTrips: number;
+  /** Every `jti` on the D9 list now. */
+  readonly revokedJtis: readonly string[];
 
   // ── `PLAYOUT-SOURCES-01` §3 — D10 and D11, and their test-only hooks ──────────────────────
   /** D10 — the Playout's inputs. Bearer-gated, `ETag`'d. */
@@ -1156,9 +1181,12 @@ function sendJsonText(
 }
 
 /** The contract's one error shape (§4.6): a stable snake_case `error` plus free-text `message`. */
-function sendError(res: http.ServerResponse, code: FakePlayoutErrorCode): void {
-  sendJson(res, ERROR_STATUS[code], { error: code, message: ERROR_MESSAGES[code] });
+function sendError(res: http.ServerResponse, code: FakePlayoutErrorCode, message?: string): void {
+  sendJson(res, ERROR_STATUS[code], { error: code, message: message ?? ERROR_MESSAGES[code] });
 }
+
+/** `2.9.2` §8 — a spent refresh token back within this is a lost reply, not a theft. */
+export const FAKE_REFRESH_REUSE_WINDOW_MS = 10_000;
 
 class FakePlayoutServer implements FakePlayout {
   readonly #server = http.createServer();
@@ -1217,8 +1245,33 @@ class FakePlayoutServer implements FakePlayout {
    */
   #revokedRevision = 0;
 
-  /** Opaque refresh token → which user it refreshes. Deleted on use (§4.2 rotation). */
-  readonly #refreshTokens = new Map<string, FakeUserKey>();
+  /**
+   * Opaque refresh token → which user it refreshes, and its FAMILY (one per D1; a D2 successor keeps
+   * its parent's). Deleted on use (§4.2 rotation).
+   */
+  readonly #refreshTokens = new Map<string, { user: FakeUserKey; family: string }>();
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` §8: every refresh token already USED, and when. A
+   * spent token back within {@link FAKE_REFRESH_REUSE_WINDOW_MS} is a lost reply (`401` only); later,
+   * it is theft — the whole family is revoked and every access token of the user goes on D9, once per
+   * family.
+   */
+  readonly #spentRefreshTokens = new Map<
+    string,
+    { user: FakeUserKey; family: string; spentAt: number }
+  >();
+  readonly #revokedFamilies = new Set<string>();
+  #theftTrips = 0;
+  /** Every access token minted, per user — what a theft trip puts on the D9 list. */
+  readonly #issuedAccess = new Map<FakeUserKey, { jti: string; exp: number }[]>();
+  /** `2.9.2` §2 — the message D1 and D2 answer `403 cg_not_licensed` with, or `null` (licensed). */
+  #cgNotLicensed: string | null = null;
+  /** `2.9.2` §2 — D2 refused BEFORE use for another cause than the licence. */
+  #refreshRefusal: 'no_cg_access' | null = null;
+  /** `2.9.2` §9 — D8 as before `2.9.2`: a multi-channel account's FIRST grant, as a lone object. */
+  #meLegacy = false;
+  /** The clock the reuse window is read on (TEST-ONLY override). */
+  readonly #now: () => number;
 
   #credentialFailure: FakeCredentialFailure | null = null;
   #port = 0;
@@ -1234,6 +1287,7 @@ class FakePlayoutServer implements FakePlayout {
   ) {
     this.#sealOnLoopback = options.sealOnLoopback ?? true;
     this.#listenHost = options.listenHost ?? '127.0.0.1';
+    this.#now = options.now ?? ((): number => Date.now());
     this.#grants = options.grants ?? {};
     this.#beforeMediaSearch = options.beforeMediaSearch;
     this.#published = [active];
@@ -1606,7 +1660,31 @@ class FakePlayoutServer implements FakePlayout {
     const token = await new SignJWT(claims)
       .setProtectedHeader({ alg: 'ES256', kid: key.kid, typ: 'JWT' })
       .sign(key.privateKey);
+    // `2.9.2` §8 — a theft trip puts every access token of the user on D9: keep them, per user.
+    const minted = this.#issuedAccess.get(userKey) ?? [];
+    minted.push({ jti, exp: claims.exp as number });
+    this.#issuedAccess.set(userKey, minted);
     return { token, jti, claims };
+  }
+
+  setCgNotLicensed(message: string | null): void {
+    this.#cgNotLicensed = message;
+  }
+
+  setRefreshRefusal(code: 'no_cg_access' | null): void {
+    this.#refreshRefusal = code;
+  }
+
+  setMeLegacy(legacy: boolean): void {
+    this.#meLegacy = legacy;
+  }
+
+  get theftTrips(): number {
+    return this.#theftTrips;
+  }
+
+  get revokedJtis(): readonly string[] {
+    return [...this.#revoked.keys()];
   }
 
   #signingKeyFor(options: IssueTokenOptions): FakeSigningKey {
@@ -1776,14 +1854,36 @@ class FakePlayoutServer implements FakePlayout {
     sendJson(res, 200, { channels: this.#catalogue }, { ETag: etag });
   }
 
-  /** D8 — the bearer's principal, as the contract echoes it. It introduces nothing (C8). */
+  /**
+   * D8 — the bearer's principal, as the contract echoes it. It introduces nothing (C8).
+   *
+   * `CENTRAL-BRIDGE-01-A` (`2.9.2` §9) — `cg_channels` is `"*"` or the FULL list; with
+   * {@link setMeLegacy} it answers as a Playout before `2.9.2` did: a list's FIRST grant, as a lone
+   * object (its JWT library split the claim per channel and D8 returned the first).
+   */
   #serveMe(req: http.IncomingMessage, res: http.ServerResponse): void {
     const authorization = req.headers.authorization;
     if (authorization === undefined || !authorization.startsWith('Bearer ')) {
       sendError(res, 'invalid_token');
       return;
     }
-    sendJson(res, 200, { ok: true });
+    let claims: JWTPayload;
+    try {
+      claims = decodeJwt(authorization.slice('Bearer '.length));
+    } catch {
+      sendError(res, 'invalid_token');
+      return;
+    }
+    const channels = claims['cg_channels'];
+    sendJson(res, 200, {
+      sub: claims.sub,
+      name: claims['name'],
+      roles: claims['roles'],
+      cg_channels:
+        this.#meLegacy && Array.isArray(channels) && channels.length > 0
+          ? (channels[0] as unknown)
+          : channels,
+    });
   }
 
   /** D3 (§4.3) — public, no auth, and cacheable for an hour exactly as the contract says. */
@@ -1818,31 +1918,78 @@ class FakePlayoutServer implements FakePlayout {
       sendError(res, 'invalid_credentials');
       return;
     }
-    await this.#sendSignInBody(res, key);
+    // `2.9.2` §2 — after the credentials (and `no_cg_access`), before a token is issued.
+    if (this.#cgNotLicensed !== null) {
+      sendError(res, 'cg_not_licensed', this.#cgNotLicensed);
+      return;
+    }
+    // A sign-in starts a new token FAMILY.
+    await this.#sendSignInBody(res, key, `family-${randomUUID()}`);
   }
 
-  /** D2 (§4.2) — refresh, rotating the refresh token on use. */
+  /**
+   * D2 (§4.2) — refresh, rotating the refresh token on use.
+   *
+   * `CENTRAL-BRIDGE-01-A` — Playout `2.9.2`, both halves: every REFUSAL comes before the token is
+   * used (§2: `cg_not_licensed`, `no_cg_access`), so it survives one; and a SPENT token back is a
+   * reuse (§8): within {@link FAKE_REFRESH_REUSE_WINDOW_MS}, `401` and nothing else — later, the
+   * family is revoked and every access token of the user goes on D9, once per family.
+   */
   async #serveRefresh(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const body = parseJsonObject(await readBody(req));
     const presented = body === null ? null : readString(body, 'refresh_token');
-    const key = presented === null ? undefined : this.#refreshTokens.get(presented);
-    if (presented === null || key === undefined) {
-      // Unknown AND used-after-rotation land here together, because the rotation below
-      // DELETES the spent token — which is what makes a replay indistinguishable from a
-      // forgery, on purpose.
+    if (presented === null) {
       sendError(res, 'invalid_refresh_token');
       return;
     }
+    const spent = this.#spentRefreshTokens.get(presented);
+    if (spent !== undefined) {
+      if (
+        this.#now() - spent.spentAt > FAKE_REFRESH_REUSE_WINDOW_MS &&
+        !this.#revokedFamilies.has(spent.family)
+      ) {
+        this.#tripTheft(spent.user, spent.family);
+      }
+      sendError(res, 'invalid_refresh_token');
+      return;
+    }
+    const live = this.#refreshTokens.get(presented);
+    if (live === undefined) {
+      // Never issued, or its family revoked.
+      sendError(res, 'invalid_refresh_token');
+      return;
+    }
+    // `2.9.2` §2 — refused BEFORE the token is used: the same token works once the cause is fixed.
+    if (this.#cgNotLicensed !== null) {
+      sendError(res, 'cg_not_licensed', this.#cgNotLicensed);
+      return;
+    }
+    if (this.#refreshRefusal !== null) {
+      sendError(res, this.#refreshRefusal);
+      return;
+    }
     this.#refreshTokens.delete(presented);
-    await this.#sendSignInBody(res, key);
+    this.#spentRefreshTokens.set(presented, { ...live, spentAt: this.#now() });
+    await this.#sendSignInBody(res, live.user, live.family);
+  }
+
+  /** `2.9.2` §8 — a theft trip: the family's tokens die, and the user's access tokens go on D9. */
+  #tripTheft(user: FakeUserKey, family: string): void {
+    this.#revokedFamilies.add(family);
+    this.#theftTrips += 1;
+    for (const [token, entry] of this.#refreshTokens) {
+      if (entry.family === family) this.#refreshTokens.delete(token);
+    }
+    for (const { jti, exp } of this.#issuedAccess.get(user) ?? []) this.#revoked.set(jti, exp);
+    this.#revokedRevision += 1;
   }
 
   /** The §4.1 body, shared by D1 and D2 — one shape, so the two cannot drift apart. */
-  async #sendSignInBody(res: http.ServerResponse, key: FakeUserKey): Promise<void> {
+  async #sendSignInBody(res: http.ServerResponse, key: FakeUserKey, family: string): Promise<void> {
     const user = FAKE_USERS[key];
     const issued = await this.issueToken({ user: key });
     const refreshToken = `refresh-${randomUUID()}`;
-    this.#refreshTokens.set(refreshToken, key);
+    this.#refreshTokens.set(refreshToken, { user: key, family });
     sendJson(res, 200, {
       token_type: 'Bearer',
       access_token: issued.token,
@@ -1914,6 +2061,11 @@ export interface FakePlayoutOptions {
    * tab lists what the core holds NOW. It must not reject: a failed re-read keeps the last library.
    */
   readonly beforeMediaSearch?: () => Promise<void>;
+  /**
+   * `CENTRAL-BRIDGE-01-A` — the clock `2.9.2`'s refresh-reuse window is read on (default `Date.now`),
+   * so a spec can put a stale refresh past the 10 s window without sleeping.
+   */
+  readonly now?: () => number;
 }
 
 export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {

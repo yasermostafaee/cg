@@ -1139,3 +1139,137 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A3 → CENTRAL-BRIDGE-01 — the connect-ti
     expect(wireOf(bridge)).toContain(ipc.StackTakeChannel.name);
   });
 });
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01-A` (Playout `2.9.2` §8) — **THE RUNTIME'S RETRY NEVER RESENDS A TOKEN THAT
+ * MAY HAVE BEEN USED.** Before this, a failed refresh was retried 15 s later with the same token —
+ * past the Playout's 10 s grace, which `2.9.2` treats as theft of the account: every console signed
+ * in as it goes on D9. The module half is `playoutRefresh.test.ts`; this is the wiring.
+ */
+describe('CENTRAL-BRIDGE-01-A — the console’s refresh, on the runtime', () => {
+  const T0 = 'refresh-token-under-test';
+  /** The refresh fires one minute in: the session is seeded ten minutes and one minute from `exp`. */
+  const FIRES_AT_MS = 60_000;
+
+  function seedExpiringSoon(): void {
+    storage.setItem(
+      SESSION_KEY,
+      JSON.stringify({
+        accessToken: 'jwt-held-by-this-console',
+        refreshToken: T0,
+        expiresAtMs: Date.now() + ipc.REFRESH_LEAD_MS + FIRES_AT_MS,
+      }),
+    );
+  }
+
+  function tokensAnswer(refreshToken: string): Response {
+    return new Response(
+      JSON.stringify({
+        access_token: 'jwt-renewed',
+        refresh_token: refreshToken,
+        expires_in: 43_200,
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }
+
+  /**
+   * The Playout, for the refresh path: the probe (a `GET`) is answered unless `offline`; every D2 (a
+   * `POST`) records the token it carried and answers from `refresh`.
+   */
+  function stubRefreshPlayout(opts: {
+    offline?: () => boolean;
+    refresh: () => Response | Error;
+  }): string[] {
+    const presented: string[] = [];
+    globalThis.fetch = (_input, init): Promise<Response> => {
+      if (opts.offline?.() === true) return Promise.reject(new TypeError('Failed to fetch'));
+      if ((init?.method ?? 'GET') === 'GET') {
+        return Promise.resolve(new Response(null, { status: 405 }));
+      }
+      const body = typeof init?.body === 'string' ? init.body : '{}';
+      presented.push((JSON.parse(body) as { refresh_token: string }).refresh_token);
+      const answer = opts.refresh();
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+    };
+    return presented;
+  }
+
+  function storedSession(): Record<string, unknown> {
+    return JSON.parse(storage.getItem(SESSION_KEY) ?? 'null') as Record<string, unknown>;
+  }
+
+  async function signedInConsole(): Promise<WebSocketRuntime> {
+    const bridge = new FakeBridge();
+    bridge.capabilities = playoutCapabilities();
+    bridge.authAnswer = { kind: 'accept', principal: principalNamed('علی رضایی') };
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+    return runtime;
+  }
+
+  it('🔴 an answer LOST on its way back is never retried — not after 15 s, not after five minutes', async () => {
+    seedExpiringSoon();
+    const presented = stubRefreshPlayout({ refresh: () => new TypeError('Failed to fetch') });
+    const runtime = await signedInConsole();
+    await vi.advanceTimersByTimeAsync(FIRES_AT_MS + 1_000);
+    expect(presented, 'the refresh fired').toEqual([T0]);
+
+    // The old retry's whole ladder (+15, +45, +105, +225 s) — and still inside the token's life.
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(presented, 'the token that may have been used was sent again').toEqual([T0]);
+    expect(storedSession()).toMatchObject({ refreshToken: null });
+    expect(storedSession()).not.toHaveProperty('refreshInFlight');
+    // Nobody is signed out for it: the access token lives to `exp`.
+    expect(runtime.auth.state().kind).toBe('signed-in');
+  });
+
+  it('CONTROL — a Playout that does not answer AT ALL is asked again, and the token (which never left) then works', async () => {
+    seedExpiringSoon();
+    let offline = true;
+    const presented = stubRefreshPlayout({
+      offline: () => offline,
+      refresh: () => tokensAnswer('refresh-renewed'),
+    });
+    await signedInConsole();
+    await vi.advanceTimersByTimeAsync(FIRES_AT_MS + 1_000);
+    expect(presented, 'nothing may be sent to a Playout that does not answer').toEqual([]);
+
+    offline = false;
+    await vi.advanceTimersByTimeAsync(16_000);
+    expect(presented).toEqual([T0]);
+    expect(storedSession()).toMatchObject({ refreshToken: 'refresh-renewed' });
+  });
+
+  it('🔴 A2 — refused BEFORE use (`cg_not_licensed`): the token is kept, the Playout’s reason is on the state, and the SAME token is asked again a minute later', async () => {
+    seedExpiringSoon();
+    const message = 'لایسنسِ این Playout شاملِ CG Control نیست.';
+    let licensed = false;
+    const presented = stubRefreshPlayout({
+      refresh: () =>
+        licensed
+          ? tokensAnswer('refresh-renewed')
+          : new Response(JSON.stringify({ error: 'cg_not_licensed', message }), {
+              status: 403,
+              headers: { 'content-type': 'application/json' },
+            }),
+    });
+    const runtime = await signedInConsole();
+    await vi.advanceTimersByTimeAsync(FIRES_AT_MS + 1_000);
+    expect(presented).toEqual([T0]);
+    expect(runtime.auth.state()).toMatchObject({
+      kind: 'signed-in',
+      renewalRefused: { code: 'cg_not_licensed', message },
+    });
+    expect(storedSession()).toMatchObject({ refreshToken: T0 });
+    expect(storedSession()).not.toHaveProperty('refreshInFlight');
+
+    licensed = true;
+    await vi.advanceTimersByTimeAsync(61_000);
+    // A refusal before use is never a reuse: the same token, and it works.
+    expect(presented).toEqual([T0, T0]);
+    expect(runtime.auth.state()).not.toHaveProperty('renewalRefused');
+    expect(storedSession()).toMatchObject({ refreshToken: 'refresh-renewed' });
+  });
+});

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { z } from 'zod';
@@ -5,31 +6,40 @@ import {
   PlayoutSignInError,
   refreshDelayMs,
   refreshPlayoutToken,
+  refreshTokenFate,
   signInToPlayout,
   type BridgeSessionState,
   type PlayoutFetchLike,
   type PlayoutTokens,
   type SignInFailure,
 } from '@cg/shared-ipc';
+import { neverReachedPlayout } from './playout-http.js';
 
 /**
- * 🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — **CG BRIDGE'S OWN PLAYOUT SESSION.**
+ * 🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) and `CENTRAL-BRIDGE-01-A` (Playout
+ * `2.9.2`) — **CG BRIDGE'S OWN PLAYOUT SESSION.**
  *
  * The Playout has no service or machine token: the bridge signs in like a user (D1), as the
- * station's own account, and keeps the refresh token. Their letter's two sentences decide the
- * shape of everything here:
+ * station's own account, and keeps the refresh token — its OWN family, never shared with a console.
+ * Three facts from the Playout decide the shape of everything here:
  *
- *   - _"the refresh token is single-use and changes every time — store the new one durably BEFORE
- *     using it; a crash between getting it and saving it means signing in again with the
- *     password."_ So every answer's refresh token is written — tmp, write, `fsync`, rename — before
- *     anything the answer carries is used, and the window the sentence warns about is the length of
- *     one synchronous write.
- *   - _"a new password for `cg-admin` revokes all its tokens."_ So a refused refresh is not an
- *     outage to retry: it is a lost session, and every console says
- *     `CG Bridge needs a station admin to sign in` until one does.
+ *   1. _"the refresh token is single-use and changes every time — store the new one durably BEFORE
+ *      using it."_ Every answer's refresh token is written (tmp, write, `fsync`, rename) before
+ *      anything the answer carries is used.
+ *   2. **`2.9.2` §8 — a spent refresh token that comes back is REUSE.** Within 10 s: `401` only. After
+ *      10 s: THEFT — the whole family is revoked and every access token of that user goes on the D9
+ *      list, so one stale refresh signs every console of that account out. So a D2 is marked "in
+ *      flight" ON DISK before its token leaves, and the mark comes off only when the successor is on
+ *      disk or the Playout refused BEFORE using the token. A mark found at start — the process died
+ *      with a D2 in flight — means the token may have been used: it is NEVER sent again, and the
+ *      station says `CG Bridge needs a station admin to sign in`. The same for any D2 whose outcome
+ *      is unknown (a timeout, a dropped connection, an answer that cannot be read).
+ *   3. **`2.9.2` §2 — every D2 REFUSAL comes before the token is used** (`cg_not_licensed`,
+ *      `no_cg_access`, a disabled account): the token is kept, the Playout's reason is shown, and
+ *      the refresh is asked again about every minute. Never a lost session.
  *
- * The password is never stored: {@link BridgeSession.signIn} holds it for its one D1 request and
- * nowhere else — not in this object, not in the file, not in a log.
+ * Refreshes are SERIAL (one operation at a time, {@link BridgeSession.#serial}). The password is
+ * never stored: {@link BridgeSession.signIn} holds it for its one D1 request and nowhere else.
  */
 
 const RecordSchema = z.object({
@@ -40,9 +50,19 @@ const RecordSchema = z.object({
   name: z.string().min(1).optional(),
   /** When this refresh token was received (ISO). */
   obtainedAt: z.string().min(1),
+  /**
+   * `CENTRAL-BRIDGE-01-A` — a D2 carrying `refreshToken` was SENT and its answer is not yet saved.
+   * `tokenId` names the token (a hash, not the token) for the log.
+   */
+  refreshInFlight: z.object({ tokenId: z.string().min(1), since: z.string().min(1) }).optional(),
 });
 
 export type BridgeSessionRecord = z.infer<typeof RecordSchema>;
+
+/** A refresh token's name for the log and the mark — never the token. */
+export function refreshTokenId(token: string): string {
+  return createHash('sha256').update(token).digest('hex').slice(0, 16);
+}
 
 /** The saved session, or `null` when there is none; `problem` says why a file present was unusable. */
 export function loadBridgeSession(file: string): {
@@ -100,22 +120,35 @@ export interface BridgeSessionOptions {
   readonly refreshUrl: string;
   /** The bridge's own offline verifier (`PlayoutAuth.verify`) — the account is read from the JWT. */
   readonly verify: VerifyAccess;
-  /** The request — the bridge's `playoutFetch` (no `Origin`, no proxy, one IPv4). */
+  /** The request — the bridge's `playoutFetchForSession` (no `Origin`, no proxy, one IPv4). */
   readonly fetchImpl?: PlayoutFetchLike;
   readonly now?: () => number;
-  /** The durable write. A seam for the crash test; the default is {@link saveBridgeSession}. */
+  /** The durable write. A seam for the crash tests; the default is {@link saveBridgeSession}. */
   readonly save?: (file: string, record: BridgeSessionRecord) => void;
   /** Told once per access token gained — the bridge's introducing D9 read and its poller. */
   readonly onAccess?: (accessToken: string) => void;
-  /** Between attempts when the Playout does not answer a refresh. */
+  /** Between attempts when a refresh never reached the Playout (default 30 s). */
   readonly retryMs?: number;
+  /** Between attempts after the Playout REFUSED a refresh before using it (default 60 s, `2.9.2` §2). */
+  readonly refusedRetryMs?: number;
+  /** The bound on a D1/D2 answer (default 15 s). An answer that never comes is an unknown outcome. */
+  readonly answerTimeoutMs?: number;
   readonly log?: (line: string) => void;
 }
 
-export type BridgeSignInResult = { ok: true } | { ok: false; failure: SignInFailure };
+export type BridgeSignInResult =
+  | { ok: true }
+  | { ok: false; failure: SignInFailure; message?: string };
 
-/** Thirty seconds between refresh attempts the Playout did not answer. */
 const DEFAULT_RETRY_MS = 30_000;
+const DEFAULT_REFUSED_RETRY_MS = 60_000;
+const DEFAULT_ANSWER_TIMEOUT_MS = 15_000;
+
+/**
+ * What a `refused` state says when the Playout sent no reason of its own. Every console shows it
+ * after "CG Bridge:", as it shows the Playout's own reason.
+ */
+const REFUSED_WITHOUT_REASON = 'The Playout refuses to renew its session.';
 
 export class BridgeSession {
   readonly #opts: BridgeSessionOptions;
@@ -126,7 +159,7 @@ export class BridgeSession {
   #record: BridgeSessionRecord | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #disposed = false;
-  /** One operation at a time: a sign-in and a refresh must never interleave their writes. */
+  /** One operation at a time: a sign-in and a refresh never interleave, and never run twice at once. */
   #chain: Promise<unknown> = Promise.resolve();
   readonly #listeners = new Set<(state: BridgeSessionState) => void>();
 
@@ -145,14 +178,18 @@ export class BridgeSession {
     return () => this.#listeners.delete(handler);
   }
 
-  /** The bearer for the bridge's own Playout reads: only while signed in and not past `exp`. */
+  /** The bearer for the bridge's own Playout reads: only while held and not past `exp`. */
   accessToken(): string | null {
     const held = this.#access;
     if (held === null || this.#now() >= held.expiresAtMs) return null;
     return held.token;
   }
 
-  /** Read the saved session and refresh it — or say that a station admin must sign the bridge in. */
+  /**
+   * Read the saved session and refresh it — or say that a station admin must sign the bridge in.
+   * 🔴 A mark left IN FLIGHT means this process (or one before it) died with a D2 out: the token may
+   * have been used, so it is never sent again.
+   */
   start(): Promise<void> {
     return this.#serial(async () => {
       const { record, problem } = loadBridgeSession(this.#opts.file);
@@ -163,6 +200,13 @@ export class BridgeSession {
         this.#set({ state: 'needs-admin' });
         return;
       }
+      if (record.refreshInFlight !== undefined) {
+        this.#lose(
+          `a refresh of token ${record.refreshInFlight.tokenId} was in flight when CG Bridge ` +
+            'stopped; the Playout may have used it, so it is never sent again',
+        );
+        return;
+      }
       this.#record = record;
       this.#set({ state: 'waiting' });
       await this.#refresh();
@@ -170,8 +214,9 @@ export class BridgeSession {
   }
 
   /**
-   * A station admin's one-time sign-in: D1 with these, the refresh token kept, the password
-   * dropped when this returns. Answers the contract's failure CODE, never the Playout's text.
+   * A station admin's one-time sign-in: D1 with these, the refresh token kept (a NEW family), the
+   * password dropped when this returns. Answers the contract's failure CODE — and, for
+   * `cg_not_licensed`, the Playout's own message.
    */
   signIn(username: string, password: string): Promise<BridgeSignInResult> {
     return this.#serial(async () => {
@@ -184,7 +229,13 @@ export class BridgeSession {
           this.#deps(),
         ));
       } catch (err) {
-        return { ok: false, failure: failureOf(err) };
+        const failure = err instanceof PlayoutSignInError ? err.code : 'unexpected';
+        const message = err instanceof PlayoutSignInError ? err.playoutMessage : null;
+        return {
+          ok: false,
+          failure,
+          ...(failure === 'cg_not_licensed' && message !== null ? { message } : {}),
+        };
       }
       return this.#adopt(tokens);
     });
@@ -204,42 +255,115 @@ export class BridgeSession {
     return next;
   }
 
-  #deps(): { fetchImpl?: PlayoutFetchLike; nowMs: () => number } {
+  #deps(): { fetchImpl?: PlayoutFetchLike; nowMs: () => number; timeoutMs: number } {
     return {
       ...(this.#opts.fetchImpl !== undefined ? { fetchImpl: this.#opts.fetchImpl } : {}),
       nowMs: this.#now,
+      timeoutMs: this.#opts.answerTimeoutMs ?? DEFAULT_ANSWER_TIMEOUT_MS,
     };
   }
 
   async #refresh(): Promise<void> {
-    const presented = this.#record?.refreshToken ?? null;
-    if (presented === null) {
+    const record = this.#record;
+    if (record === null) {
       this.#lose('there is no saved session');
       return;
     }
-    let tokens: PlayoutTokens;
+    if (record.refreshInFlight !== undefined) {
+      this.#lose('a refresh with this token is already unaccounted for; it is never sent again');
+      return;
+    }
+    // 1 — THE MARK, ON DISK, BEFORE THE TOKEN LEAVES. No mark, no send.
+    const marked: BridgeSessionRecord = {
+      ...record,
+      refreshInFlight: {
+        tokenId: refreshTokenId(record.refreshToken),
+        since: new Date(this.#now()).toISOString(),
+      },
+    };
     try {
-      tokens = await refreshPlayoutToken(this.#opts.refreshUrl, presented, this.#deps());
+      this.#save(this.#opts.file, marked);
     } catch (err) {
-      const failure = failureOf(err);
-      if (failure === 'invalid_refresh_token' || failure === 'invalid_credentials') {
-        // Refused, not unanswered: the token was spent, revoked, or the password changed.
-        this.#lose(`the Playout refused the saved session (${failure})`);
-        return;
-      }
-      // Unanswered: keep the token and ask again. An access token still inside `exp` keeps working.
+      this.#log(
+        `the refresh could not be recorded before it was sent (${describe(err)}), so it was not ` +
+          'sent; asking again',
+      );
       if (this.accessToken() === null) this.#set({ state: 'waiting' });
-      this.#log(`the Playout did not answer the session refresh (${failure}); asking again`);
       this.#schedule(this.#opts.retryMs ?? DEFAULT_RETRY_MS);
       return;
     }
+    this.#record = marked;
+
+    // 2 — D2, bounded.
+    let tokens: PlayoutTokens;
+    try {
+      tokens = await refreshPlayoutToken(this.#opts.refreshUrl, record.refreshToken, this.#deps());
+    } catch (err) {
+      this.#afterFailedRefresh(record, err);
+      return;
+    }
+    // 3 — the successor, durably, with the mark cleared, before anything the answer carries is used.
     await this.#adopt(tokens);
   }
 
+  /** What a failed D2 did to the token it carried, and what follows (`refreshTokenFate`). */
+  #afterFailedRefresh(unmarked: BridgeSessionRecord, err: unknown): void {
+    const cause = err instanceof PlayoutSignInError ? err.cause : err;
+    if (neverReachedPlayout(cause)) {
+      // Never sent: the token cannot have been used. The mark comes off; ask again.
+      this.#unmark(unmarked);
+      if (this.accessToken() === null) this.#set({ state: 'waiting' });
+      this.#log(
+        `the Playout could not be reached for the session refresh (${describe(cause)}); asking again`,
+      );
+      this.#schedule(this.#opts.retryMs ?? DEFAULT_RETRY_MS);
+      return;
+    }
+    const fate = refreshTokenFate(err);
+    if (fate === 'kept') {
+      // `2.9.2` §2 — refused BEFORE use: the same token works once the cause is fixed.
+      this.#unmark(unmarked);
+      const message = err instanceof PlayoutSignInError ? err.playoutMessage : null;
+      const code = err instanceof PlayoutSignInError ? err.code : 'unexpected';
+      this.#set({ state: 'refused', message: message ?? REFUSED_WITHOUT_REASON });
+      this.#log(
+        `the Playout refused the session refresh before using the token (${code}); the token is kept`,
+      );
+      this.#schedule(this.#opts.refusedRetryMs ?? DEFAULT_REFUSED_RETRY_MS);
+      return;
+    }
+    if (fate === 'spent') {
+      this.#lose(
+        'the Playout refused the saved session (it was spent, revoked, or its password changed)',
+      );
+      return;
+    }
+    // Unknown — the Playout may have used the token. It is never sent again (the mark stays on disk).
+    this.#lose(
+      `the Playout's answer to the session refresh did not arrive (${describe(cause)}); ` +
+        'its token may have been used, so it is never sent again',
+    );
+  }
+
+  /** Take the in-flight mark off: the token was not used. A failed write leaves the mark — safe. */
+  #unmark(unmarked: BridgeSessionRecord): void {
+    try {
+      this.#save(this.#opts.file, unmarked);
+      this.#record = unmarked;
+    } catch (err) {
+      this.#log(
+        `the session file could not be cleared after a refresh that did not use the token (${describe(err)}); ` +
+          'a restart will ask for a station admin',
+      );
+      this.#record = unmarked;
+    }
+  }
+
   /**
-   * 🔴 **PERSIST, THEN USE.** The answer's refresh token is written durably FIRST — before the
-   * access token is verified, used, or handed to anything. A crash after this line leaves the new
-   * token on disk, and the next start refreshes with it; the spent one is never presented again.
+   * 🔴 **PERSIST, THEN USE.** The answer's refresh token is written durably FIRST — with no in-flight
+   * mark — before the access token is verified, used, or handed to anything. A crash after this line
+   * leaves the new token on disk; a crash before it leaves the mark, and the next start sends
+   * nothing.
    */
   async #adopt(tokens: PlayoutTokens): Promise<BridgeSignInResult> {
     const refreshToken = tokens.refreshToken ?? this.#record?.refreshToken ?? null;
@@ -254,10 +378,10 @@ export class BridgeSession {
       try {
         this.#save(this.#opts.file, record);
       } catch (err) {
-        // The token is valid for THIS process; say plainly what a restart will cost.
+        // The token is valid for THIS process; the file keeps the mark, so a restart sends nothing.
         this.#log(
-          `the session could not be saved (${err instanceof Error ? err.message : String(err)}) — ` +
-            'it works until this bridge restarts, and a station admin must sign it in again then',
+          `the session could not be saved (${describe(err)}) — it works until this bridge ` +
+            'restarts, and a station admin must sign it in again then',
         );
       }
       this.#record = record;
@@ -306,7 +430,9 @@ export class BridgeSession {
 
   #set(next: BridgeSessionState): void {
     const same =
-      next.state === this.#state.state && (next.name ?? null) === (this.#state.name ?? null);
+      next.state === this.#state.state &&
+      (next.name ?? null) === (this.#state.name ?? null) &&
+      (next.message ?? null) === (this.#state.message ?? null);
     this.#state = next;
     if (!same) for (const l of this.#listeners) l(next);
   }
@@ -316,6 +442,6 @@ export class BridgeSession {
   }
 }
 
-function failureOf(err: unknown): SignInFailure {
-  return err instanceof PlayoutSignInError ? err.code : 'unexpected';
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }

@@ -18,8 +18,17 @@ import { SIGN_IN_FAILURES } from '../playout-session.js';
  *   - `needs-admin` — no session, or the Playout refused the saved one: every console says
  *     {@link BRIDGE_NEEDS_ADMIN_LINE}, and a station admin can sign the bridge in.
  *   - `signed-in` — the bridge holds a session (`name` is its account's, from the verified token).
+ *   - `refused` — `CENTRAL-BRIDGE-01-A` (Playout `2.9.2` §2): the Playout refused the refresh BEFORE
+ *     using the token (`cg_not_licensed`, `no_cg_access`, a disabled account). The token is kept and
+ *     asked again about every minute; `message` is the Playout's own reason, shown as it is.
  */
-export const BRIDGE_SESSION_STATES = ['off', 'waiting', 'needs-admin', 'signed-in'] as const;
+export const BRIDGE_SESSION_STATES = [
+  'off',
+  'waiting',
+  'needs-admin',
+  'signed-in',
+  'refused',
+] as const;
 
 export type BridgeSessionStateName = (typeof BRIDGE_SESSION_STATES)[number];
 
@@ -27,6 +36,8 @@ export const BridgeSessionStateSchema = z.object({
   state: z.enum(BRIDGE_SESSION_STATES),
   /** The account the bridge is signed in as — `signed-in` only. */
   name: z.string().min(1).optional(),
+  /** `refused` — the Playout's own reason, as it sent it (one line). */
+  message: z.string().min(1).max(300).optional(),
 });
 
 export type BridgeSessionState = z.infer<typeof BridgeSessionStateSchema>;
@@ -68,5 +79,7 @@ export const BridgeSessionSignInChannel = defineChannel(
   z.object({
     ok: z.boolean(),
     failure: z.enum(SIGN_IN_FAILURES).optional(),
+    /** `CENTRAL-BRIDGE-01-A` — `cg_not_licensed`: the Playout's own message, shown as it is. */
+    message: z.string().min(1).max(300).optional(),
   }),
 );

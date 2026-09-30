@@ -178,4 +178,45 @@ describe('CENTRAL-BRIDGE-01 5.1 — a station admin signs the bridge in, once', 
     });
     expect(openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass')?.value).toBe('');
   });
+
+  it('A4 — a `cg_not_licensed` refusal shows the Playout’s own message, and marks no field', async () => {
+    const message = 'لایسنسِ Playout منقضی شده است.';
+    await mount({ state: 'needs-admin' }, ADMIN, () =>
+      Promise.resolve({ ok: false, failure: 'cg_not_licensed', message }),
+    );
+    await act(async () => {
+      openButton()?.click();
+    });
+    const password = openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass');
+    if (password === null || password === undefined) throw new Error('no password field');
+    await type(password, PASSWORD);
+    await press('Sign in');
+    expect(openDialog()?.textContent).toContain(message);
+    expect(password.getAttribute('aria-invalid')).not.toBe('true');
+  });
+});
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01-A` A2 (Playout `2.9.2` §2) — **REFUSED BEFORE USE: THE PLAYOUT'S REASON, ON
+ * EVERY CONSOLE.** The bridge keeps its token and asks again every minute, so nothing is lost; the
+ * line says why, in the Playout's words, isolated.
+ */
+describe('CENTRAL-BRIDGE-01-A A2 — the bridge’s refused renewal', () => {
+  const message = 'لایسنسِ این Playout شاملِ CG Control نیست.';
+
+  it('🔴 shows the Playout’s reason after "CG Bridge:", in its own isolate — on an operator’s console too', async () => {
+    await mount({ state: 'refused', message }, OPERATOR);
+    expect(banner()?.getAttribute('data-bridge-session-state')).toBe('refused');
+    expect(banner()?.textContent).toBe(`CG Bridge: ${message}`);
+    expect(banner()?.querySelector('bdi')?.textContent).toBe(message);
+    expect(banner()?.textContent).not.toContain(BRIDGE_NEEDS_ADMIN_LINE);
+    expect(openButton()).toBeNull();
+  });
+
+  it('a station admin keeps the sign-in (an account that lost its access is fixed by signing in as another) — CONTROL: the line clears when the renewal lands', async () => {
+    const { push } = await mount({ state: 'refused', message }, ADMIN);
+    expect(openButton()).not.toBeNull();
+    await push({ state: 'signed-in', name: 'cg-admin' });
+    expect(banner()).toBeNull();
+  });
 });

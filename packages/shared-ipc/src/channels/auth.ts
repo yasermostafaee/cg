@@ -37,9 +37,32 @@ export type PlayoutChannelGrant = z.infer<typeof PlayoutChannelGrantSchema>;
  * ⚠ Carried here from day one even though nothing reads it yet: `C-038` is the item that
  * gates on it, and a principal shape that had to grow a field later would mean every stored
  * and published copy of it changing at the same time.
+ *
+ * 🔴 `CENTRAL-BRIDGE-01-A` (Playout `2.9.2` §2, §9) — **THREE SHAPES ARRIVE, AND ALL THREE READ AS
+ * THESE TWO.** `"*"`; an explicit list — which from `2.9.2` even an ADMIN's token carries on a
+ * Playout whose CG licence caps the channels; and, from a Playout before `2.9.2`, D8 (`GET
+ * /api/cg/me`) answered a multi-channel account with its FIRST grant as a lone OBJECT. A lone grant
+ * is read as a list of one ({@link normalizePlayoutChannels}), so every reader sees `"*"` or a list.
  */
-export const PlayoutChannelsSchema = z.union([z.literal('*'), z.array(PlayoutChannelGrantSchema)]);
-export type PlayoutChannels = z.infer<typeof PlayoutChannelsSchema>;
+export const PlayoutChannelsSchema = z.preprocess(
+  (value) => normalizePlayoutChannels(value) ?? value,
+  z.union([z.literal('*'), z.array(PlayoutChannelGrantSchema)]),
+);
+export type PlayoutChannels = '*' | PlayoutChannelGrant[];
+
+/**
+ * `cg_channels` in any shape a Playout has sent — `"*"`, a list, or (before `2.9.2`'s D8) a lone
+ * grant — as `"*"` or a list; `null` for anything that is none of them.
+ */
+export function normalizePlayoutChannels(value: unknown): PlayoutChannels | null {
+  if (value === '*') return '*';
+  if (Array.isArray(value)) {
+    const grants = z.array(PlayoutChannelGrantSchema).safeParse(value);
+    return grants.success ? grants.data : null;
+  }
+  const one = PlayoutChannelGrantSchema.safeParse(value);
+  return one.success ? [one.data] : null;
+}
 
 /**
  * What the bridge VERIFIED about the operator on this socket.

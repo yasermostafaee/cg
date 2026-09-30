@@ -16,7 +16,7 @@ import {
   signInCanWork,
   type ShownCheckLine,
 } from '../firstRun/firstRunStation.js';
-import { signInMarksField, signInMessage } from './signInMessages.js';
+import { signInFailureLine } from './signInMessages.js';
 
 /**
  * 🔴 `R-066` / `C-037` — **THE SIGN-IN, OVER THE LIVE STACK.**
@@ -164,7 +164,11 @@ export function SignInOverlay(): JSX.Element | null {
   const capabilities = useAuthCapabilities();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<{ text: string; marksField: boolean } | null>(null);
+  const [error, setError] = useState<{
+    text: string;
+    marksField: boolean;
+    fromPlayout?: boolean;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   // B2 — the check's lines, which decide whether a sign-in can work; and the one re-check.
   const [lines, setLines] = useState<readonly ShownCheckLine[] | null>(null);
@@ -220,13 +224,19 @@ export function SignInOverlay(): JSX.Element | null {
     } catch (err) {
       /*
         ⚠ The CODE is mapped to this console's own sentence — the contract says the Playout's
-        free-text `message` is never shown verbatim (it goes to the station's log instead). A
-        Playout that did not answer is the CHECK's to say, under the address (B2).
+        free-text `message` is never shown verbatim (it goes to the station's log instead), with
+        ONE exception the owner decided (`CENTRAL-BRIDGE-01-A` A4): `cg_not_licensed` shows the
+        Playout's message as it is, marks no field and keeps the form. A Playout that did not answer
+        is the CHECK's to say, under the address (B2).
       */
       const code = err instanceof PlayoutSignInError ? err.code : 'unexpected';
+      const line = signInFailureLine(
+        code,
+        err instanceof PlayoutSignInError ? err.playoutMessage : null,
+      );
       if (code === 'unreachable') setRecheck((n) => n + 1);
-      else setError({ text: signInMessage(code), marksField: signInMarksField(code) });
-      setPassword('');
+      else setError(line);
+      if (!line.keepsForm) setPassword('');
     } finally {
       setBusy(false);
       /*
@@ -327,7 +337,8 @@ export function SignInOverlay(): JSX.Element | null {
             does not jump under the pointer as the message arrives.
           */}
           <div id="cg-signin-error" style={styles.error} role="status">
-            {message?.text}
+            {/* A4 — the Playout's own words sit in their own isolate (golden rule 11). */}
+            {message?.fromPlayout === true ? <bdi>{message.text}</bdi> : message?.text}
           </div>
         </div>
         {/* The one way through. No ✕, no Cancel — there is nothing behind this to go back to. */}

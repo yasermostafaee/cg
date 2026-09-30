@@ -9,7 +9,7 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { PlayoutSignInError } from '../../../platform/playoutSession.js';
-import { signInMarksField, signInMessage } from '../auth/signInMessages.js';
+import { signInFailureLine } from '../auth/signInMessages.js';
 import { airFrom } from '../channels/channelAir.js';
 import { OutputDot } from '../channels/OutputDot.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
@@ -241,7 +241,11 @@ function SignInStep({
 }): JSX.Element {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<{ text: string; marksField: boolean } | null>(null);
+  const [error, setError] = useState<{
+    text: string;
+    marksField: boolean;
+    fromPlayout?: boolean;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   /*
     🔴 `DELTA-MULTI-CHANNEL-01-B` B2 — **A SIGN-IN IS OFFERED ONLY WHEN IT CAN WORK.** The owner,
@@ -261,14 +265,19 @@ function SignInStep({
       await window.cg.auth.signIn(username, password);
     } catch (err) {
       const code = err instanceof PlayoutSignInError ? err.code : 'unexpected';
+      // `CENTRAL-BRIDGE-01-A` A4 — `cg_not_licensed` shows the Playout's own message and keeps the form.
+      const line = signInFailureLine(
+        code,
+        err instanceof PlayoutSignInError ? err.playoutMessage : null,
+      );
       if (code === 'unreachable') {
         // B2 — the Playout stopped answering since the check: the CHECK says so, under the
         // address, in its own words. Never a sentence on a field.
         onPlayoutSilent();
       } else {
-        setError({ text: signInMessage(code), marksField: signInMarksField(code) });
+        setError(line);
       }
-      setPassword('');
+      if (!line.keepsForm) setPassword('');
     } finally {
       setBusy(false);
     }
@@ -327,7 +336,8 @@ function SignInStep({
       </div>
       {shown !== null && (
         <div style={styles.error} role="status">
-          {shown.text}
+          {/* A4 — the Playout's own words sit in their own isolate (golden rule 11). */}
+          {shown.fromPlayout === true ? <bdi>{shown.text}</bdi> : shown.text}
         </div>
       )}
       <div style={styles.row}>

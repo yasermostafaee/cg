@@ -21,6 +21,11 @@
  * this repo refuses.
  *
  * `unreachable` is ours and not theirs: it is the one failure with no HTTP answer at all.
+ *
+ * `CENTRAL-BRIDGE-01-A` (Playout `2.9.2`) — `cg_not_licensed`: `403` at D1 and D2 when the Playout's
+ * licence does not include CG Control (or none of the account's channels is inside its CG cap). The
+ * one code whose Playout `message` IS shown, as it is — the owner's decision in the delta: it names
+ * a licence condition only the Playout can word.
  */
 export const SIGN_IN_FAILURES = [
   'invalid_credentials',
@@ -28,6 +33,7 @@ export const SIGN_IN_FAILURES = [
   'account_locked',
   'rate_limited',
   'invalid_refresh_token',
+  'cg_not_licensed',
   'unreachable',
   'unexpected',
 ] as const;
@@ -53,11 +59,29 @@ export const RECORD_BODY_MAX = 2000;
 export class PlayoutSignInError extends Error {
   readonly code: SignInFailure;
   readonly detail: SignInFailureDetail | null;
-  constructor(code: SignInFailure, detail: SignInFailureDetail | null = null) {
+  /**
+   * `CENTRAL-BRIDGE-01-A` — the Playout's own `message`, when its answer carried one. Shown only
+   * where a decision says so (`cg_not_licensed`); otherwise it is the record's, like `detail`.
+   */
+  readonly playoutMessage: string | null;
+  /**
+   * `CENTRAL-BRIDGE-01-A` — for `unreachable`, what the request itself failed with. A caller that
+   * can tell "the request never reached the Playout" from "its answer was lost" reads it (a refresh
+   * token that was never sent may be sent again; one that may have been used may not).
+   */
+  override readonly cause: unknown;
+  constructor(
+    code: SignInFailure,
+    detail: SignInFailureDetail | null = null,
+    playoutMessage: string | null = null,
+    cause: unknown = undefined,
+  ) {
     super(`playout sign-in failed: ${code}`);
     this.name = 'PlayoutSignInError';
     this.code = code;
     this.detail = detail;
+    this.playoutMessage = playoutMessage;
+    this.cause = cause;
   }
 }
 
@@ -73,10 +97,21 @@ export interface PlayoutResponseLike {
   json(): Promise<unknown>;
 }
 
-/** A `fetch` as this module calls it — a browser's `fetch`, or the bridge's `playoutFetch`. */
+/**
+ * A `fetch` as this module calls it — a browser's `fetch`, or the bridge's `playoutFetch`.
+ *
+ * ⚠ With {@link PlayoutTokenDeps.timeoutMs} the init ALSO carries a `signal` (an `AbortSignal`),
+ * which a real `fetch` honours. It is not in this type on purpose: this package has no DOM library
+ * to name `AbortSignal` with, and any other spelling would make a browser's own `fetch` stop being
+ * one of these. An implementation that is not `fetch` reads it as `(init as { signal?: … }).signal`.
+ */
 export type PlayoutFetchLike = (
   url: string,
-  init: { method: 'POST'; headers: Record<string, string>; body: string },
+  init: {
+    method: 'POST';
+    headers: Record<string, string>;
+    body: string;
+  },
 ) => Promise<PlayoutResponseLike>;
 
 /** A D1/D2 answer, reduced to what a holder keeps. */
@@ -124,17 +159,24 @@ async function failureFrom(res: PlayoutResponseLike): Promise<PlayoutSignInError
     // No body to keep.
   }
   const detail: SignInFailureDetail = { status: res.status, body: text.slice(0, RECORD_BODY_MAX) };
+  let playoutMessage: string | null = null;
   try {
     const body: unknown = JSON.parse(text);
     const code = (body as { error?: unknown } | null)?.error;
+    const message = (body as { message?: unknown } | null)?.message;
+    if (typeof message === 'string' && message.trim() !== '') {
+      // As it is, in ONE line: whitespace runs (a line break included) become one space.
+      playoutMessage = message.replace(/\s+/g, ' ').trim().slice(0, PLAYOUT_MESSAGE_MAX);
+    }
     if (
       code === 'invalid_credentials' ||
       code === 'no_cg_access' ||
       code === 'account_locked' ||
       code === 'rate_limited' ||
-      code === 'invalid_refresh_token'
+      code === 'invalid_refresh_token' ||
+      code === 'cg_not_licensed'
     ) {
-      return new PlayoutSignInError(code, detail);
+      return new PlayoutSignInError(code, detail, playoutMessage);
     }
   } catch {
     // No body, or not JSON. Fall through to the status.
@@ -149,8 +191,11 @@ async function failureFrom(res: PlayoutResponseLike): Promise<PlayoutSignInError
           : res.status === 429
             ? 'rate_limited'
             : 'unexpected';
-  return new PlayoutSignInError(byStatus, detail);
+  return new PlayoutSignInError(byStatus, detail, playoutMessage);
 }
+
+/** The most of a Playout `message` a failure keeps — one line's worth, never a page. */
+export const PLAYOUT_MESSAGE_MAX = 300;
 
 function tokensFrom(body: TokenResponse, nowMs: number): PlayoutTokens {
   const accessToken = body.access_token;
@@ -185,21 +230,33 @@ async function postJson(
   url: string,
   payload: unknown,
   fetchImpl: PlayoutFetchLike,
+  timeoutMs: number | undefined,
 ): Promise<PlayoutResponseLike> {
+  // Built apart from the call so the `signal` can ride along (see `PlayoutFetchLike`).
+  const init = {
+    method: 'POST' as const,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    body: JSON.stringify(payload),
+    ...(timeoutMs !== undefined ? { signal: timeoutSignal(timeoutMs) } : {}),
+  };
   try {
-    return await fetchImpl(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(payload),
-    });
-  } catch {
+    return await fetchImpl(url, init);
+  } catch (err) {
     /*
       🔴 A NETWORK failure and an HTTP failure are DIFFERENT FACTS and get different sentences.
       "Wrong password" and "the Playout cannot be reached" send the operator to two different
-      places, and flattening them would send half of them to the wrong one.
+      places, and flattening them would send half of them to the wrong one. The failure itself rides
+      `cause`: a refresh must know whether its token could have reached the Playout.
     */
-    throw new PlayoutSignInError('unreachable', { status: null, body: '' });
+    throw new PlayoutSignInError('unreachable', { status: null, body: '' }, null, err);
   }
+}
+
+/** `AbortSignal.timeout`, reached structurally — this package is built with no DOM library. */
+function timeoutSignal(ms: number): unknown {
+  const Signal = (globalThis as { AbortSignal?: { timeout?: (ms: number) => unknown } })
+    .AbortSignal;
+  return Signal?.timeout?.(ms);
 }
 
 async function tokenBody(res: PlayoutResponseLike): Promise<TokenResponse> {
@@ -215,6 +272,12 @@ export interface PlayoutTokenDeps {
   /** The request. A browser's `fetch`, or the bridge's `playoutFetch` (no `Origin`). */
   readonly fetchImpl?: PlayoutFetchLike;
   readonly nowMs?: () => number;
+  /**
+   * Give up on an answer after this long. A refresh must bound its wait — a Playout that took the
+   * request and never answered holds the caller forever otherwise — and a refresh that timed out
+   * is one whose token may have been used ({@link refreshTokenFate}).
+   */
+  readonly timeoutMs?: number;
 }
 
 /** The runtime's own `fetch`, read when called — a test that replaces `globalThis.fetch` is honoured. */
@@ -233,7 +296,7 @@ export async function signInToPlayout(
 ): Promise<SignInOutcome> {
   const nowMs = deps.nowMs ?? ((): number => Date.now());
   const body = await tokenBody(
-    await postJson(tokenUrl, { username, password }, deps.fetchImpl ?? globalFetch),
+    await postJson(tokenUrl, { username, password }, deps.fetchImpl ?? globalFetch, deps.timeoutMs),
   );
   return { session: tokensFrom(body, nowMs()), echo: echoFrom(body) };
 }
@@ -250,9 +313,48 @@ export async function refreshPlayoutToken(
 ): Promise<PlayoutTokens> {
   const nowMs = deps.nowMs ?? ((): number => Date.now());
   const body = await tokenBody(
-    await postJson(refreshUrl, { refresh_token: refreshToken }, deps.fetchImpl ?? globalFetch),
+    await postJson(
+      refreshUrl,
+      { refresh_token: refreshToken },
+      deps.fetchImpl ?? globalFetch,
+      deps.timeoutMs,
+    ),
   );
   return tokensFrom(body, nowMs());
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01-A` (Playout `2.9.2` §2 and §8) — **WHAT A FAILED D2 SAYS ABOUT THE REFRESH
+ * TOKEN IT CARRIED.** One reading, for CG Bridge and for every console, because getting it wrong is
+ * no longer harmless: from `2.9.2` a spent refresh token that comes back MORE THAN 10 s later is
+ * treated as theft — its whole family is revoked, and every access token of that USER goes on the
+ * D9 list. With every console signed in as one account, one stale refresh signs every console out.
+ *
+ *   - `spent`   — a `401` (`invalid_refresh_token`): used, revoked, or its account's password
+ *                 changed. It is gone; a full sign-in (D1) is the only way on.
+ *   - `kept`    — the contract's OTHER refusals (§4.6): `403` (`cg_not_licensed`, `no_cg_access`, a
+ *                 disabled account), `423`, `429`. Their §2 says every D2 refusal comes before the
+ *                 token is used, so the same token works again once the cause is fixed: keep it, say
+ *                 why, ask again on the normal cadence.
+ *   - `unknown` — no answer, a timeout, a dropped connection, a `5xx`, a `2xx` that cannot be read,
+ *                 a status the contract does not define: the Playout MAY have used it. It is never
+ *                 sent again.
+ *
+ * ⚠ `kept` is the DANGEROUS answer to get wrong — a token called kept is sent again a minute later,
+ * past the 10 s grace — so it is the contract's named refusals only, never "any 4xx". A status the
+ * contract does not name costs an admin sign-in; a wrong `kept` costs every console of the account.
+ */
+export type RefreshTokenFate = 'spent' | 'kept' | 'unknown';
+
+/** The contract's refusals that come BEFORE a D2 uses its token (§4.6; `2.9.2` §2). */
+const REFUSED_BEFORE_USE: ReadonlySet<number> = new Set([403, 423, 429]);
+
+export function refreshTokenFate(err: unknown): RefreshTokenFate {
+  if (!(err instanceof PlayoutSignInError)) return 'unknown';
+  const status = err.detail?.status ?? null;
+  if (status === 401) return 'spent';
+  if (status !== null && REFUSED_BEFORE_USE.has(status)) return 'kept';
+  return 'unknown';
 }
 
 /**

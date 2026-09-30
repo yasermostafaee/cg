@@ -10,6 +10,7 @@ import type {
   BridgeSessionSignInChannel,
   BridgeSessionState,
   BridgeSessionStateChannel,
+  SignInFailure,
   ChannelsCatalogueChannel,
   SetupCheckChannel,
   SetupPhase,
@@ -191,6 +192,13 @@ export type AuthSessionState =
        * surface reading the claim instead would offer a channel the bridge refuses.
        */
       readonly permittedChannels: readonly number[];
+      /**
+       * `CENTRAL-BRIDGE-01-A` A2 (Playout `2.9.2` §2) — the Playout refuses to RENEW this session,
+       * before using its refresh token (`cg_not_licensed`, `no_cg_access`, a disabled account).
+       * Nothing is lost: the token is kept and asked again every minute, and the session works to
+       * `exp`. `message` is the Playout's own reason, when it sent one. Absent while renewal works.
+       */
+      readonly renewalRefused?: { readonly code: SignInFailure; readonly message: string | null };
     }
   /**
    * A principal was held and the bridge has stopped accepting it. The NAME is kept so the pill

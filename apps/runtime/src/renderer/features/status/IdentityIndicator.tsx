@@ -1,7 +1,9 @@
+import type { AuthSessionState } from '../../../shared/runtime-bridge.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { colors } from '../../theme.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
+import { signInFailureLine } from '../auth/signInMessages.js';
 
 /**
  * 🔴 `R-066` — **WHO IS SIGNED IN AT THIS CONSOLE, in the operator's words.**
@@ -68,7 +70,8 @@ export function IdentityIndicator(): JSX.Element | null {
           className="cg-pill"
           role="status"
           aria-label="Sign-in state"
-          title={`This session ends at ${formatEndTime(auth.principal.expiresAt)}.`}
+          title={sessionTitle(auth)}
+          {...(auth.renewalRefused !== undefined ? { 'data-renewal-refused': '' } : {})}
         >
           <span style={styles.signedIn}>
             SIGNED IN AS <IsolatedName>{auth.principal.name}</IsolatedName>
@@ -76,6 +79,23 @@ export function IdentityIndicator(): JSX.Element | null {
         </Tag>
       );
   }
+}
+
+/** First-strong isolate … pop directional isolate: a plain-text `<bdi>`, for a `title`. */
+const FSI = String.fromCodePoint(0x2068);
+const PDI = String.fromCodePoint(0x2069);
+
+/**
+ * The pill's `title`: when the session ends — and, `CENTRAL-BRIDGE-01-A` A2, why the Playout will not
+ * renew it while it refuses (the session still works to that time, and the renewal is asked again
+ * every minute). A state fact, not advice; the Playout's own words go in an isolate.
+ */
+export function sessionTitle(auth: Extract<AuthSessionState, { kind: 'signed-in' }>): string {
+  const ends = `This session ends at ${formatEndTime(auth.principal.expiresAt)}.`;
+  const refused = auth.renewalRefused;
+  if (refused === undefined) return ends;
+  const line = signInFailureLine(refused.code, refused.message);
+  return `${ends} ${line.fromPlayout ? `${FSI}${line.text}${PDI}` : line.text}`;
 }
 
 /**

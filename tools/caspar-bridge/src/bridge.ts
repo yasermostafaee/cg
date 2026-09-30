@@ -231,7 +231,7 @@ import {
   type CheckOptions,
   type CheckProbes,
 } from './connection-check.js';
-import { pinnedIPv4, playoutFetch } from './playout-http.js';
+import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
 import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
@@ -1863,7 +1863,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
                 }
               : { ok: false, reason: verified.refusal };
           },
-          fetchImpl: playoutFetch,
+          fetchImpl: playoutFetchForSession,
           onAccess: (accessToken) => {
             playoutAuth.startPolling();
             void playoutAuth.introduce(accessToken);

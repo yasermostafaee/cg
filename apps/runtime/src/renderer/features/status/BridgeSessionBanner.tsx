@@ -12,7 +12,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { cssVars, NOTICE_PX } from '../../theme.js';
-import { signInMarksField, signInMessage } from '../auth/signInMessages.js';
+import { signInFailureLine, signInMessage } from '../auth/signInMessages.js';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — **CG BRIDGE HAS NO PLAYOUT SESSION OF ITS
@@ -26,6 +26,12 @@ import { signInMarksField, signInMessage } from '../auth/signInMessages.js';
  *
  * Amber, as the skew banner beside it is: nothing on air is affected by this line, and the
  * station's reads fall back to a signed-in console's own session meanwhile.
+ *
+ * `CENTRAL-BRIDGE-01-A` A2 — `refused`: the Playout refused to renew the bridge's session BEFORE
+ * using its token (`cg_not_licensed`, `no_cg_access`, a disabled account). Nothing is lost — the
+ * bridge keeps the token and asks again every minute — so the line is the Playout's own reason,
+ * after "CG Bridge:", isolated (it is the Playout's language, not ours). A station admin still gets
+ * the sign-in: an account that lost its access is fixed by signing the bridge in as another.
  */
 
 const styles = {
@@ -73,14 +79,28 @@ export function BridgeSessionBanner(): JSX.Element | null {
     };
   }, [mayAsk]);
 
-  if (session?.state !== 'needs-admin') return null;
+  if (session?.state !== 'needs-admin' && session?.state !== 'refused') return null;
   const admin =
     auth.kind === 'signed-in' && holdsPermissionClass(auth.principal.roles, 'station-admin');
 
   return (
-    <div style={styles.banner} role="alert" data-bridge-session-banner="" data-tone="caution">
+    <div
+      style={styles.banner}
+      role="alert"
+      data-bridge-session-banner=""
+      data-bridge-session-state={session.state}
+      data-tone="caution"
+    >
       <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
-      <span style={styles.text}>{BRIDGE_NEEDS_ADMIN_LINE}</span>
+      <span style={styles.text}>
+        {session.state === 'refused' ? (
+          <>
+            CG Bridge: <bdi>{session.message}</bdi>
+          </>
+        ) : (
+          BRIDGE_NEEDS_ADMIN_LINE
+        )}
+      </span>
       {admin && (
         <Button variant="neutral" onClick={() => setDialogOpen(true)}>
           Sign in CG Bridge…
@@ -108,8 +128,10 @@ function BridgeSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
         onClose();
         return;
       }
-      const code = answer.failure ?? 'unexpected';
-      setError({ text: signInMessage(code), marksField: signInMarksField(code) });
+      // `CENTRAL-BRIDGE-01-A` A4 — `cg_not_licensed` carries the Playout's own message, shown as it is
+      // (the message region renders each line in its own `dir="auto"` isolate).
+      const line = signInFailureLine(answer.failure ?? 'unexpected', answer.message ?? null);
+      setError({ text: line.text, marksField: line.marksField });
     } catch (err) {
       setError({
         text: err instanceof Error ? err.message : signInMessage('unexpected'),

@@ -2,6 +2,7 @@ import dns from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
+import type { PlayoutFetchLike } from '@cg/shared-ipc';
 
 /**
  * 🔴 `DESKTOP-APPS-01-B` B1.4 — **EVERY REQUEST THE BRIDGE MAKES TO THE PLAYOUT GOES THROUGH HERE:
@@ -88,6 +89,41 @@ export interface PlayoutFetchInit extends RequestInit {
    * (`CONNECT_TIMEOUT`). The connection check sets it; the background reads rely on their signal.
    */
   readonly connectTimeoutMs?: number;
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` (D7) — {@link playoutFetch} as `@cg/shared-ipc`'s D1/D2 calls it. That package
+ * is built with no DOM library, so the timeout's `AbortSignal` rides on the init outside its type
+ * (see `PlayoutFetchLike`); this is where the real type is known.
+ *
+ * `CENTRAL-BRIDGE-01-A` — with a CONNECT bound ({@link SESSION_CONNECT_TIMEOUT_MS}), so a request that
+ * never reached the Playout fails as `CONNECT_TIMEOUT` (never sent) rather than as the caller's own
+ * overall timeout (which cannot tell "never sent" from "sent, answer lost").
+ */
+export const playoutFetchForSession: PlayoutFetchLike = (url, init) => {
+  const { signal } = init as { signal?: AbortSignal };
+  return playoutFetch(url, {
+    method: init.method,
+    headers: init.headers,
+    body: init.body,
+    connectTimeoutMs: SESSION_CONNECT_TIMEOUT_MS,
+    ...(signal !== undefined ? { signal } : {}),
+  });
+};
+
+/** How long the bridge's own D1/D2 wait for a connection to OPEN. */
+export const SESSION_CONNECT_TIMEOUT_MS = 5_000;
+
+/**
+ * `CENTRAL-BRIDGE-01-A` — did this request fail before it could reach the Playout? A refresh token
+ * that was never sent cannot have been used, so it may be sent again; every other failure is one
+ * whose token may have been used.
+ */
+export function neverReachedPlayout(err: unknown): boolean {
+  return (
+    err instanceof PlayoutRequestError &&
+    (err.code === 'ECONNREFUSED' || err.code === 'NO_IPV4' || err.code === 'CONNECT_TIMEOUT')
+  );
 }
 
 export async function playoutFetch(

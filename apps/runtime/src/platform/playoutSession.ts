@@ -42,41 +42,94 @@ export {
 
 const STORAGE_KEY = 'cg.runtime.playoutSession';
 
+/**
+ * `CENTRAL-BRIDGE-01-A` (Playout `2.9.2` §8) — the stored session's refresh token is OUT: a tab sent
+ * it to D2 at `since` and has not yet stored the answer. While it is set, no other tab sends that
+ * token; a mark nobody can still be waiting on means it may have been used, and it is never sent
+ * again (`playoutRefresh.ts`).
+ */
+export interface RefreshInFlight {
+  /** Epoch ms the mark was written. */
+  readonly since: number;
+  /** Which tab wrote it — how a read-back tells its own mark from another tab's. */
+  readonly by: string;
+}
+
 /** What the console holds between reloads. Never leaves this browser except as the `auth` frame. */
-export type StoredSession = PlayoutTokens;
+export interface StoredSession extends PlayoutTokens {
+  readonly refreshInFlight?: RefreshInFlight;
+}
 
 function readStored(): StoredSession | null {
+  return readPlayoutStore().session;
+}
+
+/**
+ * `CENTRAL-BRIDGE-01-A` — the store AND what it holds. `usable: false` when the store itself cannot
+ * be read (blocked site data): the session then lives in this tab's memory alone — no other tab can
+ * hold its refresh token and no restart can find it — so "nothing stored" must not be read as
+ * "another tab signed out".
+ */
+export function readPlayoutStore(): {
+  readonly usable: boolean;
+  readonly session: StoredSession | null;
+} {
   let raw: string | null;
   try {
     raw = localStorage.getItem(STORAGE_KEY);
   } catch {
     // Private mode / blocked storage: no session is the honest answer, not a crash.
-    return null;
+    return { usable: false, session: null };
   }
+  return { usable: true, session: parseStored(raw) };
+}
+
+function parseStored(raw: string | null): StoredSession | null {
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null) return null;
-    const { accessToken, refreshToken, expiresAtMs } = parsed as Record<string, unknown>;
+    const { accessToken, refreshToken, expiresAtMs, refreshInFlight } = parsed as Record<
+      string,
+      unknown
+    >;
     if (typeof accessToken !== 'string' || accessToken === '') return null;
     if (typeof expiresAtMs !== 'number' || !Number.isFinite(expiresAtMs)) return null;
+    const mark = markFrom(refreshInFlight);
     return {
       accessToken,
       refreshToken: typeof refreshToken === 'string' ? refreshToken : null,
       expiresAtMs,
+      ...(mark !== null ? { refreshInFlight: mark } : {}),
     };
   } catch {
     return null;
   }
 }
 
-function writeStored(session: StoredSession | null): void {
+/**
+ * A stored mark, or `null`. ⚠ A mark that is present but unreadable still MEANS a D2 may be out, so
+ * it reads as the oldest possible mark (`since: 0`, nobody's) — never as no mark at all, which would
+ * send the token.
+ */
+function markFrom(value: unknown): RefreshInFlight | null {
+  if (value === undefined || value === null) return null;
+  const { since, by } = (typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  return {
+    since: typeof since === 'number' && Number.isFinite(since) ? since : 0,
+    by: typeof by === 'string' ? by : '',
+  };
+}
+
+function writeStored(session: StoredSession | null): boolean {
   try {
     if (session === null) localStorage.removeItem(STORAGE_KEY);
     else localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    return true;
   } catch {
     // Storage refused. The in-memory session still works for this page's lifetime; what must
-    // not happen is a pretence that it was saved, so nothing else is done here.
+    // not happen is a pretence that it was saved — so the caller is told it was not.
+    return false;
   }
 }
 
@@ -85,9 +138,9 @@ export function loadPlayoutSession(): StoredSession | null {
   return readStored();
 }
 
-/** Replace the held session, or clear it. */
-export function savePlayoutSession(session: StoredSession | null): void {
-  writeStored(session);
+/** Replace the held session, or clear it. `false` when the store refused the write. */
+export function savePlayoutSession(session: StoredSession | null): boolean {
+  return writeStored(session);
 }
 
 /** Is this session past `exp`? The browser's own view; the bridge decides for itself. */

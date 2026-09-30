@@ -293,7 +293,7 @@ describe('DELTA-MULTI-CHANNEL-01-B B3 — one interface language, and the shared
     expect(bdi?.textContent).toBe('علی رضایی');
   });
 
-  it('every failure sentence of ours is English, and all seven are different', () => {
+  it('every failure sentence of ours is English, and all eight are different', () => {
     const codes = [
       'invalid_credentials',
       'no_cg_access',
@@ -301,6 +301,7 @@ describe('DELTA-MULTI-CHANNEL-01-B B3 — one interface language, and the shared
       'rate_limited',
       'unreachable',
       'invalid_refresh_token',
+      'cg_not_licensed',
       'unexpected',
     ] as const;
     const sentences = codes.map((c) => signInMessage(c));
@@ -368,6 +369,42 @@ describe('DELTA-MULTI-CHANNEL-01-B B2 — a sign-in is offered only when it can 
     expect(field(h, 'cg-signin-pass')?.getAttribute('aria-invalid')).toBe('true');
     expect(field(h, 'cg-signin-pass')?.value).toBe('');
     expect(field(h, 'cg-signin-user')?.value).toBe('cg-op1');
+  });
+
+  /*
+    🔴 `CENTRAL-BRIDGE-01-A` A4 — Playout `2.9.2` refuses a sign-in with `403 cg_not_licensed` and a
+    message for the operator. It is shown AS IT IS, in one line, isolated; it is not a password error,
+    so no field is marked and nothing typed is cleared.
+  */
+  it('🔴 A4 — `cg_not_licensed` shows the Playout’s OWN message, isolated and alone on its line; no field is marked, and the form is KEPT', async () => {
+    const h = await mount(SIGNED_OUT);
+    const message = 'لایسنسِ این Playout شاملِ CG Control نیست.';
+    h.setSignInResult(
+      new PlayoutSignInError('cg_not_licensed', { status: 403, body: '' }, message),
+    );
+    await fill(h);
+    await h.click('button.cg-gate-submit');
+    const line = h.el.querySelector('#cg-signin-error');
+    expect(line?.querySelector('bdi')?.textContent, 'the message is not isolated').toBe(message);
+    // The Playout's words, and nothing of ours around them.
+    expect(line?.textContent).toBe(message);
+    expect(field(h, 'cg-signin-pass')?.getAttribute('aria-invalid')).not.toBe('true');
+    expect(field(h, 'cg-signin-pass')?.value, 'the form was cleared').toBe(
+      'test-only-not-a-secret',
+    );
+    expect(field(h, 'cg-signin-user')?.value).toBe('cg-op1');
+  });
+
+  it('A4 — with no message of its own, this console’s sentence: English, no field marked, the form kept', async () => {
+    const h = await mount(SIGNED_OUT);
+    h.setSignInResult(new PlayoutSignInError('cg_not_licensed', { status: 403, body: '' }));
+    await fill(h);
+    await h.click('button.cg-gate-submit');
+    expect(h.el.querySelector('#cg-signin-error')?.textContent).toBe(
+      signInMessage('cg_not_licensed'),
+    );
+    expect(field(h, 'cg-signin-pass')?.getAttribute('aria-invalid')).not.toBe('true');
+    expect(field(h, 'cg-signin-pass')?.value).toBe('test-only-not-a-secret');
   });
 
   for (const code of ['no_cg_access', 'account_locked', 'rate_limited'] as const) {
