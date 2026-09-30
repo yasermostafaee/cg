@@ -17,6 +17,18 @@ import type { VerifiedToken } from './playout-auth.js';
  * needs no second code path — the MODE decides what that means, at the gate, in one place.
  */
 export class AuthSession {
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **THE CONSOLE MACHINE this socket came from**: its peer
+   * address (`192.168.21.50`; an IPv4-mapped IPv6 form reduced to IPv4), or `null` when unknown.
+   * One CG Bridge serves consoles on several machines, so an audit row names the user AND the
+   * machine they pressed on. Fixed for the life of the socket — a connection does not move.
+   */
+  readonly peerAddress: string | null;
+
+  constructor(peerAddress: string | null = null) {
+    this.peerAddress = peerAddress;
+  }
+
   #token: VerifiedToken | null = null;
   /**
    * 🔴 **A VERIFICATION IN FLIGHT, so the frames behind it are not judged before it lands.**

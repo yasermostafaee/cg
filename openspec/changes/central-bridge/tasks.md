@@ -128,7 +128,14 @@
       control: the handshake went out; a real matched pair: no mismatch), `bridgeSkewBanner.dom` (the
       line, outranking a skew, following the answer), `mock-bridge-parity`, `bridgeTimeoutWords` (its
       fake answers the release); bridge `auth-gate` (the version to an unsigned socket, own vs given).
-- [ ] 4.4 Audit rows name the user and the console machine (the socket's peer address).
+- [x] 4.4 Audit rows name the user and the console machine (the socket's peer address). The socket's
+      `AuthSession` carries the address (`consoleAddressOf`: IPv4-mapped reduced, over-length → none);
+      `#recordAudit` stamps `consoleAddress` from the acting session as it stamps `actorSub`; the Log
+      shows it on the actor cell's title. Tests: bridge `auth-principal` (a take and a sign-out name
+      `127.0.0.1` — control: a take no console caused carries none; the address unit, with the
+      over-length case), runtime
+      `auditPanel.legibility.dom` (the title and `data-audit-console` — control: a row without it has no
+      title).
 - [ ] 4.5 e2e: two consoles, one bridge (the multi-box take, the clear, the control).
 - [ ] 4.6 Tokens: none, expired, without channel 2 — refused; control: channel 2 works.
 

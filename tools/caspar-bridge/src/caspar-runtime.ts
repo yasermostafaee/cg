@@ -145,7 +145,12 @@ import {
   ledgerChannels,
   templateAdmitsPassTiming,
 } from '@cg/shared-ipc';
-import { operatorActor, operatorSub, runAsTemplate } from './actor-context.js';
+import {
+  operatorActor,
+  operatorConsoleAddress,
+  operatorSub,
+  runAsTemplate,
+} from './actor-context.js';
 import { SILENCE_CHECK_MS, SILENT_LAYER_MS, silentLayersToAsk } from './silent-layer-question.js';
 import {
   ChannelSettingsStore,
@@ -13580,8 +13585,11 @@ export class CasparRuntime {
       nothing" are not the same fact.
     */
     const verifiedSub = operatorSub();
+    // `CENTRAL-BRIDGE-01` (`R-068`) — and the console machine, stamped the same way.
+    const consoleAddress = operatorConsoleAddress();
     const row: AuditEntry = {
       ...(verifiedSub !== null ? { actorSub: verifiedSub } : {}),
+      ...(consoleAddress !== null ? { consoleAddress } : {}),
       ...entry,
       ts: entry.ts ?? new Date().toISOString(),
     } as AuditEntry;

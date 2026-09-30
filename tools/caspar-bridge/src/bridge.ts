@@ -172,7 +172,11 @@ import {
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
-import { retainedFromStackItem, type RetainedStackItem } from '@cg/shared-schema';
+import {
+  CONSOLE_ADDRESS_MAX_LENGTH,
+  retainedFromStackItem,
+  type RetainedStackItem,
+} from '@cg/shared-schema';
 import { loadPersistedStack, savePersistedStack } from './stack-store.js';
 import { currentAuthSession, runAsActor } from './actor-context.js';
 import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
@@ -1033,6 +1037,19 @@ function rateWindow(limit: number, windowMs: number): { admit: (nowMs: number) =
 export function refusedByAuth(route: Route, state: AuthGateState): boolean {
   if (state === 'off' || state === 'signed-in') return false;
   return !openToUnauthenticated(route.channel.name);
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` (`R-068`) — a console socket's peer address as the audit record names the
+ * machine: an IPv4-mapped IPv6 address (`::ffff:192.168.21.50`) reduced to its IPv4 form, anything
+ * else kept as the socket reports it; `null` when the socket reports none — or one longer than a
+ * row may carry, since a shortened address would name a machine that does not exist.
+ */
+export function consoleAddressOf(remote: string | undefined): string | null {
+  if (remote === undefined || remote === '') return null;
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(remote);
+  const address = mapped?.[1] ?? remote;
+  return address.length <= CONSOLE_ADDRESS_MAX_LENGTH ? address : null;
 }
 
 /**
@@ -2232,13 +2249,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     );
   }
 
-  wss.on('connection', (socket) => {
+  wss.on('connection', (socket, request) => {
     /*
       🔴 `C-037` — ONE PRINCIPAL HOLDER PER SOCKET, created here because here is where a
       connection begins. Two browsers are two people; see `auth-session.ts` for why this is
-      not a field on the bridge.
+      not a field on the bridge. `CENTRAL-BRIDGE-01` — it carries the console machine too.
     */
-    const session = new AuthSession();
+    const session = new AuthSession(consoleAddressOf(request.socket.remoteAddress));
     /*
       🔴 **THE PUBLISH GATE — the SECOND door, and it used to be wide open.**
 

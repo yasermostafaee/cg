@@ -640,7 +640,18 @@ function Row({
         Guard item 27 — the WHO, in its own isolate (a console name can be Persian beside
         this Latin chrome). Never composed with the names: it is a label somebody typed.
       */}
-      <span className="cg-audit-actor" data-audit-actor={entry.actor}>
+      {/*
+        `CENTRAL-BRIDGE-01` — and the console MACHINE it came from, on hover: the record names the
+        user and the machine; the address is a technical fact, so it rides the title (rule 11).
+      */}
+      <span
+        className="cg-audit-actor"
+        data-audit-actor={entry.actor}
+        {...(entry.consoleAddress !== undefined && {
+          title: `From ${entry.consoleAddress}`,
+          'data-audit-console': entry.consoleAddress,
+        })}
+      >
         <bdi>{entry.actor}</bdi>
       </span>
       <span>{entry.action}</span>

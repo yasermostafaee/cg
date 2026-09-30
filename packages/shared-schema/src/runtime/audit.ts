@@ -4,6 +4,13 @@ import { LayerSlotSchema } from './item-state.js';
 
 const Sha256Schema = z.string().regex(/^[0-9a-f]{64}$/i, 'Expected sha256 hex');
 
+/**
+ * `CENTRAL-BRIDGE-01` — the longest console address a row may carry. An IPv6 address with a zone
+ * is well inside it; a peer the socket reports longer than this is recorded as no machine at all,
+ * because a row that fails its own schema is a row the record loses.
+ */
+export const CONSOLE_ADDRESS_MAX_LENGTH = 64;
+
 /** One row of the always-on audit log. NDJSON on disk. */
 export const AuditEntrySchema = z.object({
   ts: ISODateSchema,
@@ -115,6 +122,14 @@ export const AuditEntrySchema = z.object({
    * on every take would be noise about a fact that does not change during a session.
    */
   actorNameTruncated: z.literal(true).optional(),
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — the CONSOLE MACHINE the action came from: the peer address
+   * of the console's socket (`192.168.21.50`). One CG Bridge serves consoles on several machines,
+   * so a row names the user AND where they pressed. Kept beside the actor as `actorSub` is — a
+   * technical fact, never the sentence (golden rule 11: the Log shows it on hover). Absent on a row
+   * no console caused, and on every row written before.
+   */
+  consoleAddress: z.string().min(1).max(CONSOLE_ADDRESS_MAX_LENGTH).optional(),
   itemId: IdSchema.optional(),
   templateId: IdSchema.optional(),
   templateHash: Sha256Schema.optional(),

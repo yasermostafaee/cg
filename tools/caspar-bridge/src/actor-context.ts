@@ -48,6 +48,15 @@ export interface ActorContext {
   readonly session: AuthSession | null;
 }
 
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — the console MACHINE behind the running request (its socket's
+ * peer address), or `null` outside a request or when unknown. Read from the acting socket's
+ * session, so it cannot name another console's machine; stamped on the audit row beside the user.
+ */
+export function operatorConsoleAddress(): string | null {
+  return actorStore.getStore()?.session?.peerAddress ?? null;
+}
+
 const actorStore = new AsyncLocalStorage<ActorContext>();
 
 /**

@@ -288,3 +288,26 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     expect(rows()[0]?.querySelector('[data-audit-command]')).toBeNull();
   });
 });
+
+describe('CENTRAL-BRIDGE-01 — a row names the console MACHINE as well as the user', () => {
+  it('the actor cell carries the console machine as its title, and the sentence stays the user', async () => {
+    const fromConsole: AuditEntry = {
+      ...LOGO_ON_LAYER_90,
+      actor: 'Sara',
+      consoleAddress: '192.168.21.50',
+    };
+    stubBridge([fromConsole, LOGO_ON_LAYER_90], [LOGO], BANK);
+    await render();
+    const [attributed, older] = rows().map((r) =>
+      r.querySelector<HTMLElement>('[data-audit-actor]'),
+    );
+    expect(attributed?.textContent).toBe('Sara');
+    expect(attributed?.getAttribute('title')).toBe('From 192.168.21.50');
+    expect(attributed?.getAttribute('data-audit-console')).toBe('192.168.21.50');
+    // CONTROL: a row recorded without the field (every row before this release, and any row no
+    // console caused) has no title and no machine — not an empty one.
+    expect(older?.textContent).toBe('unattributed');
+    expect(older?.hasAttribute('title')).toBe(false);
+    expect(older?.hasAttribute('data-audit-console')).toBe(false);
+  });
+});

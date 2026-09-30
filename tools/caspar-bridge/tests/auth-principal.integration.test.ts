@@ -8,7 +8,9 @@ import {
   serializeWsFrame,
   type PlayoutPrincipal,
 } from '@cg/shared-ipc';
+import { CONSOLE_ADDRESS_MAX_LENGTH } from '@cg/shared-schema';
 import { createBridge, type BridgeHandle } from '../src/index.js';
+import { consoleAddressOf } from '../src/bridge.js';
 import {
   FAKE_LONG_NAME_USER,
   FAKE_OPERATOR,
@@ -321,6 +323,41 @@ describe('C-037 — the record learns who arrived, and keeps saying so', () => {
     const offRow = offRows.find((r) => r.action === 'take' && r.itemId === 'row-with-auth-off');
     expect(offRow, 'the auth-off control wrote no row at all').toBeDefined();
     expect(offRow?.actorSub, 'a bridge with no identity invented one').toBeUndefined();
+
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **AND THE ROW NAMES THE CONSOLE MACHINE.** One CG Bridge
+      serves consoles on several machines; the user and the machine they pressed on are two facts.
+      The socket here is loopback, so the machine is `127.0.0.1` (an IPv4-mapped form reduced).
+    */
+    expect(takeRow?.consoleAddress, 'the verb’s row did not name the console machine').toBe(
+      '127.0.0.1',
+    );
+    expect(offRow?.consoleAddress, 'a console’s act with auth off is still from a machine').toBe(
+      '127.0.0.1',
+    );
+    // CONTROL — an append no console caused (the runtime called directly) names no machine.
+    await offBridge.runtime.take('row-no-console');
+    const direct = (await offBridge.runtime.auditRecent(200)).find(
+      (r) => r.action === 'take' && r.itemId === 'row-no-console',
+    );
+    expect(direct, 'the direct append wrote no row').toBeDefined();
+    expect(
+      direct?.consoleAddress,
+      'a machine was named for an act no console made',
+    ).toBeUndefined();
+  });
+
+  it('`CENTRAL-BRIDGE-01` — a console’s address as the record names it: IPv4-mapped reduced, others kept', () => {
+    expect(consoleAddressOf('::ffff:192.168.21.50')).toBe('192.168.21.50');
+    expect(consoleAddressOf('192.168.21.50')).toBe('192.168.21.50');
+    expect(consoleAddressOf('fe80::1')).toBe('fe80::1');
+    expect(consoleAddressOf(undefined)).toBeNull();
+    expect(consoleAddressOf('')).toBeNull();
+    // Longer than a row may carry: no machine, never a shortened one — and the longest real
+    // spelling (a full IPv6 address with a zone) is inside the bound.
+    const fullV6 = 'fe80:0000:0000:0000:0204:61ff:fe9d:f156%ethernet0';
+    expect(consoleAddressOf(fullV6)).toBe(fullV6);
+    expect(consoleAddressOf(`${fullV6}${'x'.repeat(CONSOLE_ADDRESS_MAX_LENGTH)}`)).toBeNull();
   });
 });
 

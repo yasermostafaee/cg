@@ -170,6 +170,26 @@ routes what the page calls, and reports without refusing.
 - **WHEN** a bridge answers without `bridgeVersion` **THEN** the console reads it as a release older than
   `0.10` and sends nothing
 
+### Requirement: An audit row SHALL name the console machine beside the user
+
+Every audited action a console caused SHALL record, beside the actor, the console machine it came from
+(`consoleAddress`): the peer address of that console's own socket, with an IPv4-mapped IPv6 address
+reduced to its IPv4 form. It SHALL be read from the acting socket's session and never from the request,
+so a console cannot name another machine; an action no console caused, and every row written before,
+SHALL carry none; and a peer address longer than a row may carry SHALL be recorded as none rather than
+shortened. The Log SHALL keep the user in the sentence and show the machine on the actor's hover (golden
+rule 11: a technical fact rides the `title`).
+
+#### Scenario: A take names the console machine
+
+- **WHEN** a signed-in console at `192.168.21.50` takes a row **THEN** the row's actor is the user and its
+  `consoleAddress` is `192.168.21.50` — control: an action the bridge takes by itself carries none
+
+#### Scenario: The Log shows the machine on hover
+
+- **WHEN** the Log shows a row with a console machine **THEN** the actor cell reads the user and its title
+  reads `From 192.168.21.50` — control: a row without one has no title
+
 ## MODIFIED Requirements
 
 ### Requirement: A restore refuses to decide rather than act on absent evidence
