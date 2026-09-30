@@ -31,6 +31,7 @@ function info(templateId: string): TemplateInfo {
 interface HttpResult {
   status: number;
   contentType: string | undefined;
+  cacheControl: string | undefined;
   body: string;
 }
 
@@ -45,6 +46,7 @@ function get(url: string): Promise<HttpResult> {
           resolve({
             status: res.statusCode ?? 0,
             contentType: res.headers['content-type'],
+            cacheControl: res.headers['cache-control'],
             body,
           }),
         );
@@ -54,48 +56,56 @@ function get(url: string): Promise<HttpResult> {
 }
 
 describe('TemplateHttpServer', () => {
-  it('serves the stored HTML for a known id and 404s an unknown id', async () => {
+  it('serves the stored HTML at its version’s key with `no-store`, and 404s an unknown key', async () => {
     const reg = new TemplateRegistry();
-    reg.importOn([1], info('t1'), '<!doctype html><html><body>v1</body></html>');
+    const v1 = reg.importOn(
+      [1],
+      info('t1'),
+      '<!doctype html><html><body>v1</body></html>',
+    ).versionId;
     server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
-    const known = await get(server.urlFor('t1'));
+    const known = await get(server.urlFor(`t1~${v1}`));
     expect(known.status).toBe(200);
     expect(known.contentType).toBe('text/html; charset=utf-8');
+    // 🔴 `CENTRAL-BRIDGE-01` (`B-293`) — CasparCG's CEF keeps pages on disk: never store this.
+    expect(known.cacheControl).toBe('no-store');
     expect(known.body).toBe('<!doctype html><html><body>v1</body></html>');
 
     const unknown = await get(server.urlFor('nope'));
     expect(unknown.status).toBe(404);
+    expect(unknown.cacheControl).toBe('no-store');
 
     const root = await get(`http://127.0.0.1:${String(server.port)}/`);
     expect(root.status).toBe(404);
   });
 
-  it('serves the replacement HTML after a re-import (reads the live registry)', async () => {
+  it('🔴 B-293 — a re-import is served at a NEW path; the released version’s path serves nothing, never the new page', async () => {
     const reg = new TemplateRegistry();
-    reg.importOn([1], info('t1'), '<html><body>v1</body></html>');
+    const v1 = reg.importOn([1], info('t1'), '<html><body>v1</body></html>').versionId;
     server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
-    expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v1</body></html>');
-    // Nothing holds v1, so the re-import releases it — and its bare path goes to v2.
-    reg.importOn([1], info('t1'), '<html><body>v2</body></html>');
-    expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v2</body></html>');
+    expect((await get(server.urlFor(`t1~${v1}`))).body).toBe('<html><body>v1</body></html>');
+    // Nothing holds v1, so the re-import releases it — and v2 is served at ITS OWN path.
+    const v2 = reg.importOn([1], info('t1'), '<html><body>v2</body></html>').versionId;
+    expect((await get(server.urlFor(`t1~${v2}`))).body).toBe('<html><body>v2</body></html>');
+    expect((await get(server.urlFor(`t1~${v1}`))).status).toBe(404);
   });
 
   it('🔴 CHANNEL-TEMPLATES-01 — a HELD version keeps its path; the new one is served beside it', async () => {
     const reg = new TemplateRegistry();
     const v1 = reg.importOn([1, 2], info('t1'), '<html><body>v1</body></html>').versionId;
-    // A row on channel 1 took v1: its page was served from the bare path.
+    // A row on channel 1 took v1: its page was served from v1's path.
     reg.hold('row-on-ch1', v1);
     server = new TemplateHttpServer((key) => reg.htmlForServeKey(key));
     await server.start({ bindHost: '127.0.0.1', port: 0, serveHost: '127.0.0.1' });
 
     const v2 = reg.importOn([2], info('t1'), '<html><body>v2</body></html>').versionId;
     // v1's path is untouched, byte for byte…
-    expect(reg.serveKeyOf(v1)).toBe('t1');
-    expect((await get(server.urlFor('t1'))).body).toBe('<html><body>v1</body></html>');
+    expect(reg.serveKeyOf(v1)).toBe(`t1~${v1}`);
+    expect((await get(server.urlFor(`t1~${v1}`))).body).toBe('<html><body>v1</body></html>');
     // …and v2 is served at its own, qualified path.
     const key2 = reg.serveKeyOf(v2) ?? '';
     expect(key2).toBe(`t1~${v2}`);

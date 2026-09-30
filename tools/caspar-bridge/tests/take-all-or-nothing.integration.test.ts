@@ -15,6 +15,7 @@ import type {
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { foregroundUnchanged, mayClearAfterRefusal, outcomeOf } from '../src/refusal-cleanup.js';
+import { templateVersionId } from '../src/template-registry.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 
 /**
@@ -199,6 +200,15 @@ const sentSince = async (from: number): Promise<string[]> =>
     .filter((e) => e.dir === 'recv')
     .map((e) => e.line);
 
+const TWO_BOX_HTML = '<!doctype html><html><body>two-box</body></html>';
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-293`) — **THE ONE LINE OF A TAKE'S WIRE THIS CHANGE MOVES, BY DECISION.**
+ * The page's path names its version, `<templateId>~<versionId>`, because CasparCG's CEF keeps pages
+ * on disk and a path that changed its page could air the cached old one (the Playout team's rule 12).
+ * Computed, not normalised away: the take must name THIS version, not any version.
+ */
+const TWO_BOX_KEY = `two-box~${templateVersionId(twoBox(), TWO_BOX_HTML)}`;
+
 /** The two values a take mints afresh each time: the serve port and the take token. */
 const normalise = (line: string): string =>
   line
@@ -242,7 +252,7 @@ async function boot(): Promise<CasparRuntime> {
   runtime = r;
   r.start();
   await r.startServing();
-  r.templateImport(twoBox(), '<!doctype html><html><body>two-box</body></html>');
+  r.templateImport(twoBox(), TWO_BOX_HTML);
   r.templateImport(oneBox(), '<!doctype html><html><body>one-box</body></html>');
   await r.whenServerHealthy(HEALTH_MS);
   await awaitChannelModeRead(r);
@@ -277,10 +287,14 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
       VOLUME, FILL, CLIP per plate and one COMMIT, which left each producer drawn at its layer's
       previous transform — full frame, on a fresh layer — until that commit. The page's own lines
       (the mute, the ADD, the unmute, the CG PLAY last) are unchanged: the control.
+
+      🔴 `CENTRAL-BRIDGE-01` (`B-293`) MOVED ONE LINE, BY DECISION (the Playout team's rule 12): the
+      `CG ADD` path names the page's version, `two-box~<versionId>` ({@link TWO_BOX_KEY}). Nothing
+      else in the take moved — every other line below is byte for byte what it was.
     */
     const RECORDED = [
       'MIXER 2-59 VOLUME 0',
-      'CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/two-box?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"',
+      `CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/${TWO_BOX_KEY}?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"`,
       'MIXER 2-59 VOLUME 1',
       'MIXER 2-60 OPACITY 0 DEFER',
       'MIXER 2-60 VOLUME 0 DEFER',
@@ -327,7 +341,7 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
     const lines = await sentSince(from);
     expect(lines.map(normalise)).toEqual([
       'MIXER 2-59 VOLUME 0',
-      'CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/two-box?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"',
+      `CG 2-59 ADD 0 "http://127.0.0.1:<PORT>/template/${TWO_BOX_KEY}?cw=1920&ch=1080" 0 "{\\"__cg\\":{\\"look\\":\\"look-2\\",\\"take\\":\\"<TOKEN>\\"}}"`,
       'MIXER 2-59 VOLUME 1',
       // `LOOK-SWITCH-01` — both layers are hidden first, in one commit; only then the PLAYs.
       'MIXER 2-60 OPACITY 0 DEFER',

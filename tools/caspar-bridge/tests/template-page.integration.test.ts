@@ -53,8 +53,8 @@ it('🔴 the page on CH 1 is the served page, byte for byte — over the socket 
 
   const page = handle.runtime.templatePage('news', 1);
   expect(page).toEqual({ ok: true, html: NEWS_HTML });
-  // The bytes CasparCG gets: the serve path's own answer.
-  const served = await get(`http://127.0.0.1:${String(handle.templateServe.port)}/template/news`);
+  // The bytes CasparCG gets: the serve path's own answer (`B-293`: the path names the version).
+  const served = await get(handle.runtime.templateServeUrl('news', 1) ?? '');
   expect(served.status).toBe(200);
   expect(page.ok && page.html).toBe(served.body);
 

@@ -583,9 +583,16 @@ export class TemplateRegistry {
     return list;
   }
 
-  /** A serve key no stored version has: the bare id if free, else qualified. */
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`B-293`) — **A NEW VERSION IS ALWAYS SERVED AT ITS OWN KEY,
+   * `<templateId>~<versionId>`.** It used to take the BARE id whenever that was free, so once an
+   * older version was collected a later version of the same template was served at the URL the
+   * older one had — and CasparCG's CEF keeps pages on disk (the Playout team's rule 12), so a take
+   * could air the cached old page. The version id is the content's, so a URL now names one page for
+   * life. A record written before keeps the key it has (bare or qualified), which no later version
+   * is ever given. The `~n` suffix only guards a key some legacy record already holds.
+   */
   #freeServeKey(templateId: string, versionId: string): string {
-    if (!this.#byServeKey.has(templateId)) return templateId;
     const qualified = `${templateId}${SERVE_KEY_SEPARATOR}${versionId}`;
     let key = qualified;
     for (let n = 2; this.#byServeKey.has(key); n++)

@@ -12969,6 +12969,8 @@ could be served at the same URL as an older one. The `200` carried `content-type
 qualified key, `<templateId>~<versionId>`, for life (a record written before carries its stored key, which
 no later version is ever given), and the page is sent `Cache-Control: no-store`. ⚠ **This changes the URL a
 take sends in `CG ADD`** — the path segment gains `~<versionId>`; nothing else in a take's wire moves.
+**Built (2026-09-30, closed in code; the Linux e2e is owed):** as specified — the 404 is `no-store` too, and
+`take-all-or-nothing`'s recorded take wire moved by exactly that one line.
 
 ## [~] B-294 — Every console re-delivered its own copy of the stack and the template library on connect, and a stale copy could win ⟨priority: high — with two consoles on one bridge⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.2 · `openspec/changes/central-bridge/`
 

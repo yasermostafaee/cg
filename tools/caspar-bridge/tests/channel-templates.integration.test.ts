@@ -11,7 +11,11 @@ import {
 } from '@cg/shared-ipc';
 import type { BridgeHandle } from '../src/index.js';
 import { createBridge } from '../src/index.js';
-import { isRegistryRecordName, registryRecordFileName } from '../src/template-registry.js';
+import {
+  isRegistryRecordName,
+  registryRecordFileName,
+  templateVersionId,
+} from '../src/template-registry.js';
 import {
   deadConnection,
   expectRefusedWith,
@@ -229,7 +233,9 @@ describe('CHANNEL-TEMPLATES-01 — one stored version, per-channel lists', () =>
     rt.templateImport(NEWS, NEWS_V1, 1);
     rt.templateImport(NEWS, NEWS_V1, 2);
     const newsRecords = (): string[] => records(s.templatesDir).filter((f) => f.startsWith('news'));
-    expect(newsRecords()).toEqual([registryRecordFileName('news')]);
+    // `B-293` — a version's key (and so its record's name) is `<templateId>~<versionId>`.
+    const v1Key = `news~${templateVersionId(NEWS, NEWS_V1)}`;
+    expect(newsRecords()).toEqual([registryRecordFileName(v1Key)]);
 
     rt.templateImport(NEWS, NEWS_V2, 2);
     expect(newsRecords()).toHaveLength(2);
@@ -238,7 +244,7 @@ describe('CHANNEL-TEMPLATES-01 — one stored version, per-channel lists', () =>
     // Both are served, each at its own path: CH 1's at the path it always had.
     const url1 = rt.templateServeUrl('news', 1) ?? '';
     const url2 = rt.templateServeUrl('news', 2) ?? '';
-    expect(url1.endsWith('/template/news')).toBe(true);
+    expect(url1.endsWith(`/template/${v1Key}`)).toBe(true);
     expect(url2).not.toBe(url1);
     expect(await get(url1)).toEqual({ status: 200, body: NEWS_V1 });
     expect(await get(url2)).toEqual({ status: 200, body: NEWS_V2 });
@@ -249,7 +255,10 @@ describe('CHANNEL-TEMPLATES-01 — one stored version, per-channel lists', () =>
     const rt = s.handle.runtime;
     rt.templateImport(NEWS, NEWS_V1, 1);
     rt.templateImport(NEWS, NEWS_V1, 2);
-    const file = path.join(s.templatesDir, registryRecordFileName('news'));
+    const file = path.join(
+      s.templatesDir,
+      registryRecordFileName(`news~${templateVersionId(NEWS, NEWS_V1)}`),
+    );
 
     // CONTROL first: a row on CH 2 holds it, so CH 2 refuses — and CH 1's row-less list is irrelevant.
     expect(await rt.loadFixed({ channel: 2, layer: 99 }, 'row-ch2', 'news', {})).toEqual({

@@ -121,7 +121,7 @@ describe('the bridge writes it', () => {
 
     const text = fs.readFileSync(file, 'utf8');
     expect(text).toMatch(
-      /ms >> CG 1-99 ADD 0 "http:\/\/[^ ]+\/template\/logo\?[^ ]+" 0 "[^\n]*<< 202/,
+      /ms >> CG 1-99 ADD 0 "http:\/\/[^ ]+\/template\/logo~[0-9a-f]{16}\?[^ ]+" 0 "[^\n]*<< 202/,
     );
     expect(text).toMatch(/ms >> CG 1-99 PLAY 0 << 202/);
     expect(text).toContain('<redacted>');

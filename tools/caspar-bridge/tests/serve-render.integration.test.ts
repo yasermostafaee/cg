@@ -87,8 +87,9 @@ it('serves the template URL, CG ADDs it with real Persian fields, and CG UPDATE 
   // resource, and the geometry is a per-ADD argument, not part of where the
   // template lives.
   expect(add?.template).toBe(`${String(runtime.templateServeUrl('lower-third'))}?cw=1920&ch=1080`);
+  // `B-293` — the path names the version: `<templateId>~<versionId>`.
   expect(add?.template).toMatch(
-    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
+    /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third~[0-9a-f]{16}\?cw=1920&ch=1080$/,
   );
   /*
     …and the data arg is the REAL field JSON (Persian intact), never "{}".

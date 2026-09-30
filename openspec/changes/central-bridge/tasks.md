@@ -84,7 +84,13 @@
       ⚠ Naming debt: the living "The browser retains stack intent and restores it on reconnect" (amended in
       the pending `runtime-retention-state`) keeps a name that no longer describes it; rename it when that
       change archives — a RENAMED here would collide with its MODIFIED.
-- [ ] 3.3 Every new template version served at `<id>~<versionId>`; the page sent `Cache-Control: no-store`.
+- [x] 3.3 Every new template version served at `<id>~<versionId>`; the page sent `Cache-Control: no-store`
+      (the 404 too). A version stored before keeps its key, which no later version is given
+      (`template-registry` test with a hand-written pre-change record and index). ⚠ **TAKE WIRE: one line
+      moved, by decision** — the `CG ADD` path gains `~<versionId>`; `take-all-or-nothing`'s recorded wire
+      computes the exact key (not normalised away) and every other line is byte for byte as it was. Twelve
+      URL pins updated (registry, HTTP server, siblings, channel-templates, amcp-log, onair-position,
+      owned-slot-occupancy, reconnect-reconciliation, serve-render, template-page). Bridge 1484/1484.
 
 ## 4. The console ↔ bridge connection (`R-068`, `B-262`)
 

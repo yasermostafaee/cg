@@ -88,7 +88,8 @@ describe('B-116 — sibling config files beside the templates are not templates'
     const fresh = new TemplateRegistry(dir);
     expect(fresh.loadPersisted()).toEqual({ loaded: 1, skipped: 0 });
     expect(fresh.getOn(1, 'lower-third')).toEqual(INFO);
-    expect(fresh.htmlForServeKey('lower-third')).toBe(HTML);
+    const version = fresh.versionOn(1, 'lower-third') ?? '';
+    expect(fresh.htmlForServeKey(fresh.serveKeyOf(version) ?? '')).toBe(HTML);
     expect(templateWarnings()).toEqual([]);
   });
 

@@ -75,20 +75,26 @@ describe('TemplateRegistry — a channel lists a version', () => {
     expect(reg.versionOn(1, 'tpl-1')).toBe(v1);
     expect(reg.versionOn(2, 'tpl-1')).toBe(v2);
     expect(reg.storedVersions().sort()).toEqual([v1, v2].sort());
-    // Both are served, each at its own path: v1 keeps the bare id.
-    expect(reg.htmlForServeKey('tpl-1')).toBe('<html>v1</html>');
+    // Both are served, each at its own path.
+    expect(reg.htmlForServeKey(reg.serveKeyOf(v1) ?? '')).toBe('<html>v1</html>');
     expect(reg.htmlForServeKey(reg.serveKeyOf(v2) ?? '')).toBe('<html>v2</html>');
   });
 
-  it('a re-import nothing else keeps RELEASES the old version, and the new one takes the bare path', () => {
+  it('🔴 B-293 — every version is served at ITS OWN key for life: a released version’s URL never serves the new page', () => {
     const reg = new TemplateRegistry();
     const v1 = reg.importOn([1], info('tpl-1'), '<html>v1</html>').versionId;
+    const v1Key = reg.serveKeyOf(v1);
+    expect(v1Key).toBe(`tpl-1~${v1}`);
     const v2 = reg.importOn([1], info('tpl-1'), '<html>v2</html>').versionId;
 
     expect(reg.storedVersions()).toEqual([v2]);
     expect(reg.serveKeyOf(v1)).toBeNull();
-    expect(reg.serveKeyOf(v2)).toBe('tpl-1');
-    expect(reg.htmlForServeKey('tpl-1')).toBe('<html>v2</html>');
+    expect(reg.serveKeyOf(v2)).toBe(`tpl-1~${v2}`);
+    expect(reg.htmlForServeKey(`tpl-1~${v2}`)).toBe('<html>v2</html>');
+    // The URL CasparCG fetched v1 from answers nothing now — never v2's bytes (CEF keeps pages
+    // on disk: a URL that changed its page would air the cached old one). CONTROL: nor the bare id.
+    expect(reg.htmlForServeKey(v1Key ?? '')).toBeNull();
+    expect(reg.htmlForServeKey('tpl-1')).toBeNull();
   });
 
   it('removing from one channel keeps the version while another lists it; the last one deletes it', () => {
@@ -114,7 +120,7 @@ describe('TemplateRegistry — a channel lists a version', () => {
     // The channel moves on (a re-import) — the page on air still has its record and its path.
     const v2 = reg.importOn([1], info('tpl-1'), '<html>v2</html>').versionId;
     expect(reg.storedVersions().sort()).toEqual([v1, v2].sort());
-    expect(reg.htmlForServeKey('tpl-1')).toBe('<html>v1</html>');
+    expect(reg.htmlForServeKey(`tpl-1~${v1}`)).toBe('<html>v1</html>');
     expect(reg.serveKeyOf(v2)).toBe(`tpl-1~${v2}`);
 
     // The row takes v2: v1 is held by nothing and listed nowhere, so it goes.
@@ -191,17 +197,53 @@ describe('TemplateRegistry persistence (R-028 3.2 — a bridge restart does not 
     expect({ loaded, skipped }).toEqual({ loaded: 2, skipped: 0 });
     expect(second.listOn(1).map((t) => t.templateId)).toEqual(['tpl-1', 'tpl-2']);
     expect(second.listOn(2).map((t) => t.templateId)).toEqual(['tpl-2']);
-    // The HTML survives byte-exact — it is what /template/<id> serves to CasparCG.
-    expect(second.htmlForServeKey('tpl-1')).toBe('<html><body>پایین‌ثلث</body></html>');
+    // The HTML survives byte-exact — it is what /template/<key> serves to CasparCG, at the same key.
+    const v = templateVersionId(info('tpl-1'), '<html><body>پایین‌ثلث</body></html>');
+    expect(second.serveKeyOf(v)).toBe(`tpl-1~${v}`);
+    expect(second.htmlForServeKey(`tpl-1~${v}`)).toBe('<html><body>پایین‌ثلث</body></html>');
   });
 
   it('one stored FILE per version, however many channels list it', () => {
     const d = tmpDir();
     const reg = new TemplateRegistry(d);
     reg.loadPersisted();
-    reg.importOn([1], info('tpl-1'), '<html>same</html>');
+    const { versionId } = reg.importOn([1], info('tpl-1'), '<html>same</html>');
     reg.importOn([2], info('tpl-1'), '<html>same</html>');
-    expect(records(d)).toEqual([registryRecordFileName('tpl-1')]);
+    expect(records(d)).toEqual([registryRecordFileName(`tpl-1~${versionId}`)]);
+  });
+
+  it('🔴 B-293 — a record written BEFORE keeps its bare key; a later version never takes it, even once the old one is gone', () => {
+    const d = tmpDir();
+    // A version stored before `CENTRAL-BRIDGE-01`, at the bare id (as the old rule gave it).
+    const oldHtml = '<html>old</html>';
+    const oldVersion = templateVersionId(info('tpl-1'), oldHtml);
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(
+      path.join(d, registryRecordFileName('tpl-1')),
+      JSON.stringify({
+        info: info('tpl-1'),
+        html: oldHtml,
+        importedAt: '2026-09-01T00:00:00.000Z',
+        versionId: oldVersion,
+        serveKey: 'tpl-1',
+      }),
+    );
+    // …listed on channel 1 by an index of the per-channel lists, as a station after
+    // `CHANNEL-TEMPLATES-01` has it (so the registry is past its one-time upgrade copy).
+    fs.writeFileSync(
+      path.join(d, 'template-channels.json'),
+      JSON.stringify({ v: 1, lists: { '1': [{ templateId: 'tpl-1', versionId: oldVersion }] } }),
+    );
+    const reg = new TemplateRegistry(d);
+    reg.loadPersisted();
+    expect(reg.versionOn(1, 'tpl-1')).toBe(oldVersion);
+    expect(reg.serveKeyOf(oldVersion)).toBe('tpl-1');
+    expect(reg.htmlForServeKey('tpl-1')).toBe(oldHtml);
+
+    // A new version replaces it on the channel: its own key, and the bare one is left to nothing.
+    const v2 = reg.importOn([1], info('tpl-1'), '<html>new</html>').versionId;
+    expect(reg.serveKeyOf(v2)).toBe(`tpl-1~${v2}`);
+    expect(reg.htmlForServeKey('tpl-1'), 'the old URL now serves the NEW page').toBeNull();
   });
 
   it('a re-import on one channel and a removal from another — both visible after restart', () => {
@@ -221,7 +263,7 @@ describe('TemplateRegistry persistence (R-028 3.2 — a bridge restart does not 
     expect(second.versionOn(2, 'tpl-1')).toBe(v2);
     expect(second.hasAny('tpl-2')).toBe(false);
     // The serve keys survive the restart — a page on air keeps its path.
-    expect(second.htmlForServeKey('tpl-1')).toBe('<html>v1</html>');
+    expect(second.htmlForServeKey(`tpl-1~${v1}`)).toBe('<html>v1</html>');
     expect(second.htmlForServeKey(`tpl-1~${v2}`)).toBe('<html>v2</html>');
   });
 
@@ -237,7 +279,7 @@ describe('TemplateRegistry persistence (R-028 3.2 — a bridge restart does not 
     const second = new TemplateRegistry(d);
     second.loadPersisted();
     expect(second.heldVersion('row-1')).toBe(v1);
-    expect(second.htmlForServeKey('tpl-1')).toBe('<html>v1</html>');
+    expect(second.htmlForServeKey(`tpl-1~${v1}`)).toBe('<html>v1</html>');
     second.release('row-1');
     expect(second.storedVersions()).toEqual([]);
     expect(records(d)).toEqual([]);

@@ -336,12 +336,23 @@ export class TemplateHttpServer {
     if (match !== null) {
       const id = decodeURIComponent(match[1] ?? '');
       const html = this.#getHtml(id);
+      /*
+        🔴 `CENTRAL-BRIDGE-01` (`B-293`) — `no-store` on BOTH answers. CasparCG's CEF keeps pages on
+        disk (the Playout team's rule 12); a URL names one version for life now (the registry's
+        serve key), and this makes sure neither a page nor a 404 outlives the answer that gave it.
+      */
       if (html !== null) {
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.writeHead(200, {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+        });
         res.end(html);
         return;
       }
-      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.writeHead(404, {
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+      });
       res.end('template not found');
       return;
     }

@@ -253,6 +253,54 @@ The bridge SHALL route no `stack.restore` (`CENTRAL-BRIDGE-01`: it restores its 
 - **WHEN** a signed-in viewer's console sends `stack.restore` and a re-delivery, then presses TAKE
 - **THEN** the first finds no route, the second is refused with the re-delivery sentence, the TAKE is refused for the role, and the only `refused` row is the TAKE's
 
+### Requirement: The bridge serves retained template HTML over HTTP
+
+The bridge SHALL run a small HTTP server (separate from the control WebSocket) that serves each stored
+template version at `/template/<key>`, returning the stored HTML as `200 text/html; charset=utf-8` with
+`Cache-Control: no-store`, and `404` (also `no-store`) for a key no stored version has. A version stored
+from `CENTRAL-BRIDGE-01` on SHALL be served at `<templateId>~<versionId>` — its content's id — for as long
+as it is stored; a version stored before keeps the key it was given, and no later version SHALL ever be
+given that key (`B-293`: CasparCG's CEF keeps pages on disk, so a URL that changed its page could air the
+cached old one — the Playout team's rule 12). A take's `CG ADD` SHALL use the key of the version the row's
+own channel lists. Removing a version SHALL stop serving its key. The server holds template HTML only — it
+exposes no control surface, and its route set is unchanged.
+
+The served HTML SHALL be self-contained: the runtime, scene, images, AND the bundled app fonts
+(Vazirmatn / Exo 2) are inlined (base64), so CasparCG fetches nothing else — Persian text renders with the
+correct face and intact shaping.
+
+#### Scenario: A known template serves its stored HTML, never stored by the client
+
+- **WHEN** a listed template's URL `/template/<templateId>~<versionId>` is fetched **THEN** the server
+  returns `200 text/html; charset=utf-8` with exactly the stored HTML and `Cache-Control: no-store`
+
+#### Scenario: An unknown key is 404
+
+- **WHEN** `/template/<key>` is fetched for a key no stored version has **THEN** the server returns `404`
+  with `Cache-Control: no-store`
+
+#### Scenario: A re-import is served at a new path
+
+- **WHEN** a template id is re-imported with new content and no row holds its previous version **THEN**
+  the new version is served at its own `<templateId>~<versionId>` path and the next take names it, and the
+  previous path answers `404` — never the new page
+
+#### Scenario: A held version keeps its path beside the new one
+
+- **WHEN** a template is re-imported while a row still holds the previous version **THEN** the previous
+  version is served at its own path byte for byte, and the new version at `<templateId>~<versionId>`
+
+#### Scenario: A version stored before keeps its path, and no later version takes it
+
+- **GIVEN** a version stored before `CENTRAL-BRIDGE-01`, served at the bare template id
+- **WHEN** a new version replaces it and it is collected **THEN** the new version is served at its own
+  qualified path, and the bare path answers `404`
+
+#### Scenario: The served page is self-contained including fonts
+
+- **WHEN** the served HTML is inspected **THEN** it contains the bundled Persian `@font-face` faces inlined
+  as base64 `data:` URIs and references no external `/fonts/…`, `https:` or `<link>` resource
+
 ### Requirement: Single-server operation is declared, quiet, and memory-bounded
 
 The connection config SHALL support declaring a single server: `servers.B` is
