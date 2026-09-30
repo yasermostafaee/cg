@@ -64,3 +64,17 @@ export const PGM_RETURN_PATH_PREFIX = '/pgm/';
 export function pgmReturnPath(channel: number): string {
   return `${PGM_RETURN_PATH_PREFIX}${String(channel)}`;
 }
+
+/**
+ * `PLAYOUT-FEATURES-01` E (`R-076`) — the programme's SOUND on CG Bridge's control port: the core's
+ * `GET /audio.wav`, relayed beside the picture. The same one spelling for the route and the console.
+ *
+ * ⚠ **No `.wav` in the path, deliberately.** A download manager's browser hook (Internet Download Manager
+ * was measured doing it on the dev host) captures a response whose URL ends `.wav` and whose type is
+ * `audio/wav`, and hands the page an empty `204` instead: the sound never plays and nothing says why.
+ * The bytes are the core's WAV stream unchanged; only the path and the type (`application/octet-stream`)
+ * are the relay's own.
+ */
+export function pgmAudioPath(channel: number): string {
+  return `${pgmReturnPath(channel)}/sound`;
+}

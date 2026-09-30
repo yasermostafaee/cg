@@ -12,6 +12,7 @@ import { defineChannel } from '../channel.js';
  *
  *   - `/pgm/<n>` — the programme return for channel `n`, issued only for a channel the socket's
  *     sign-in holds (the channel scope, `C-038`);
+ *   - `/pgm/<n>/sound` — that channel's programme sound (`PLAYOUT-FEATURES-01` E), on the same rule;
  *   - `/logs.zip` — CG Bridge's logs, issued only to a `station-admin`, used once.
  *
  * The console joins the path to CG Bridge's own host and port (the socket's): nothing here names an
@@ -25,10 +26,17 @@ const TicketPathSchema = z.object({
 
 export type TicketPath = z.infer<typeof TicketPathSchema>;
 
-/** A ticket for channel `channel`'s programme return (`/pgm/<n>`). */
+/**
+ * A ticket for channel `channel`'s programme return: its picture (`/pgm/<n>`), or — `PLAYOUT-FEATURES-01`
+ * E (`R-076`) — its sound (`/pgm/<n>/sound`, `stream: 'audio'`). Either ticket opens that one
+ * stream of that one channel.
+ */
 export const PgmReturnTicketChannel = defineChannel(
   'pgmReturn.ticket',
-  z.object({ channel: z.number().int().positive() }),
+  z.object({
+    channel: z.number().int().positive(),
+    stream: z.enum(['picture', 'audio']).optional(),
+  }),
   TicketPathSchema,
 );
 

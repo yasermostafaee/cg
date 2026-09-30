@@ -134,6 +134,8 @@ const BRIDGE_SURFACE: {
     bridgeSession: ['state', 'onChanged', 'signIn'],
     // `PLAYOUT-FEATURES-01` D — the CG license (the mock: nothing read).
     license: ['state', 'onChanged'],
+    // `PLAYOUT-FEATURES-01` E — the Playout's meters (the mock: none).
+    meters: ['onReading'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never
@@ -246,7 +248,7 @@ const BRIDGE_SURFACE: {
     */
     emptiedAir: ['notice', 'restore', 'dismiss', 'onNoticeChanged'],
     // C-016 — the programme return. The mock has no relay: `feedUrl` is `null`, nothing is watched.
-    pgmReturn: ['feedUrl', 'status', 'onStatusChanged'],
+    pgmReturn: ['feedUrl', 'audioUrl', 'status', 'onStatusChanged'],
     // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
     // part-A seam): `tests/**` is not typechecked, so the mapped type above
     // never caught the omission and any mock↔bridge divergence in the fixed

@@ -87,6 +87,7 @@ const PATHS = {
   media: '/api/cg/media',
   /** `PLAYOUT-FEATURES-01` D — `2.9.2`'s CG license (LICENSE §3.1). */
   license: '/api/cg/license',
+  meters: '/api/cg/meters',
 } as const;
 
 // ── `PLAYOUT-SOURCES-01` §3 — D10 AND D11, AS THEIR ANSWER DESCRIBES THEM ──────────────────────
@@ -634,6 +635,46 @@ export const FAKE_NOT_INCLUDED_MESSAGE = 'لایسنسِ این Playout شامل
 /** `grace`'s end, fixed so a spec can assert the line that names it. */
 export const FAKE_GRACE_UNTIL = '2026-10-01T12:00:00Z';
 
+/** `PLAYOUT-FEATURES-01` E — one programme channel's levels, as the fake's meters stream sends them. */
+export interface FakeMeterLevels {
+  /** dBFS per bus, in the core's order (16 today). */
+  readonly dbfs: readonly number[];
+  /** Short-term / momentary LUFS and the limiter's gain reduction; `null` values are unknown. */
+  readonly loudness?: {
+    readonly momentary: number | null;
+    readonly shortterm: number | null;
+    readonly limiterGrDb: number | null;
+  } | null;
+}
+
+/** Their §2.3: `audio` every 50 ms, `loudness` every 150 ms (every third tick), `: ping` every 15 s. */
+export const FAKE_METER_TICK_MS = 50;
+export const FAKE_METER_PING_MS = 15_000;
+/** Their §2.2: the meter's floor. */
+export const FAKE_METER_FLOOR = -60;
+
+/**
+ * The bearer's `cg_channels`, read from its claims WITHOUT verifying it (the fake's D4 rule): `'*'`, the
+ * grant list, or none when the token cannot be read.
+ */
+export function grantedMeterChannels(bearer: string): FakeCgChannels {
+  try {
+    const payload = JSON.parse(
+      Buffer.from(bearer.split('.')[1] ?? '', 'base64url').toString('utf8'),
+    ) as { cg_channels?: unknown };
+    const claim = payload.cg_channels;
+    if (claim === '*') return '*';
+    if (!Array.isArray(claim)) return [];
+    return claim.flatMap((g: unknown) => {
+      if (typeof g !== 'object' || g === null) return [];
+      const { host, channel } = g as { host?: unknown; channel?: unknown };
+      return typeof host === 'string' && typeof channel === 'number' ? [{ host, channel }] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
 /** The `GET /api/cg/license` body for a preset, over the fake's catalogue (its channels in order). */
 export function fakeLicenseBody(
   preset: FakeLicensePreset,
@@ -1153,6 +1194,24 @@ export interface FakePlayout {
    */
   setD11Legacy(legacy: boolean): void;
 
+  // ── `PLAYOUT-FEATURES-01` E — Playout `2.9.2`'s meters ────────────────────────────────────────
+  /**
+   * `GET /api/cg/meters` (PLAYLIST-AUDIO §2.3): `text/event-stream`, bearer-gated, `no-store`, and ONLY the
+   * bearer's `cg_channels` (`"*"` = every programme channel). `404` with CG Control off or while not served.
+   */
+  readonly metersUrl: string;
+  /** One programme channel's levels from now on (`null` — it has no data, so no `audio` for it). */
+  setMeterLevels(casparChannel: number, levels: FakeMeterLevels | null, casparHost?: string): void;
+  /** The core is down (a crash or restart): `audio` carries the floor, and no `loudness` is sent. */
+  setMeterCoreDown(down: boolean): void;
+  /** `false` — a Playout before `2.9.2`: the endpoint `404`s. Default served. */
+  setMetersServed(served: boolean): void;
+  /** Close every open meters stream now (a token expiring, the engine stopping). */
+  closeMeterStreams(): void;
+  /** Meters streams open now. LIVE. */
+  readonly meterStreams: number;
+  /** Every meters request as received: its path and query, and whether it carried a bearer. LIVE. */
+  readonly meterRequests: readonly { readonly url: string; readonly bearer: boolean }[];
   // ── `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` ─────────────────────────────────────────────────
   /**
    * §2 — CG Control not licensed: D1 (after the credentials) and D2 (BEFORE the token is used)
@@ -1424,7 +1483,16 @@ class FakePlayoutServer implements FakePlayout {
   #license: FakeLicensePreset | null = 'licensed';
   /** `PLAYOUT-FEATURES-01` A — D11 as before `2.9.1`: no `fingerprint`/`source`, the filter ignored. */
   #d11Legacy = false;
-  /** `2.9.2` §2 — D2 refused BEFORE use for another cause than the licence. */
+  // `PLAYOUT-FEATURES-01` E — the meters stream's state.
+  #metersServed = true;
+  #meterCoreDown = false;
+  readonly #meterLevels = new Map<
+    string,
+    { casparHost: string; casparChannel: number; levels: FakeMeterLevels }
+  >();
+  readonly #meterStreams = new Set<http.ServerResponse>();
+  readonly #meterRequests: { url: string; bearer: boolean }[] =
+    []; /** `2.9.2` §2 — D2 refused BEFORE use for another cause than the licence. */
   #refreshRefusal: 'no_cg_access' | null = null;
   /** `2.9.2` §9 — D8 as before `2.9.2`: a multi-channel account's FIRST grant, as a lone object. */
   #meLegacy = false;
@@ -1838,6 +1906,39 @@ class FakePlayoutServer implements FakePlayout {
     this.#d11Legacy = legacy;
   }
 
+  get metersUrl(): string {
+    return `${this.baseUrl}${PATHS.meters}`;
+  }
+
+  setMeterLevels(
+    casparChannel: number,
+    levels: FakeMeterLevels | null,
+    casparHost = '127.0.0.1',
+  ): void {
+    const key = `${casparHost}|${String(casparChannel)}`;
+    if (levels === null) this.#meterLevels.delete(key);
+    else this.#meterLevels.set(key, { casparHost, casparChannel, levels });
+  }
+
+  setMeterCoreDown(down: boolean): void {
+    this.#meterCoreDown = down;
+  }
+
+  setMetersServed(served: boolean): void {
+    this.#metersServed = served;
+  }
+
+  closeMeterStreams(): void {
+    for (const res of [...this.#meterStreams]) res.end();
+  }
+
+  get meterStreams(): number {
+    return this.#meterStreams.size;
+  }
+
+  get meterRequests(): readonly { readonly url: string; readonly bearer: boolean }[] {
+    return this.#meterRequests;
+  }
   setLicense(preset: FakeLicensePreset | null): void {
     this.#license = preset;
     // D4 carries `cgLicensed`, so its answer changes with the license.
@@ -1944,6 +2045,10 @@ class FakePlayoutServer implements FakePlayout {
     if (method === 'GET' && pathname === PATHS.license) {
       this.#counts.license += 1;
       this.#serveLicense(req, res);
+      return;
+    }
+    if (method === 'GET' && pathname === PATHS.meters) {
+      this.#serveMeters(req, res);
       return;
     }
     if (method === 'GET' && pathname === PATHS.media) {
@@ -2058,8 +2163,73 @@ class FakePlayoutServer implements FakePlayout {
   }
 
   /**
-   * `PLAYOUT-FEATURES-01` D — `GET /api/cg/license` (LICENSE §3.1): bearer-gated like D4 and D10,
-   * `Cache-Control: no-store`, `404` while CG Control is switched off — and, here, with no license set
+   * `PLAYOUT-FEATURES-01` E — `GET /api/cg/meters` (PLAYLIST-AUDIO §2.3): the opening comment, then `audio`
+   * every {@link FAKE_METER_TICK_MS} for each channel with data and `loudness` every third tick (150 ms)
+   * while a value is known, and a `: ping` comment every {@link FAKE_METER_PING_MS} — for the bearer's
+   * `cg_channels` only. The core down: `audio` at the floor, no `loudness` (their §2.3).
+   *
+   * ⚠ Like D4 it does not VERIFY the token; it reads the grant from the bearer's claims, because the
+   * property under test is what the BRIDGE does with the channels it is given.
+   */
+  #serveMeters(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const authorization = req.headers.authorization;
+    this.#meterRequests.push({
+      url: req.url ?? '',
+      bearer: authorization?.startsWith('Bearer ') === true,
+    });
+    if (!this.#cgEnabled || !this.#metersServed) {
+      sendError(res, 'not_found');
+      return;
+    }
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
+      sendError(res, 'invalid_token');
+      return;
+    }
+    const granted = grantedMeterChannels(authorization.slice('Bearer '.length));
+    const mayRead = (host: string, channel: number): boolean =>
+      granted === '*' || granted.some((g) => g.host === host && g.channel === channel);
+    res.writeHead(200, {
+      ...CORS_HEADERS,
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+    });
+    res.write(': apasai meters\n\n');
+    this.#meterStreams.add(res);
+    let tick = 0;
+    const timer = setInterval(() => {
+      tick += 1;
+      const t = Date.now();
+      for (const { casparHost, casparChannel, levels } of this.#meterLevels.values()) {
+        if (!mayRead(casparHost, casparChannel)) continue;
+        const dbfs = this.#meterCoreDown
+          ? levels.dbfs.map(() => FAKE_METER_FLOOR)
+          : levels.dbfs.map((v) => Math.max(FAKE_METER_FLOOR, Math.round(v * 10) / 10));
+        res.write(
+          `event: audio\ndata: ${JSON.stringify({ casparHost, casparChannel, dbfs, t })}\n\n`,
+        );
+        const loudness = this.#meterCoreDown ? null : (levels.loudness ?? null);
+        if (tick % 3 === 0 && loudness !== null) {
+          const known = [loudness.momentary, loudness.shortterm, loudness.limiterGrDb];
+          if (known.some((v) => v !== null)) {
+            res.write(
+              `event: loudness\ndata: ${JSON.stringify({ casparHost, casparChannel, ...loudness, t })}\n\n`,
+            );
+          }
+        }
+      }
+    }, FAKE_METER_TICK_MS);
+    const ping = setInterval(() => {
+      res.write(': ping\n\n');
+    }, FAKE_METER_PING_MS);
+    res.on('close', () => {
+      clearInterval(timer);
+      clearInterval(ping);
+      this.#meterStreams.delete(res);
+    });
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` D — `GET /api/cg/license` (LICENSE §3.1): bearer-gated like D4 and D10,   * `Cache-Control: no-store`, `404` while CG Control is switched off — and, here, with no license set
    * (a Playout before `2.9.2` has no such endpoint).
    */
   #serveLicense(req: http.IncomingMessage, res: http.ServerResponse): void {

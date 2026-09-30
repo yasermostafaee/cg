@@ -21,6 +21,7 @@ import { MonitorPanel, programHeadTags } from '../src/renderer/features/monitors
 import type { ProgramReturn } from '../src/renderer/hooks/useProgramReturn.js';
 import { signedInStub } from './support/authStub.js';
 import { stationSetupStub } from './support/stationSetup.js';
+import { SOUND_OFF, stubMeters } from './support/programPane.js';
 
 /**
  * 🔴 `UI-POLISH-01` G — **ON AIR OR NOT, BEFORE EVERY CHANNEL NAME AND ON THE PROGRAM HEAD; THE
@@ -248,6 +249,7 @@ describe('the strip — the dot before the name, the alarm mark after it', () =>
 const NO_RETURN: ProgramReturn = { src: null, signal: 'none', onError: () => undefined };
 
 function head(value: ChannelAir): ReactElement {
+  stubMeters();
   return createElement(MonitorPanel, {
     id: 'pgm',
     title: 'PROGRAM (PGM)',
@@ -255,6 +257,7 @@ function head(value: ChannelAir): ReactElement {
     channel: 1,
     onAirRows: 0,
     programReturn: NO_RETURN,
+    programSound: SOUND_OFF,
     air: value,
   });
 }

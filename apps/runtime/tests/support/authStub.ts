@@ -159,6 +159,8 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     takeOffAir: () => Promise.resolve({ ok: false }),
   };
   // `PLAYOUT-FEATURES-01` D — no license read: the quiet answer (nothing is marked for it).
+  // `PLAYOUT-FEATURES-01` E — no meters: the meter sits at the floor.
+  cg['meters'] ??= { onReading: () => () => undefined };
   cg['license'] ??= {
     state: () => Promise.resolve({ license: null }),
     onChanged: () => () => undefined,

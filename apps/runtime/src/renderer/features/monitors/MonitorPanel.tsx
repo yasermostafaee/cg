@@ -1,11 +1,14 @@
 import { useLayoutEffect, useRef, type CSSProperties } from 'react';
-import { MonitorOff } from 'lucide-react';
+import { MonitorOff, Volume2, VolumeX } from 'lucide-react';
 import { colors, cssVars } from '../../theme.js';
+import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
 import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/MonitorHead.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
 import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
+import type { PgmAudio } from '../../hooks/usePgmAudio.js';
+import { LoudnessBadge, VuMeter } from './VuMeter.js';
 import { playlistTag, type ChannelAir } from '../channels/channelAir.js';
 
 /**
@@ -36,11 +39,23 @@ import { playlistTag, type ChannelAir } from '../channels/channelAir.js';
  */
 
 const styles = {
+  /**
+   * `PLAYOUT-FEATURES-01` E — the screen and the meter side by side. A size container, so the meter can
+   * drop to two bars when the panel is too narrow for eight (`controls.css`).
+   */
+  stage: {
+    display: 'flex',
+    flex: 1,
+    minHeight: 0,
+    minWidth: 0,
+    containerType: 'inline-size' as const,
+  },
   /** The video area. Black because that is what a video area is. */
   screen: {
     position: 'relative' as const,
     flex: 1,
     minHeight: 0,
+    minWidth: 0,
     background: cssVars['--r-video-ground'],
     display: 'flex',
     flexDirection: 'column' as const,
@@ -95,6 +110,8 @@ interface Props {
   onAirRows: number;
   /** The programme return for `channel` — lifted to the strip, like the air count. */
   programReturn: ProgramReturn;
+  /** `PLAYOUT-FEATURES-01` E — the programme's SOUND at this console, lifted beside the return. */
+  programSound: PgmAudio;
   /**
    * 🔴 `UI-POLISH-01` G — the Playout's `output` and `playlist` for `channel` (`NO_AIR` when it said
    * nothing). `output` alone colours the head; the playlist is a neutral tag and never a colour.
@@ -117,6 +134,7 @@ export function MonitorPanel({
   channel,
   onAirRows,
   programReturn,
+  programSound,
   air,
 }: Props): JSX.Element {
   const { src, signal, onError } = programReturn;
@@ -164,6 +182,25 @@ export function MonitorPanel({
       <MonitorSignalStrip
         signal={words}
         tone={signal}
+        /* `PLAYOUT-FEATURES-01` E — the Playout's short-term loudness for this channel. */
+        reading={<LoudnessBadge channel={channel} />}
+        /*
+          🔴 `PLAYOUT-FEATURES-01` E — THE PROGRAMME'S SOUND, at THIS console only: off by default, a
+          pressed toggle while on (`data-toggle-on`, as PVW's guides), remembered per console.
+        */
+        action={
+          <Button
+            variant="ghost"
+            aria-pressed={programSound.on}
+            data-toggle-on={programSound.on ? '' : undefined}
+            data-pgm-audio={programSound.status}
+            aria-label="Programme sound"
+            title="Programme sound — this console only"
+            onClick={programSound.toggle}
+          >
+            <Icon icon={programSound.on ? Volume2 : VolumeX} size={13} />
+          </Button>
+        }
         fact={
           <MonitorHeadFact
             testId="data-monitor-air-count"
@@ -177,16 +214,20 @@ export function MonitorPanel({
         `role="img"` with a name, NOT a bare decorative box: a screen reader user needs the same
         fact a sighted operator gets — there is an output here, and what state its return is in.
       */}
-      <div style={styles.screen} role="img" aria-label={`${title} — ${words}`} data-pgm-screen="">
-        {src !== null && (
-          <ProgramPicture key={src} src={src} visible={signal === 'live'} onError={onError} />
-        )}
-        {signal !== 'live' && (
-          <>
-            <Icon icon={MonitorOff} size={22} />
-            <span style={styles.label}>{words}</span>
-          </>
-        )}
+      <div style={styles.stage} data-pgm-stage="">
+        <div style={styles.screen} role="img" aria-label={`${title} — ${words}`} data-pgm-screen="">
+          {src !== null && (
+            <ProgramPicture key={src} src={src} visible={signal === 'live'} onError={onError} />
+          )}
+          {signal !== 'live' && (
+            <>
+              <Icon icon={MonitorOff} size={22} />
+              <span style={styles.label}>{words}</span>
+            </>
+          )}
+        </div>
+        {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
+        <VuMeter channel={channel} />
       </div>
     </Panel>
   );

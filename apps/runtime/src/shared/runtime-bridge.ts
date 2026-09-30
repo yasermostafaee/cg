@@ -12,6 +12,7 @@ import type {
   BridgeSessionStateChannel,
   LicenseState,
   LicenseStateChannel,
+  PgmMeterReading,
   SignInFailure,
   ChannelsCatalogueChannel,
   SetupCheckChannel,
@@ -652,6 +653,11 @@ export interface RuntimeBridge {
      * the picture asks for a fresh one. Rejects when the bridge refuses (the channel is not held).
      */
     feedUrl(channel: number): Promise<string | null>;
+    /**
+     * `PLAYOUT-FEATURES-01` E (`R-076`) — where this console reads channel `n`'s programme SOUND (`/pgm/<n>/sound`,
+     * behind a ticket for the sound), or `null` with no relay (test mode). Asked for per connection.
+     */
+    audioUrl(channel: number): Promise<string | null>;
     /** Every WATCHED channel's state. A channel nobody watches has no entry. */
     status(): Promise<ChannelResponse<typeof PgmReturnStatusChannel>>;
     onStatusChanged(handler: (status: readonly PgmReturnStatus[]) => void): Unsubscribe;
@@ -982,6 +988,15 @@ export interface RuntimeBridge {
   license: {
     state(): Promise<ChannelResponse<typeof LicenseStateChannel>>;
     onChanged(handler: (state: LicenseState) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — **THE PLAYOUT'S METERS**, relayed by CG Bridge from `GET /api/cg/meters`
+   * for the channels this console's sign-in holds: bus levels every 50 ms, loudness every 150 ms. A push only
+   * — there is nothing to pull: a reading older than a moment is not a level, and the meter falls to the floor.
+   */
+  meters: {
+    onReading(handler: (reading: PgmMeterReading) => void): Unsubscribe;
   };
 
   /**

@@ -183,6 +183,18 @@ const EMPTIED_AIR = scoped<EmptiedAirNotice | null>(emptiedAirFor);
 const STRAYS = scoped<readonly StationStray[]>(straysFor);
 const AUDIT = scoped<readonly AuditEntry[]>(auditFor);
 const PLATE_RELEASED = scoped<LivePlateReleaseState>(plateReleaseFor);
+/**
+ * `PLAYOUT-FEATURES-01` E — the meter readings on channels the socket holds, and NOTHING — not an empty list,
+ * which the schema refuses — when none is left: a console on channel 1 hears no message at channel 2's rate.
+ */
+export function readingsFor<T extends { readonly channel: number }>(
+  readings: readonly T[],
+  holds: Holds,
+): T[] | typeof TELL_NOTHING {
+  const kept = rowsFor(readings, holds);
+  return kept.length === 0 ? TELL_NOTHING : kept;
+}
+const READINGS = scoped<readonly { readonly channel: number }[]>(readingsFor);
 const STATION_WIDE: ScopeEntry = { kind: 'station-wide' };
 const PER_SOCKET: ScopeEntry = { kind: 'per-socket' };
 const INTENT: ScopeEntry = { kind: 'intent' };
@@ -205,6 +217,8 @@ export const PUBLISH_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   [LayersOwnedOccupancyChangedChannel.name]: ROWS,
   [RehearseStateChangedChannel.name]: ROWS,
   [PgmReturnStatusChangedChannel.name]: ROWS,
+  // `PLAYOUT-FEATURES-01` E — the Playout's meters, per reading, by its channel.
+  'meters.changed': READINGS,
   [StationStraysChangedChannel.name]: STRAYS,
   // Computed for this socket's principal already.
   'auth.state-changed': PER_SOCKET,

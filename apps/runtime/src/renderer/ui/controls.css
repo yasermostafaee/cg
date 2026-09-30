@@ -506,6 +506,143 @@
 }
 
 /*
+ * ── 🔴 PLAYOUT-FEATURES-01 E (R-076) — THE PROGRAMME METER ──────────────────────────────────
+ *
+ * The Playout's own `VuMeterTall` (PLAYLIST-AUDIO §2.4): bars on a black box with a thin frame; each bar a
+ * FIXED gradient — green to 70 % (−18 dBFS), yellow to 88 % (−7.2 dBFS), red above — revealed from the
+ * bottom by the `clip-path` the meter store writes (no React render per reading); 32 segment lines over
+ * it; a linear −60…0 scale beside it, under "dBFS". One linear transition both ways (symmetric motion),
+ * and no peak hold, as theirs.
+ */
+.cg-vu {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  gap: var(--r-meter-pad);
+  padding: var(--r-meter-pad);
+  box-sizing: border-box;
+  min-height: 0;
+  background: var(--r-meter-ground);
+  border: 1px solid var(--r-meter-frame);
+}
+.cg-vu__unit {
+  font-size: var(--r-meter-scale-text);
+  line-height: 1;
+  color: var(--r-meter-scale-ink);
+  text-align: center;
+}
+.cg-vu__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--r-meter-pad);
+  /* A label sits ON its mark, half above it: the halves at 0 and −60 need this room. */
+  padding-block: calc(var(--r-meter-scale-text) / 2);
+}
+.cg-vu__bars {
+  display: flex;
+  gap: var(--r-meter-bar-gap);
+}
+.cg-vu__bar {
+  position: relative;
+  width: var(--r-meter-bar-w);
+  box-shadow: inset 0 0 0 1px var(--r-meter-frame);
+}
+.cg-vu__fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    var(--r-meter-safe) 0 70%,
+    var(--r-meter-warn) 70% 88%,
+    var(--r-meter-over) 88% 100%
+  );
+  clip-path: inset(100% 0 0 0);
+  transition: clip-path 100ms linear;
+}
+/* The 32 segment lines, over the lit and the unlit bar alike. */
+.cg-vu__bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to top,
+    transparent 0 calc(100% / 32 - 1px),
+    var(--r-meter-segment) calc(100% / 32 - 1px) calc(100% / 32)
+  );
+}
+.cg-vu__scale {
+  position: relative;
+  width: 2.4em;
+  font-size: var(--r-meter-scale-text);
+  color: var(--r-meter-scale-ink);
+  font-variant-numeric: tabular-nums;
+}
+.cg-vu__mark {
+  position: absolute;
+  left: 0;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translateY(50%);
+}
+/*
+ * TOO NARROW FOR EIGHT: the picture is bound by the panel's HEIGHT (161 px at the desktop's smallest window,
+ * 1100 × 700, so 287 px wide at 16:9), and eight bars (130 px) fit beside it down to a stage of about 420 px
+ * — measured 536 px at 1100 × 700, so the desktop always shows eight. Below that (a browser console narrower
+ * than the desktop minimum) eight would squeeze the picture, so the meter shows the first TWO — the
+ * programme's left and right — and hides the rest.
+ */
+@container (max-width: 420px) {
+  .cg-vu__bar:nth-child(n + 3) {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-vu__fill {
+    transition: none;
+  }
+}
+
+/*
+ * THE LOUDNESS BADGE — the Playout's short-term LUFS with one decimal: green within −23 ± 1, amber to ± 2,
+ * red beyond; silence and unknown in the quiet ink. It pulses while the true-peak limiter takes more than
+ * 0.1 dB — and, where motion is reduced, is underlined instead, so the fact survives the setting.
+ */
+.cg-loudness {
+  font-size: var(--r-monitor-fact-text);
+  color: var(--r-text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.cg-loudness[data-loudness-tone='on-target'] {
+  color: var(--r-meter-safe);
+}
+.cg-loudness[data-loudness-tone='near'] {
+  color: var(--r-meter-warn);
+}
+.cg-loudness[data-loudness-tone='off-target'] {
+  color: var(--r-meter-over);
+}
+.cg-loudness[data-limiting] {
+  animation: cg-loudness-pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes cg-loudness-pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cg-loudness[data-limiting] {
+    animation: none;
+    text-decoration: underline;
+  }
+}
+
+/*
  * THE SCOPE. The quietest thing on the row and the most load-bearing sentence on it: the three
  * buttons to its left drive EVERY rehearsing frame, never the selected one.
  */

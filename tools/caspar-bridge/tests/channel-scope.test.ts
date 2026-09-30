@@ -250,6 +250,12 @@ const FIXTURES: Readonly<Record<string, unknown>> = {
   'station.strays-changed': STRAYS,
   'station.strays': STRAYS,
   'audit.recent': AUDIT,
+  // `PLAYOUT-FEATURES-01` E — the Playout's meter readings, one list per read of its stream.
+  'meters.changed': [
+    { kind: 'audio', channel: 1, dbfs: [-18.2, -18.6] },
+    { kind: 'audio', channel: 2, dbfs: [-6, -6] },
+    { kind: 'loudness', channel: 2, momentary: -22.4, shortterm: -23.1, limiterGrDb: 0 },
+  ],
 };
 
 /** Every channel number a payload names — under `channel`/`casparChannel`, and each seat's. */

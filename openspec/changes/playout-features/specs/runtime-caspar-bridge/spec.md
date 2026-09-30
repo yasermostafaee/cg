@@ -73,22 +73,31 @@ found cleared while D4 says the channel's `playlist` is `unlicensed`, its notice
 
 ### Requirement: CG Bridge SHALL relay the programme's sound and the Playout's meters, and SHALL never put a token in a URL
 
-CG Bridge SHALL serve `/pgm/<n>/audio.wav` on its control port behind the same short-lived ticket as the
-picture, reading the core's `GET /audio.wav` on `9250 + n − 1` by the well-behaved-client rule (one request,
-then nothing; one upstream per channel shared by every listener; closed 1.5 s after the last listener; a
-backoff on reconnect), and every listener SHALL receive the WAV header and then whole 4-byte frames. CG
-Bridge SHALL read `GET /api/cg/meters` ONCE, with its own session, by a streaming `fetch` with the bearer in
-`Authorization` (never `EventSource`, never the token in the URL), reconnecting when the stream closes, and
-only while a console watches. Each `audio` and `loudness` event SHALL be relayed over the control socket only
-to consoles that watch that channel AND whose token holds it.
+CG Bridge SHALL serve `/pgm/<n>/sound` on its control port behind a short-lived ticket issued for that
+channel's SOUND (a picture ticket SHALL NOT open it, nor a sound ticket the picture), readable cross-origin, as
+`application/octet-stream` and with no `.wav` in its path (a download manager's browser hook captures a `.wav`
+URL of type `audio/wav` and answers the page an empty `204`). It SHALL read the core's `GET /audio.wav` on
+`9250 + n − 1` by the well-behaved-client rule (one request, then nothing; one upstream per channel shared by
+every listener; closed 1.5 s after the last listener; a silent stream closed and redialled; an increasing
+backoff), and every listener SHALL receive the core's 44-byte WAV header once and then whole 4-byte frames, a
+slow listener skipping chunks rather than queueing them. CG Bridge SHALL read `GET /api/cg/meters` ONCE, with
+its own session (a console's token only until it has one, reopening the stream when its own arrives), by a
+streaming request with the bearer in `Authorization` (never `EventSource`, never the token in the URL),
+reconnecting when the stream closes or falls silent, and only while at least one console is connected. Each
+`audio` and `loudness` event SHALL be joined to this station's channel by the D10 reader's join and relayed
+over the control socket only to consoles whose sign-in holds that channel.
 
-#### Scenario: One Playout stream for two consoles
+#### Scenario: One Playout stream for three consoles
 
-- **WHEN** a console granted CH 1 and a console granted CH 2 both watch meters **THEN** the Playout sees one
-  meters request, and each console receives only its own channel's events
-- **AND** the request carries the bearer in `Authorization` and no token in its URL
+- **WHEN** a console granted CH 1, a console granted CH 2 and a console granted both are connected **THEN** the
+  Playout sees one meters stream, the first two receive only their own channel's events, and the third both
+- **AND** every meters request carries the bearer in `Authorization` and no query at all
+- **AND WHEN** the stream closes **THEN** CG Bridge reads it again; **AND WHEN** the core is down **THEN** the
+  relayed levels are the floor
+- **AND WHEN** the last console leaves **THEN** the stream is released
 
 #### Scenario: The sound relay
 
 - **WHEN** two consoles listen to CH 1's sound **THEN** the core sees one `GET /audio.wav`, and each listener's
-  stream begins with the 44-byte header followed by whole frames
+  stream begins with the 44-byte header followed by whole frames, even when the core's writes split a frame
+- **AND** a sound ticket opens `/pgm/1/sound` only, and a picture ticket does not open it

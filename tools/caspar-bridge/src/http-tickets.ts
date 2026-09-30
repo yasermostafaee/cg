@@ -14,7 +14,12 @@ import { HTTP_TICKET_TTL_MS } from '@cg/shared-ipc';
  */
 
 export type TicketGrant =
-  | { readonly kind: 'pgm'; readonly channel: number }
+  | {
+      readonly kind: 'pgm';
+      readonly channel: number;
+      /** `PLAYOUT-FEATURES-01` E — the sound's ticket opens the sound only. Absent = the picture. */
+      readonly stream?: 'picture' | 'audio';
+    }
   | { readonly kind: 'logs' };
 
 interface Held {

@@ -78,6 +78,53 @@ export function padJpeg(jpeg: Buffer, total: number): Buffer {
   return jpegWithComment(jpeg, filler);
 }
 
+/**
+ * `PLAYOUT-FEATURES-01` E (`R-076`) — the core's `GET /audio.wav` on the SAME port (PLAYLIST-AUDIO §2.1): an
+ * HTTP/1.0 head, a 44-byte WAV header whose lengths say "endless", then raw PCM s16le, 2 channels, 48 kHz,
+ * one field's worth a write (20 ms on 1080i50), until the connection closes.
+ */
+export const AUDIO_FEED_HEAD =
+  'HTTP/1.0 200 OK\r\n' +
+  'Connection: close\r\n' +
+  'Cache-Control: no-cache, no-store, must-revalidate, private\r\n' +
+  'Access-Control-Allow-Origin: *\r\n' +
+  'Content-Type: audio/wav\r\n' +
+  '\r\n';
+
+export const AUDIO_SAMPLE_RATE = 48_000;
+/** 20 ms of stereo s16: 960 frames of 4 bytes. */
+export const AUDIO_CHUNK_BYTES = 960 * 4;
+
+/** The 44-byte WAV header with the "endless" lengths the core writes. */
+export function wavHeader(): Buffer {
+  const b = Buffer.alloc(44);
+  b.write('RIFF', 0, 'latin1');
+  b.writeUInt32LE(0xffffffff, 4);
+  b.write('WAVE', 8, 'latin1');
+  b.write('fmt ', 12, 'latin1');
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20); // PCM
+  b.writeUInt16LE(2, 22); // stereo
+  b.writeUInt32LE(AUDIO_SAMPLE_RATE, 24);
+  b.writeUInt32LE(AUDIO_SAMPLE_RATE * 4, 28);
+  b.writeUInt16LE(4, 32);
+  b.writeUInt16LE(16, 34);
+  b.write('data', 36, 'latin1');
+  b.writeUInt32LE(0xffffffff, 40);
+  return b;
+}
+
+/** 20 ms of a 1 kHz tone at −12 dBFS, starting at sample `from` so consecutive chunks join. */
+export function toneChunk(from: number): Buffer {
+  const b = Buffer.alloc(AUDIO_CHUNK_BYTES);
+  for (let i = 0; i < AUDIO_CHUNK_BYTES / 4; i++) {
+    const v = Math.round(Math.sin((2 * Math.PI * 1000 * (from + i)) / AUDIO_SAMPLE_RATE) * 8192);
+    b.writeInt16LE(v, i * 4);
+    b.writeInt16LE(v, i * 4 + 2);
+  }
+  return b;
+}
+
 export interface FakeFeedConnection {
   readonly openedAt: number;
   /** Every byte this connection sent the feed. */
@@ -103,7 +150,13 @@ export interface FakePgmFeed {
   setFrames(frames: readonly Buffer[]): void;
   /** Close every connection now (a core restart). */
   closeAll(): void;
-  /** From now on, close each connection the moment it is accepted. */
+  /** `PLAYOUT-FEATURES-01` E — every `GET /audio.wav` connection, apart from the picture's. */
+  readonly audioConnections: readonly FakeFeedConnection[];
+  /** Audio connections open now. */
+  audioOpenCount(): number;
+  /** Stop sending sound on every audio connection, keeping each open. */
+  pauseAudio(): void;
+  resumeAudio(): void; /** From now on, close each connection the moment it is accepted. */
   closeOnAccept(on: boolean): void;
   stop(): Promise<void>;
 }
@@ -114,11 +167,18 @@ export interface FakePgmFeedOptions {
   readonly host?: string;
   readonly fps?: number;
   readonly frames?: readonly Buffer[];
+  /**
+   * TEST-ONLY — write each 20 ms sound chunk as two writes split at this byte, so a relay must carry a
+   * part frame across writes. Absent: one write a chunk, as the core sends.
+   */
+  readonly audioSplitAt?: number;
 }
-
 export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promise<FakePgmFeed> {
   const connections: FakeFeedConnection[] = [];
   const sockets = new Set<net.Socket>();
+  const audioConnections: FakeFeedConnection[] = [];
+  const audioSockets = new Set<net.Socket>();
+  let audioPaused = false;
   let frames: readonly Buffer[] = options.frames ?? [FRAME_A, FRAME_B];
   let paused = false;
   let closeOnAccept = false;
@@ -151,6 +211,31 @@ export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promis
       record.received = Buffer.concat([record.received, chunk]);
       if (record.requestAt !== null || !record.received.includes('\r\n\r\n')) return;
       record.requestAt = Date.now();
+      if (record.received.toString('latin1').startsWith('GET /audio.wav ')) {
+        // `PLAYOUT-FEATURES-01` E — the sound: this connection is the audio's, not the picture's.
+        connections.splice(connections.indexOf(record), 1);
+        audioConnections.push(record);
+        sockets.delete(socket);
+        audioSockets.add(socket);
+        socket.write(Buffer.concat([Buffer.from(AUDIO_FEED_HEAD, 'latin1'), wavHeader()]));
+        let sample = 0;
+        timer = setInterval(() => {
+          if (audioPaused || socket.destroyed) return;
+          const pcm = toneChunk(sample);
+          sample += AUDIO_CHUNK_BYTES / 4;
+          const at = options.audioSplitAt;
+          if (at === undefined) socket.write(pcm);
+          else {
+            // Apart in TIME, or loopback TCP delivers the two halves as one read.
+            socket.write(pcm.subarray(0, at));
+            setTimeout(() => {
+              if (!socket.destroyed) socket.write(pcm.subarray(at));
+            }, 5);
+          }
+          record.framesSent += 1;
+        }, 20);
+        return;
+      }
       socket.write(PGM_FEED_HEAD);
       timer = setInterval(() => {
         if (paused || socket.destroyed || frames.length === 0) return;
@@ -165,6 +250,7 @@ export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promis
       if (timer !== null) clearInterval(timer);
       record.closedAt = Date.now();
       sockets.delete(socket);
+      audioSockets.delete(socket);
     });
   });
   await new Promise<void>((resolve, reject) => {
@@ -192,12 +278,22 @@ export async function startFakePgmFeed(options: FakePgmFeedOptions = {}): Promis
     },
     closeAll: () => {
       for (const socket of sockets) socket.destroy();
+      for (const socket of audioSockets) socket.destroy();
+    },
+    audioConnections,
+    audioOpenCount: () => audioSockets.size,
+    pauseAudio: () => {
+      audioPaused = true;
+    },
+    resumeAudio: () => {
+      audioPaused = false;
     },
     closeOnAccept: (on) => {
       closeOnAccept = on;
     },
     stop: async () => {
       for (const socket of sockets) socket.destroy();
+      for (const socket of audioSockets) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };

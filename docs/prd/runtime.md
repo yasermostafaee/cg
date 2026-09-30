@@ -4231,7 +4231,7 @@ tick error that clears the box with no `epoch` change is caught by `B-292`'s sil
 `sourcePicker.dom.test.ts`, `playlistAudioLock.dom.test.ts`, e2e `playlist-output.spec.ts`. **Owed:** `2.9.2`
 on `.111`, where both channels' L is 5.
 
-## [!] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · BLOCKED on the Playout team's answer to `CG-CONTROL-ASK-PLAYLIST-AUDIO-2026-09-29.md` §2
+## [~] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` E in `openspec/changes/playout-features/` (§5) · owed: `2.9.2` on `.111`
 
 **What.** The programme's sound in CG Control, in sync with the PGM monitor's picture, and a VU meter
 like the Playout's own. It REUSES the Playout's way of syncing audio and its level source — no second
@@ -4241,6 +4241,22 @@ sound and picture together (one stream or two, buffering, timestamps, latency), 
 levels (OSC, an endpoint, or the stream), the scale and ballistics, and whether CG Control may read
 the same audio and levels with D4/D10's authentication. **Acceptance (to confirm):** WHEN the PGM
 monitor shows a channel THEN its sound plays in sync and the meter moves as the Playout's does.
+
+**Answered (`2.9.2`, PLAYLIST-AUDIO §2) and built (`PLAYOUT-FEATURES-01` E, 2026-10-01).** Their client keeps
+sound and picture as two separate streams with no timestamp and no comparison — "in sync" means each path as
+short as it can be — and meters from the engine (`GET /api/cg/meters`, SSE, D4/D10 authentication), not from
+the stream. Built to that, reusing their method and never a second one: CG Bridge relays the core's
+`/audio.wav` as `/pgm/<n>/sound` behind a ticket for the sound (one reader per channel; no `.wav` and
+`application/octet-stream`, because a download manager's browser hook swallows a `.wav` typed `audio/wav` —
+measured on the dev host), and reads the meters stream ONCE with its own session, relaying each reading only
+to a console holding its channel. The console plays the sound by their client's buffer rules (30 → 90 ms, the
+150 ms cap), behind a speaker on the PROGRAM strip that is off by default and remembered per console, and
+draws their `VuMeterTall` beside the picture — eight bars and a linear dBFS scale, written to the DOM with no
+render per reading — with the short-term loudness badge in their three tones, pulsing while the limiter
+works. Eight bars fit at the desktop's smallest window (measured: the picture is height-bound there); two show
+only in a narrower browser. Tests: `pgm-audio.test.ts`, `playout-meters.integration.test.ts`,
+`pgmAudioPlayer.test.ts`, `meterScale.test.ts`, `programMeter.dom.test.ts`, e2e `programme-sound.spec.ts`.
+**Owed:** `2.9.2` on `.111` (the meters endpoint), and a listen on the plant.
 
 ## [~] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · ANSWERED by `PLAYOUT-CG-RESPONSE-LICENSE-v1.md` (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` D in `openspec/changes/playout-features/` (§1) · owed: `2.9.2` on `.111`
 

@@ -130,3 +130,40 @@ plate on it.
 6. **Open, for the Playout team:** the lookup uses the bridge's own bearer, the primary Playout's. Whether a
    backup Playout (its own install, its own keys) accepts it is unknown; if not, every clip stays empty on the
    backup and says its list could not be read.
+
+## E — the programme's sound and the meter (`R-076`)
+
+1. **The sound reaches the console through CG Bridge, never the core** (`CENTRAL-BRIDGE-01`'s hard stop): one
+   well-behaved reader per channel of the core's `GET /audio.wav` on the picture's own port
+   (`pgm-audio.ts`, the picture relay's host, bounds and backoff), served at `/pgm/<n>/sound` behind a ticket
+   issued for the SOUND of that channel (`pgmReturn.ticket` with `stream: 'audio'`), readable cross-origin
+   (`Access-Control-Allow-Origin: *`, as the core's own). Each console gets the core's 44-byte header ONCE and
+   then whole 4-byte frames; a redial never repeats the header mid-stream; a slow console skips chunks.
+2. **No `.wav` in the relay's path, and `application/octet-stream`, deliberately** — measured on the dev host:
+   Internet Download Manager's browser hook captured the page's `fetch` of a `.wav` URL typed `audio/wav` and
+   answered it an empty `204` (Chrome saw `Cache-Control: no-cache` / `Connection: close` headers the bridge
+   never sends; Node, with Chrome's exact request headers, got the bridge's `200`). Either change alone
+   avoided it; both are kept, because a plant console can carry the same tool.
+3. **The console plays it by the Playout client's method** (`pgmAudioPlayer.ts`): a streaming `fetch`, the header
+   skipped, 4-byte cuts, an `AudioBuffer` per chunk at 48 kHz started at `nextT` on the context's clock, a
+   buffer from 30 ms (+15 ms after three underruns in 10 s, to 90, never lowered on a connection), and a
+   150 ms cap that drops back to the buffer. No `<audio>`, no resampling, no timestamps.
+4. **The speaker is off by default, per console and remembered** (`cg.runtime.pgm-audio.v1`, `{ on }`). A
+   browser starts sound only after a press on the page: the press on the speaker is one; after a reload the
+   remembered speaker starts as soon as the page has had one (`navigator.userActivation.hasBeenActive` — the
+   press that shows the monitors), or at the first press or key otherwise (`waiting` until then).
+5. **The meters are read ONCE, by CG Bridge, with its own session** (`playout-meters.ts`): a streaming request
+   with the bearer in `Authorization` (never `EventSource`, never a query), reconnecting on close or on 35 s
+   of silence (the Playout pings every 15 s), `404` read as a Playout before `2.9.2` (asked again every
+   minute), open while any console is connected. Until the bridge has its own session it reads with a
+   console's token (D7's fallback), which the Playout answers with THAT token's channels only; its own
+   session's arrival reopens the stream. Each event is joined by the D10 reader's join (`hostIsOurs` and a
+   declared channel) and relayed as `meters.changed` — one list per read of the stream (the Playout's 50 ms tick
+   writes every channel at once), projected per console to the channels its sign-in holds, and not sent at all
+   when that leaves none (the scope census holds it like every other scoped push).
+6. **The console writes the DOM, not React state** (`meterStore.ts`): one subscription; the meter and the badge
+   register writers; a reading older than 500 ms is the floor, loudness older than 1 s is unknown. The
+   `VuMeterTall` look is the Playout's (`§2.4`) in three meter tokens of its own — never the air green.
+7. **Two bars only where eight would squeeze the picture** — measured in Chromium: at the desktop's smallest
+   window (1100 × 700) the PROGRAM stage is 536 × 161 px and the picture is height-bound (287 × 161), so eight
+   fit; a container query shows the first two below a 420 px stage (at 800 × 700 in a browser it is 386 px).

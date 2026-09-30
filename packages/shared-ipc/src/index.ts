@@ -102,4 +102,5 @@ export * from './playout-session.js';
 // one-time sign-in.
 export * from './channels/bridgeSession.js';
 export * from './channels/license.js';
+export * from './channels/meters.js';
 export * from './channels/bridgeHttp.js';

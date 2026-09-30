@@ -502,6 +502,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #bridgeSessionSubs = new Subs<ipcChannels.BridgeSessionState>();
   /** `PLAYOUT-FEATURES-01` D — the CG license as CG Bridge last read it. */
   readonly #licenseSubs = new Subs<ipcChannels.LicenseState>();
+  /** `PLAYOUT-FEATURES-01` E — the Playout's meters, one reading at a time. */
+  readonly #meterSubs = new Subs<ipcChannels.PgmMeterReading>();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
   readonly #sourceCatalogSubs = new Subs<ConsoleSourceCatalog>();
   readonly #sourceAssignmentSubs = new Subs<SourceAssignments>();
@@ -1422,6 +1424,12 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#licenseSubs.emit(p.data);
         break;
       }
+      // `PLAYOUT-FEATURES-01` E — the meter readings that arrived together, handed on one at a time.
+      case ipcChannels.PgmMetersChangedChannel.name: {
+        const p = ipcChannels.PgmMetersChangedChannel.payload.safeParse(payload);
+        if (p.success) for (const reading of p.data) this.#meterSubs.emit(reading);
+        break;
+      }
       case ipcChannels.StationStraysChangedChannel.name: {
         const p = ipcChannels.StationStraysChangedChannel.payload.safeParse(payload);
         if (p.success) this.#straySubs.emit(p.data);
@@ -1928,6 +1936,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#licenseSubs.add(handler),
   };
 
+  /** `PLAYOUT-FEATURES-01` E — the Playout's meters, pushed by CG Bridge for this socket's channels. */
+  readonly meters = {
+    onReading: (handler: (reading: ipcChannels.PgmMeterReading) => void) =>
+      this.#meterSubs.add(handler),
+  };
+
   readonly connections = {
     config: (): Promise<ConnectionConfig> => this.#invoke(ConnectionsConfigChannel, undefined),
     setConfig: (req: ChannelRequest<typeof ConnectionsSetConfigChannel>) =>
@@ -1974,6 +1988,14 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly pgmReturn = {
     feedUrl: async (channel: number): Promise<string | null> => {
       const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, { channel });
+      return this.#bridgeHttpUrl(path);
+    },
+    // `PLAYOUT-FEATURES-01` E — the SOUND, behind a ticket for the sound.
+    audioUrl: async (channel: number): Promise<string | null> => {
+      const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, {
+        channel,
+        stream: 'audio',
+      });
       return this.#bridgeHttpUrl(path);
     },
     status: () => this.#invoke(PgmReturnStatusChannel, undefined),

@@ -39,7 +39,7 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 - [x] 3.3 The guard: every targeted verb outside 50–99 unless own; never layer L; no `NEXT`/`BACKGROUND`/`BUFFER`
 - [x] 3.4 The reveal: at least two frames of the channel's rate after `PLAY`; pinned
 - [x] 3.5 Console: every audio control disabled with the reason; the locked pill
-- [ ] 3.6 Fake Playout lists `pl-` rows (layer 7); tests; e2e; gate; pushed; CI read
+- [x] 3.6 Fake Playout lists `pl-` rows (layer 7); tests; e2e; gate; pushed; CI read — `88df999a`: PR run https://github.com/yasermostafaee/cg/actions/runs/36770857527 (`E2E (Playwright)` RAN: runtime 317 passed, designer 293 passed; `Lint • Typecheck • Test • Build` success); Desktop run https://github.com/yasermostafaee/cg/actions/runs/36770857385 (Installers, Installer smoke and CG Bridge smoke success)
 
 ## 4. A — the backup's own clip (`B-286`)
 
@@ -47,15 +47,15 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 - [x] 4.2 The backup lookup (the backup Playout's D11 `?fingerprint=`), cached, off the take's path
 - [x] 4.3 `RedundancyAdapter`: a per-server line, journaled for B; a plate refused on B sends B nothing
 - [x] 4.4 The row's line; the renderer
-- [ ] 4.5 Tests; gate; pushed; CI read
+- [x] 4.5 Tests; gate; pushed; CI read — `994dbb4e`: PR run https://github.com/yasermostafaee/cg/actions/runs/36774562884 (`E2E (Playwright)` RAN: runtime 316 passed + 1 flaky, designer 293 passed — the flaky is `first-run.spec.ts:129`, a strict-mode locator race between two first-run panes, green on retry, not this change's; `Lint • Typecheck • Test • Build` success); Desktop run https://github.com/yasermostafaee/cg/actions/runs/36774562745 (Installers, Installer smoke and CG Bridge smoke success)
 
 ## 5. E — PGM sound and the VU meter (`R-076`)
 
-- [ ] 5.1 Bridge: the ticketed `/pgm/<n>/audio.wav` relay
-- [ ] 5.2 Bridge: the meters stream, read once, relayed per console and per channel
-- [ ] 5.3 Console: the audio reader (their method); the speaker toggle, remembered
-- [ ] 5.4 Console: the meter (8 bars and the scale) and the loudness badge; stale reads −60
-- [ ] 5.5 Fakes: the feed's `/audio.wav`; the fake Playout's meters stream
+- [x] 5.1 Bridge: the ticketed `/pgm/<n>/sound` relay (no `.wav`, octet-stream: a download manager swallows `.wav` + `audio/wav`)
+- [x] 5.2 Bridge: the meters stream, read once, relayed per console and per channel
+- [x] 5.3 Console: the audio reader (their method); the speaker toggle, remembered
+- [x] 5.4 Console: the meter (8 bars and the scale) and the loudness badge; stale reads −60
+- [x] 5.5 Fakes: the feed's `/audio.wav`; the fake Playout's meters stream
 - [ ] 5.6 Tests; e2e with screenshots; gate; pushed; CI read
 
 ## 6. Close

@@ -53,8 +53,9 @@ The core listens on `0.0.0.0`; the Playout rewrites its firewall rule on every s
 `9250–9269` and `9350–9369` from **any** address (their §4). So **the programme picture of every
 channel is readable by anyone on the station's LAN**, whatever CG Control does. Limiting it to the
 bridge would break the Playout's own clients; that decision is the owner's and the Playout team's.
-CG Control's own relay (`/pgm/<n>` on `127.0.0.1:5174`) adds nothing to that exposure: it serves
-loopback peers only.
+CG Control's own relay adds nothing to that exposure: since `CENTRAL-BRIDGE-01` (D9) it is served on CG
+Bridge's control port — `/pgm/<n>` for the picture, `/pgm/<n>/sound` for the sound — and opens only
+with a short-lived ticket a signed-in console was given for that channel over its verified socket.
 
 ## What CG Control never does
 
@@ -64,11 +65,24 @@ loopback peers only.
 - It never dials channels ≥ 21: their ports (`9270+`) are outside the firewall rule. The console
   says "No return signal" and the bridge log names the port and the rule.
 
+## The sound — built by `PLAYOUT-FEATURES-01` E (`R-076`)
+
+- **The core's `GET /audio.wav` on the SAME port**, `9250 + n − 1`: a 44-byte RIFF header whose lengths say
+  "endless", then PCM s16le, 2 channels, 48 kHz, one field a write (their PGM-FEED §6 and PLAYLIST-AUDIO
+  §2.1). **Never `935x`.** Read by `tools/caspar-bridge/src/pgm-audio.ts` under every rule in the table above
+  — one exact request (`GET /audio.wav HTTP/1.1`), one upstream per channel, the same linger, silence bound
+  and backoff — and only while some console has its speaker on.
+- **Relayed as `/pgm/<n>/sound`, typed `application/octet-stream`** — not `.wav`, not `audio/wav`: a download
+  manager's browser hook (Internet Download Manager, measured on the dev host) captures a `.wav` URL of type
+  `audio/wav` and hands the page an empty `204`. Each console gets the header once, then whole 4-byte frames;
+  a slow console skips chunks rather than queueing them.
+- **Played by the Playout client's method** (their §2.1): `fetch` + a stream, an adaptive 30–90 ms buffer and
+  a 150 ms cap, no `<audio>`, no timestamps — so sound and picture are never compared, each simply as short as
+  it can be. The meter beside the picture does not come from this stream: it is the Playout's
+  `GET /api/cg/meters`, read once by CG Bridge.
+
 ## Named, not built
 
-- **Audio** — `GET /audio.wav` on the SAME port, `9250 + n − 1`: a 44-byte RIFF header, then
-  endless PCM s16le, 2 channels, 48 kHz (their §6). For a later meter or listen button. **Never
-  `935x`.**
 - **A backup Playout's return.** The relay reads the primary Playout host only.
 
 ## Cost, measured

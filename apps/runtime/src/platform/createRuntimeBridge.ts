@@ -322,6 +322,11 @@ export function createMockBridge(): RuntimeBridge {
       onChanged: () => () => undefined,
     },
 
+    // `PLAYOUT-FEATURES-01` E — test mode has no Playout, so no meters: the meter sits at the floor.
+    meters: {
+      onReading: () => () => undefined,
+    },
+
     connections: {
       config: () => Promise.resolve(mock.config()),
       setConfig: (req) => Promise.resolve(mock.setConfig(req)),
@@ -364,6 +369,8 @@ export function createMockBridge(): RuntimeBridge {
     */
     pgmReturn: {
       feedUrl: () => Promise.resolve(null),
+      // `PLAYOUT-FEATURES-01` E — no relay, so no sound either.
+      audioUrl: () => Promise.resolve(null),
       status: () => Promise.resolve([]),
       onStatusChanged: () => () => undefined,
     },

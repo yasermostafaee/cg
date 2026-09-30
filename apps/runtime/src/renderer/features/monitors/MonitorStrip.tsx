@@ -1,6 +1,7 @@
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { useChannelAir, useChannelBankState } from '../channels/useSelectedChannel.js';
 import { useProgramReturn } from '../../hooks/useProgramReturn.js';
+import { usePgmAudio } from '../../hooks/usePgmAudio.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
 import { airTally, onChannel } from '../stack/onAir.js';
 import { MonitorPanel } from './MonitorPanel.js';
@@ -50,6 +51,8 @@ export function MonitorStrip(): JSX.Element {
     away, so no picture is requested and the bridge pulls nothing from the Playout for it.
   */
   const programReturn = useProgramReturn(showPgm ? viewChannel : null);
+  // `PLAYOUT-FEATURES-01` E — and its SOUND, on the same rule: a folded PROGRAM plays nothing.
+  const programSound = usePgmAudio(showPgm ? viewChannel : null);
 
   return (
     /*
@@ -97,6 +100,7 @@ export function MonitorStrip(): JSX.Element {
           channel={viewChannel}
           onAirRows={onAirRows}
           programReturn={programReturn}
+          programSound={programSound}
           air={air}
         />
       )}

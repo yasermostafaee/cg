@@ -33,17 +33,22 @@ message on the row.
 
 ### Requirement: The PGM monitor SHALL play the programme's sound on request and SHALL show the Playout's meter
 
-A speaker toggle on the PGM monitor SHALL be off by default and remembered per console; on, it SHALL play the
-channel's sound by the Playout client's method: a streaming `fetch`, the 44-byte header skipped, whole 4-byte
+A speaker toggle on the PGM monitor SHALL be off by default and remembered per console (`cg.runtime.pgm-audio.v1`;
+remembered ON after a reload, the sound starts at the first press or key on the page, as a browser requires);
+on, it SHALL play the channel's sound by the Playout client's method: a streaming `fetch`, the 44-byte header skipped, whole 4-byte
 frames of s16le stereo at 48 kHz, each chunk scheduled on the `AudioContext` clock, a buffer that starts at 30
 ms and grows by 15 ms after 3 underruns within 10 s up to 90 ms and never shrinks during a connection, and
 chunks dropped whenever more than 150 ms is scheduled ahead. No timestamp SHALL be added. Beside the monitor a
 meter SHALL draw the channel's first 8 bus levels and the scale, as the Playout's `VuMeterTall` does: a fixed
 green / yellow / red gradient revealed by `clip-path` (green to −18 dBFS, yellow to −7.2 dBFS, red above), 32
 segment lines, a linear −60…0 scale labelled 0, −6, −12, −18, −30, −40, −60 under `dBFS`, values written to the
-DOM with no render per tick, no peak hold. A stale stream SHALL read −60. A badge SHALL show the short-term
-loudness with one decimal: green within −23 ± 1, amber within ± 2, red outside, pulsing while the limiter
-reduces gain by more than 0.1 dB, and silence at or below −70.
+DOM with no render per tick, no peak hold, bus 1 the left bar whatever the page's direction, and in the meter's
+own three hues, never the air green. Where the panel is too narrow for eight bars beside a full-height picture
+the meter SHALL show the first two (measured: never at the desktop's smallest window, 1100 × 700, where the
+stage is 536 px; at 800 × 700 in a browser it is 386 px). A stale stream SHALL read −60. A badge SHALL show the short-term loudness
+with one decimal: green within −23 ± 1, amber within ± 2, red outside, pulsing while the limiter reduces gain
+by more than 0.1 dB (underlined instead where motion is reduced), silence at or below −70, and unknown when
+no loudness has arrived for a second. Nothing SHALL be metered per box.
 
 #### Scenario: The audio buffer
 
@@ -58,3 +63,15 @@ reduces gain by more than 0.1 dB, and silence at or below −70.
 #### Scenario: A stale stream
 
 - **WHEN** no level arrives for longer than the stale limit **THEN** every bar reads −60, not the last value
+
+#### Scenario: The speaker
+
+- **WHEN** the console opens **THEN** the speaker is off and nothing asks for the sound
+- **AND WHEN** the operator presses it **THEN** it is pressed, remembered, and the console asks CG Bridge for
+  the sound of the channel on screen
+- **AND WHEN** the page reloads **THEN** it is still pressed and waits for a press before the sound starts
+
+#### Scenario: No render per reading
+
+- **WHEN** eighty readings arrive for the channel on screen **THEN** the bars and the badge show the last of
+  them and React commits nothing; a reading for another channel draws nothing

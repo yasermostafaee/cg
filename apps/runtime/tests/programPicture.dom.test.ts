@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MonitorPanel } from '../src/renderer/features/monitors/MonitorPanel.js';
 import type { ProgramReturn } from '../src/renderer/hooks/useProgramReturn.js';
 import { NO_AIR } from '../src/renderer/features/channels/channelAir.js';
+import { SOUND_OFF, stubMeters } from './support/programPane.js';
 
 /**
  * 🔴 `FIELD-FIXES-01` H — **THE PROGRAM PICTURE ASKS FOR ITS STREAM IN A DEVELOPMENT BUILD TOO.**
@@ -39,6 +40,7 @@ afterEach(async () => {
 });
 
 function pane(programReturn: ProgramReturn): ReactElement {
+  stubMeters();
   return createElement(MonitorPanel, {
     id: 'pgm',
     title: 'PROGRAM (PGM)',
@@ -46,6 +48,7 @@ function pane(programReturn: ProgramReturn): ReactElement {
     channel: 2,
     onAirRows: 0,
     programReturn,
+    programSound: SOUND_OFF,
     air: NO_AIR,
   });
 }

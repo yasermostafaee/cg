@@ -602,7 +602,15 @@ describe('the relay route — the control port, behind a ticket, bytes untouched
     const bridge = await bridgeOn(f.port);
     const query = (await ticketedUrl(bridge, await consoleSocket(bridge), 1)).split('?')[1] ?? '';
     const base = `http://127.0.0.1:${String(bridge.port)}`;
-    for (const bad of ['/pgm/', '/pgm/0', '/pgm/01', '/pgm/abc', '/pgm/1/audio.wav']) {
+    // `/pgm/1/sound` too: a PICTURE ticket never opens the sound (`PLAYOUT-FEATURES-01` E).
+    for (const bad of [
+      '/pgm/',
+      '/pgm/0',
+      '/pgm/01',
+      '/pgm/abc',
+      '/pgm/1/audio.wav',
+      '/pgm/1/sound',
+    ]) {
       const r = await open(`${base}${bad}?${query}`);
       r.req.destroy();
       expect(r.status, bad).toBe(403);

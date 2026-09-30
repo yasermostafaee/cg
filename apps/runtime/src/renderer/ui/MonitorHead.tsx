@@ -114,10 +114,16 @@ export function MonitorSignalStrip({
   signal,
   tone,
   fact,
+  reading,
+  action,
 }: {
   signal: string;
   tone: 'none' | 'live' | 'stalled';
   fact: ReactNode;
+  /** `PLAYOUT-FEATURES-01` E — a reading before the air count (the programme's loudness). */
+  reading?: ReactNode;
+  /** `PLAYOUT-FEATURES-01` E — the trailing toggle (the programme's sound), as PVW's strip ends in its own. */
+  action?: ReactNode;
 }): JSX.Element {
   return (
     <div className="cg-monitor-strip" data-monitor-pgm-strip="" data-pgm-signal={tone}>
@@ -135,7 +141,9 @@ export function MonitorSignalStrip({
         {signal}
       </span>
       <span className="cg-monitor-strip__spacer" />
+      {reading}
       {fact}
+      {action}
     </div>
   );
 }

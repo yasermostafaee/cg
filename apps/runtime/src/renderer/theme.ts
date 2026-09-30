@@ -2830,6 +2830,29 @@ export const cssVars = {
   '--r-monitor-strip-ink': '#93a5bc',
   /** `#monitor-area .pvw-compact .monitor-controls{background:#101827}` */
   '--r-monitor-strip-bg': '#101827',
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` E (`R-076`) — **THE PROGRAMME METER: the Playout's own `VuMeterTall` look**
+   * (`PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2.4) — vertical bars on a black box with a thin frame, a
+   * FIXED gradient per bar revealed from the bottom: green to 70 % (−18 dBFS), yellow to 88 % (−7.2 dBFS),
+   * red above; 32 segment lines; 10 px bars.
+   *
+   * ⚠ THREE HUES OF THEIR OWN, named for the meter's zones and never for air. The green is NOT
+   * `--r-onair` (the sacred air mark) nor `--r-audible-text`: a level is not a claim about air, and a
+   * meter drawn in the air green would put that claim on every channel with sound. The owner asked for
+   * the Playout's look, and these are its values (Tailwind green-500 / yellow-400 / red-500).
+   */
+  '--r-meter-safe': '#22c55e',
+  '--r-meter-warn': '#facc15',
+  '--r-meter-over': '#ef4444',
+  '--r-meter-ground': '#000',
+  '--r-meter-frame': colors.border,
+  /** The segment lines drawn over the bar (32 of them), a shade of the ground. */
+  '--r-meter-segment': 'rgba(0, 0, 0, 0.55)',
+  '--r-meter-bar-w': '10px',
+  '--r-meter-bar-gap': '2px',
+  '--r-meter-pad': '4px',
+  '--r-meter-scale-text': '9px',
+  '--r-meter-scale-ink': '#93a5bc',
   '--r-stage-note-inset': `${String(STAGE_NOTE_PX.inset)}px`,
   '--r-stage-note-pad': `${String(STAGE_NOTE_PX.padY)}px ${String(STAGE_NOTE_PX.padX)}px`,
   '--r-stage-note-text': `${String(STAGE_NOTE_PX.text)}px`,

@@ -248,6 +248,8 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       onStateChanged: () => () => undefined,
     },
     // `PLAYOUT-FEATURES-01` D — the channel strip reads the CG license (none read: nothing marked).
+    // `PLAYOUT-FEATURES-01` E — no meters: the meter sits at the floor.
+    meters: { onReading: () => () => undefined },
     license: {
       state: () => Promise.resolve({ license: null }),
       onChanged: () => () => undefined,
