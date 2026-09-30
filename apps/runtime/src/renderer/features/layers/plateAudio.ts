@@ -1,3 +1,4 @@
+import { PLAYLIST_AUDIO_LOCKED_REASON } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 
 /**
@@ -215,6 +216,18 @@ const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
  * place that fact is said (the DELTA's §3 removed the row's paragraph). So it is not
  * decoration: shorten it and an operator who moves that fader can believe something was sent.
  */
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — **A BOX SHOWING THE PLAYOUT'S PLAYLIST OUTPUT: LOCKED AT 0.** The
+ * route carries the programme sound again, so the box is always at `VOLUME 0` and nothing here can raise
+ * it (the bridge refuses a raise too). A state fact, not a fourth audibility: the word says it is locked
+ * and at what level; the reason is its `title`.
+ */
+export const LOCKED_PILL: PlateAudioPill = {
+  label: 'Locked · 0',
+  tone: colors.textMuted,
+  detail: `${PLAYLIST_AUDIO_LOCKED_REASON} — this box stays at 0.`,
+};
+
 export const UNSEATED_PILL: PlateAudioPill = {
   label: 'Not seated',
   tone: cssVars['--r-caution-text'],

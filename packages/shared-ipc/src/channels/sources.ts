@@ -362,6 +362,12 @@ export const SourceDefinitionSchema = z.object({
    * channel and offered on every other. Absent = unknown, never "safe": nothing is guessed from a name.
    */
   ownOutputOf: z.number().int().positive().optional(),
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — the Playout CHANNEL whose running playlist this input outputs
+   * (D10's `playlistOf`, `2.9.2`), in the Playout's own numbering — `route://N-L` to its playout layer.
+   * Present: the box is ALWAYS at `VOLUME 0` (`isPlaylistOutput`), whatever the operator asks.
+   */
+  playlistOf: z.number().int().positive().optional(),
   /** `PLAYOUT-SOURCES-01` — a media item's facts, for the picker's second line. Media only. */
   media: z
     .object({

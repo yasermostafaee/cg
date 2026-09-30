@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Tag } from '../../ui/Tag.js';
 import { reportCommandError } from '../status/commandFeedback.js';
+import { PLAYLIST_AUDIO_LOCKED_REASON } from '@cg/shared-ipc';
 import {
   OFF_TITLE,
   ON_TITLE,
@@ -90,6 +91,12 @@ export function PlateAudioStrip({
   // `null` means the console cannot honestly state this plate's audio — blind, or stranded.
   // See `LiveLayerRowView.audio`. Showing a strip here would be inventing an answer.
   if (audio === null) return null;
+  /*
+    🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — THE PLAYLIST OUTPUT'S BOX IS LOCKED AT 0. Every control stays
+    PRESENT and goes disabled with the reason, by the strip's own rule for a refusal: the bridge refuses
+    a raise anyway, and a live control over a value that cannot move would be the appearance of one.
+  */
+  const why = refusal ?? (audio.locked === true ? PLAYLIST_AUDIO_LOCKED_REASON : undefined);
 
   // `??` twice, never `||`: a recorded intent of 0 is a REAL authored value ("muted by the
   // operator") and must not fall through to the default that happens to equal it.
@@ -144,8 +151,8 @@ export function PlateAudioStrip({
           max={100}
           step={5}
           value={Math.round(shown * 100)}
-          disabled={refusal !== undefined}
-          {...(refusal !== undefined ? { title: refusal } : {})}
+          disabled={why !== undefined}
+          {...(why !== undefined ? { title: why } : {})}
           aria-label={`Volume for ${row.plate} ${
             row.coordinate !== null ? `on ${row.coordinate}` : '(not seated)'
           }`}
@@ -181,8 +188,8 @@ export function PlateAudioStrip({
           variant="secondary"
           run={() => apply({ [row.plate]: 1 })}
           onError={reportCommandError}
-          disabled={refusal !== undefined}
-          {...(refusal !== undefined ? { title: refusal } : { title: ON_TITLE })}
+          disabled={why !== undefined}
+          {...(why !== undefined ? { title: why } : { title: ON_TITLE })}
           aria-label={`Full volume for ${row.plate} (100%, not the previous level)`}
         >
           ON
@@ -191,8 +198,8 @@ export function PlateAudioStrip({
           variant="secondary"
           run={() => apply({ [row.plate]: 0 })}
           onError={reportCommandError}
-          disabled={refusal !== undefined}
-          {...(refusal !== undefined ? { title: refusal } : { title: OFF_TITLE })}
+          disabled={why !== undefined}
+          {...(why !== undefined ? { title: why } : { title: OFF_TITLE })}
           aria-label={`Silence ${row.plate}`}
         >
           OFF
@@ -201,8 +208,8 @@ export function PlateAudioStrip({
           variant="caution"
           run={() => apply(soloMap(siblings, row.plate))}
           onError={reportCommandError}
-          disabled={refusal !== undefined || siblings.length < 2}
-          title={refusal ?? (siblings.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE)}
+          disabled={why !== undefined || siblings.length < 2}
+          title={why ?? (siblings.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE)}
           aria-label={`Solo ${row.plate} — silences the other ${String(siblings.length - 1)} plate(s) on this row, with no restore`}
         >
           SOLO

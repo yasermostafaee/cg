@@ -117,6 +117,9 @@ import {
   SOURCE_OWN_OUTPUT_CODE,
   // `B-299` — the binding door names a source this channel may not show by rule 1's clause.
   notShowableWords,
+  // `PLAYOUT-FEATURES-01` C — the playlist output's box is locked at volume 0.
+  isPlaylistOutput,
+  PLAYLIST_AUDIO_LOCKED_CODE,
   unbindableChange,
   redactUrlCredentials,
   // `MEDIA-PLATES-01` — a clip's playback settings, through the ONE reader.
@@ -206,7 +209,8 @@ import {
   ROUTE_EPOCH_STALE_CODE,
   ROUTE_LOADBG_MAX_MS,
   ROUTE_LOADBG_MIN_MS,
-  ROUTE_REVEAL_AFTER_PLAY_MS,
+  // `PLAYOUT-FEATURES-01` C — the reveal waits two ticks of the route's own rate (never under 80 ms).
+  routeRevealDelayMs,
   ROUTE_WAITING_CODE,
   ROUTE_WINDOW_MISSED_CODE,
   SYSTEM_ROUTE_CLOCK,
@@ -379,6 +383,11 @@ interface LivePlatePlacement {
      * silent and only ever raised by a ramp (contract v1.3 rule 2).
      */
     readonly origin?: 'input' | 'media';
+    /**
+     * `PLAYOUT-FEATURES-01` C — the Playout channel whose PLAYLIST this entry outputs: its box is always
+     * at `VOLUME 0` (`isPlaylistOutput`).
+     */
+    readonly playlistOf?: number;
   };
   /** `FILL` and `CLIP`, from ONE computation — never assembled separately. */
   readonly fit: { readonly fill: NormalizedRect; readonly clip: NormalizedRect };
@@ -573,6 +582,8 @@ function sourceLabelOf(source: SourceDefinition): LivePlatePlacement['source'] {
     id: source.id,
     name: source.name,
     ...(source.origin !== undefined ? { origin: source.origin } : {}),
+    // `PLAYOUT-FEATURES-01` C — the playlist output's seat is locked at volume 0 (`isPlaylistOutput`).
+    ...(source.playlistOf !== undefined ? { playlistOf: source.playlistOf } : {}),
   };
 }
 
@@ -9236,12 +9247,24 @@ export class CasparRuntime {
       a switch's pre-seated routes already ran hidden through its preroll, and the wait is spent.
       Nothing waits when no route was played, or when nothing will be revealed.
     */
-    const lastRoutePlay = Math.max(
+    /*
+      `PLAYOUT-FEATURES-01` C — and "one or two ticks" is a whole tick at the ROUTE'S OWN RATE: each
+      route's wait is two of its channel ticks, never under 80 ms (`routeRevealDelayMs`), and the reveal
+      waits for the latest of them.
+    */
+    const revealAt = Math.max(
       Number.NEGATIVE_INFINITY,
-      ...[...seats.values()].map((s) => s.routePlayedAt ?? Number.NEGATIVE_INFINITY),
+      ...[...seats.values()].map((s) =>
+        s.routePlayedAt === undefined
+          ? Number.NEGATIVE_INFINITY
+          : s.routePlayedAt +
+            routeRevealDelayMs(
+              s.placement.producer.kind === 'route' ? s.placement.producer.videoMode : undefined,
+            ),
+      ),
     );
-    if (!takeRefused && Number.isFinite(lastRoutePlay)) {
-      await sleepUntil(this.#routeClock, lastRoutePlay + ROUTE_REVEAL_AFTER_PLAY_MS);
+    if (!takeRefused && Number.isFinite(revealAt)) {
+      await sleepUntil(this.#routeClock, revealAt);
     }
 
     /**
@@ -9306,7 +9329,12 @@ export class CasparRuntime {
         // rather than falling through to the default that happens to equal it —
         // the two agree today, and a future non-zero default would make the bug
         // appear in a line nobody edited.
-        intendedVolume: intent[placement.plateId] ?? CREATED_MUTED_VOLUME,
+        // 🔴 `PLAYOUT-FEATURES-01` C — the playlist output's box is 0, whatever intent was armed:
+        // every line that reads this record (the reveal, an unhold, a reconnect's re-send) sends 0.
+        intendedVolume: isPlaylistOutput(placement.source)
+          ? CREATED_MUTED_VOLUME
+          : (intent[placement.plateId] ?? CREATED_MUTED_VOLUME),
+        ...(isPlaylistOutput(placement.source) && { audioLocked: true as const }),
         // `PLAYOUT-SOURCES-01` §1.I — a later raise reaches this layer from the record alone.
         ...(placement.source.origin !== undefined && { origin: placement.source.origin }),
         // `ROUTE-PLATES-01` rule 5 — the epoch of the route actually running: the prior one for a
@@ -10497,6 +10525,17 @@ export class CasparRuntime {
     // through the range test and be recorded as an intent nothing can assert.
     if (!Number.isFinite(volume) || volume < 0 || volume > 1)
       return { ok: false, reason: 'invalid-volume' };
+    /*
+      🔴 `PLAYOUT-FEATURES-01` C (`R-075`, the Playout's rule 3) — A BOX SHOWING THE PLAYOUT'S PLAYLIST
+      OUTPUT IS NEVER RAISED. Its route carries the programme sound again, added to the Playout's own
+      layer (≈ +6 dB, no normalisation). Refused HERE — the one door ON, a fader, SOLO and the batch all
+      pass — whether the plate is seated (its record is locked) or only bound (its intent would be armed
+      for the take). A silence is never refused. The seat writes 0 whatever the intent says, so even an
+      intent recorded before this rule existed cannot reach the wire.
+    */
+    if (volume > CREATED_MUTED_VOLUME && this.#plateAudioLocked(itemId, plateId)) {
+      return { ok: false, reason: PLAYLIST_AUDIO_LOCKED_CODE };
+    }
 
     /*
       🔴 **THE PUNCHED RECORD FIRST (session BM), because a plate can now label TWO of them.**
@@ -11133,6 +11172,64 @@ export class CasparRuntime {
       }
       return { ok: results.every((r) => r.ok), results };
     });
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` C — is this plate's audio LOCKED at 0: a seat of it shows the Playout's playlist
+   * output (its record's `audioLocked`), or — nothing seated yet — it resolves to that output in any look
+   * of the row as the maps stand now.
+   */
+  #plateAudioLocked(itemId: string, plateId: string): boolean {
+    const records = this.#liveLayers.get(itemId) ?? [];
+    if (records.some((r) => r.sourceId === plateId && r.audioLocked === true)) return true;
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const slot = this.#slots.get(itemId);
+    if (templateId === undefined || slot === undefined) return false;
+    const carrier = this.#templates.getOn(slot.channel, templateId)?.liveSources;
+    if (carrier === undefined) return false;
+    const plan = resolveLookBindings({
+      templateId,
+      carrier,
+      assignments: this.#assignmentsFor(itemId, templateId, 'pinned', slot.channel).assignments,
+      channel: slot.channel,
+      catalog: this.#sourceCatalog,
+      bindings: this.#lookSourceBindings.get(itemId),
+      overrides: this.#sourceOverrides.get(itemId),
+      argumentOf: (source) => this.#builder.sourceArgument(source.producer),
+    });
+    return plan.frames.some((f) => f.plateId === plateId && isPlaylistOutput(f.source));
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` C — does the ledger hold a LOCKED seat (the playlist output's box) on this
+   * coordinate? The send seam's backstop: no `VOLUME` above 0 ever reaches it.
+   */
+  #audioLockedOn(channel: number, layer: number): boolean {
+    for (const records of this.#liveLayers.values()) {
+      if (
+        records.some(
+          (r) => r.audioLocked === true && r.slot.channel === channel && r.slot.layer === layer,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` C (the Playout's rule 2) — is this coordinate a Playout PLAYOUT LAYER L, the one
+   * a playlist output's `route://N-L` reads? Read from D10's playlist rows, never assumed. No command of
+   * ours may ever address it (`amcp-guard.ts`).
+   */
+  #isPlayoutPlaylistLayer(channel: number, layer: number): boolean {
+    return this.#sourceCatalog.sources.some(
+      (s) =>
+        isPlaylistOutput(s) &&
+        s.producer.kind === 'route' &&
+        s.producer.channel === channel &&
+        s.producer.layer === layer,
+    );
   }
 
   /** Is this exact coordinate a bridge-owned Live Source layer? */
@@ -14991,6 +15088,9 @@ export class CasparRuntime {
             playoutRoute: options.routeEpoch !== undefined,
             // `MEDIA-PLATES-01` — `PAUSE` / `RESUME` / `CALL` only where the ledger holds a clip of ours.
             clipOn: (channel, layer) => this.#holdsClip(channel, layer),
+            // `PLAYOUT-FEATURES-01` C — never the Playout's playout layer L; never a raise on the box.
+            playoutLayerOn: (channel, layer) => this.#isPlayoutPlaylistLayer(channel, layer),
+            audioLockedOn: (channel, layer) => this.#audioLockedOn(channel, layer),
           });
     if (refusal !== null) {
       this.#clearExpiry(seq);

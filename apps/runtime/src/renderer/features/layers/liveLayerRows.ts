@@ -4,6 +4,7 @@ import { colors } from '../../theme.js';
 import { shortId } from '../../ui/operatorNaming.js';
 import {
   CLEARED_PILL,
+  LOCKED_PILL,
   UNSEATED_PILL,
   plateAudioPill,
   type PlateAudioPill,
@@ -175,6 +176,11 @@ export interface LiveLayerRowView {
     held: boolean;
     /** How it reads. Derived HERE so every surface reading this row reads the same words. */
     pill: PlateAudioPill;
+    /**
+     * `PLAYOUT-FEATURES-01` C — the plate shows the Playout's PLAYLIST OUTPUT: its volume is 0 and stays
+     * 0, and every audio control is disabled with the reason. Absent: an ordinary plate.
+     */
+    locked?: true;
   } | null;
 }
 
@@ -311,6 +317,11 @@ export function liveLayerRow(
    * free of both; `LayersPanel` is the one place that can see them.
    */
   sourceNameOf: (itemId: string, plateId: string) => string | null = () => null,
+  /**
+   * `PLAYOUT-FEATURES-01` C — is this plate's source the Playout's playlist output (`isPlaylistOutput`)?
+   * INJECTED for `sourceNameOf`'s reason: it needs the binding chain and the sources store.
+   */
+  audioLockedOf: (itemId: string, plateId: string) => boolean = () => false,
 ): LiveLayerRowView {
   const base = {
     coordinate: liveLayerCoordinate(layer),
@@ -336,7 +347,13 @@ export function liveLayerRow(
     };
   }
   const volume = volumeOf(layer.itemId, layer.sourceId);
-  const audio = { volume, held: layer.held, pill: plateAudioPill(volume, layer.held) };
+  const locked = audioLockedOf(layer.itemId, layer.sourceId);
+  const audio = {
+    volume,
+    held: layer.held,
+    pill: locked ? LOCKED_PILL : plateAudioPill(volume, layer.held),
+    ...(locked ? { locked: true as const } : {}),
+  };
   if (owner === null) {
     return {
       ...base,
@@ -462,8 +479,11 @@ export function liveLayerRows(
   blind: LiveLayerBlindness | null,
   volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
   sourceNameOf: (itemId: string, plateId: string) => string | null = () => null,
+  audioLockedOf: (itemId: string, plateId: string) => boolean = () => false,
 ): LiveLayerRowView[] {
-  return layers.map((l) => liveLayerRow(l, ownerOf(l.itemId), blind, volumeOf, sourceNameOf));
+  return layers.map((l) =>
+    liveLayerRow(l, ownerOf(l.itemId), blind, volumeOf, sourceNameOf, audioLockedOf),
+  );
 }
 
 /**
@@ -526,6 +546,8 @@ export function declaredFrameRows(
    * `canHoldLivePlate` — golden rule 6's exact failure, in the surface, about a plate on air.
    */
   releasedOf: (itemId: string, plateId: string) => LivePlateReleaseState | null = () => null,
+  /** `PLAYOUT-FEATURES-01` C — see {@link liveLayerRow}'s `audioLockedOf`. */
+  audioLockedOf: (itemId: string, plateId: string) => boolean = () => false,
 ): LiveLayerRowView[] {
   const extra: LiveLayerRowView[] = [];
   const seen = new Set<string>();
@@ -607,7 +629,10 @@ export function declaredFrameRows(
         // 🔴 `B-247` — …and `CLEARED_PILL` for the frame that HAD one. Both wear the same
         // amber: they answer one question (`why can I not hear this box?`) and differ only in
         // what happened before.
-        audio: { volume, held: false, pill: cleared === null ? UNSEATED_PILL : CLEARED_PILL },
+        // `PLAYOUT-FEATURES-01` C — a frame bound to the playlist output reads LOCKED whatever else it is.
+        audio: audioLockedOf(row.itemId, plateId)
+          ? { volume, held: false, pill: LOCKED_PILL, locked: true as const }
+          : { volume, held: false, pill: cleared === null ? UNSEATED_PILL : CLEARED_PILL },
       });
     }
   }

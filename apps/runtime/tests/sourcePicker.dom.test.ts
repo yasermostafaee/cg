@@ -78,6 +78,26 @@ const CATALOG: SourceCatalog = {
       ownOutputOf: 2,
     },
     {
+      // `PLAYOUT-FEATURES-01` C (`R-075`) — the Playout's playlist output of CH 1, L = 7, on CH 1 and 2.
+      id: 'in-pl-apasai',
+      name: 'خروجیِ پخش: آپاسای',
+      origin: 'input',
+      producer: { kind: 'route', channel: 1, layer: 7 },
+      channels: [1, 2],
+      playlistOf: 1,
+    },
+    {
+      // …and CH 2's, which the Playout marks unavailable (`unlicensed`, in words, by the builder).
+      id: 'in-pl-cg',
+      name: 'خروجیِ پخش: کانال دوم',
+      origin: 'input',
+      producer: { kind: 'route', channel: 2, layer: 7 },
+      channels: [1, 2],
+      playlistOf: 2,
+      status: 'unavailable',
+      reason: 'Unlicensed in the Playout — it clears that channel every minute.',
+    },
+    {
       id: 'md-m-recent',
       name: 'تیتراژ خبر ۲۰',
       origin: 'media',
@@ -244,10 +264,12 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
       'Channel one only',
       'Studio 7',
       'خروجی کانال ۲',
+      'خروجیِ پخش: آپاسای',
+      'خروجیِ پخش: کانال دوم',
     ]);
     expect(panel.textContent).not.toMatch(/NDI|Stream|rtsp|STUDIO-PC/);
     const tabs = [...panel.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
-    expect(tabs).toEqual(['Inputs 7', `Media ${String(LIBRARY.length)}`]);
+    expect(tabs).toEqual(['Inputs 9', `Media ${String(LIBRARY.length)}`]);
   });
 
   it('opens on the tab of the current binding — Media for a media item, Inputs otherwise', async () => {
@@ -263,6 +285,32 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
 });
 
 describe('what cannot be chosen is SHOWN, disabled, with the reason — never hidden', () => {
+  it('🔴 `R-075` — the playlist output is listed under the Playout’s own name and offered; one the Playout marks unavailable is DISABLED with its reason in words', async () => {
+    const onChange = vi.fn();
+    const panel = await openPicker(await render({ onChange, channel: 2 }));
+    const up = panel.querySelector<HTMLElement>('[data-picker-input="in-pl-apasai"]');
+    expect(up?.querySelector('bdi')?.textContent).toBe('خروجیِ پخش: آپاسای');
+    expect(up?.getAttribute('aria-disabled')).toBe('false');
+    const down = panel.querySelector<HTMLElement>('[data-picker-input="in-pl-cg"]');
+    expect(down?.getAttribute('aria-disabled')).toBe('true');
+    expect(down?.getAttribute('title')).toBe(
+      'Unlicensed in the Playout — it clears that channel every minute.',
+    );
+    await act(async () => {
+      down?.click();
+      await Promise.resolve();
+    });
+    expect(onChange).not.toHaveBeenCalled();
+    // CONTROL — an ordinary unavailable input keeps its rule: listed, bindable, tagged.
+    const studio7 = panel.querySelector<HTMLElement>('[data-picker-input="in-down"]');
+    expect(studio7?.getAttribute('aria-disabled')).toBe('false');
+    await act(async () => {
+      up?.click();
+      await Promise.resolve();
+    });
+    expect(onChange).toHaveBeenCalledWith('in-pl-apasai');
+  });
+
   it('🔴 `B-298` — CH 2’s own output is disabled on a CH 2 row with `Own output of CH 2 (would loop)` — control: enabled on CH 1, and an unmarked NDI input is enabled on CH 2', async () => {
     const onChange = vi.fn();
     const panel = await openPicker(await render({ onChange, channel: 2 }));

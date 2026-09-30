@@ -9,7 +9,10 @@ import {
   canonicalPlayoutEpoch,
   foldPlayoutInputsRead,
   isPlayoutRoute,
+  isPlaylistOutput,
   notShowableWords,
+  PLAYLIST_UNAVAILABLE_WORDS,
+  sourceLoopsOn,
   parsePlayoutJson,
   parsePlayoutInputs,
   parsePlayoutMediaPage,
@@ -444,5 +447,70 @@ describe('`ROUTE-PLATES-01` — the epoch, the route predicate, and rule 1', () 
       name: 'ورودی ۴',
       rest: " can't be shown on CH 2.",
     });
+  });
+});
+
+/**
+ * `PLAYOUT-FEATURES-01` B and C — D10's `ownOutputOf` (`2.9.1`) and the playlist output's row (`2.9.2`),
+ * through the one builder.
+ */
+describe('PLAYOUT-FEATURES-01 — `ownOutputOf` and the playlist output', () => {
+  const ndiOwn = (channel: number, host = '127.0.0.1'): PlayoutInput => ({
+    ...studio,
+    id: `li-own${String(channel)}`,
+    name: `Own ${String(channel)}`,
+    ownOutputOf: { casparHost: host, casparChannel: channel },
+  });
+  const playlist = (over: Partial<PlayoutInput> = {}): PlayoutInput => ({
+    id: 'pl-apasai',
+    name: 'خروجیِ پخش: آپاسای',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'route', channel: 1, layer: 7, videoMode: '1080i5000' },
+    compatibleChannels: [
+      { casparHost: '127.0.0.1', casparChannel: 1 },
+      { casparHost: '127.0.0.1', casparChannel: 2 },
+    ],
+    available: true,
+    playlistOf: { casparHost: '127.0.0.1', casparChannel: 1 },
+    ...over,
+  });
+
+  it('B — `ownOutputOf` joins OUR channel by D4’s rule; one naming none of ours loops nowhere; absent is absent', () => {
+    const c = catalogOf([ndiOwn(2), ndiOwn(1, '192.0.2.99'), studio]);
+    const by = (id: string) => c.sources.find((s) => s.id === `in-${id}`);
+    expect(by('li-own2')?.ownOutputOf).toBe(2);
+    expect(sourceLoopsOn(by('li-own2') ?? {}, 2)).toBe(true);
+    expect(sourceLoopsOn(by('li-own2') ?? {}, 1)).toBe(false);
+    // Another machine's channel 1 is not ours: nothing is marked.
+    expect(by('li-own1')?.ownOutputOf).toBeUndefined();
+    // No mark: unknown, never guessed — it loops nowhere.
+    expect(by('li-1a2b3c4d')?.ownOutputOf).toBeUndefined();
+    expect(sourceLoopsOn(by('li-1a2b3c4d') ?? {}, 1)).toBe(false);
+  });
+
+  it('C — the playlist row keeps the Playout’s own channel (even one this station does not declare) and its layer', () => {
+    const c = catalogOf([playlist({ playlistOf: { casparHost: '127.0.0.1', casparChannel: 5 } })]);
+    const entry = c.sources[0];
+    expect(entry?.playlistOf).toBe(5);
+    expect(entry?.producer).toMatchObject({ kind: 'route', channel: 1, layer: 7 });
+    expect(isPlaylistOutput(entry ?? {})).toBe(true);
+    // CONTROL — a camera route is not a playlist output.
+    expect(isPlaylistOutput(catalogOf([input3]).sources[0] ?? {})).toBe(false);
+  });
+
+  it('C — a `pl-` row that lost `playlistOf` to a malformed value is STILL locked, by its id', () => {
+    const c = catalogOf([playlist({ playlistOf: undefined })]);
+    expect(c.sources[0]?.playlistOf).toBe(1);
+  });
+
+  it('C — `available: false` reads in words: `unlicensed` says the Playout clears the channel; an unknown code is shown as it came', () => {
+    const unlicensed = catalogOf([playlist({ available: false, reason: 'unlicensed' })]).sources[0];
+    expect(unlicensed).toMatchObject({ status: 'unavailable' });
+    expect(unlicensed?.reason).toBe(PLAYLIST_UNAVAILABLE_WORDS.get('unlicensed'));
+    expect(unlicensed?.reason).toMatch(/clears that channel/);
+    const odd = catalogOf([playlist({ available: false, reason: 'constructor' })]).sources[0];
+    expect(odd?.reason).toBe('constructor');
+    // CONTROL — a camera route's reason is the Playout's own, untouched.
+    expect(catalogOf([input4]).sources[0]?.reason).toBe('no signal');
   });
 });

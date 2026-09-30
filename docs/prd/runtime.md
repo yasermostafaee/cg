@@ -4198,7 +4198,7 @@ channel empty (the old list stays dormant); template audit rows name no channel;
 still local-wins (`B-085`); a browser's record from before the change re-delivers only as a restore (never
 a replacement), and not at all once a channel has removed it.
 
-## [!] R-075 — The Playout's running playlist as a plate source ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.1 · BLOCKED on the Playout team's answer to `CG-CONTROL-ASK-PLAYLIST-AUDIO-2026-09-29.md` §1
+## [~] R-075 — The Playout's running playlist as a plate source ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.1 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §1 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` C in `openspec/changes/playout-features/` (§3) · owed: `2.9.2` on `.111`
 
 **What.** A channel's running playlist appears inside a CG box — a squeeze-back or an L-shaped look —
 with our graphics around it. It comes from the Playout as a D10 input (for example a `route` to the
@@ -4210,6 +4210,26 @@ change, a pause and a core reset, the D10 shape and the build. Nothing is built 
 **Acceptance (to confirm with the answer):** WHEN the operator binds a plate to a channel's playlist
 output THEN the box shows what the playlist airs, never our own layers 50–99, and it is silent until
 raised.
+
+**Answered (`2.9.2`) and built (`PLAYOUT-FEATURES-01` C, 2026-09-30) — with one change to the acceptance
+above: the box is NEVER raised.** D10 lists a `pl-<code>` row per programme channel: a `route` to that
+channel's playout layer L (read from D10, never assumed 5) with `playlistOf`. Their rules, kept: exactly
+`route://N-L` (never `route://N`, never `NEXT`/`BACKGROUND`, never `BUFFER`); nothing ever sent to layer L;
+the box ALWAYS at `VOLUME 0`, because the route carries the programme sound again (≈ +6 dB, no
+normalisation). **Built:** the row is listed in the Inputs tab under its D10 name, disabled with its reason
+in words when `available: false`; the seat writes the box's volume 0 whatever intent was armed, a raise is
+refused by the bridge (`playlist-audio-locked`) and every audio control is disabled with `Programme sound
+is already on air`, the pill reading `Locked · 0`; the send guard now refuses ANY targeted verb to a layer
+outside 50–99 the station does not own (it refused only `CLEAR` before — `design.md` §0.1), refuses every
+command to L even then, a route's `NEXT`/`BACKGROUND`/`BUFFER`, and a `VOLUME` above 0 on the box; the
+reveal waits two ticks of the route's own rate (never under 80 ms), so it lands a full tick after the
+`PLAY` takes effect (the fixed 80 ms fell short below 25 fps). What the box shows follows the playlist
+(their §1.5): a stop is transparent; a core restart takes the box off (the restart notice, PUT BACK ON AIR);
+the Playout's own `CLEAR N` on an unlicensed channel is named by `B-292`'s notice (`R-077`); a per-channel
+tick error that clears the box with no `epoch` change is caught by `B-292`'s silence check (`design.md`
+§0.4). **Tests:** `route-plates.integration.test.ts` (C), `amcp-guard.test.ts`, `playout-sources.test.ts`,
+`sourcePicker.dom.test.ts`, `playlistAudioLock.dom.test.ts`, e2e `playlist-output.spec.ts`. **Owed:** `2.9.2`
+on `.111`, where both channels' L is 5.
 
 ## [!] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · BLOCKED on the Playout team's answer to `CG-CONTROL-ASK-PLAYLIST-AUDIO-2026-09-29.md` §2
 

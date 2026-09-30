@@ -19,11 +19,13 @@ import { silenceHasTarget } from './panicReport.js';
 */
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import {
+  isPlaylistOutput,
   resolvePlateSourcesForLook,
   type EmptiedAirRow,
   type OrphanLayer,
   type RestoreMigration,
   type RestoreSkip,
+  type SourceDefinition,
 } from '@cg/shared-ipc';
 import {
   currentSourceAssignments,
@@ -976,7 +978,18 @@ export function LayersPanel({
     ⚠ `null` for an unassigned plate or a deleted catalogue entry, and it stays `null`: the
     surface falls back to the producer rather than dressing the argument up as a name.
   */
-  const liveSourceName = (itemId: string, plateId: string): string | null => {
+  const liveSourceName = (itemId: string, plateId: string): string | null =>
+    liveSourceEntry(itemId, plateId)?.name ?? null;
+  /*
+    🔴 `PLAYOUT-FEATURES-01` C (`R-075`) — A PLATE ON THE PLAYOUT'S PLAYLIST OUTPUT IS LOCKED AT 0: every
+    audio control is disabled with the reason and its pill reads `Locked · 0`. Through the SAME resolution
+    as the name — the entry the bridge would seat — and the ONE predicate the bridge's refusal asks.
+  */
+  const liveSourceLocked = (itemId: string, plateId: string): boolean => {
+    const entry = liveSourceEntry(itemId, plateId);
+    return entry !== null && isPlaylistOutput(entry);
+  };
+  function liveSourceEntry(itemId: string, plateId: string): SourceDefinition | null {
     const item = items.find((i) => i.itemId === itemId);
     if (item === undefined) return null;
     const catalogId = resolvePlateSourcesForLook({
@@ -994,8 +1007,8 @@ export function LayersPanel({
       lookId: item.activeLookId,
     }).get(plateId);
     if (catalogId === undefined || catalogId === null) return null;
-    return sourceCatalog.sources.find((c) => c.id === catalogId)?.name ?? null;
-  };
+    return sourceCatalog.sources.find((c) => c.id === catalogId) ?? null;
+  }
 
   const liveRowName = (itemId: string): string | null => {
     const slot = slots.find((sl) => sl.binding?.itemId === itemId);
@@ -1029,6 +1042,7 @@ export function LayersPanel({
     */
     plateVolumeFor(items),
     liveSourceName,
+    liveSourceLocked,
   );
   /*
     🔴 `PLATES-AUDIO-11` §2 — **THE FRAMES THE LEDGER HAS NOT SEATED, APPENDED TO THE SAME
@@ -1058,6 +1072,7 @@ export function LayersPanel({
         the two lookups above it are injected — the subscription lives with the panel.
       */
       plateReleases,
+      liveSourceLocked,
     ),
   ];
   const liveStranded = hasStrandedLiveLayer(liveRows);
@@ -1910,6 +1925,11 @@ export function LayersPanel({
                         AUDIBILITY rather than intent. Same rows, same pass, two questions.
                       */
                       seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
+                      audioLockedOf={
+                        item === null
+                          ? undefined
+                          : (plateId: string) => liveSourceLocked(item.itemId, plateId)
+                      }
                       // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
                       // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
                       holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
@@ -2036,6 +2056,7 @@ export function LayersPanel({
                 templates,
               )}
               seatedPlates={rowPlateAudioOf(liveRows, audioItem.itemId)}
+              audioLockedOf={(plateId) => liveSourceLocked(audioItem.itemId, plateId)}
               focusPlateId={plateAudioFor.plateId}
               onApplyVolumes={(volumes) => applyPlateVolumes(audioItem.itemId, volumes)}
               onClose={() => {

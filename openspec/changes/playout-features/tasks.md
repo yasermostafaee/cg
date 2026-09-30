@@ -27,11 +27,11 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 
 ## 3. C — the playlist output as a box source (`R-075`)
 
-- [ ] 3.1 Parse `playlistOf`; the Inputs tab row, its disabled reasons in words
-- [ ] 3.2 Always `VOLUME 0`: every wire volume, the bridge's refusal of a raise, the ledger's lock
-- [ ] 3.3 The guard: every targeted verb outside 50–99 unless own; never layer L; no `NEXT`/`BACKGROUND`/`BUFFER`
-- [ ] 3.4 The reveal: at least two frames of the channel's rate after `PLAY`; pinned
-- [ ] 3.5 Console: every audio control disabled with the reason; the locked pill
+- [x] 3.1 Parse `playlistOf`; the Inputs tab row, its disabled reasons in words
+- [x] 3.2 Always `VOLUME 0`: every wire volume, the bridge's refusal of a raise, the ledger's lock
+- [x] 3.3 The guard: every targeted verb outside 50–99 unless own; never layer L; no `NEXT`/`BACKGROUND`/`BUFFER`
+- [x] 3.4 The reveal: at least two frames of the channel's rate after `PLAY`; pinned
+- [x] 3.5 Console: every audio control disabled with the reason; the locked pill
 - [ ] 3.6 Fake Playout lists `pl-` rows (layer 7); tests; e2e; gate; pushed; CI read
 
 ## 4. A — the backup's own clip (`B-286`)

@@ -82,3 +82,28 @@ plate on it.
    not already in force (`(look, plate, source)` compared with the maps in force), with the take's clauses.
    An unchanged binding is never refused for a mark or a list change that came after it — so an UPDATE of a
    row's texts is not blocked by the Playout marking its input later.
+
+## C — the playlist output as a box source (`R-075`)
+
+1. **`playlistOf` is kept in the Playout's own numbering, never joined** (`SourceDefinition.playlistOf`). The
+   D4-style join (`channelFor`) answers `null` for a channel this station does not declare — which is the
+   programme channel a squeeze-back shows — and losing the fact would unlock the box's audio. A `pl-` row
+   that lost the field to a malformed value is still locked, by its id (their §1.6 reserves the prefix).
+2. **ONE predicate, `isPlaylistOutput`**, asked by the seat, the bridge's refusal of a raise, the guard's
+   context and every console audio surface.
+3. **Volume 0 is enforced three times, on purpose.** The SEAT writes `intendedVolume: 0` and `audioLocked` on
+   the ledger record whatever intent was armed (a plate raised on a camera and swapped to the playlist is
+   the measured case — without it the swap carried the raise); every line that reads the record (the reveal,
+   an unhold, a reconnect's re-send) therefore sends 0. `setLivePlateVolume` refuses a raise
+   (`playlist-audio-locked`) for a seated OR only-bound plate — the one door ON, a fader, SOLO and the batch
+   all pass. And the send seam refuses a `VOLUME` above 0 on a locked layer (`amcp-guard-audio-locked`), the
+   backstop behind both.
+4. **The guard holds every verb to 50–99** (`design.md` §0.1), with the station's own configured layers as the
+   one exemption (legacy fixtures; a real station's are the same set); the Playout's playout layer L is
+   refused before that exemption is read; a Playout route line with `NEXT`, `BACKGROUND` or `BUFFER` is
+   refused. The whole bridge suite (1,622 tests) passed under the tightened rule unchanged: nothing
+   legitimately addresses a foreign layer.
+5. **The reveal's wait is two ticks of the route's own rate, never under 80 ms** (`routeRevealDelayMs`); a mode
+   this does not parse is timed at 23.976 fps, the slowest this product drives.
+6. **The picker disables only the playlist row the Playout marks unavailable**; every other unavailable input
+   keeps its rule (bindable, tagged), as `runtime-playout-sources` states it.

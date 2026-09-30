@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Volume2 } from 'lucide-react';
-import type { TemplateInfo } from '@cg/shared-ipc';
+import { PLAYLIST_AUDIO_LOCKED_REASON, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { Button } from '../../ui/Button.js';
@@ -15,6 +15,7 @@ import {
   ON_TITLE,
   SOLO_ALONE_TITLE,
   SOLO_TITLE,
+  LOCKED_PILL,
   pct,
   plateAudioPill,
   soloMap,
@@ -95,6 +96,11 @@ export interface LivePlateAudioDialogProps {
    * Empty for a row that owns nothing — every declared plate then reads NOT SEATED.
    */
   seatedPlates?: readonly RowPlateAudio[] | undefined;
+  /**
+   * `PLAYOUT-FEATURES-01` C — is this plate bound to the Playout's PLAYLIST OUTPUT? Its fader, ON, OFF and
+   * SOLO are then disabled with the reason, and its state reads `Locked · 0`. Absent: no plate is.
+   */
+  audioLockedOf?: ((plateId: string) => boolean) | undefined;
   /** The plate whose fader takes focus when the dialog opens — the one the operator pointed at. */
   focusPlateId?: string | undefined;
   /**
@@ -123,6 +129,7 @@ export function LivePlateAudioDialog({
   template,
   name,
   seatedPlates = [],
+  audioLockedOf = () => false,
   focusPlateId,
   onApplyVolumes,
   onClose,
@@ -333,9 +340,13 @@ export function LivePlateAudioDialog({
         <span>Audio controls</span>
       </div>
       {plates.map((plate) => {
-        const value = shown(plate.plateId);
-        const pill: PlateAudioPill =
-          plate.seated === undefined
+        // `PLAYOUT-FEATURES-01` C — the playlist output's box: every control disabled, the state locked.
+        const locked = audioLockedOf(plate.plateId);
+        const lockedTitle = locked ? { title: PLAYLIST_AUDIO_LOCKED_REASON } : {};
+        const value = locked ? 0 : shown(plate.plateId);
+        const pill: PlateAudioPill = locked
+          ? LOCKED_PILL
+          : plate.seated === undefined
             ? UNSEATED_PILL
             : // The PUBLISHED intent, not the drag value: the word says what the bridge holds.
               plateAudioPill(intents[plate.plateId], plate.seated.held);
@@ -373,6 +384,8 @@ export function LivePlateAudioDialog({
                 max={100}
                 step={5}
                 value={Math.round(value * 100)}
+                disabled={locked}
+                {...lockedTitle}
                 aria-label={`Volume for ${plate.plateId}`}
                 aria-valuetext={pct(value)}
                 {...(plate.plateId === focusId ? { 'data-modal-autofocus': '' } : {})}
@@ -407,7 +420,8 @@ export function LivePlateAudioDialog({
                 onClick={() => {
                   commit({ [plate.plateId]: 1 });
                 }}
-                title={ON_TITLE}
+                disabled={locked}
+                title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : ON_TITLE}
                 aria-label={`Full volume for ${plate.plateId} (100%, not the previous level)`}
               >
                 ON
@@ -417,14 +431,15 @@ export function LivePlateAudioDialog({
                 onClick={() => {
                   commit({ [plate.plateId]: 0 });
                 }}
-                title={OFF_TITLE}
+                disabled={locked}
+                title={locked ? PLAYLIST_AUDIO_LOCKED_REASON : OFF_TITLE}
                 aria-label={`Silence ${plate.plateId}`}
               >
                 OFF
               </Button>
               <Button
                 variant="caution"
-                disabled={plateIds.length < 2}
+                disabled={locked || plateIds.length < 2}
                 onClick={() => {
                   commit(soloMap(plateIds, plate.plateId));
                 }}
@@ -434,7 +449,13 @@ export function LivePlateAudioDialog({
                   said what to do about it. Two spellings of one promise is how a surface comes
                   to promise less than its twin — `plateAudio.ts` now owns both.
                 */
-                title={plateIds.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE}
+                title={
+                  locked
+                    ? PLAYLIST_AUDIO_LOCKED_REASON
+                    : plateIds.length < 2
+                      ? SOLO_ALONE_TITLE
+                      : SOLO_TITLE
+                }
                 aria-label={`Solo ${plate.plateId} — silences the other ${String(plateIds.length - 1)} plate(s) on this row, with no restore`}
               >
                 SOLO

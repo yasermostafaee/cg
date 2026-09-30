@@ -84,8 +84,33 @@ export const PlayoutInputSchema = z.object({
    * ABSENCE means unknown, not safe. Only in the D10 of the server that owns the output.
    */
   ownOutputOf: PlayoutCompatibleChannelSchema.optional().catch(undefined),
+  /**
+   * `PLAYOUT-FEATURES-01` C (`2.9.2`, PLAYLIST-AUDIO §1.6) — this row is the PLAYLIST OUTPUT of a programme
+   * channel: a `route` to that channel's playout layer L (read from `producer.layer`, never assumed).
+   */
+  playlistOf: PlayoutCompatibleChannelSchema.optional().catch(undefined),
 });
 export type PlayoutInput = z.infer<typeof PlayoutInputSchema>;
+
+/**
+ * `PLAYOUT-FEATURES-01` C — a playlist row's id: `pl-` + the channel's code (their §1.6). A live input's
+ * id is `li-…`, so the prefix is the Playout's own mark too — read beside `playlistOf`, so a row that
+ * lost the field to a malformed value still has its audio locked.
+ */
+const PLAYLIST_ROW_ID = /^pl-/;
+
+/**
+ * `PLAYOUT-FEATURES-01` C — a playlist row's `reason` codes, in the operator's words (their §1.6). A `Map`,
+ * so a code like `constructor` can never find a prototype key; a code not here is shown as it came.
+ */
+export const PLAYLIST_UNAVAILABLE_WORDS: ReadonlyMap<string, string> = new Map([
+  ['not-running', "The Playout's core has not started yet."],
+  [
+    'pending-restart',
+    "This channel is not in the Playout's running core yet (it waits for a restart).",
+  ],
+  ['unlicensed', 'Unlicensed in the Playout — it clears that channel every minute.'],
+]);
 
 /**
  * v1.3's `epoch`: changes with every core start and whenever an input's holder `(channel, layer)`
@@ -421,6 +446,18 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
       i.ownOutputOf === undefined
         ? null
         : input.channelFor(i.ownOutputOf.casparHost, i.ownOutputOf.casparChannel);
+    /*
+      `PLAYOUT-FEATURES-01` C — THE PLAYOUT CHANNEL whose playlist this row outputs, in the Playout's own
+      numbering. NOT joined to our channels (`channelFor` answers null for a channel this station does not
+      declare — which is exactly the programme channel a squeeze-back shows): the fact is kept whenever
+      the row says it, because it is what locks the box's audio at 0.
+    */
+    const playlistOf =
+      i.playlistOf !== undefined
+        ? i.playlistOf.casparChannel
+        : PLAYLIST_ROW_ID.test(i.id) && producer.kind === 'route'
+          ? producer.channel
+          : null;
     const unusable = unusableReason(i, producer, input.hostIsOurs);
     const status: SourceDefinition['status'] = departed
       ? 'unavailable'
@@ -432,7 +469,13 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
     const reason = departed
       ? INPUT_GONE_REASON
       : (unusable ??
-        (i.available === false ? (i.reason ?? SIGNAL_UNAVAILABLE_REASON) : undefined) ??
+        (i.available === false
+          ? ((playlistOf !== null && i.reason !== undefined
+              ? PLAYLIST_UNAVAILABLE_WORDS.get(i.reason)
+              : undefined) ??
+            i.reason ??
+            SIGNAL_UNAVAILABLE_REASON)
+          : undefined) ??
         ((names.get(nameKey(i.name)) ?? 0) > 1 ? DUPLICATE_NAME_REASON : undefined));
     return {
       id: inputSourceId(i.id),
@@ -447,6 +490,7 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
       ...(reason !== undefined ? { reason } : {}),
       ...(channels !== undefined ? { channels } : {}),
       ...(ownOutputOf !== null ? { ownOutputOf } : {}),
+      ...(playlistOf !== null ? { playlistOf } : {}),
     };
   };
 
@@ -581,6 +625,20 @@ export function ownOutputWords(
 
 /** The refusal code a take, a switch or a swap carries for an input that would loop (`B-298`). */
 export const SOURCE_OWN_OUTPUT_CODE = 'source-own-output';
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`, the Playout's rule 3) — **IS THIS THE PLAYOUT'S PLAYLIST OUTPUT?** A
+ * box showing it is ALWAYS at `VOLUME 0`: the route carries the programme sound again, so a raise would put
+ * about +6 dB on air with no normalisation. The ONE question the bridge's refusal of a raise, the seat's
+ * clamp and every console audio control ask.
+ */
+export function isPlaylistOutput(entry: Pick<SourceDefinition, 'playlistOf'>): boolean {
+  return entry.playlistOf !== undefined;
+}
+
+/** `R-075` — the refusal's code, and its words (the controls' `title` and the bridge's refusal). */
+export const PLAYLIST_AUDIO_LOCKED_CODE = 'playlist-audio-locked';
+export const PLAYLIST_AUDIO_LOCKED_REASON = 'Programme sound is already on air';
 
 /**
  * `ROUTE-PLATES-01` — the clause for an entry that may not be shown on a channel, the entry's NAME

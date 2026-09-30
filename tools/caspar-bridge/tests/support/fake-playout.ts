@@ -108,6 +108,8 @@ export interface FakeInput {
   readonly compatibleChannels?: readonly { casparHost: string; casparChannel: number }[];
   /** `PLAYOUT-FEATURES-01` B (`2.9.1`) — an NDI input that is one of this server's own channel outputs. */
   readonly ownOutputOf?: { casparHost: string; casparChannel: number };
+  /** `PLAYOUT-FEATURES-01` C (`2.9.2`) — this row is a programme channel's PLAYLIST output. */
+  readonly playlistOf?: { casparHost: string; casparChannel: number };
 }
 
 /**
@@ -169,6 +171,39 @@ export const FAKE_INPUTS: readonly FakeInput[] = [
     casparHost: '127.0.0.1',
     producer: { kind: 'stream', url: 'rist://10.0.0.30:5004' },
     aspect: 1.7778,
+  },
+  /*
+    🔴 `PLAYOUT-FEATURES-01` C — `2.9.2`'s PLAYLIST OUTPUTS, one per programme channel (PLAYLIST-AUDIO
+    §1.6), after the live inputs. The playout layer is 7 HERE, not the Playout's default 5, so nothing can
+    pass by assuming 5: L is read from D10.
+  */
+  {
+    id: 'pl-apasai',
+    name: 'خروجیِ پخش: آپاسای',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'route', channel: 1, layer: 7, videoMode: '1080i5000' },
+    format: '1080i5000',
+    aspect: 1.7778,
+    available: true,
+    compatibleChannels: [
+      { casparHost: '127.0.0.1', casparChannel: 1 },
+      { casparHost: '127.0.0.1', casparChannel: 2 },
+    ],
+    playlistOf: { casparHost: '127.0.0.1', casparChannel: 1 },
+  },
+  {
+    id: 'pl-cg-test2',
+    name: 'خروجیِ پخش: کانال دوم (تست CG)',
+    casparHost: '127.0.0.1',
+    producer: { kind: 'route', channel: 2, layer: 7, videoMode: '1080i5000' },
+    format: '1080i5000',
+    aspect: 1.7778,
+    available: true,
+    compatibleChannels: [
+      { casparHost: '127.0.0.1', casparChannel: 1 },
+      { casparHost: '127.0.0.1', casparChannel: 2 },
+    ],
+    playlistOf: { casparHost: '127.0.0.1', casparChannel: 2 },
   },
 ];
 

@@ -138,6 +138,8 @@ interface Props {
    * is the correct reading for a row that owns no live layers.
    */
   seatedPlates?: readonly RowPlateAudio[];
+  /** `PLAYOUT-FEATURES-01` C — which of this row's plates show the playlist output (audio locked at 0). */
+  audioLockedOf?: ((plateId: string) => boolean) | undefined;
   /**
    * `FIELD-FIXES-01-A` Decision 2 — does the bridge's ledger hold a seat for this row's item?
    * Resolved by the PANEL from the one ledger snapshot, for `rehearsing`'s reason, and handed to
@@ -315,6 +317,7 @@ export function LayerRow({
   dirty,
   rehearsing,
   seatedPlates = [],
+  audioLockedOf,
   holdsLiveSeats = false,
   operatorName,
   density = 'full',
@@ -1240,6 +1243,7 @@ export function LayerRow({
             )
           }
           seatedPlates={seatedPlates}
+          audioLockedOf={audioLockedOf}
           /*
             `add-multibox-audio` — the MAP door, not the single-plate one. SOLO is a
             cross-plate statement and the bridge holds the row's live-seat lock for the whole

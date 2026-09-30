@@ -32,6 +32,45 @@ export const ROUTE_LOADBG_MAX_MS = 200;
  */
 export const ROUTE_REVEAL_AFTER_PLAY_MS = 80;
 
+/**
+ * `PLAYOUT-FEATURES-01` C — the SLOWEST channel tick this product drives: 23.976 frames a second. A
+ * route whose video mode is not known is waited for as if it ran at this rate.
+ */
+export const SLOWEST_TICK_MS = 1000 / 23.976;
+
+/**
+ * `PLAYOUT-FEATURES-01` C — ONE CHANNEL TICK of a CasparCG video mode, in milliseconds, or `null` for a mode
+ * this does not know. A channel ticks once per FRAME: an interlaced mode's two fields are one tick
+ * (`1080i5000` → 25 frames → 40 ms — the Playout's own reading: "on 1080i50, every OSC value is the
+ * second field's", one per channel cycle, `PLAYLIST-AUDIO` §2.2).
+ */
+export function channelTickMs(videoMode: string | null | undefined): number | null {
+  if (videoMode === null || videoMode === undefined) return null;
+  const mode = videoMode.trim().toLowerCase();
+  if (mode === 'pal') return 40;
+  if (mode === 'ntsc') return 1000 / 29.97;
+  const match = /^\d+([ip])(\d{4})$/.exec(mode);
+  if (match === null) return null;
+  const rate = Number(match[2]) / 100;
+  if (!(rate > 0)) return null;
+  const frames = match[1] === 'i' ? rate / 2 : rate;
+  return 1000 / frames;
+}
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` C (the Playout's rule 4, `PLAYLIST-AUDIO` §1.2) — **HOW LONG AFTER A ROUTE'S
+ * `PLAY` REPLY THE REVEAL MAY BE SENT: at least one FULL channel tick after the `PLAY` takes effect.**
+ * A `PLAY` takes effect no later than the tick after its reply, and the reveal's `COMMIT` no sooner than
+ * the tick after it is sent; so waiting TWO ticks of the route's rate puts a whole tick between the two
+ * effects, and the stale first frame the route holds passes hidden. Never under
+ * {@link ROUTE_REVEAL_AFTER_PLAY_MS} (80 ms — two ticks at 25 fps); a mode this does not know is timed
+ * at {@link SLOWEST_TICK_MS}. The fixed 80 ms alone fell short of a tick below 25 fps (`design.md` §0.2).
+ */
+export function routeRevealDelayMs(videoMode: string | null | undefined): number {
+  const tick = channelTickMs(videoMode) ?? SLOWEST_TICK_MS;
+  return Math.max(ROUTE_REVEAL_AFTER_PLAY_MS, Math.ceil(2 * tick));
+}
+
 /** Rule 5 — the bounded D10 re-read after a reconnect, on an epoch change, and before a restore. */
 export const ROUTE_EPOCH_READ_MS = 1_500;
 

@@ -1023,3 +1023,166 @@ describe('B-299 — a swap to a route this channel may not show is refused; an u
     });
   });
 });
+
+// ── `PLAYOUT-FEATURES-01` C (`R-075`) — the Playout's playlist output as a box source ─────────────
+
+describe('PLAYOUT-FEATURES-01 C — the playlist output: `route://N-L` with L from D10, ALWAYS at VOLUME 0, nothing ever to L', () => {
+  const PL_TWO = inputSourceId('pl-cg-test2');
+  const PL_ONE = inputSourceId('pl-apasai');
+  /** Every line whose TARGET is `ch-layer` — the token after the verb (`CG`/`MIXER` included). */
+  const targeting = (lines: readonly string[], coordinate: string): string[] =>
+    lines.filter((l) => l.split(' ')[1] === coordinate);
+
+  it('🔴 a take on CH 2 of CH 2’s playlist: `LOADBG 2-60 "route://2-7"` (L = 7 from D10), `VOLUME 0` committed before it and the reveal at 0 — and no line ever targets 2-7', async () => {
+    const { r, sources, mark, sentSince } = await boot({
+      assignments: bind('single', { l1: PL_TWO }),
+    });
+    expect(sources.catalog().sources.find((s) => s.id === PL_TWO)?.playlistOf).toBe(2);
+    const from = await mark();
+    await take(r, 'single');
+    const lines = await sentSince(from);
+    const mute = lines.indexOf('MIXER 2-60 VOLUME 0 DEFER');
+    const loaded = lines.indexOf('LOADBG 2-60 "route://2-7"');
+    expect(mute).toBeGreaterThanOrEqual(0);
+    expect(loaded).toBeGreaterThan(lines.indexOf('MIXER 2 COMMIT', mute));
+    expect(lines.indexOf('PLAY 2-60')).toBeGreaterThan(loaded);
+    // Every volume the box was ever sent is 0.
+    const volumes = lines.filter((l) => l.startsWith('MIXER 2-60 VOLUME'));
+    expect(volumes.length).toBeGreaterThan(0);
+    for (const v of volumes) expect(v).toMatch(/^MIXER 2-60 VOLUME 0( |$)/);
+    expect(targeting(lines, '2-7')).toEqual([]);
+    expect((r.liveLayers().get(ROW) ?? [])[0]).toMatchObject({
+      audioLocked: true,
+      intendedVolume: 0,
+    });
+  });
+
+  it('🔴 after an AMCP reconnect the box’s re-sent VOLUME is 0', async () => {
+    const { r, mock, mark, sentSince } = await boot({
+      assignments: bind('single', { l1: PL_TWO }),
+    });
+    await take(r, 'single');
+    const from = await mark();
+    mock.closeAllAmcpConnections();
+    await waitFor(() => r.health().primary.state !== 'healthy', 'the drop');
+    await waitFor(() => r.health().primary.state === 'healthy', 'the reconnect');
+    const deadline = Date.now() + 5_000;
+    let lines: string[] = [];
+    while (Date.now() < deadline) {
+      lines = await sentSince(from);
+      if (lines.some((l) => l.startsWith('MIXER 2-60 VOLUME'))) break;
+      await delay(50);
+    }
+    const volumes = lines.filter((l) => l.startsWith('MIXER 2-60 VOLUME'));
+    expect(volumes.length, lines.join('\n')).toBeGreaterThan(0);
+    for (const v of volumes) expect(v).toMatch(/^MIXER 2-60 VOLUME 0( |$)/);
+    expect(targeting(lines, '2-7')).toEqual([]);
+  });
+
+  it('🔴 ON, a fader, SOLO and the batch are refused on the box, and no VOLUME above 0 is sent — control: the camera route beside it is raised', async () => {
+    const { r, mark, sentSince } = await boot({
+      assignments: bind('duo', { l1: PL_ONE, l2: INPUT_3 }),
+    });
+    await take(r, 'duo');
+    const box = layerOf(r, 'l1');
+    const camera = layerOf(r, 'l2');
+    const from = await mark();
+    expect(await r.setLivePlateVolume(ROW, 'l1', 1)).toEqual({
+      ok: false,
+      reason: 'playlist-audio-locked',
+    });
+    expect(await r.setLivePlateVolumes(ROW, { l1: 0.8 })).toMatchObject({
+      ok: false,
+      results: [{ plateId: 'l1', ok: false, reason: 'playlist-audio-locked' }],
+    });
+    expect(await sentSince(from)).toEqual([]);
+    // A silence is never refused.
+    expect(await r.setLivePlateVolume(ROW, 'l1', 0)).toMatchObject({ ok: true });
+    // CONTROL — the camera route is raised, by its ramp.
+    expect(await r.setLivePlateVolume(ROW, 'l2', 1)).toMatchObject({ ok: true });
+    const lines = await sentSince(from);
+    expect(lines).toContain(`MIXER 2-${String(camera)} VOLUME 1 25`);
+    expect(lines.filter((l) => l.startsWith(`MIXER 2-${String(box)} VOLUME`))).toEqual([
+      `MIXER 2-${String(box)} VOLUME 0`,
+    ]);
+  });
+
+  it('🔴 a plate RAISED on a camera and then swapped to the playlist output is seated at 0 — the intent it carried never reaches the box', async () => {
+    const { r, mark, sentSince } = await boot({ assignments: bind('single', { l1: INPUT_3 }) });
+    await take(r, 'single');
+    expect(await r.setLivePlateVolume(ROW, 'l1', 1)).toMatchObject({ ok: true });
+    const from = await mark();
+    expect((await r.swapLiveSource(ROW, 'l1', PL_TWO)).ok).toBe(true);
+    const lines = await sentSince(from);
+    expect(lines).toContain('LOADBG 2-60 "route://2-7"');
+    const volumes = lines.filter((l) => l.startsWith('MIXER 2-60 VOLUME'));
+    expect(volumes.length, lines.join('\n')).toBeGreaterThan(0);
+    for (const v of volumes) expect(v).toMatch(/^MIXER 2-60 VOLUME 0( |$)/);
+    expect((r.liveLayers().get(ROW) ?? [])[0]).toMatchObject({
+      audioLocked: true,
+      intendedVolume: 0,
+    });
+  });
+
+  it('🔴 the send seam: a planted raise of the box, any command to 2-7, and a route’s NEXT/BACKGROUND/BUFFER are refused and NOTHING is sent — control: a line to our own layer 61 passes', async () => {
+    const { r, seam, mark, sentSince } = await boot({
+      assignments: bind('single', { l1: PL_TWO }),
+    });
+    await take(r, 'single');
+    const from = await mark();
+    expect(await seam('MIXER 2-60 VOLUME 1')).toMatchObject({
+      ok: false,
+      errorCode: 'amcp-guard-audio-locked',
+    });
+    for (const line of ['MIXER 2-7 VOLUME 1', 'PLAY 2-7 "x"', 'STOP 2-7', 'CLEAR 2-7']) {
+      expect(await seam(line), line).toMatchObject({
+        ok: false,
+        errorCode: 'amcp-guard-playout-layer',
+      });
+    }
+    for (const line of [
+      'LOADBG 2-61 "route://2-7" BUFFER 2',
+      'LOADBG 2-61 "route://2-7" NEXT',
+      'LOADBG 2-61 "route://2-7" BACKGROUND',
+    ]) {
+      expect(await seam(line, { routeEpoch: 'epoch-1' }), line).toMatchObject({
+        ok: false,
+        errorCode: 'amcp-guard-route-form',
+      });
+    }
+    expect(await sentSince(from)).toEqual([]);
+    // CONTROL — our own layer 61 is ours: the same kind of line passes.
+    expect(await seam('MIXER 2-61 VOLUME 0')).toMatchObject({ ok: true });
+    expect(await sentSince(from)).toEqual(['MIXER 2-61 VOLUME 0']);
+  });
+
+  it('🔴 the reveal comes at least one full tick after the PLAY takes effect: ≥ 80 ms at 25 fps, ≥ 2 × 41.7 ms at 23.98', async () => {
+    const slow: FakeInput = {
+      id: 'pl-slow',
+      name: 'خروجیِ پخش: ۲۳.۹۸',
+      casparHost: '127.0.0.1',
+      producer: { kind: 'route', channel: 2, layer: 7, videoMode: '1080p2398' },
+      aspect: 1.7778,
+      available: true,
+      compatibleChannels: [{ casparHost: '127.0.0.1', casparChannel: 2 }],
+      playlistOf: { casparHost: '127.0.0.1', casparChannel: 2 },
+    };
+    for (const [id, inputs, least] of [
+      [PL_TWO, INPUTS, 80],
+      [inputSourceId('pl-slow'), [...INPUTS, slow], 84],
+    ] as const) {
+      const { r, mock } = await boot({
+        assignments: bind('single', { l1: id }),
+        provider: new LocalPlayoutSources({ inputs }),
+      });
+      const before = mock.receivedCommands().length;
+      await take(r, 'single');
+      const got = mock.receivedCommands().slice(before);
+      const played = got.find((c) => c.line === 'PLAY 2-60');
+      const reveal = got.find((c) => c.line === 'MIXER 2-60 OPACITY 1 DEFER');
+      expect(played, id).toBeDefined();
+      expect((reveal?.at ?? NaN) - (played?.at ?? NaN), id).toBeGreaterThanOrEqual(least);
+      await r.stop();
+    }
+  });
+});

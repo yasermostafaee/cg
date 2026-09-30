@@ -157,6 +157,14 @@ export interface LiveLayerRecord {
         readonly paused?: 'hidden' | 'operator' | undefined;
       }
     | undefined;
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` C (`R-075`, the Playout's rule 3) — **this seat shows the Playout's PLAYLIST
+   * OUTPUT, so its volume is 0 and stays 0.** The route carries the programme sound again (≈ +6 dB with no
+   * normalisation); `intendedVolume` is written 0 for it, every raise is refused, and the send seam refuses
+   * a `VOLUME` above 0 on its layer. Persisted, so a reconnect's re-send and a restart's adoption keep it.
+   * Additive: absent is every other seat.
+   */
+  readonly audioLocked?: true | undefined;
 }
 
 /**
@@ -203,6 +211,8 @@ const LiveLayerRecordSchema = z.object({
   transport: z
     .object({ loop: z.boolean(), paused: z.enum(['hidden', 'operator']).optional() })
     .optional(),
+  // Additive — see {@link LiveLayerRecord.audioLocked}. Absent is every seat but a playlist box.
+  audioLocked: z.literal(true).optional(),
 });
 
 export const PersistedLiveLayersSchema = z.array(

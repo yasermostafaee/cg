@@ -138,3 +138,78 @@ describe('`MEDIA-PLATES-01` — `PAUSE`, `RESUME` and `CALL` reach only a seated
     expect(refused('PAUSE 9-60')).toBe('amcp-guard-channel');
   });
 });
+
+/**
+ * `PLAYOUT-FEATURES-01` C (`design.md` §0.1) — ONLY OUR OWN LAYERS FOR EVERY VERB; never the Playout's playout
+ * layer L; never a route's NEXT/BACKGROUND/BUFFER; never a VOLUME above 0 on the playlist box. Before this,
+ * `PLAY`, `STOP` and `MIXER` to a layer below 50 were NOT refused — the first three cases below were red.
+ */
+describe('PLAYOUT-FEATURES-01 C — the playlist output’s rules at the seam', () => {
+  const withPlaylist: AmcpGuardContext = {
+    ...context,
+    // The Playout's playout layer on channel 2 is 7 (D10); the station's own config claims 7 too, and
+    // loses: no configuration makes their playlist's layer ours.
+    isOwnLayer: (channel, layer) => channel === 2 && layer === 7,
+    playoutLayerOn: (channel, layer) => channel === 2 && layer === 7,
+    audioLockedOn: (channel, layer) => channel === 2 && layer === 60,
+  };
+  const why = (line: string, ctx: AmcpGuardContext = context): string | undefined =>
+    amcpLineRefusal(line, ctx)?.code;
+
+  it.each([
+    ['PLAY 2-5 "x"', 'amcp-guard-layer'],
+    ['STOP 2-5', 'amcp-guard-layer'],
+    ['MIXER 2-5 VOLUME 1', 'amcp-guard-layer'],
+    ['LOADBG 2-49 "x"', 'amcp-guard-layer'],
+    ['CG 2-100 ADD 0 "t" 0 "{}"', 'amcp-guard-layer'],
+    ['CALL 2-3 SEEK 0', 'amcp-guard-layer'],
+  ])('%s — any verb outside 50–99 the station does not own — is refused', (line, code) => {
+    expect(why(line)).toBe(code);
+  });
+
+  it.each(['MIXER 2-7 VOLUME 1', 'PLAY 2-7 "x"', 'STOP 2-7', 'CLEAR 2-7', 'MIXER 2-7 OPACITY 0'])(
+    '%s — the Playout’s playout layer — is refused even though the config claims it',
+    (line) => {
+      expect(why(line, withPlaylist)).toBe('amcp-guard-playout-layer');
+    },
+  );
+
+  it.each([
+    'LOADBG 2-60 "route://2-7" BUFFER 2',
+    'LOADBG 2-60 "route://2-7" NEXT',
+    'PLAY 2-60 "route://2-7" BACKGROUND',
+  ])('%s — a route’s preloaded or buffered form — is refused on a Playout route line', (line) => {
+    expect(amcpLineRefusal(line, { ...withPlaylist, playoutRoute: true })?.code).toBe(
+      'amcp-guard-route-form',
+    );
+  });
+
+  it.each(['MIXER 2-60 VOLUME 1', 'MIXER 2-60 VOLUME 0.8 25 DEFER'])(
+    '%s — a raise of the playlist box — is refused',
+    (line) => {
+      expect(why(line, withPlaylist)).toBe('amcp-guard-audio-locked');
+    },
+  );
+
+  it.each([
+    'MIXER 2-60 VOLUME 0',
+    'MIXER 2-60 VOLUME',
+    'MIXER 2-61 VOLUME 1 25',
+    'LOADBG 2-60 "route://2-7"',
+    'PLAY 2-60',
+    'PLAY 2-60 "x"',
+    'MIXER 2 COMMIT',
+    'INFO 2',
+  ])('control: %s passes', (line) => {
+    expect(amcpLineRefusal(line, { ...withPlaylist, playoutRoute: line.includes('route') })).toBe(
+      null,
+    );
+  });
+
+  it('control: a layer below 50 the station’s config declares (a legacy bank row) passes for every verb', () => {
+    const legacy: AmcpGuardContext = { ...context, isOwnLayer: (c, l) => c === 2 && l === 20 };
+    for (const line of ['PLAY 2-20 "x"', 'STOP 2-20', 'MIXER 2-20 VOLUME 1', 'CLEAR 2-20']) {
+      expect(amcpLineRefusal(line, legacy), line).toBe(null);
+    }
+  });
+});

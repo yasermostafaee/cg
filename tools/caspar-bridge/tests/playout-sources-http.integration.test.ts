@@ -92,6 +92,9 @@ describe('D10 over HTTP', () => {
       'ورودی ۳',
       'ورودی ۴',
       'RIST feed',
+      // `PLAYOUT-FEATURES-01` C — `2.9.2`'s playlist outputs, after the live inputs, as the Playout lists them.
+      'خروجیِ پخش: آپاسای',
+      'خروجیِ پخش: کانال دوم (تست CG)',
     ]);
     expect(r.catalog().sources.find((s) => s.name === 'RIST feed')?.status).toBe('unusable');
     expect(playout.requestCounts.inputs).toBe(1);
@@ -147,7 +150,8 @@ describe('D10 over HTTP', () => {
     playout.setEpoch(null);
     const r = reader(playout, { inputsPath });
     await r.refresh(0);
-    expect(r.catalog().sources).toHaveLength(6);
+    // Six live inputs and, since `PLAYOUT-FEATURES-01` C, the two playlist outputs.
+    expect(r.catalog().sources).toHaveLength(8);
     expect(
       PlayoutInputsStateSchema.parse(JSON.parse(fs.readFileSync(inputsPath, 'utf8'))).epoch,
     ).toBeUndefined();

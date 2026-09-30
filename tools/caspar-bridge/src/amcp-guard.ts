@@ -20,9 +20,14 @@ import { FIRST_ALLOCATABLE_LAYER, LAYER_BANDS } from '@cg/shared-ipc';
  *   hidden plate on the channel comes back visible and loud next tick);
  * - `SWAP`, `SET … MODE`, consumer `ADD` / `REMOVE` (never `CG … ADD` / `CG … REMOVE`, our own
  *   page on our own layer), `CLEAR ALL`, `CHANNEL_GRID`;
- * - `CLEAR <ch>-<L>` outside CG's layers ({@link FIRST_ALLOCATABLE_LAYER} to the template band's
- *   top — 50–99) — "only on your own layers (50 to 99)", as C5 words it — unless the station's own
- *   CONFIG declares that layer ({@link AmcpGuardContext.isOwnLayer});
+ * - ANY targeted verb to a layer outside CG's layers ({@link FIRST_ALLOCATABLE_LAYER} to the template
+ *   band's top — 50–99) — "only on your own layers (50 to 99)", as C5 words it — unless the station's
+ *   own CONFIG declares that layer ({@link AmcpGuardContext.isOwnLayer}). (Until `PLAYOUT-FEATURES-01`
+ *   this was asked of `CLEAR` alone.);
+ * - `PLAYOUT-FEATURES-01` C — any targeted verb to the Playout's PLAYOUT LAYER L that a playlist output
+ *   reads ({@link AmcpGuardContext.playoutLayerOn}), whatever the configuration says; a Playout route
+ *   line with `NEXT`, `BACKGROUND` or `BUFFER`; and a `VOLUME` above 0 on the playlist box's layer
+ *   ({@link AmcpGuardContext.audioLockedOn});
  * - `MIXER <ch>-<L> CLEAR` on a layer that holds a SEATED plate (the same next-tick reveal, one
  *   layer at a time);
  * - a PLAYOUT route (`route://H`) with no layer (rule 3: it stacks every held input);
@@ -60,6 +65,18 @@ export interface AmcpGuardContext {
    * never paused (contract v1.3). Absent: this rule is not asked (a context without a ledger).
    */
   readonly clipOn?: (channel: number, layer: number) => boolean;
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` C (the Playout's rule 2, `PLAYLIST-AUDIO` §1.3) — is this coordinate a Playout
+   * PLAYOUT LAYER L, the one a playlist output's `route://N-L` reads (from D10, never assumed)? No command
+   * of ours may address it — not `MIXER`, `PLAY`, `STOP` or `CLEAR` — even where a configuration would
+   * call the layer its own. Absent: no playlist row is known.
+   */
+  readonly playoutLayerOn?: (channel: number, layer: number) => boolean;
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` C (the Playout's rule 3) — does this coordinate hold the playlist output's box?
+   * Its volume is 0 and stays 0: a `MIXER <ch>-<L> VOLUME` above 0 there is refused. Absent: none held.
+   */
+  readonly audioLockedOn?: (channel: number, layer: number) => boolean;
 }
 
 /** `MEDIA-PLATES-01` — the transport verbs, which only a seated clip of ours may receive. */
@@ -107,6 +124,13 @@ function targetOf(token: string | undefined): { channel: number; layer?: number 
 const ROUTE_WITHOUT_LAYER = /route:\/\/\d+(?!-\d)(?=["\s]|$)/i;
 
 /**
+ * `PLAYOUT-FEATURES-01` C (the Playout's rule 1, `PLAYLIST-AUDIO` §1.1–§1.2) — a route's `NEXT` or
+ * `BACKGROUND` form shows the Playout's PRELOADED next item, not what is on air, and a `BUFFER` parameter
+ * keeps n stale frames at the start. Never on a Playout route line.
+ */
+const ROUTE_FORBIDDEN_WORD = /\s"?(NEXT|BACKGROUND|BUFFER)"?(\s|$)/i;
+
+/**
  * Answer why `line` must not be sent, or `null` when it may be. Pure: the facts come in through
  * `context`, so every branch is testable without a server.
  */
@@ -139,6 +163,13 @@ export function amcpLineRefusal(line: string, context: AmcpGuardContext): AmcpGu
       reason: 'a Playout route:// with no layer is never sent (rule 3)',
     };
   }
+  if (context.playoutRoute === true && ROUTE_FORBIDDEN_WORD.test(line)) {
+    return {
+      code: 'amcp-guard-route-form',
+      reason:
+        "a Playout route's NEXT or BACKGROUND form, or a BUFFER, is never sent (their rule 1)",
+    };
+  }
 
   if (!TARGETED_VERBS.has(verb)) return null;
   const target = targetOf(tokens[1]);
@@ -149,20 +180,53 @@ export function amcpLineRefusal(line: string, context: AmcpGuardContext): AmcpGu
       reason: `channel ${String(target.channel)} is not a declared programme channel`,
     };
   }
-  if (verb === 'CLEAR') {
-    if (target.layer === undefined) {
+  if (verb === 'CLEAR' && target.layer === undefined) {
+    return {
+      code: 'amcp-guard-forbidden',
+      reason: `CLEAR ${String(target.channel)} clears the whole channel (C5)`,
+    };
+  }
+  if (target.layer !== undefined) {
+    const coordinate = `${String(target.channel)}-${String(target.layer)}`;
+    /*
+      🔴 `PLAYOUT-FEATURES-01` C (the Playout's rule 2) — THE PLAYOUT'S PLAYOUT LAYER L. Asked FIRST, and
+      before any own-layer exemption: no configuration makes their playlist's layer ours.
+    */
+    if (context.playoutLayerOn?.(target.channel, target.layer) === true) {
       return {
-        code: 'amcp-guard-forbidden',
-        reason: `CLEAR ${String(target.channel)} clears the whole channel (C5)`,
+        code: 'amcp-guard-playout-layer',
+        reason: `${verb} ${coordinate} addresses the Playout's playout layer (their rule 2)`,
       };
     }
+    /*
+      🔴 `PLAYOUT-FEATURES-01` C (`design.md` §0.1) — ONLY OUR OWN LAYERS, FOR EVERY VERB. This refused a
+      `CLEAR` outside 50–99 and nothing else: a `PLAY`, `STOP` or `MIXER` to a layer below 50 left the
+      process. Now every targeted verb is held to CG's layers ({@link FIRST_ALLOCATABLE_LAYER} to the
+      template band's top), unless the station's own CONFIG declares the layer (the suite's legacy
+      fixtures; on every station that can boot, the two are the same set).
+    */
     const inCgLayers = target.layer >= FIRST_ALLOCATABLE_LAYER && target.layer <= LAST_CG_LAYER;
     if (!inCgLayers && context.isOwnLayer?.(target.channel, target.layer) !== true) {
       return {
         code: 'amcp-guard-layer',
         reason:
-          `CLEAR ${String(target.channel)}-${String(target.layer)} is outside CG's layers ` +
+          `${verb} ${coordinate} is outside CG's layers ` +
           `${String(FIRST_ALLOCATABLE_LAYER)}-${String(LAST_CG_LAYER)}`,
+      };
+    }
+    /*
+      🔴 `PLAYOUT-FEATURES-01` C (the Playout's rule 3) — THE PLAYLIST BOX IS NEVER ABOVE VOLUME 0. The
+      backstop behind the bridge's own refusal of a raise: whatever line reaches the seam, none raises it.
+    */
+    if (
+      verb === 'MIXER' &&
+      (tokens[2] ?? '').toUpperCase() === 'VOLUME' &&
+      Number(tokens[3]) > 0 &&
+      context.audioLockedOn?.(target.channel, target.layer) === true
+    ) {
+      return {
+        code: 'amcp-guard-audio-locked',
+        reason: `a VOLUME above 0 on ${coordinate}, the playlist output's box (their rule 3)`,
       };
     }
   }

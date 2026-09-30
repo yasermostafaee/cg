@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { Cable, Check, Film } from 'lucide-react';
 import {
+  isPlaylistOutput,
   ownOutputTitle,
   sourceBindable,
   sourceLoopsOn,
@@ -350,18 +351,24 @@ function InputsTab({
     const offChannel = channel !== undefined && !sourceShowableOn(source, channel);
     // `PLAYOUT-FEATURES-01` B (`B-298`) — the row channel's own output: it would loop there.
     const loops = channel !== undefined && sourceLoopsOn(source, channel);
+    /*
+      `PLAYOUT-FEATURES-01` C (`R-075`) — the Playout's PLAYLIST OUTPUT that it marks `available: false` is
+      shown DISABLED with its reason in words (`not-running`, `pending-restart`, `unlicensed` — the last
+      saying the Playout clears that channel). Another unavailable input keeps its rule: bindable, tagged.
+    */
+    const playlistDown = isPlaylistOutput(source) && source.status === 'unavailable';
     const bindable = sourceBindable(source);
     const selected = source.id === value;
     return {
       kind: 'option',
       key: source.id,
-      disabled: !bindable || offChannel || loops,
+      disabled: !bindable || offChannel || loops || playlistDown,
       selected,
       ...(loops
         ? { title: ownOutputTitle(channel) }
         : offChannel
           ? { title: `Not available on CH ${String(channel)}` }
-          : !bindable && source.reason !== undefined
+          : (!bindable || playlistDown) && source.reason !== undefined
             ? { title: source.reason }
             : {}),
       data: { 'data-picker-input': source.id },
