@@ -90,10 +90,36 @@ jobs:
       - name: Stage CG Control's payload (bridge bundle, console, node.exe)
         run: node tools/caspar-bridge/scripts/stage-control.mjs
 
+      # CENTRAL-BRIDGE-01 1A (D1) — Shawl 1.9.0 (MIT), the service host CG Bridge runs under, built
+      # here from crates.io; the installer carries it, so nothing is fetched at install time.
+      - name: Build Shawl (the service host)
+        run: cargo install shawl --version 1.9.0 --locked
+
+      - name: Stage CG Bridge's payload (bridge bundle, node.exe, shawl.exe)
+        shell: pwsh
+        run: node tools/caspar-bridge/scripts/stage-bridge.mjs --shawl "$env:USERPROFILE\.cargo\bin\shawl.exe"
+
       # CLIENT-TEST-RELEASE-01 — the installers carry no real address and no test secret: every text
-      # file the two installers are built from, scanned before either is built.
+      # file the installers are built from, scanned before any is built.
       - name: Scan what the installers ship
-        run: node tools/release/src/scan-payload.mjs apps/runtime/src-tauri/payload apps/runtime/src-tauri/starting-dist apps/designer/dist
+        run: node tools/release/src/scan-payload.mjs apps/runtime/src-tauri/payload apps/runtime/src-tauri/starting-dist apps/designer/dist tools/bridge-installer/payload
+
+      # CENTRAL-BRIDGE-01 1A — CG Bridge's own NSIS installer (per machine; the service CGBridge). The
+      # runner's NSIS when it has one; else NSIS from Chocolatey (build time only).
+      - name: Build CG Bridge
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $makensis = (Get-Command makensis -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) {
+            choco install nsis -y --no-progress
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+            $makensis = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+          }
+          & $makensis /V2 "/DVERSION=$env:VERSION" tools/bridge-installer/cg-bridge.nsi
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Item "tools/bridge-installer/CG-Bridge_${env:VERSION}_x64-setup.exe" | Format-List Name, Length
 
       - name: Build CG Control
         run: pnpm --filter @cg/runtime tauri build
@@ -109,6 +135,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force installers | Out-Null
           Copy-Item target/release/bundle/nsis/*-setup.exe installers/
+          Copy-Item tools/bridge-installer/CG-Bridge_*_x64-setup.exe installers/
           Get-ChildItem installers | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)"
@@ -129,6 +156,60 @@ jobs:
           path: installers/CG Designer_*-setup.exe
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload CG Bridge
+        uses: actions/upload-artifact@v7
+        with:
+          name: CG-Bridge-installer
+          path: installers/CG-Bridge_*-setup.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  # CENTRAL-BRIDGE-01 1E — CG Bridge on a clean Windows, as the Playout's installer will chain it:
+  # silent install, the service (automatic, recovery, no dependency), /health under a second, our
+  # rules, nothing on UDP 6250, no state for a console without a token, a silent upgrade and a
+  # silent uninstall, each exit code read. Its own runner: until CG Control stops carrying its own
+  # bridge, the two would contend for 5280 on one machine.
+  bridge-smoke:
+    name: CG Bridge smoke (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            tools/bridge-installer/smoke.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Node (test harness only)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download the CG Bridge installer
+        uses: actions/download-artifact@v8
+        with:
+          name: CG-Bridge-installer
+          path: installers
+
+      - name: Install, check, upgrade and uninstall CG Bridge (elevated)
+        shell: pwsh
+        run: |
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          node tools/bridge-installer/smoke.mjs --installer "$bridge" --version "${{ needs.installers.outputs.version }}" --out bridge-smoke
+          exit $LASTEXITCODE
+
+      - name: Upload the CG Bridge smoke evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: bridge-smoke
+          path: bridge-smoke/
+          retention-days: 14
 
   smoke:
     name: Installer smoke (clean Windows)
