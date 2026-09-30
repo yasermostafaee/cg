@@ -61,6 +61,12 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
    */
   readonly clipTimes: OscClipTimeTap;
   private readonly expectedSourceHost: string | undefined;
+  /**
+   * `CENTRAL-BRIDGE-01` rule 7 — the channels this transport takes in; `null` takes every channel.
+   * See {@link setServedChannels}.
+   */
+  private servedChannel: ((channel: number) => boolean) | null = null;
+  private foreignDropped = 0;
 
   constructor(options: OscTransportOptions = {}) {
     super();
@@ -163,6 +169,25 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
     return this.boundPort;
   }
 
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 7 — **ONLY THE CHANNELS THIS STATION SERVES.** `OSC SUBSCRIBE` carries
+   * every channel of the core, with no filter (on the Playout's machine: its programme channels, its
+   * previews, its holder and its guard). A message for a channel `accept` refuses is dropped the
+   * moment it is parsed — before the occupancy, channel-tick and clip-time taps and before any
+   * consumer — so nothing the bridge keeps or shows is built from a channel it does not serve.
+   * Packet-level traffic still counts as hearing the server (`noteTraffic`): which channel spoke
+   * says nothing about whether this server is reachable. Read per message, so a declaration that
+   * changes takes effect on the next packet. `null` takes every channel (the default).
+   */
+  setServedChannels(accept: ((channel: number) => boolean) | null): void {
+    this.servedChannel = accept;
+  }
+
+  /** Telemetry: OSC messages dropped because their channel is not served. */
+  get foreignChannelDroppedCount(): number {
+    return this.foreignDropped;
+  }
+
   get address(): string {
     return this.boundAddress;
   }
@@ -212,9 +237,15 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
       if (this.isExpectedSource(rinfo.address)) this.occupancy.noteTraffic(recvAt);
       const messages = flatten(packet);
       const events: OscEvent[] = [];
+      const served = this.servedChannel;
       for (const msg of messages) {
         const event = messageToEvent(msg);
         if (event === null) continue;
+        // `CENTRAL-BRIDGE-01` rule 7 — a channel this station does not serve stops here.
+        if (served !== null && event.kind !== 'osc.health' && !served(event.channel)) {
+          this.foreignDropped++;
+          continue;
+        }
         // R-009 — the passive occupancy tap sees EVERY parsed producer
         // event, BEFORE the interest drop; it never adds to `events`.
         this.occupancy.note(event, recvAt);
