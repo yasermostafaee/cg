@@ -5617,7 +5617,7 @@ content from chrome before a single key can be assigned.
   recorded as a DOCUMENTED PHANTOM (session AX) — never a heading. The registry's dated pointer
   reads `D-160` — headings and pointer AGREE.
 
-## [~] D-161 — Help → About names CG Designer's version and build ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §4 · `openspec/changes/release-0-9-1/`
+## [x] D-161 — Help → About names CG Designer's version and build ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §4 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
 
 **What.** The Designer's existing Help menu carries an `About` item that has been disabled since the
 menu bar was built (`TopToolbar.tsx`). It now opens a dialog that names the app — `CG Designer` — its
@@ -5628,7 +5628,7 @@ inside the app, where users look for it. **Acceptance:** WHEN Help → About is 
 names CG Designer, `Version <release>` and the build; WHEN the release version is read through
 `tools/release` THEN the dialog shows the same; control: a planted wrong version does not match.
 
-**Built (2026-09-30, `RELEASE-091-01` §4; not yet archived).** `AboutModal.tsx` — `CG Designer`,
+**Built (2026-09-30, `RELEASE-091-01` §4; archived 2026-09-30).** `AboutModal.tsx` — `CG Designer`,
 `Version <release>`, `Build <sha> · <date>`, three `Tag`s in the shell's `Modal` (its close and
 Escape). Tests: `about-version.dom.test.ts` (the release read through `tools/release`; the control, a
 dialog planted with `0.0.1`, fails the same check) and `app-version.spec.ts` (the built app).

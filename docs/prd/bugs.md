@@ -1362,7 +1362,7 @@ weaker claim than it sounds, since CI runs the same suite far less contended.
   fails an innocent suite), [[B-078]] (the stale-process Playwright collision the repair rules
   already carve out as "not a code bug").
 
-## [~] B-290 — CG Control and CG Designer showed the same icon in the Windows taskbar ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §3 · `openspec/changes/release-0-9-1/`
+## [x] B-290 — CG Control and CG Designer showed the same icon in the Windows taskbar ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §3 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
 
 **Seen (owner, installed `0.9.0`):** the desktop shortcuts carry different icons — CG Control dark, CG
 Designer light — but in the taskbar both apps show the same light icon. **Cause (§0):** both apps'
@@ -1379,7 +1379,7 @@ bar, Start menu, desktop shortcut, Installed apps) shows that app's own. **Regre
 clean-Windows smoke reads each installed exe's icon resource, each shortcut's icon and each
 shortcut's AppUserModelID; control: the two apps' values differ.
 
-**Closed in code (2026-09-30, `RELEASE-091-01` §3; not yet archived).** `42af1a96`'s two sets are back
+**Closed in code (2026-09-30, `RELEASE-091-01` §3; archived 2026-09-30).** `42af1a96`'s two sets are back
 (`src-tauri/icons/*`, byte for byte). The smoke's drive phase, once both apps are installed, reads for
 each app the SHA-256 of the icon the shell extracts from its exe, every `<product>.lnk` under Start and
 the desktop (all users and this user) with its icon and AppUserModelID, and the Installed-apps

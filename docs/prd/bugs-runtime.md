@@ -12844,7 +12844,7 @@ byte-identical, since the adapter never read it; their comments now say what rea
 answered, which is what already kept it correct. **Verified:** a `target: 'primary'` planted back at
 one site fails the bridge's typecheck (`TS2353`, not a property of `SendOptions`); removed → clean.
 
-## [~] B-288 — PVW needed its own copy of the page in the browser: a template imported anywhere else could not be rehearsed ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §1 · `openspec/changes/release-0-9-1/`
+## [x] B-288 — PVW needed its own copy of the page in the browser: a template imported anywhere else could not be rehearsed ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §1 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
 
 **Repro:** import a template from one browser — another machine, another profile, another channel;
 open CG Control where the channel's list carries it but that browser did not import it (a fresh
@@ -12868,7 +12868,7 @@ the template and the reason. Nothing stored is deleted, and PVW still sends noth
 (profile A imports; a fresh profile B rehearses; control: with the file gone from the bridge's store,
 B shows the one line).
 
-## [~] B-289 — A media plate's raise jumped where a Playout input ramps; "AUDIO → ON gave no sound" was not reproduced ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §2 · `openspec/changes/release-0-9-1/`
+## [x] B-289 — A media plate's raise jumped where a Playout input ramps; "AUDIO → ON gave no sound" was not reproduced ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` §2 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
 
 **Seen (owner, 2026-09-29):** on his local CasparCG a media clip played with no sound, and AUDIO → ON
 on its row changed nothing. **Established (§0, measured on his CasparCG 2.5.0 through the real
@@ -12889,7 +12889,7 @@ an in-place `PLAY` and the 25-frame ramp. **Regression tests:** `media-plates.in
 and the way back the declared volume; control: the page layer's `VOLUME 1`), and
 `playout-sources.integration.test.ts` (the old media control, superseded).
 
-## [~] B-291 — A station set up before the five-row default kept showing every row ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §7 · `openspec/changes/release-0-9-1/`
+## [x] B-291 — A station set up before the five-row default kept showing every row ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §7 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
 
 **Seen (owner, installed `0.9.0` over the older install):** at start every row was shown again, where
 `FIELD-FIXES-01` I ([[R-070]]) gives five template rows (99–95) and five beds (59–55). **Cause (§0):**
@@ -12906,7 +12906,7 @@ persists it. An operator's own Show choices are never touched. **Regression test
 the old shape opens as 5 + 5; control: an occupied row 90 stays shown; control: with occupancy
 unknown, nothing changes.
 
-## [~] B-292 — A layer of ours cleared from outside stayed ON AIR, and plates left in our band could not be cleared ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (DELTA B, B1–B3) · `openspec/changes/release-0-9-1/`
+## [x] B-292 — A layer of ours cleared from outside stayed ON AIR, and plates left in our band could not be cleared ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (DELTA B, B1–B3) · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`)
 
 **Seen (owner, installed `0.9.0` against `.111`):** station A had templates on air; station B, a second
 install on the same channel, cleared them — and on a multi-box page B's CLEAR removed the page but
@@ -12932,7 +12932,7 @@ cleared layer goes silent, and `INFO <ch>` / `INFO <ch>-<layer>` answer with per
 ON AIR); a leftover plate listed and cleared from the strip (control: a plate the ledger holds is
 not listed).
 
-**Closed in code (2026-09-30, `RELEASE-091-01`; not yet archived).** The read is `INFO <ch>`, not
+**Closed in code (2026-09-30, `RELEASE-091-01`; archived 2026-09-30).** The read is `INFO <ch>`, not
 `INFO <ch>-<layer>`: the core ignores the layer and answers the whole channel, and the bridge's own
 guard refuses layer-addressed `INFO` (`BRIDGE-TRUTH-01` §3) — same reply, one read per channel. The
 rule for WHEN to ask is `silentLayersToAsk`. Measured clear → row off air: 1.10–1.15 s (six runs). The

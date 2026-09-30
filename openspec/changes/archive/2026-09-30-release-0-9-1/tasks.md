@@ -139,7 +139,11 @@ smoke phases success; draft skipped, not a tag).
       run, a read of the take path showed the bridge's `#loaded` record surviving the clear, so the
       re-take `CG PLAY`ed the emptied layer — red first in `media-plates.integration.test.ts`
       (`CG 2-99 PLAY 0`, no `ADD`); the clear now forgets it, as the operator's own clear does. Runs
-      2–5 were such re-takes: `CG 1-99 ADD` then `PLAY`, the page back on the stage each time.
+      2–5 were such re-takes: `CG 1-99 ADD` then `PLAY`, the page back on the stage each time. The fix
+      is `6c6273ff`; CI on `b38e4c95`, which carries it, COMPLETED success with the jobs RAN: PR
+      https://github.com/yasermostafaee/cg/actions/runs/36653898947 (the `E2E` step: runtime 310
+      passed, designer 293 passed) and Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36653899002 (installers + smoke).
 
 ## 10. Gate, CI, report
 

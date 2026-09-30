@@ -3720,7 +3720,7 @@ four files, and nothing is published by CI. **Shared CI config** (`.github/workf
 reduced-motion setting, not code (his Chrome, started inside a Remote Desktop session, reports
 `prefers-reduced-motion: reduce`); nothing was changed for it. The rest is in the change's design.
 
-## [~] P-060 — Release `0.9.1`: the fixes the owner's `0.9.0` check found, one `SHA256SUMS.txt`, a draft release ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (v2) + DELTA A + DELTA B · `openspec/changes/release-0-9-1/` · `0.9.0` is never delivered
+## [x] P-060 — Release `0.9.1`: the fixes the owner's `0.9.0` check found, one `SHA256SUMS.txt`, a draft release ⟨priority: high⟩ — FILED 2026-09-29 by `RELEASE-091-01` (v2) + DELTA A + DELTA B · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-release-0-9-1`) · `0.9.0` is never delivered
 
 **What.** One version, `0.9.1`, for CG Control, CG Designer and the bridge, through `tools/release`;
 a `v0.9.1` tag builds, smokes and opens a DRAFT pre-release with the same four files as [[P-059]]. It
@@ -3745,7 +3745,7 @@ pre-release holds exactly four files and every line of its `SHA256SUMS.txt` name
 hash; WHEN a sums line names a file the release does not hold THEN the release job stops (the control);
 WHEN a CI run builds the installers THEN no artifact carries a `SHA256SUMS.txt`.
 
-**Built (2026-09-30, not yet archived).** The nine files carry `0.9.1` (`release-version.mjs`); the
+**Built (2026-09-30; archived 2026-09-30).** The nine files carry `0.9.1` (`release-version.mjs`); the
 installers job logs its hashes and uploads no sums; the release job runs `release-files.mjs verify` over
 the assets downloaded back from the draft (`sumsProblems` — the `0.9.0` job's own sums fail it, naming
 the line). The `0.9.1` guide adds the one-CG-Control-per-channel limit and Help → About. [[P-031]]'s floor

@@ -232,3 +232,21 @@ The Designer's chrome SHALL draw every Persian glyph in the self-hosted Vazirmat
 
 - **WHEN** a Persian label in the Designer's chrome is measured with CDP `CSS.getPlatformFontsForNode` **THEN** it is drawn in Vazirmatn, not in `Segoe UI`
 - **WHEN** a Latin label is measured the same way **THEN** it is drawn in exactly the font the previous stack gives it at the same weight and size
+
+### Requirement: Help → About SHALL name CG Designer, its version and its build
+
+The Designer's Help menu SHALL offer `About`, which opens a dialog naming the app — `CG Designer` —
+`Version <release>`, and the exact build (`<sha> · <date>`), from the same build stamp the start screen's
+version line reads. The start screen's line SHALL stay. The facts SHALL be rendered as facts, not
+controls, and the dialog SHALL close by its own close control and Escape.
+
+#### Scenario: About
+
+- **WHEN** the operator chooses Help → About **THEN** a dialog names CG Designer, `Version <release>` — the
+  version `tools/release` reads for the release — and the build
+
+#### Scenario: A wrong version is caught
+
+- **WHEN** the dialog shows another version than `tools/release` reads (a planted `0.0.1`) **THEN** the
+  same check the real dialog passes fails
+- **WHEN** Escape is pressed, or the dialog's own close **THEN** it closes
