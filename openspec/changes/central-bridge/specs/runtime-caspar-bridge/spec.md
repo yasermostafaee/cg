@@ -119,6 +119,25 @@ report on every connect, so a console that connects after the bridge's start sti
 - **WHEN** the report holds a row on channel 1 and one on channel 2, and a dismissal names channel 1
   **THEN** only channel 2's row remains
 
+### Requirement: CG Bridge SHALL never run with authentication off
+
+A bridge started as CG Bridge (`requireAuth`, which the service configuration sets) SHALL refuse to
+start when no Playout is configured, with a sentence naming what is missing and where it is set, and
+SHALL leave nothing listening. Every console connection then signs in: a socket with no valid token —
+never signed in, expired or revoked — SHALL be answered only on the open doors (`bridge.capabilities`,
+`auth.*`, and until CG Control signs in to the Playout itself, the narrowed `setup.check`) and SHALL be
+pushed nothing (the amendment to `playout-auth-signin`'s expiry requirement, 2026-09-30).
+
+#### Scenario: No Playout, no start
+
+- **WHEN** CG Bridge starts with no Playout configured **THEN** the start fails with the sentence and
+  nothing listens — control: with a Playout it starts, and refuses an unsigned socket's read
+
+#### Scenario: An expired token is refused like none
+
+- **WHEN** a socket's token expires or is revoked **THEN** its reads are refused as its intents are, and
+  it is pushed nothing — control: a console whose token is still valid is answered and pushed as before
+
 ## MODIFIED Requirements
 
 ### Requirement: A restore refuses to decide rather than act on absent evidence

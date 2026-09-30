@@ -452,6 +452,14 @@ export interface BridgeOptions {
    */
   playoutConfigPath?: string;
   /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`R-068`, D3) — **THIS BRIDGE NEVER RUNS WITH AUTH OFF.** CG Bridge, the
+   * service on the Playout machine, serves consoles across the network, and every connection must
+   * present a valid Playout token. With this set, a start with no Playout configured is a start
+   * FAILURE with a sentence ({@link AUTH_REQUIRED_START_FAILURE}) — never a bridge that answers
+   * anyone. Absent (the dev bridge, every test) = auth follows the configuration, as before.
+   */
+  requireAuth?: boolean;
+  /**
    * 🔴 `DESKTOP-APPS-01` — **THIS BRIDGE IS AN INSTALLED STATION THAT MAY STILL BE IN FIRST-RUN**
    * (`--first-run`, which only the desktop app passes). Two things follow, and nothing else:
    *
@@ -914,10 +922,10 @@ export function lockRefuses(
  * 🔴 `C-037` — **WHAT THE AUTH GATE IS LOOKING AT, as four names.**
  *
  * A boolean would collapse the two that matter most: a socket that has never signed in and a
- * socket whose session stopped holding are different situations with different answers, and
- * ADR 0010 rule 4 spells both — _"a never-authenticated socket gets `bridge.capabilities`
- * and the `auth.*` door, nothing else"_, while an expired one _"refuses NEW operator intents
- * … `read` routes keep answering"_.
+ * socket whose session stopped holding are different situations, and `auth.state` tells them
+ * apart for the console (a sign-in, or a sign-in AGAIN). ADR 0010 rule 4 gave them different
+ * GATES too — an expired one _"`read` routes keep answering"_; `CENTRAL-BRIDGE-01` (`R-068`)
+ * amended that: both are refused everything but the open doors ({@link refusedByAuth}).
  *
  * ⚠ It IS `@cg/shared-ipc`'s `AuthStatus`, aliased rather than redeclared: the same four
  * names travel on `auth.state`, and two spellings of one verdict is how a surface comes to
@@ -929,9 +937,10 @@ export type AuthGateState = AuthStatus;
  * ⭐ **THE DOOR ADR 0010 RULE 4 LEAVES OPEN, spelled once.**
  *
  * `bridge.capabilities` because it is asked at CONNECT and is how a console DISCOVERS that it
- * must sign in (`B-153`); `auth.*` because it is the sign-in itself. Both are open in every
- * not-signed-in state, EXPIRED included — the way back in must not need the thing that
- * expired, which is the inverse half `B-229` insisted on for the lock.
+ * must sign in (`B-153`) — it carries the bridge's version and no state; `auth.*` because it is
+ * the sign-in itself. Both are open in every not-signed-in state, EXPIRED included — the way back
+ * in must not need the thing that expired, which is the inverse half `B-229` insisted on for the
+ * lock.
  *
  * 🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **AND `setup.check`, because it is how a console learns
  * whether a sign-in CAN work.** The owner pressed Check on a station whose Playout was down and
@@ -939,6 +948,10 @@ export type AuthGateState = AuthStatus;
  * reports and changes nothing; and before a sign-in it is NARROW — this station's own Playout
  * only (`checksThisStation` in `buildRoutes`), so the open door cannot turn the station into a
  * network probe for an unsigned caller.
+ *
+ * ⚠ `CENTRAL-BRIDGE-01` (D3) closes this door when CG Control signs in to the Playout itself
+ * (tasks 7.2/7.3) — the console then learns whether a sign-in can work from its own sign-in, and the
+ * sign-in surface stops asking the bridge. Until then the sign-in surface still runs this check.
  */
 export function openToUnauthenticated(channelName: string): boolean {
   return (
@@ -1004,25 +1017,32 @@ function rateWindow(limit: number, windowMs: number): { admit: (nowMs: number) =
  * exactly as `refusedWhileLocked` is, and for the same reason: "everything else is refused"
  * is a claim about each channel, and no sample can make it.
  *
- * ⚠ **It reads `route.lock` for the EXPIRED case and that is not a re-derivation.**
- * `LockPolicy` already classifies every route as answering-a-question versus acting, which is
- * the same question the expiry carve-out asks; `C-038` is the item that adds a permission
- * class of its own, and adding a second required argument here would be doing its work with
- * none of its design. What this function does NOT do is treat the two policies as
- * interchangeable: `unlock` is reachable while LOCKED and refused while EXPIRED, because the
- * lock's way out is a PIN and an expired session's way out is signing in — neither strands
- * the operator, and each is answered by its own gate.
+ * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **AN EXPIRED OR REVOKED TOKEN IS REFUSED LIKE NONE.** ADR 0010
+ * rule 4 let an invalid session keep every `read` ("reads keep answering"); with one CG Bridge
+ * serving consoles across the network, the rule is "no valid token → no state, no command", and a
+ * token that stopped being valid is no token. The socket stays open and its open doors stay open,
+ * so a fresh sign-in restores everything at once — the way back never needs what expired.
  */
 export function refusedByAuth(route: Route, state: AuthGateState): boolean {
   if (state === 'off' || state === 'signed-in') return false;
-  if (openToUnauthenticated(route.channel.name)) return false;
-  if (state === 'absent') return true;
-  /*
-    🔴 **ONLY `read` SURVIVES AN INVALID SESSION.** `unlock` does not, for the reason above: the
-    lock's way out is a PIN, an expired session's is signing in. (The `resync` class this used to
-    refuse as well — `stack.restore` — is gone: `CENTRAL-BRIDGE-01`, `B-294`.)
-  */
-  return route.lock !== 'read';
+  return !openToUnauthenticated(route.channel.name);
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D3) — the start failure of a bridge that must authenticate and has no
+ * Playout to authenticate against. Names what is missing and where it is set.
+ */
+export const AUTH_REQUIRED_START_FAILURE =
+  'CG Bridge cannot start without its Playout address: every console connection signs in to the ' +
+  'Playout. Set "playout" in the CG Bridge configuration file.';
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **MAY THIS SOCKET BE TOLD ANYTHING?** The publish gate's
+ * verdict, and the request gate's for a read, from the ONE state: auth off, or a valid principal.
+ * An expired or revoked session is told nothing, as a socket that never signed in is not.
+ */
+export function mayBeTold(state: AuthGateState): boolean {
+  return state === 'off' || state === 'signed-in';
 }
 
 /**
@@ -1673,6 +1693,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
 `),
   );
   const playoutConfigPath = options.playoutConfigPath;
+  // `CENTRAL-BRIDGE-01` (D3) — CG Bridge never answers a socket with auth off.
+  if (options.requireAuth === true && auth.playout === null) {
+    throw new Error(AUTH_REQUIRED_START_FAILURE);
+  }
   const playoutAuth =
     auth.playout === null
       ? null
@@ -2209,7 +2233,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     const unsubscribers = wirePublishes(
       socket,
       runtime,
-      () => authGateState(session, playoutAuth) !== 'absent',
+      // `CENTRAL-BRIDGE-01` (`R-068`) — an expired or revoked session is told nothing either.
+      () => mayBeTold(authGateState(session, playoutAuth)),
       // § 3(a) — THIS socket's principal, through the one composition `auth.state` answers with.
       () => authStateFor(session, authGateState(session, playoutAuth), auth.mode, runtime),
     );
@@ -2227,7 +2252,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     */
     const pushStationChannels = stationChannelsPusher(
       socket,
-      () => authGateState(session, playoutAuth) !== 'absent',
+      () => mayBeTold(authGateState(session, playoutAuth)),
       () =>
         stationChannelsFor(
           session,
@@ -2248,7 +2273,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         emitters (the `B-247` guard's subject), and the relay is not the runtime.
       */
       pgmReturn.subscribe((status) => {
-        if (authGateState(session, playoutAuth) === 'absent') return;
+        if (!mayBeTold(authGateState(session, playoutAuth))) return;
         send(socket, {
           type: 'publish',
           channel: PgmReturnStatusChangedChannel.name,
@@ -3721,9 +3746,11 @@ export function buildRoutes(
       report and change nothing, so `read` on both axes. The route address is for a signed-in
       principal; the CHECK is open before any sign-in too (`DELTA-MULTI-CHANNEL-01-B` B1,
       {@link openToUnauthenticated}) — and then it checks this station's own Playout, nothing else.
+      🔴 `CENTRAL-BRIDGE-01` — "before any sign-in" includes an EXPIRED or revoked session now: the
+      narrowing applies to every socket without a valid principal.
     */
     route(SetupCheckChannel, 'read', 'read', (r: ConnectionCheckRequest) => {
-      if (authState(currentAuthSession()) === 'absent' && !checksThisStation(r)) {
+      if (!mayBeTold(authState(currentAuthSession())) && !checksThisStation(r)) {
         throw new Error(CHECK_BEFORE_SIGN_IN_REFUSAL);
       }
       return connectionCheck(r);

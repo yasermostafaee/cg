@@ -237,39 +237,36 @@ describe('C-037 — a token that expires mid-session', () => {
     ).toBe(strangerRefusal.error);
   });
 
-  it('…and every READ keeps answering while the same socket is refused every intent', async () => {
+  it('🔴 CENTRAL-BRIDGE-01 — …and every READ is refused TOO, with the same sentence: an expired token is no token', async () => {
     /*
-      The carve-out (`refusedByAuth` → `route.lock !== 'read' && route.lock !== 'resync'`),
-      measured on live sockets rather than over the route table — `auth-gate`'s census already
-      walks the table, and a census cannot show the two outcomes happening at the SAME MOMENT
-      on the SAME connection.
-
-      ⚠ That simultaneity is this spec's own positive control, and it is why the refusal is
-      asserted here as well as in the spec above rather than being left to it. "The reads
-      answered" is worth nothing if the gate happened to be open; the refusal one line earlier
-      is what proves it was shut while they answered.
+      ADR 0010 rule 4 let an invalid session keep every read; `CENTRAL-BRIDGE-01` (`R-068`, D3)
+      amended it — one CG Bridge serves consoles across the network, and "no valid token → no
+      state" is the rule. Measured on a live socket, reads BEFORE the expiry as the positive
+      control: the same reads answered while the token was good, so their refusal after is the
+      gate and not a broken route.
     */
     const { client, expSec } = await boot();
     await signIn(client, 'in', expSec);
+    for (const [id, channel] of [
+      ['b1', 'stack.snapshot'],
+      ['b2', 'connections.config'],
+      ['b3', 'lock.state'],
+    ] as const) {
+      expect((await client.ask(id, channel, undefined)).error, `${channel} before`).toBeUndefined();
+    }
+
     setClockToSec(expSec + CONTRACT_TOLERANCE_SEC + 60);
-
-    expectRefusedWith(
-      (await takeUnknownItem(client, 'gate')).error,
-      AUTH_REQUIRED_REFUSAL,
-      'the gate was open, so the reads below prove nothing',
-    );
-
-    const snapshot = await client.ask('r1', 'stack.snapshot', undefined);
-    expect(snapshot.error, 'stack.snapshot must answer an expired session').toBeUndefined();
-    expect(Array.isArray(snapshot.payload)).toBe(true);
-
-    const config = await client.ask('r2', 'connections.config', undefined);
-    expect(config.error, 'connections.config must answer an expired session').toBeUndefined();
-    expect((config.payload as { servers?: unknown }).servers).toBeDefined();
-
-    const lock = await client.ask('r3', 'lock.state', undefined);
-    expect(lock.error, 'lock.state must answer an expired session').toBeUndefined();
-    expect((lock.payload as { engaged?: boolean }).engaged).toBe(false);
+    for (const [id, channel] of [
+      ['r1', 'stack.snapshot'],
+      ['r2', 'connections.config'],
+      ['r3', 'lock.state'],
+    ] as const) {
+      expectRefusedWith(
+        (await client.ask(id, channel, undefined)).error,
+        AUTH_REQUIRED_REFUSAL,
+        `${channel} answered an expired session`,
+      );
+    }
   });
 
   it('…and `auth.state` still answers, naming the principal the socket is still holding', async () => {
@@ -474,11 +471,20 @@ describe('C-037 — a token that expires mid-session', () => {
 
     const before = runtime.stackSnapshot();
     expect(before, 'the seeded row is not in the snapshot').toHaveLength(1);
-    // The publish instrument, proven live BEFORE the expiry: the seed itself moved it.
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (`R-068`) — the expired socket is told NOTHING now, so it cannot be the
+      instrument for "no stack publish": its silence would prove nothing. The instrument is a SECOND
+      console whose token outlives the expiry — the way a colleague's console sees the same bridge.
+    */
+    if (handle === null) throw new Error('no bridge');
+    const colleague = await openClient(handle);
+    await signIn(colleague, 'colleague', expSec + 3600);
+    // The expiring socket's instrument, proven live BEFORE the expiry: the seed moved it.
     await waitFor(() => publishedChannels(client).includes('stack.state-changed'));
-    const stackPublishesBefore = publishedChannels(client).filter(
+    const colleagueStackPublishesBefore = publishedChannels(colleague).filter(
       (c) => c === 'stack.state-changed',
     ).length;
+    const expiredPublishesBefore = publishedChannels(client).length;
 
     // ── the clock crosses `exp`, and the operator presses TAKE ──────────────
     setClockToSec(expSec + CONTRACT_TOLERANCE_SEC + 60);
@@ -487,19 +493,21 @@ describe('C-037 — a token that expires mid-session', () => {
       AUTH_REQUIRED_REFUSAL,
       'an expired session was allowed to take the seeded row',
     );
-    // …and reads on, exactly as an operator's console would while it waits to sign back in.
-    expect((await client.ask('r', 'stack.snapshot', undefined)).error).toBeUndefined();
 
-    // The positive control for the absence below: a publish still reaches this expired socket.
+    // The positive control for the absences below: a publish still reaches the valid console…
     runtime.updateCancel();
-    await waitFor(() => publishedChannels(client).includes('update.state-changed'));
+    await waitFor(() => publishedChannels(colleague).includes('update.state-changed'));
     // …and then the settle, because that marker is emitted INLINE and a stack publish is not.
     await settle();
 
     expect(
-      publishedChannels(client).filter((c) => c === 'stack.state-changed').length,
+      publishedChannels(colleague).filter((c) => c === 'stack.state-changed').length,
       'a stack change was published while a session merely expired',
-    ).toBe(stackPublishesBefore);
+    ).toBe(colleagueStackPublishesBefore);
     expect(runtime.stackSnapshot(), 'the stack moved when a session expired').toEqual(before);
+    // …and the expired socket was told nothing at all — not even the marker the colleague got.
+    expect(publishedChannels(client).length, 'an expired session was pushed state').toBe(
+      expiredPublishesBefore,
+    );
   });
 });

@@ -63,7 +63,9 @@
       `--stack-path` defaults beside the persisted config, and the dev station names it). `own-stack` test:
       a bridge with two rows on air stops, the core loses one page, a second bridge on the same file restores
       both, reads `INFO 1`, names the emptied row, keeps the playing one ON AIR, sends nothing to either;
-      an unusable file is said and kept. Bridge suite 1483/1483.
+      an unusable file is said and kept. Bridge suite 1483/1483. **Linux e2e discharged for 2.x and 3.1**
+      on `f07c3126` (carries `756a7f81`): https://github.com/yasermostafaee/cg/actions/runs/36668049339 —
+      `completed`/`success`, the `ci` job's `Test` step and the `e2e` job's `E2E` step both RAN.
 - [x] 3.2 The console re-delivers nothing: its template re-delivery and its stack restore removed from
       `#resync` (which now only READS: the restore report, the strays, the snapshots); `stack.restore` gone
       from the IPC contract and the route table; a `redelivery` import refused before every gate
@@ -94,8 +96,18 @@
 
 ## 4. The console ↔ bridge connection (`R-068`, `B-262`)
 
-- [ ] 4.1 Auth always on in service mode; an expired or revoked token is refused like none (no read, no
-      publish).
+- [x] 4.1 Auth always on in service mode; an expired or revoked token is refused like none (no read, no
+      publish). `requireAuth` makes a start with no Playout a failure (`AUTH_REQUIRED_START_FAILURE`; the
+      service configuration sets it — 6.1); `refusedByAuth` answers `invalid` as `absent`, and one
+      predicate (`mayBeTold`) gates every push and the pre-sign-in check's narrowing. ⚠ Deferred, on
+      purpose: `setup.check`'s pre-sign-in door stays open (narrowed to this station's Playout) until
+      CG Control signs in to the Playout itself (7.2/7.3) — the sign-in surface still runs that check,
+      and closing it first would break it. ADR 0010 rules 4 and 5 amended (dated);
+      `playout-auth-signin`'s pending expiry and revocation text amended in place. Tests: `auth-gate`
+      (the expired set equals the never-signed-in set; `requireAuth` with its control), `auth-expiry`
+      (reads refused after expiry — control: the same reads before; a still-valid colleague console as
+      the instrument that nothing on air changed, and the expired socket pushed nothing),
+      `auth-revocation`.
 - [ ] 4.2 Per-socket channel scope over every channel-scoped publish and read route, with a coverage test.
 - [ ] 4.3 `bridge.capabilities.bridgeVersion`; the console's `major.minor` check — one line, no command.
 - [ ] 4.4 Audit rows name the user and the console machine (the socket's peer address).

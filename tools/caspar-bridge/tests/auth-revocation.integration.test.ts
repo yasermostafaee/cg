@@ -145,8 +145,8 @@ function futureExpSec(): number {
   return Math.floor(clock / 1000) + 3600;
 }
 
-describe('C-037 D9 — a revoked `jti` stops being accepted, and the READS keep answering', () => {
-  it('🔴 THE CLAIM: a revoked token is refused with the one sentence on the SAME socket, while `stack.snapshot` still answers', async () => {
+describe('C-037 D9 → CENTRAL-BRIDGE-01 — a revoked `jti` stops being accepted, for reads as well', () => {
+  it('🔴 THE CLAIM: a revoked token is refused with the one sentence on the SAME socket — its reads too; `auth.state` still answers', async () => {
     const { bridge, fake, authority } = await start();
     const issued = await fake.issueToken();
     const client = await openClient(bridge);
@@ -174,13 +174,17 @@ describe('C-037 D9 — a revoked `jti` stops being accepted, and the READS keep 
     );
 
     /*
-      "…reads keep answering" — the second half of the acceptance bullet, and the half that
-      makes the refusal survivable. A revoked console still SEES the stack it may no longer
-      touch, which is `refusedByAuth`'s carve-out for `read` and `resync` routes.
+      🔴 `CENTRAL-BRIDGE-01` (`R-068`, D3) — the acceptance bullet's "…reads keep answering" is
+      AMENDED: a revoked token is no token, so the read is refused too, with the same sentence.
+      What keeps the refusal survivable is the open door — `auth.state` still answers, and a fresh
+      sign-in restores everything on the same socket.
     */
-    const snapshot = await client.ask('snap', 'stack.snapshot', undefined);
-    expect(snapshot.error, 'a read was refused to a revoked session').toBe(undefined);
-    expect(Array.isArray(snapshot.payload), 'the read answered with something else').toBe(true);
+    expectRefusedWith(
+      (await client.ask('snap', 'stack.snapshot', undefined)).error,
+      AUTH_REQUIRED_REFUSAL,
+      'a read answered a revoked session',
+    );
+    expect((await client.ask('state', 'auth.state', undefined)).error).toBe(undefined);
   });
 });
 

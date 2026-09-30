@@ -15,7 +15,12 @@ import {
   type BridgeHandle,
   type CheckProbes,
 } from '../src/index.js';
-import { SIGN_IN_NOTE_MAX, SIGN_IN_NOTES_PER_MINUTE, signInFailureLine } from '../src/bridge.js';
+import {
+  AUTH_REQUIRED_START_FAILURE,
+  SIGN_IN_NOTE_MAX,
+  SIGN_IN_NOTES_PER_MINUTE,
+  signInFailureLine,
+} from '../src/bridge.js';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { TEST_LAYER_POLICY } from './support/harness.js';
 import type { FakePlayout } from './support/fake-playout.js';
@@ -49,6 +54,25 @@ afterEach(async () => {
   handle = null;
   await playout?.stop();
   playout = null;
+});
+
+describe('CENTRAL-BRIDGE-01 (D3) — CG Bridge never runs with auth off', () => {
+  it('🔴 with `requireAuth`, a start with no Playout FAILS with the sentence — nothing is left listening; control: with a Playout it starts, authenticating', async () => {
+    await expect(
+      createBridge({ port: 0, connection: deadConnection(), requireAuth: true }),
+    ).rejects.toThrow(AUTH_REQUIRED_START_FAILURE);
+
+    const started = await startAuthedBridge({ requireAuth: true });
+    handle = started.handle;
+    playout = started.playout;
+    const client = await openClient(handle);
+    // Authenticating: a socket that has not signed in is refused a read.
+    expectRefusedWith(
+      (await client.ask('s', 'stack.snapshot', undefined)).error,
+      AUTH_REQUIRED_REFUSAL,
+      'a requireAuth bridge answered an unsigned socket',
+    );
+  });
 });
 
 describe('C-037 §1 — an unauthenticated socket gets two answers, not every answer', () => {
@@ -372,27 +396,35 @@ describe('C-037 §1 — THE CENSUS: every route, not a sample', () => {
     ]);
   });
 
-  it('🔴 an EXPIRED session keeps every READ and NOTHING ELSE — not even the resync', () => {
+  it('🔴 CENTRAL-BRIDGE-01 — an EXPIRED session is refused exactly what a never-signed-in one is: every route but the open doors', () => {
     /*
-      `C-037` acceptance 4's carve-out, censused rather than sampled. The two classes that stay
-      reachable are the ones whose `LockPolicy` already says they answer a question
-      (`read`) or belong to the client's own reconnect machinery (`resync`) — see
-      `refusedByAuth`'s note for why reading `LockPolicy` here is not a re-derivation.
+      `C-037` acceptance 4's carve-out kept every READ for an invalid session; `CENTRAL-BRIDGE-01`
+      (`R-068`, D3) removed it — an expired or revoked token is no token. Censused rather than
+      sampled, and against the never-signed-in set: the two must be the SAME set, or an expired
+      token is still worth something.
 
-      ⚠ `lock.release` is deliberately NOT in the list. It is an operator act, and an expired
-      session's way out is to sign in — after which unlocking works. Neither gate strands
-      anybody.
+      ⚠ `lock.release` is not in it either. It is an operator act, and an expired session's way
+      out is to sign in — after which unlocking works. Neither gate strands anybody.
     */
     const runtime = new CasparRuntime(deadConnection(), {}, { layerPolicy: TEST_LAYER_POLICY });
     const routes = buildRoutes(runtime);
 
     const reachable = [...routes.entries()]
       .filter(([, r]) => !refusedByAuth(r, 'invalid'))
-      .map(([name]) => name);
+      .map(([name]) => name)
+      .sort();
+    const neverSignedIn = [...routes.entries()]
+      .filter(([, r]) => !refusedByAuth(r, 'absent'))
+      .map(([name]) => name)
+      .sort();
 
-    expect(reachable).toContain('stack.snapshot');
+    expect(reachable).toEqual(neverSignedIn);
+    // The open doors, and nothing that answers a question about the station.
     expect(reachable).toContain('auth.state');
     expect(reachable).toContain('auth.sign-out');
+    expect(reachable).toContain('bridge.capabilities');
+    expect(reachable).not.toContain('stack.snapshot');
+    expect(reachable).not.toContain('connections.config');
     expect(reachable).not.toContain('stack.take');
     expect(reachable).not.toContain('stack.clear-all');
     expect(reachable).not.toContain('lock.release');

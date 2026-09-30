@@ -127,7 +127,14 @@ behind the bridge, and the browser talks to nothing but the bridge for control.
    console learns whether a sign-in can work at all, it reads and changes nothing, and before a
    sign-in it checks this station's own Playout and nothing else, so the door cannot make the
    station a network probe for an unsigned caller. The one refusal names nothing it cannot know
-   is involved: "…so that was refused and nothing was done". Access tokens live
+   is involved: "…so that was refused and nothing was done". **Amended 2026-09-30
+   (`CENTRAL-BRIDGE-01`, `R-068`, `openspec/changes/central-bridge` D3): an expired or revoked
+   token is treated like NONE — `read` routes no longer keep answering, and nothing is pushed.**
+   One CG Bridge on the Playout machine serves consoles across the network, where the rule is "no
+   valid token → no state, no command". The socket still stays open, the open doors stay open (the
+   way back never needs what expired), and a fresh `auth` frame restores everything at once. The
+   pre-sign-in `setup.check` door closes when CG Control signs in to the Playout itself (that
+   change's tasks 7.2/7.3). Access tokens live
    **12 h** (one shift), deliberately NOT shortened: a short token would make every console depend
    on the Playout being up at refresh time, which is the coupling this whole shape exists to avoid.
 
@@ -136,7 +143,9 @@ behind the bridge, and the browser talks to nothing but the bridge for control.
    `{ revoked: [{ jti, exp }] }`, entries pruned one minute after `exp` so the list cannot grow
    without bound. The Playout revokes automatically on disable, delete, or refresh-family theft,
    and manually through its own admin endpoint. The bridge polls at most once per 60 s; a revoked
-   `jti` refuses NEW intents only; reads keep answering; and on a Playout outage the bridge keeps
+   `jti` refuses NEW intents only; reads keep answering (**amended 2026-09-30 by
+   `CENTRAL-BRIDGE-01`: a revoked `jti` is refused everything but the open doors, reads
+   included — see rule 4**); and on a Playout outage the bridge keeps
    the LAST list it saw. **A Playout outage never changes a verdict** — golden rule 8, applied to
    an axis the bridge cannot probe.
 

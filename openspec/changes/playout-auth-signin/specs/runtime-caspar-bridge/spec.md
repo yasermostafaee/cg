@@ -190,15 +190,19 @@ anything.
 ### Requirement: An expired or revoked principal degrades; it never disconnects and never touches air
 
 A token that has passed its expiry, or whose `jti` appears on the Playout's revocation list, SHALL
-cause NEW intents to be refused with the same shared sentence, while `read` routes and the
-client's own resync keep answering. The socket SHALL NOT be closed, nothing on air SHALL change,
-and a fresh `auth` frame on the SAME socket SHALL restore every control with no reload.
+cause NEW intents to be refused with the same shared sentence. ⚠ **Amended 2026-09-30 by
+`CENTRAL-BRIDGE-01` (`R-068`, change `central-bridge` D3), in place: such a token SHALL be treated
+like NONE — `read` routes SHALL be refused too, and the socket SHALL receive no publish;** only the
+open doors answer. (It read: "while `read` routes and the client's own resync keep answering".)
+The socket SHALL NOT be closed, nothing on air SHALL change, and a fresh `auth` frame on the SAME
+socket SHALL restore every control with no reload.
 
-#### Scenario: Expiry refuses intents and keeps answering reads
+#### Scenario: Expiry refuses everything but the open doors
 
-- **WHEN** a held token passes its expiry plus the clock tolerance **THEN** intents are refused
-  with the shared sentence, reads still answer, the socket is still open and no publish reports a
-  change to air
+- **WHEN** a held token passes its expiry plus the clock tolerance **THEN** intents AND reads are
+  refused with the shared sentence (amended 2026-09-30, `CENTRAL-BRIDGE-01`), `auth.state` still
+  answers, the socket is still open, and no publish reaches it — and a console whose token is still
+  valid sees nothing on air change
 
 #### Scenario: The clock tolerance is real
 
@@ -220,7 +224,8 @@ list it saw: an outage means a verdict cannot be UPDATED, never that it flips.
 #### Scenario: A revoked token is refused within the polling interval
 
 - **WHEN** a held token's `jti` appears on the revocation list and the list is next read **THEN**
-  that socket's new intents are refused with the shared sentence while its reads keep answering
+  that socket's new intents and its reads are refused with the shared sentence (amended
+  2026-09-30, `CENTRAL-BRIDGE-01`), while `auth.state` still answers
 
 #### Scenario: A Playout outage never changes a verdict
 
