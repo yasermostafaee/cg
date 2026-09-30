@@ -504,6 +504,16 @@
   border-color: var(--r-accent-line);
   color: var(--r-accent);
 }
+/*
+ * `PLAYOUT-FEATURES-01` E — PROGRAM's strip keeps the reference's 31 px with its speaker toggle in it: the
+ * toggle is the strip's content box, one px under PVW's 25 px transport (`--r-pgm-strip-toggle`).
+ */
+.cg-monitor-strip[data-monitor-pgm-strip] > .cg-btn {
+  min-height: var(--r-pgm-strip-toggle);
+  height: var(--r-pgm-strip-toggle);
+  width: var(--r-pgm-strip-toggle);
+  min-width: var(--r-pgm-strip-toggle);
+}
 
 /*
  * ── 🔴 PLAYOUT-FEATURES-01 E (R-076) — THE PROGRAMME METER ──────────────────────────────────

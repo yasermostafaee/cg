@@ -161,9 +161,14 @@ test('E — the Playout’s levels beside PROGRAM in its own look; the badge’s
   // THE SPEAKER — off by default: nothing has asked the core for sound.
   await expect(speaker(page)).toHaveAttribute('aria-pressed', 'false');
   expect((feed as FakePgmFeed).audioConnections).toHaveLength(0);
+  // The badge and the toggle ride the reference's 31 px strip without growing it (`shell-chrome.spec` §C3).
+  const stripHeight = async (): Promise<number> =>
+    (await page.locator('[data-monitor-pgm-strip]').boundingBox())?.height ?? 0;
+  expect(await stripHeight()).toBeCloseTo(31, 0);
   await speaker(page).click();
   await expect(speaker(page)).toHaveAttribute('aria-pressed', 'true');
   await expect(speaker(page)).toHaveAttribute('data-pgm-audio', 'playing', { timeout: 15_000 });
+  expect(await stripHeight(), 'pressed, still 31').toBeCloseTo(31, 0);
   // ONE reader at the core, with the exact request, and nothing after it.
   expect((feed as FakePgmFeed).audioConnections).toHaveLength(1);
   expect((feed as FakePgmFeed).audioConnections[0]?.received.toString('latin1')).toBe(

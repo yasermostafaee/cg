@@ -2853,6 +2853,12 @@ export const cssVars = {
   '--r-meter-pad': '4px',
   '--r-meter-scale-text': '9px',
   '--r-meter-scale-ink': '#93a5bc',
+  /**
+   * `PLAYOUT-FEATURES-01` E — the PROGRAM strip's speaker toggle: the strip's CONTENT box, 31 − 3 − 3 − 1 (its
+   * height, padding and bottom border). The PVW transport's 25 px would push the reference's 31 px strip to 32
+   * (measured: `shell-chrome.spec.ts` §C3 pins it), so the one control on this strip is a px smaller.
+   */
+  '--r-pgm-strip-toggle': `${String(MONITOR_HEAD_PX.stripH - 2 * MONITOR_HEAD_PX.stripPadY - 1)}px`,
   '--r-stage-note-inset': `${String(STAGE_NOTE_PX.inset)}px`,
   '--r-stage-note-pad': `${String(STAGE_NOTE_PX.padY)}px ${String(STAGE_NOTE_PX.padX)}px`,
   '--r-stage-note-text': `${String(STAGE_NOTE_PX.text)}px`,
