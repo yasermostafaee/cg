@@ -11287,6 +11287,17 @@ export class CasparRuntime {
     const keys = new Set(layers.map((layer) => adoptionKey({ channel, layer })));
     for (const layer of layers) session.osc.noteCleared(channel, layer);
     this.#reconciler.markLayersEmptied(keys);
+    /*
+      B-039, as `#reconcileClearedSlot` does for the operator's own clear: the producer is GONE, so
+      the operator's re-take must RE-ADD. Left in `#loaded`, the take `CG PLAY`s the emptied layer —
+      nothing renders, and the row reads ON AIR over a layer that is never heard again: `B-292`
+      itself, reached through its own remedy (measured before this line: `CG 2-99 PLAY 0`, no ADD).
+    */
+    for (const [itemId, slot] of this.#slots) {
+      if (!keys.has(adoptionKey(slot))) continue;
+      this.#loaded.delete(itemId);
+      this.#takeRefusals.delete(itemId);
+    }
     if (this.#liveLayers.size > 0) {
       const adoption = reconcileLiveLayers({
         persisted: this.#liveLayers,

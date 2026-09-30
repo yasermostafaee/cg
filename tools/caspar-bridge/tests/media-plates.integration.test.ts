@@ -178,6 +178,16 @@ const SINGLE: TemplateInfo = {
   liveSources: { resolution: SCENE, defaultPosition: CENTRED, sources: [plate('p1', FULL)] },
 };
 
+/** A graphic with no plates at all — `B-292`'s re-take: a row that owns nothing once its page is cleared. */
+const PAGE_ONLY: TemplateInfo = {
+  templateId: 'page-only',
+  templateType: 'lower-third',
+  fields: [],
+};
+/** A template-band row for it. */
+const TPL = { channel: 2, layer: 99 };
+const ROW_TPL = 'row-99';
+
 function bind(entries: readonly (readonly [string, string, string])[]): SourceAssignments {
   return {
     assignments: entries.map(([templateId, plateId, sourceId]) => ({
@@ -301,7 +311,7 @@ async function boot(
   r.setMediaPlaybackWriter((sourceId, playback) => sources.setMediaPlayback(sourceId, playback));
   r.start();
   await r.startServing();
-  for (const template of [TWO_BOX, ONE_FIRST, SINGLE]) {
+  for (const template of [TWO_BOX, ONE_FIRST, SINGLE, PAGE_ONLY]) {
     r.templateImport(template, `<!doctype html><html><body>${template.templateId}</body></html>`);
   }
   await r.whenServerHealthy(HEALTH_MS);
@@ -640,6 +650,32 @@ describe('RELEASE-091-01 DELTA B — a layer of ours cleared from outside', () =
     // Nothing was put back: no PLAY, no CG ADD, no LOADBG from the bridge after the clears.
     const after = (await sentSince(from)).filter((l) => !l.startsWith('CLEAR 2-'));
     expect(after.filter((l) => /^(PLAY|LOADBG|CG \d+-\d+ ADD)/.test(l))).toEqual([]);
+  });
+
+  /*
+    The operator's remedy after a foreign clear is a re-take — and it must put the graphic BACK. The
+    bridge keeps a record of which rows have a producer (`#loaded`, B-039) and `CG PLAY`s those
+    instead of re-ADDing; a foreign clear that leaves the record behind turns the re-take into a
+    `CG PLAY` on an empty layer: an ON AIR row over nothing, never heard again — `B-292` itself.
+  */
+  it('🔴 the operator’s re-take after a foreign CLEAR re-ADDs the page and puts it back — never a `CG PLAY` on the emptied layer', async () => {
+    const { r, mock, mark, sentSince } = await boot();
+    await take(r, 'page-only', TPL, ROW_TPL);
+    await waitFor(() => onAir(r, ROW_TPL), 'the row on air');
+    await delay(300);
+    await foreign(mock, `CLEAR 2-${String(TPL.layer)}`);
+    await waitFor(() => statusOf(r, ROW_TPL) === 'idle', 'the row off air', 5_000);
+    expect(mock.layerState(TPL)?.onStage, 'the page layer is gone from the stage').not.toBe(true);
+
+    const from = await mark();
+    expect(await r.take(ROW_TPL)).toEqual({ accepted: true });
+    const page = on(await sentSince(from), TPL.layer).filter((l) => l.startsWith('CG '));
+    expect(
+      page.some((l) => l.startsWith(`CG 2-${String(TPL.layer)} ADD `)),
+      page.join('\n'),
+    ).toBe(true);
+    await waitFor(() => mock.layerState(TPL)?.onStage === true, 'the page back on the stage');
+    await waitFor(() => onAir(r, ROW_TPL), 'the row back on air');
   });
 
   it('🔴 a plate left in our band by another client is listed and clears from the strip’s door — controls: a plate this bridge holds is not listed and is refused, and a video above the bands is refused', async () => {

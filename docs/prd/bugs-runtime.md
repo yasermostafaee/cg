@@ -12942,3 +12942,10 @@ turned 30 tests red; all were fixed in the product (the bridge counts its own ac
 the same work found and fixed the AMCP wire log going silent after any reconnect. Tests:
 `media-plates.integration.test.ts`, `silent-layer-question.test.ts`, `stage-fidelity.test.ts`,
 `orphanLayersBanner.dom.test.ts`, e2e `layers-cleared-outside.spec.ts`.
+
+**Live on the owner's CasparCG 2.5.0 (2026-09-30).** A second raw AMCP client cleared a page-only row's
+layer (`CLEAR 1-99`) five times: off air in the console after 1124–1284 ms (median 1167), one `INFO 1`
+the bridge's only line, nothing re-sent. Preparing that run found the operator's re-take after a foreign
+clear `CG PLAY`ing the emptied layer (the bridge still recorded the producer as resident); fixed — the
+foreign clear now forgets it, as the operator's own clear does — and the four live re-takes went back on
+air with `CG ADD`. Test: the re-take case in `media-plates.integration.test.ts` (red first).

@@ -57,9 +57,10 @@ answers the whole channel (`AMCPCommandsImpl.cpp` `info_channel_command`), which
 at the lowest priority, and SHALL never become a poll. If the answer's stage has no such layer, the bridge
 SHALL take that item or seat off air through its reconcile, publish the layer on `layers.cleared-outside`
 (pulled, and pushed on `layers.cleared-outside-changed`) for the notice `Layer <n> on CH <c> was cleared
-outside CG Control`, re-send nothing and put nothing back. An answer that still carries the layer, or no
-answer, SHALL change nothing. Whole-channel OSC silence SHALL never trigger the read. A layer that reports
-a producer again leaves the published list.
+outside CG Control`, re-send nothing and put nothing back. It SHALL also forget that the item's producer
+is resident, so the operator's next take ADDs the page afresh — never a `CG PLAY` on the emptied layer.
+An answer that still carries the layer, or no answer, SHALL change nothing. Whole-channel OSC silence
+SHALL never trigger the read. A layer that reports a producer again leaves the published list.
 
 #### Scenario: A foreign clear of a page and one plate
 
@@ -67,6 +68,13 @@ a producer again leaves the published list.
   **THEN** within 2 s both read off air and the list names each layer (measured: 1.1–1.2 s)
 - **AND** the row's other plates, and another item on the channel, stay ON AIR (the control)
 - **AND** nothing is sent to put either back — no `PLAY`, `LOADBG` or `CG ADD`
+
+#### Scenario: The operator's re-take after a foreign clear
+
+- **WHEN** another client clears the page of a row that holds nothing else, the row reads off air, and
+  the operator takes it again **THEN** the bridge sends `CG <ch>-<L> ADD` before `CG PLAY` and the page
+  is back on the stage (measured on the owner's CasparCG 2.5.0: off air after 1124–1284 ms over five
+  runs, each re-take on air again)
 
 #### Scenario: A quiet channel is not a cleared layer
 

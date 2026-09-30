@@ -129,6 +129,18 @@ smoke phases success; draft skipped, not a tag).
       AMCP client) and `orphan-layers.spec.ts` (its two "no Clear on 1-90" pins superseded). Red first:
       the silence question disarmed, and R-015 un-narrowed, each turns its test red.
 
+- [x] 9.5 **Live, on the owner's CasparCG 2.5.0** (`127.0.0.1:5250`, `69e8ad5`, 2026-09-30, at the
+      owner's request; `pnpm dev:station --fake --caspar 127.0.0.1:5250` from a scratch home, the real
+      console driven by Playwright). A second raw AMCP client bound to `127.0.0.2` sent ONE `CLEAR 1-99`
+      per run to row 99's page — five runs: the row idle in the console after **1124, 1133, 1167, 1215
+      and 1284 ms (median 1167)**; the bridge decided after 1092–1253 ms, one `INFO 1` its only line,
+      nothing re-sent in any run; the strip on screen after 1108–1269 ms. Channel 1 empty before and
+      after. **The operator's re-take after a foreign clear was broken, and is fixed:** preparing the
+      run, a read of the take path showed the bridge's `#loaded` record surviving the clear, so the
+      re-take `CG PLAY`ed the emptied layer — red first in `media-plates.integration.test.ts`
+      (`CG 2-99 PLAY 0`, no `ADD`); the clear now forgets it, as the operator's own clear does. Runs
+      2–5 were such re-takes: `CG 1-99 ADD` then `PLAY`, the page back on the stage each time.
+
 ## 10. Gate, CI, report
 
 - [x] 10.1 `pnpm gate` green per push (the pre-push gate: 99/99 tasks for `9f04b1eb` and for `cfad5d6b`,

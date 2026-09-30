@@ -211,6 +211,20 @@ refusal kept as their control.
 honestly always empty there. Its `clearLayer` follows (4): a bank row's listed orphan counts as its
 observation, as the bridge's sweep lists foreign producers on bank rows.
 
+**Measured on the owner's CasparCG 2.5.0** (`127.0.0.1:5250`, 2026-09-30, at his request; a scratch
+station, the real console, and a second raw AMCP client on `127.0.0.2` sending one `CLEAR 1-99` per run to
+a page-only row): off air in the console after 1124, 1133, 1167, 1215 and 1284 ms (median 1167); the
+bridge's one `INFO 1` and its decision 1092–1253 ms after the clear; nothing re-sent. The real core
+behaves as the faithful mock does, to within tens of milliseconds.
+
+**The re-take (found preparing that run, fixed).** The take path chooses `CG ADD` over `CG PLAY` by the
+bridge's `#loaded` record (B-039). The operator's own clear forgets it (`#reconcileClearedSlot`); the
+foreign-clear path did not, so the operator's re-take `CG PLAY`ed the emptied layer — nothing rendered,
+and the row would read ON AIR over a layer never heard again: `B-292` reached through its own remedy.
+The foreign-clear path now forgets the record the same way. A row whose plates are still seated after
+its page was cleared is a different case and unchanged: it still owns live seats, so a take is refused
+`already-on-air` (`FIELD-FIXES-01-A`) until the operator OUTs it.
+
 ## B6
 
 What station B showed at its start is recorded as UNCONFIRMED; nothing is built for it.
