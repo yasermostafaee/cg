@@ -110,11 +110,18 @@ import {
 import {
   CONSOLE_DEFAULT_PORT,
   ConsoleHttpServer,
+  applyFirewallRules,
+  checkReservedPorts,
   createBridge,
   defaultPlayoutConfigPath,
+  findPerUserStates,
+  importStateOnce,
+  loadServiceConfig,
   parseReservedLayersFlag,
   resolveLiveLayersPath,
+  withServiceFlags,
   writePlayoutAddress,
+  writeServiceConfig,
 } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
@@ -142,6 +149,148 @@ if (args['set-playout-address'] === undefined) {
   console.error(
     `[caspar-bridge] bridge ${bridgeVersion()} starting (node ${process.version}, pid ${String(process.pid)})`,
   );
+}
+
+/*
+  🔴 `CENTRAL-BRIDGE-01` (D2) — CG BRIDGE, THE SERVICE: `--service-config <file>`.
+
+  `%ProgramData%\CG Bridge\cg-bridge.json` (written by the installer) fills in every flag this
+  command line did not give; a flag given here always wins. Its directory is the state home, so the
+  stores land in `%ProgramData%\CG Bridge\.cg-runtime\` and the logs in `…\logs\` — and a service
+  never falls back to `~/.cg-runtime`: a file it cannot start from is a start failure naming the file.
+  A service ALWAYS authenticates against its Playout (D3), serves consoles on the network, keeps its
+  own Playout session (rule 8), and starts in first-run until a station admin picks its channels.
+*/
+/*
+  `CENTRAL-BRIDGE-01` (D2) — `--write-service-config <file>`: a ONE-SHOT the installer runs with
+  the values it was given (`/PLAYOUT=`, `/AMCPHOST=`, …). It writes `cg-bridge.json` through the
+  same schema every start reads it with, keeps every value it was not given (an upgrade), and exits
+  — 0 written, 1 refused with the sentence. An empty value is "not given".
+*/
+if (args['write-service-config'] !== undefined) {
+  if (args['write-service-config'] === true) {
+    console.error(
+      '[caspar-bridge] --write-service-config needs the file to write (cg-bridge.json).',
+    );
+    process.exit(1);
+  }
+  const given = (flag) =>
+    typeof args[flag] === 'string' && args[flag].trim() !== '' ? args[flag].trim() : undefined;
+  const asPort = (flag) => (given(flag) === undefined ? undefined : Number(given(flag)));
+  const updates = Object.fromEntries(
+    Object.entries({
+      playoutAddress: given('playout-address'),
+      amcpHost: given('caspar-host'),
+      amcpPort: asPort('amcp-port'),
+      oscPort: asPort('osc-port'),
+      controlPort: asPort('port'),
+      templatePort: asPort('template-serve-port'),
+      bridgeAddress: given('template-serve-host'),
+    }).filter(([, value]) => value !== undefined),
+  );
+  try {
+    const written = writeServiceConfig(args['write-service-config'], updates);
+    console.error(
+      `[caspar-bridge] configuration written to ${args['write-service-config']}: ${JSON.stringify(written)}`,
+    );
+    process.exit(0);
+  } catch (err) {
+    console.error(`[caspar-bridge] ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
+let serviceConfig = null;
+if (args['service-config'] !== undefined) {
+  if (args['service-config'] === true) {
+    console.error(
+      '[caspar-bridge] --service-config needs the configuration file (cg-bridge.json).',
+    );
+    process.exit(1);
+  }
+  try {
+    serviceConfig = loadServiceConfig(args['service-config']);
+  } catch (err) {
+    console.error(`[caspar-bridge] ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+  Object.assign(args, withServiceFlags(args, serviceConfig));
+  console.error(`[caspar-bridge] service configuration: ${serviceConfig.file}`);
+}
+
+/*
+  `CENTRAL-BRIDGE-01` §1 A — `--import-state`: a ONE-SHOT the installer runs (elevated, so every
+  profile can be read). The newest older per-user state (`<user>\AppData\Roaming\CG Control\
+  .cg-runtime`) is copied ONCE into this bridge's state home; nothing is deleted, nothing
+  overwritten, no token copied. Then it exits, binding nothing.
+*/
+if (args['import-state'] !== undefined) {
+  const usersRoot =
+    typeof args['import-state'] === 'string' ? args['import-state'] : path.dirname(os.homedir());
+  const home = typeof args['state-home'] === 'string' ? args['state-home'] : null;
+  if (home === null) {
+    console.error(
+      '[caspar-bridge] --import-state needs the state home (--service-config or --state-home).',
+    );
+    process.exit(1);
+  }
+  const outcome = importStateOnce(home, findPerUserStates(usersRoot));
+  console.error(
+    outcome.kind === 'imported'
+      ? `[caspar-bridge] imported ${String(outcome.files.length)} file(s) from ${outcome.from} — the source is unchanged`
+      : outcome.kind === 'already'
+        ? `[caspar-bridge] an older state was already considered once (${outcome.marker}); nothing imported`
+        : outcome.kind === 'not-empty'
+          ? '[caspar-bridge] this bridge already holds its own state; nothing imported'
+          : '[caspar-bridge] no older per-user state on this machine; nothing imported',
+  );
+  process.exit(0);
+}
+
+/*
+  `CENTRAL-BRIDGE-01` §1 A — `--firewall add|remove`: a ONE-SHOT the installer and the uninstaller
+  run. Our three inbound rules, by OUR names, scoped to THIS exe (the installed `cg-bridge.exe`), on
+  the ports in force (after `--service-config`). `add` replaces ours; `remove` deletes ours; neither
+  touches another rule. Exit 0, or 4 when an add failed (the installer says so).
+*/
+if (args.firewall !== undefined) {
+  if (args.firewall !== 'add' && args.firewall !== 'remove') {
+    console.error("[caspar-bridge] --firewall takes 'add' or 'remove'.");
+    process.exit(1);
+  }
+  const portOf = (flag, fallback) =>
+    typeof args[flag] === 'string' ? Number(args[flag]) : fallback;
+  const failed = applyFirewallRules(args.firewall, process.execPath, {
+    control: portOf('port', 5280),
+    templates: portOf('template-serve-port', 7911),
+    osc: portOf('osc-port', DEFAULT_OSC_PORT),
+  });
+  for (const f of failed) console.error(`[caspar-bridge] firewall rule not added: ${f.join(' ')}`);
+  if (failed.length === 0) console.error(`[caspar-bridge] firewall rules: ${args.firewall} done`);
+  process.exit(failed.length === 0 ? 0 : 4);
+}
+
+/*
+  `CENTRAL-BRIDGE-01` rule 12 (D11) — `--check-ports`: a ONE-SHOT the installer runs before it starts
+  the service. Exit 0 when the ports are free (or the ranges cannot be read: no verdict), 3 when one
+  is inside a range Windows has reserved — the installer then warns, naming it. Ports are never
+  changed by themselves.
+*/
+if (args['check-ports'] !== undefined) {
+  const portOf = (flag, fallback) =>
+    typeof args[flag] === 'string' ? Number(args[flag]) : fallback;
+  const problems = await checkReservedPorts([
+    { port: portOf('port', 5280), protocol: 'tcp', role: 'consoles' },
+    { port: portOf('template-serve-port', 7911), protocol: 'tcp', role: 'template pages' },
+    { port: portOf('osc-port', DEFAULT_OSC_PORT), protocol: 'udp', role: 'OSC from CasparCG' },
+  ]);
+  if (problems === null) {
+    console.error('[caspar-bridge] the reserved port ranges could not be read; no verdict');
+    process.exit(0);
+  }
+  for (const p of problems) console.error(`[caspar-bridge] ${p.message}`);
+  if (problems.length === 0) console.error('[caspar-bridge] ports free');
+  process.exit(problems.length === 0 ? 0 : 3);
 }
 
 /*
@@ -607,6 +756,10 @@ const bridgeOptions = {
     the desktop app passes it. Absent = every dev bridge, exactly as before.
   */
   ...(args['first-run'] === true ? { firstRun: true } : {}),
+  // `CENTRAL-BRIDGE-01` rule 12 — every CLI start judges its ports against Windows' reserved ranges.
+  checkReservedPorts: true,
+  // `CENTRAL-BRIDGE-01` (D3) — CG Bridge the service never answers a socket with auth off.
+  ...(serviceConfig !== null ? { requireAuth: true } : {}),
 };
 
 /*

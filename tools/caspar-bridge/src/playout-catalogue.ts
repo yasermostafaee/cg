@@ -169,6 +169,8 @@ export class PlayoutCatalogue {
   #rows: readonly CatalogueRow[] | null = null;
   #etag: string | null = null;
   #lastReadMs = Number.NEGATIVE_INFINITY;
+  /** When the Playout last ANSWERED D4 (a catalogue, or `304` for the one held). */
+  #lastGoodMs: number | null = null;
   #inFlight: Promise<void> | null = null;
   #ticker: ReturnType<typeof setInterval> | null = null;
   #readCount = 0;
@@ -191,6 +193,14 @@ export class PlayoutCatalogue {
   /** D4 requests actually issued — a cadence test's positive control. */
   get readCount(): number {
     return this.#readCount;
+  }
+
+  /**
+   * `CENTRAL-BRIDGE-01` (D10) — when the Playout last answered D4, epoch ms, or `null` when it has not
+   * since start: `/health`'s `playout.lastReadAt`. A read that failed leaves it where it was.
+   */
+  lastGoodReadAtMs(): number | null {
+    return this.#lastGoodMs;
   }
 
   /** Called with the new rows (or `null`) whenever what is held CHANGES. Returns an unsubscribe. */
@@ -253,10 +263,14 @@ export class PlayoutCatalogue {
         signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
       });
       // 304 — unchanged since the answer we hold. Holding it IS the answer.
-      if (res.status === 304) return;
+      if (res.status === 304) {
+        this.#lastGoodMs = this.#now();
+        return;
+      }
       if (!res.ok) throw new Error(`D4 answered ${String(res.status)}`);
       const parsed = CatalogueBodySchema.safeParse(await res.json());
       if (!parsed.success) throw new Error('D4 answered a body that is not a catalogue');
+      this.#lastGoodMs = this.#now();
       this.#etag = res.headers.get('etag');
       this.#set(parsed.data.channels.map((row) => resolveCatalogueHost(row, this.#playoutHost)));
     } catch {

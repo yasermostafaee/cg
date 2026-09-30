@@ -40,6 +40,23 @@ export type { AuthGateState, BridgeHandle, BridgeOptions, StackProvenance } from
 // `@cg/shared-schema`'s `retainedFromStackItem`, shared with the console's display copy).
 export { loadPersistedStack, savePersistedStack } from './stack-store.js';
 export type { PersistedStack } from './stack-store.js';
+// `CENTRAL-BRIDGE-01` §1 A — CG Bridge the service: its configuration file (D2), `/health` (D10),
+// the reserved-port check (D11) and the one-time import of an older per-user state.
+export {
+  ServiceConfigError,
+  loadServiceConfig,
+  serviceFlags,
+  withServiceFlags,
+  writeServiceConfig,
+} from './service-config.js';
+export type { LoadedServiceConfig, ServiceConfig } from './service-config.js';
+export { BridgeHealthSchema, HEALTH_APP, HEALTH_PATH, bridgeHealth } from './health.js';
+export type { BridgeHealth } from './health.js';
+export { checkReservedPorts, parseExcludedPortRanges } from './reserved-ports.js';
+export type { BridgePort, PortProblem } from './reserved-ports.js';
+export { findPerUserStates, importStateOnce } from './import-state.js';
+export { FIREWALL_RULES, applyFirewallRules } from './firewall-rules.js';
+export type { ImportOutcome, PerUserState } from './import-state.js';
 // `C-037` — the Playout link: its config precedence (CLI > file > default), the boot failure
 // that names a missing key, and the verifier. The CLI resolves the default file path through
 // `defaultPlayoutConfigPath` for `live-layers-store`'s reason — a default buried in a `.mjs`

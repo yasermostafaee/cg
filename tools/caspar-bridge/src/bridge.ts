@@ -1,5 +1,8 @@
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { bridgeHealth, HEALTH_PATH, type BridgeHealth, type HealthProblem } from './health.js';
+import { checkReservedPorts, type BridgePort } from './reserved-ports.js';
 import {
   AppInfoChannel,
   AuditHealthChannel,
@@ -484,6 +487,12 @@ export interface BridgeOptions {
    * anyone. Absent (the dev bridge, every test) = auth follows the configuration, as before.
    */
   requireAuth?: boolean;
+  /**
+   * `CENTRAL-BRIDGE-01` rule 12 (D11) — once listening, read Windows' reserved port ranges and say
+   * any of this bridge's ports inside one (log and `/health`). The CLI sets it; absent, no `netsh`
+   * is spawned (every test).
+   */
+  checkReservedPorts?: boolean;
   /**
    * `CENTRAL-BRIDGE-01` (`R-068`) — the release this bridge is (`0.10.0`), told to every console on
    * `bridge.capabilities` so a console on another release line sends nothing. Absent = this
@@ -1789,6 +1798,8 @@ function validateDeclaredBank(
  * `handle.runtime.whenServerHealthy()` before driving playout.
  */
 export async function createBridge(options: BridgeOptions = {}): Promise<BridgeHandle> {
+  // `CENTRAL-BRIDGE-01` (D10) — `/health`'s `startedAt`.
+  const startedAtMs = Date.now();
   const host = options.host ?? DEFAULT_BRIDGE_HOST;
   const requestedPort = options.port ?? DEFAULT_BRIDGE_PORT;
   /*
@@ -2335,18 +2346,42 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const stack =
     options.stackPath === undefined ? null : await restoreOwnStack(runtime, options.stackPath);
 
-  const wss = new WebSocketServer({
-    host,
-    port: requestedPort,
-    maxPayload: WS_MAX_PAYLOAD_BYTES,
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D9) — ONE PORT, ONE `http.Server`: the control socket's upgrade AND
+    `/health` (rule 13 — the Playout's engine reads it on `5280`). Every other plain request is
+    answered `426`, exactly what `ws`'s own server answered before. `/health` answers `503` for the
+    moment between the listen and the end of the start below, never a half-built body.
+  */
+  let healthNow: (() => BridgeHealth) | null = null;
+  const controlHttp = http.createServer((req, res) => {
+    const pathname = (req.url ?? '/').split('?')[0];
+    if (req.method === 'GET' && pathname === HEALTH_PATH) {
+      if (healthNow === null) {
+        res.writeHead(503, { 'content-type': 'text/plain', 'retry-after': '1' });
+        res.end('CG Bridge is starting');
+        return;
+      }
+      const body = JSON.stringify(healthNow());
+      res.writeHead(200, {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store',
+      });
+      res.end(body);
+      return;
+    }
+    const body = http.STATUS_CODES[426] ?? 'Upgrade Required';
+    res.writeHead(426, { 'content-type': 'text/plain', 'content-length': Buffer.byteLength(body) });
+    res.end(body);
   });
+  const wss = new WebSocketServer({ server: controlHttp, maxPayload: WS_MAX_PAYLOAD_BYTES });
 
   await new Promise<void>((resolve, reject) => {
-    wss.once('listening', resolve);
-    wss.once('error', reject);
+    controlHttp.once('listening', resolve);
+    controlHttp.once('error', reject);
+    controlHttp.listen(requestedPort, host);
   });
 
-  const address = wss.address();
+  const address = controlHttp.address();
   const port = typeof address === 'object' && address !== null ? address.port : requestedPort;
   bound.port = port;
 
@@ -2591,6 +2626,53 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           log: (line) => process.stderr.write(`${line}\n`),
         });
 
+  /*
+    🔴 `CENTRAL-BRIDGE-01` rule 12 (D11) — the ports this bridge listens on, judged against Windows'
+    reserved ranges once it is up (the check never delays the start). A port inside one is said in
+    the log and on `/health`, and never changed. Asked for by the CLI; a bridge in a test does not
+    spawn `netsh`.
+  */
+  const portProblems: HealthProblem[] = [];
+  const oscPortA = runtime.config().servers.A.oscPort;
+  const bridgePorts: BridgePort[] = [
+    { port, protocol: 'tcp' as const, role: 'consoles' },
+    { port: templateServe.port, protocol: 'tcp' as const, role: 'template pages' },
+    { port: oscPortA, protocol: 'udp' as const, role: 'OSC from CasparCG' },
+  ].filter((p) => p.port > 0);
+  if (options.checkReservedPorts === true) {
+    void checkReservedPorts(bridgePorts).then((problems) => {
+      for (const p of problems ?? []) {
+        process.stderr.write(`[caspar-bridge] 🔴 ${p.message}\n`);
+        portProblems.push({ code: 'reserved-port', message: p.message });
+      }
+    });
+  }
+
+  // `CENTRAL-BRIDGE-01` (D10) — `/health`, from what is held: no I/O on the request path.
+  healthNow = () => {
+    const servers = runtime.config().servers;
+    const endpoints = new Map<'A' | 'B', { host: string; amcpPort: number }>([
+      ['A', { host: servers.A.host, amcpPort: servers.A.amcpPort }],
+    ]);
+    if (servers.B !== undefined) {
+      endpoints.set('B', { host: servers.B.host, amcpPort: servers.B.amcpPort });
+    }
+    return bridgeHealth({
+      version: bridgeVersion ?? 'unknown',
+      startedAtMs,
+      nowMs: Date.now(),
+      connection: runtime.health(),
+      endpoints,
+      oscStatus: runtime.oscStatus(),
+      playoutAddress: auth.playout?.address ?? null,
+      session: bridgeSession?.state() ?? { state: 'off' },
+      lastPlayoutReadAtMs: playoutCatalogue?.lastGoodReadAtMs() ?? null,
+      consoles: wss.clients.size,
+      ports: { control: port, templates: templateServe.port, osc: servers.A.oscPort },
+      portProblems,
+    });
+  };
+
   return {
     host,
     port,
@@ -2639,6 +2721,12 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       await runtime.stop();
       await new Promise<void>((resolve, reject) => {
         wss.close((err) => (err ? reject(err) : resolve()));
+      });
+      // `CENTRAL-BRIDGE-01` (D9) — the socket's own `http.Server` (a `ws` server given one does not
+      // close it), and any `/health` reader still holding a keep-alive connection.
+      controlHttp.closeAllConnections();
+      await new Promise<void>((resolve) => {
+        controlHttp.close(() => resolve());
       });
     },
   };

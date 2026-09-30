@@ -64,6 +64,12 @@ const BEFORE_AND_AFTER = {
     'bridge-bound-media.json',
     'bridge-connection.json',
     'bridge-fixed-layers.json',
+    /*
+      `CENTRAL-BRIDGE-01` §1 A — NEW: the one-time import's marker (`import-state.ts`). Written once,
+      whatever the outcome, so an older per-user state is considered ONCE; it names what was copied
+      and from where. No migration is owed: absent means "not yet considered".
+    */
+    'bridge-imported-state.json',
     'bridge-live-layers.json',
     /*
       🔴 `C-037` — the Playout link's config: the auth MODE and the `playout.*` addresses.
@@ -79,6 +85,13 @@ const BEFORE_AND_AFTER = {
     'bridge-playout-inputs.json',
     'bridge-playout.json',
     'bridge-reserved-layers.json',
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — NEW as a DEFAULT: CG Bridge's own Playout session (the
+      rotating refresh token and its in-flight mark, never a password), named by the service's
+      configuration file. A dev bridge still has none unless `--bridge-session-path` names one. A
+      CREDENTIAL: written owner-only, and never carried by the one-time import.
+    */
+    'bridge-session.json',
     'bridge-source-assignments.json',
     'bridge-source-catalog.json',
     'bridge-templates',
