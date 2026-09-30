@@ -217,7 +217,11 @@
       `joinedPlaylist` — `stationChannelsFor`'s join. Tests: `unlicensed.integration` (the take
       refused with the sentence, no channel-2 write, audited `failed`/`unlicensed` — control: channel 1
       takes and `CG 1-80 PLAY` is on the wire; a removal passes; shown red first).
-- [ ] 5.4 A backup's loopback `casparHost` reaches the backup's host (pinned).
+- [x] 5.4 A backup's loopback `casparHost` reaches the backup's host (pinned).
+      `playout-address.integration` — a reader built for the backup's address (its host from the
+      bridge's own `playoutHostOf`) reads a `127.0.0.1` row as the backup's host — control: the
+      primary's reader reads the same row as the primary's. The living requirement "A loopback
+      casparHost is the Playout's own machine" MODIFIED with the per-reader clause.
 - [ ] 5.5 No `Origin` and no `X-Apasai-Mirrored` on any request to the Playout (bridge and native).
       The BRIDGE half is done: `bridge-session.integration` reads every request the fake Playout
       received (the bridge's D1, the D9 poll, D4) for both headers — none — with its control (the log

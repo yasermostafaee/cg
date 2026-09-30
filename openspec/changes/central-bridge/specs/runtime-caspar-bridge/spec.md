@@ -290,6 +290,24 @@ rule 11: a technical fact rides the `title`).
 
 ## MODIFIED Requirements
 
+### Requirement: A loopback casparHost is the Playout's own machine
+
+The one D4 reader SHALL rewrite a row's `casparHost` that is loopback (`127.0.0.0/8`, `localhost`,
+`::1`) to the host of the configured Playout address, and SHALL pass any other host through byte for
+byte. `CENTRAL-BRIDGE-01` (D13): the rule is per READER — a reader built for a backup Playout's address
+SHALL read that Playout's loopback rows as the BACKUP's host, never as the local core's nor as the
+primary's (the Playout team's rules 9–10: each engine names its own core `127.0.0.1`).
+
+#### Scenario: One value everywhere
+
+- **WHEN** the catalogue names a channel on `127.0.0.1` **THEN** `channels.catalogue` and
+  `channels.list`'s join both see the Playout's host **AND** a row on another host is unchanged
+
+#### Scenario: A backup Playout's row
+
+- **WHEN** a reader built for the backup Playout's address reads a row naming `127.0.0.1` **THEN** the
+  row's host is the backup's — control: the primary's reader reads the same row as the primary's host
+
 ### Requirement: A restore refuses to decide rather than act on absent evidence
 
 When the occupancy tap has never been heard from, the bridge SHALL refuse to decide a restored

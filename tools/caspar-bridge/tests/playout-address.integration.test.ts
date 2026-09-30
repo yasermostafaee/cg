@@ -17,6 +17,8 @@ import {
   writePlayoutAddress,
   type BridgeHandle,
 } from '../src/index.js';
+import { playoutHostOf } from '../src/bridge.js';
+import type { PlayoutAuthConfig } from '../src/playout-config.js';
 import { deadConnection, expectRefusedWith, openClient, waitFor } from './support/auth-harness.js';
 import { startFakePlayout, type FakePlayout } from './support/fake-playout.js';
 
@@ -375,5 +377,33 @@ describe('the reader itself — A4 lives inside it, not in a consumer', () => {
     });
     await reader.refresh();
     expect(reader.rows()?.map((r) => r.casparHost)).toEqual(['192.168.21.200', '10.0.0.4']);
+  });
+
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D13, the Playout team's rules 9–10; task 5.4) — A BACKUP'S LOOPBACK ROW
+    REACHES THE BACKUP'S HOST. Each Playout's engine names its own core `127.0.0.1`; a reader built
+    for a Playout at host H maps that to H — so a backup Playout's row can never be read as the
+    local core, nor as the primary's. The host is derived by the bridge's own `playoutHostOf` from
+    each Playout's address, as a configured reader derives it. Documentation addresses (RFC 5737).
+  */
+  it('🔴 5.4 — a backup Playout’s loopback `casparHost` is the BACKUP’s host, never the local core’s or the primary’s', async () => {
+    const body = {
+      channels: [{ id: 'cg', name: 'CG', casparHost: '127.0.0.1', casparChannel: 2 }],
+    };
+    const readerFor = (address: string): PlayoutCatalogue =>
+      new PlayoutCatalogue(`${address}/api/cg/channels`, () => 'bearer', {
+        fetchImpl: async () => new Response(JSON.stringify(body), { status: 200 }),
+        playoutHost: playoutHostOf({
+          address,
+          channelsUrl: `${address}/api/cg/channels`,
+        } as PlayoutAuthConfig),
+      });
+    const primary = readerFor('http://192.0.2.11:8080');
+    const backup = readerFor('http://192.0.2.12:8080');
+    await primary.refresh();
+    await backup.refresh();
+    expect(backup.rows()?.map((r) => r.casparHost)).toEqual(['192.0.2.12']);
+    // CONTROL — the same row read by the primary's reader is the primary's.
+    expect(primary.rows()?.map((r) => r.casparHost)).toEqual(['192.0.2.11']);
   });
 });
