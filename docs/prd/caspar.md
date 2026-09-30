@@ -2868,6 +2868,30 @@ narrow seam exemption — our own stray, on an operator's request; a holder move
 leaves the row saying it waits, until a re-take. Detail: `openspec/changes/route-plates/design.md`,
 last section.
 
+## [~] C-046 — OSC by `OSC SUBSCRIBE` on the bridge's own port, never `6250` ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 7 · `openspec/changes/central-bridge/`
+
+**What.** On the Playout machine UDP `6250` belongs to the engine — it takes the core's OSC on
+`127.0.0.1:6250` for its audio meters, genlock and no-picture detection — so a bridge that shares the machine cannot
+take the core's default OSC stream there (the Playout team, `PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md` §4; the
+prompt's rule 7). The bridge now binds its own loopback port — server A the
+configured OSC port, default `6251`; server B that port plus one — and asks every core for OSC with
+`OSC SUBSCRIBE <port>` on every AMCP connection it opens, inside the handshake, so the subscription is
+renewed with every reconnect (it ends with its connection). `6250` is refused by the connection schema, the
+CLI, the bridge and the console's OSC fields, with a sentence that names the engine. OSC for a channel the
+station does not declare is dropped at the transport; the occupancy of an undeclared channel (Change
+channel…) is read with `INFO <ch>`. A core that refuses the subscribe is said in one log line and the
+session goes on. **Upstream (`v2.5.0-stable`, commit `69e8ad5`):** `AMCPCommandsImpl.cpp` registers
+`OSC SUBSCRIBE` / `OSC UNSUBSCRIBE` at lines 1794–1795; `osc_subscribe_command` (1684–1701) subscribes
+`<the connection's remote IPv4>:<port>`, keeps it on the connection under `osc-sub-<port>` and answers
+`202 OSC SUBSCRIBE OK` (`403 OSC SUBSCRIBE BAD PORT` for a port that is not a number); the core's default
+per-client subscription (`server.cpp` `setup_osc`, 306–342) is what sent to `<client>:6250`. Detail:
+`openspec/changes/central-bridge/design.md` §0.8. **Filed alongside:** [[B-295]] (a port the session
+could not bind kept AMCP down). **Acceptance:** WHEN another process holds the core's default OSC port
+THEN the bridge binds its own, subscribes, and hears the core (control: the holder still receives);
+WHEN the core drops the connection THEN a second `OSC SUBSCRIBE` is sent on the new one; WHEN a config,
+flag or field names `6250` THEN it is refused with the sentence and nothing binds `6250`; WHEN OSC reports
+a channel the station does not declare THEN no tap sees it (control: a declared channel's report arrives).
+
 ## [~] C-047 — A core restart, and the ledger checked against CasparCG at start ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rules 2 and 3 · `openspec/changes/central-bridge/`
 
 **What.** On the Playout machine the core accepts AMCP 2–6 s after the engine starts, and **every core
