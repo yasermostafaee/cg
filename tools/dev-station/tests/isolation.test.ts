@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   bridgeArgs,
+  bridgeStateDir,
   devStateDir,
   installedStateDir,
   isInside,
@@ -17,15 +18,21 @@ import {
 import { writeConsoleStub } from '../src/station-processes.mjs';
 
 /**
- * 🔴 `DEV-STATION-01` — **A DEV RUN WRITES NOTHING UNDER THE INSTALLED APP'S STATE FOLDER.**
+ * 🔴 `DEV-STATION-01` — **A DEV RUN WRITES NOTHING UNDER AN INSTALLED APP'S STATE FOLDER.**
  *
  * The REAL bridge, started with exactly the arguments `pnpm dev:station` gives it, under a scratch
- * home whose `APPDATA` holds an "installed CG Control" with a plant connection in it. Afterwards
- * that folder is byte-for-byte what it was, and no `~/.cg-runtime` exists — the default every
- * unnamed path would fall back to. Control: the dev station's own folder DID get its state.
+ * home whose `APPDATA` holds CG Control's folder as a CG Control `0.9.x` left it (its own bridge's
+ * `.cg-runtime\` with a plant connection — the folder CG Bridge's one-time import reads) and, on
+ * Windows, a scratch `ProgramData` holding CG Bridge's (`CENTRAL-BRIDGE-01`: its `cg-bridge.json`
+ * and `.cg-runtime\`). Afterwards both are byte-for-byte what they were, and no `~/.cg-runtime`
+ * exists — the default every unnamed path would fall back to. Control: the dev station's own folder
+ * DID get its state.
  *
- * Nothing reaches a plant: the Playout address is a closed loopback port, and no CasparCG
- * connection is written.
+ * Nothing reaches a plant or this machine's own CasparCG: the Playout address is a closed loopback
+ * port, and the station's CasparCG connection — as first-run would have written it — names another
+ * closed loopback port and an ephemeral OSC port. Without it the bridge falls back to 127.0.0.1:5250
+ * and UDP 6251 (measured 2026-09-30: the test's bridge held UDP 6251, a station port, and opened an
+ * AMCP session to the `casparcg.exe` running on this host).
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +81,7 @@ function snapshot(dir: string): Record<string, string> {
 }
 
 describe('isolation — the dev station keeps to its own state folder', () => {
-  it('a dev run writes NOTHING under the installed app’s folder and creates no ~/.cg-runtime; control: it writes its own dev state', async () => {
+  it('a dev run writes NOTHING under CG Control’s or CG Bridge’s folder and creates no ~/.cg-runtime; control: it writes its own dev state', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dev-station-'));
     cleanups.push(() => fs.rmSync(tmp, { recursive: true, force: true }));
     const home = path.join(tmp, 'home');
@@ -85,10 +92,11 @@ describe('isolation — the dev station keeps to its own state folder', () => {
       APPDATA: path.join(home, 'AppData', 'Roaming'),
       LOCALAPPDATA: path.join(home, 'AppData', 'Local'),
       XDG_DATA_HOME: path.join(home, '.local', 'share'),
+      ProgramData: path.join(tmp, 'ProgramData'),
     };
     delete env.CG_DEV_STATION_HOME;
 
-    // The installed CG Control, as it sits on the owner's machine: a plant connection and a Playout.
+    // CG Control's folder as a CG Control 0.9.x left it: its bridge's plant connection and Playout.
     const installed = installedStateDir(env, process.platform, home);
     fs.mkdirSync(path.join(installed, '.cg-runtime'), { recursive: true });
     fs.writeFileSync(
@@ -101,8 +109,35 @@ describe('isolation — the dev station keeps to its own state folder', () => {
     );
     const before = snapshot(installed);
 
+    // `CENTRAL-BRIDGE-01` — CG Bridge's folder, as its installer leaves it. Windows only: elsewhere
+    // CG Bridge keeps no folder (`bridgeStateDir` is null), so there is nothing to plant.
+    const bridgeHome = bridgeStateDir(env, process.platform);
+    if (bridgeHome !== null) {
+      fs.mkdirSync(path.join(bridgeHome, '.cg-runtime'), { recursive: true });
+      fs.writeFileSync(
+        path.join(bridgeHome, 'cg-bridge.json'),
+        JSON.stringify({ playoutAddress: 'http://192.168.21.111:8080', amcpHost: '127.0.0.1' }),
+      );
+      fs.writeFileSync(
+        path.join(bridgeHome, '.cg-runtime', 'bridge-playout.json'),
+        JSON.stringify({ auth: 'playout', playout: { address: 'http://192.168.21.111:8080' } }),
+      );
+    }
+    const bridgeBefore = bridgeHome === null ? {} : snapshot(bridgeHome);
+
     const dev = devStateDir(env, process.platform, home);
     const paths = stationPaths(dev, process.platform);
+    // The station's CasparCG connection, as first-run would have written it — a closed loopback
+    // port and an ephemeral OSC port, so this bridge binds no station port and dials no real core.
+    fs.mkdirSync(path.dirname(paths.connection), { recursive: true });
+    fs.writeFileSync(
+      paths.connection,
+      JSON.stringify({
+        servers: { A: { host: '127.0.0.1', amcpPort: await freePort(), oscPort: 0 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: true,
+      }),
+    );
     // The launcher's two writes before the start, exactly as it makes them.
     writeConsoleStub(paths.consoleDir);
     const set = spawnSync(process.execPath, [BRIDGE_CLI, ...setAddressArgs(paths, PLAYOUT)], {
@@ -139,14 +174,14 @@ describe('isolation — the dev station keeps to its own state folder', () => {
     bridge.stdin?.end();
     await exited;
 
-    // 🔴 The installed app's folder is exactly what it was, and no default was used.
+    // 🔴 CG Control's folder and CG Bridge's are exactly what they were, and no default was used.
     expect(snapshot(installed)).toEqual(before);
+    if (bridgeHome !== null) expect(snapshot(bridgeHome)).toEqual(bridgeBefore);
     expect(fs.existsSync(path.join(home, '.cg-runtime'))).toBe(false);
-    // Nothing anywhere under the scratch home but the installed folder and the dev one.
-    const elsewhere = Object.keys(snapshot(home)).filter(
-      (f) =>
-        !path.join(home, f).startsWith(installed + path.sep) &&
-        !path.join(home, f).startsWith(dev + path.sep),
+    // Nothing anywhere under the scratch root but the two installed folders and the dev one.
+    const kept = [installed, dev, ...(bridgeHome === null ? [] : [bridgeHome])];
+    const elsewhere = Object.keys(snapshot(tmp)).filter(
+      (f) => !kept.some((dir) => path.join(tmp, f).startsWith(dir + path.sep)),
     );
     expect(elsewhere).toEqual([]);
     // CONTROL — the dev station did write its own state, and the bridge read it from there.
@@ -161,5 +196,9 @@ describe('isolation — the dev station keeps to its own state folder', () => {
     // (measured: CI run 35975399174 failed on exactly that, with nothing written there).
     expect(said).not.toContain(installed + path.sep);
     expect(isInside(dev, installed, process.platform)).toBe(false);
+    if (bridgeHome !== null) {
+      expect(said).not.toContain(bridgeHome);
+      expect(isInside(dev, bridgeHome, process.platform)).toBe(false);
+    }
   });
 });

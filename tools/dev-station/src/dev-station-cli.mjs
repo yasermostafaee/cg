@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * 🔴 `DEV-STATION-01` — **`pnpm dev:station`: the current source, in the browser, on the installed
- * app's own origin and ports, with its own state.** Check a change in a minute; reinstall only for
- * the final check.
+ * 🔴 `DEV-STATION-01` — **`pnpm dev:station`: the current source, in the browser, on the console's
+ * one origin and CG Bridge's own ports, with its own state.** Check a change in a minute; reinstall
+ * only for the final check.
  *
  *   pnpm dev:station                  the remembered Playout (asked for once, the first time)
  *   pnpm dev:station --playout <url>  change it
@@ -14,10 +14,13 @@
  *                                     (DEV-LOCAL-CASPAR-01; loopback only; Node 23+)
  *   pnpm dev:station --no-open        do not open the browser
  *
- * It runs INSTEAD of CG Control, never beside it: the Playout's CORS admits one origin, the bridge's
- * UDP 6251 has one holder, and one channel has one station (`station-plan.mjs` has the three facts). The Playout
- * address is written by the bridge's own one-shot, as CG Control writes it — never over the socket
- * (ADR 0010: a gate whose configuration is behind the gate is not a gate).
+ * It runs INSTEAD of CG Bridge on this machine, never beside it: they bind the same ports (UDP 6251
+ * has one holder), and one channel has one station (`station-plan.mjs` has the three facts). It stops
+ * NOTHING: a CG Bridge service holding those ports is named, with how to stop it, and the launcher
+ * refuses. CG Control is only a console now and holds no port — it may even connect to this station.
+ * The Playout address is written by the bridge's own one-shot `--set-playout-address` (dev-only now:
+ * CG Bridge's installer writes its configuration through `--write-service-config`) — never over the
+ * socket (ADR 0010: a gate whose configuration is behind the gate is not a gate).
  */
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -27,7 +30,7 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runDevStation } from './station-sequence.mjs';
-import { probeStation, stopProcesses, writeConsoleStub } from './station-processes.mjs';
+import { probeStation, writeConsoleStub } from './station-processes.mjs';
 import {
   BRIDGE_CONSOLE_PORT,
   CONSOLE_URL,
@@ -36,11 +39,10 @@ import {
   devStateDir,
   fakeModulePaths,
   fakeStateName,
-  installedStateDir,
-  isInside,
   parseArgs,
   previousStateDir,
   setAddressArgs,
+  stateOverlap,
   stationPaths,
   viteArgs,
   viteEnv,
@@ -59,7 +61,7 @@ const START_TIMEOUT_MS = 120_000;
 const say = (line) => process.stderr.write(`${line}\n`);
 
 async function ask(question) {
-  // A yes nobody typed is not a yes: with no terminal to ask, the answer is none.
+  // The Playout address, when none is remembered. With no terminal to ask, the answer is none.
   if (process.stdin.isTTY !== true) return null;
   const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
   try {
@@ -326,9 +328,10 @@ async function main() {
   const platform = process.platform;
   const home = os.homedir();
   const root = devStateDir(process.env, platform, home);
-  const installed = installedStateDir(process.env, platform, home);
-  if (isInside(root, installed, platform) || isInside(installed, root, platform)) {
-    say(`The dev state folder ${root} overlaps CG Control's own ${installed} — refusing.`);
+  // `CENTRAL-BRIDGE-01` — neither CG Control's folder nor CG Bridge's may hold the dev state, or sit in it.
+  const overlap = stateOverlap(root, process.env, platform, home);
+  if (overlap !== null) {
+    say(overlap);
     process.exitCode = 2;
     return;
   }
@@ -353,7 +356,6 @@ async function main() {
     {
       probe: () => probeStation(platform),
       ask,
-      stop: (pids) => stopProcesses(pids, { platform }),
       build,
       readPlayoutAddress: () => readPlayoutAddress(paths),
       setPlayoutAddress: async (address) => setPlayoutAddress(paths, address),

@@ -19,7 +19,9 @@
  *      first connection sends `MIXER … VOLUME 1` to every declared bank slot, and its first LOAD on
  *      a layer is preceded by a `CLEAR` of that layer, whatever is on it.
  *
- * So the dev station and the installed CG Control run ONE AT A TIME, on the SAME ports.
+ * So the dev station and an installed CG Bridge service (`CENTRAL-BRIDGE-01`) run ONE AT A TIME on
+ * one machine, on the SAME ports — and the dev station never stops the service: it names it and
+ * refuses. CG Control is only a console now and holds no port, so it is never in the way.
  */
 import path from 'node:path';
 
@@ -31,14 +33,20 @@ export const BRIDGE_PORT = 5280;
 export const TEMPLATE_PORT = 7911;
 export const OSC_PORT = 6251;
 /**
- * The bridge's OWN console listener, which in the installed app IS 5174. Here Vite holds 5174 for
- * hot reload, so the bridge's listener moves to this internal port and Vite relays the two routes
- * only it can answer: `/pgm/<n>` (the PROGRAM monitor's picture) and `/__cg/health` (the identity
- * the installed CG Control reads before it starts, so it refuses by name while this runs).
+ * The bridge's own console listener (`--console-dir` / `--console-port`), kept for ONE reader: the
+ * dev station's own readiness probe, `/__cg/health`, whose answer carries the bridge's pid — so the
+ * launcher knows the bridge that came up is the one it started. It serves a one-page stub, never the
+ * console: Vite holds 5174 for hot reload. The PROGRAM picture does not come through here any more —
+ * the console asks the bridge for a ticket over its socket and loads `/pgm/<n>?ticket=…` from the
+ * bridge's control port, 5280, directly (`CENTRAL-BRIDGE-01` D9).
  */
 export const BRIDGE_CONSOLE_PORT = 5175;
 
-/** Every port the dev station binds — the installed app's four, and the one internal listener. */
+/**
+ * Every port the dev station binds: the three CG Bridge binds (5280, 7911, UDP 6251), the console's
+ * 5174 and the one internal listener. Because CG Bridge binds the first three, the dev station and
+ * an installed CG Bridge service run one at a time on one machine.
+ */
 export const STATION_PORTS = [
   { proto: 'tcp', port: CONSOLE_PORT },
   { proto: 'tcp', port: BRIDGE_PORT },
@@ -47,15 +55,17 @@ export const STATION_PORTS = [
   { proto: 'tcp', port: BRIDGE_CONSOLE_PORT },
 ];
 
-/** The installed CG Control's two processes: the app, and its bridge sidecar (`sidecar.rs`). */
-export const INSTALLED_IMAGES = ['cg-control.exe', 'cg-bridge.exe'];
-
-export const ASK = 'CG Control is running. Close it and continue? [Y/n] ';
-export const DECLINED = 'CG Control is running — close it, then run pnpm dev:station again.';
+/**
+ * CG Bridge's process image: `node.exe` renamed, run by the service host `shawl.exe` as
+ * `NT SERVICE\CGBridge` — and the name an older CG Control's own bridge ran under, too.
+ */
+const CG_BRIDGE_IMAGE = 'cg-bridge.exe';
 
 /**
- * The installed CG Control's state folder: Tauri's `data_dir` joined with `CG Control`
- * (`sidecar.rs` `paths`) — `%APPDATA%\CG Control` on Windows. The dev station never writes here.
+ * CG Control's own folder: `%APPDATA%\CG Control` on Windows (`shell_log.rs`). Today it holds only
+ * `logs\shell.log`; a CG Control `0.9.x` kept its own bridge's `.cg-runtime\` here, and that is the
+ * folder CG Bridge's one-time import reads (`import-state.ts`). Elsewhere, where Tauri's `data_dir`
+ * would put it. The dev station never writes here.
  */
 export function installedStateDir(env, platform, home) {
   if (platform === 'win32') {
@@ -70,9 +80,23 @@ export function installedStateDir(env, platform, home) {
 }
 
 /**
+ * `CENTRAL-BRIDGE-01` — CG Bridge's own folder, `%ProgramData%\CG Bridge`: its configuration
+ * (`cg-bridge.json`), its state (`.cg-runtime\`) and its logs (`tools/bridge-installer/cg-bridge.nsi`).
+ * CG Bridge is a Windows service and keeps no folder elsewhere: `null`. The dev station never writes
+ * here either. An empty `ProgramData` is no value — a relative folder would guard nothing.
+ */
+export function bridgeStateDir(env, platform) {
+  if (platform !== 'win32') return null;
+  const given = env.ProgramData;
+  const base = typeof given === 'string' && given.trim() !== '' ? given : 'C:\\ProgramData';
+  return path.win32.join(base, 'CG Bridge');
+}
+
+/**
  * The dev station's own state folder: `%LOCALAPPDATA%\CG Control Dev` on Windows — outside the
  * repo, so a `git clean` never takes the station's Playout, channel or sign-in with it, and
- * outside the installed app's Roaming folder. `CG_DEV_STATION_HOME` moves it (the tests do).
+ * outside CG Control's Roaming folder and CG Bridge's `%ProgramData%` one. `CG_DEV_STATION_HOME`
+ * moves it (the tests do).
  */
 export function devStateDir(env, platform, home) {
   const chosen = env.CG_DEV_STATION_HOME;
@@ -99,9 +123,28 @@ export function isInside(child, parent, platform) {
 }
 
 /**
- * Every file the bridge persists, NAMED — under `<state>/.cg-runtime/`, the installed app's own
- * layout. Isolation is asserted by explicit flags, never by the absence of one: a path left to its
- * default is a path that reads `~/.cg-runtime`, which on this machine names a real plant.
+ * The launcher's refusal when the dev state folder overlaps an installed app's own — CG Control's,
+ * or (on Windows) CG Bridge's — in either direction, or `null` when it overlaps neither.
+ */
+export function stateOverlap(root, env, platform, home) {
+  const guarded = [
+    { owner: 'CG Control', dir: installedStateDir(env, platform, home) },
+    { owner: 'CG Bridge', dir: bridgeStateDir(env, platform) },
+  ];
+  for (const { owner, dir } of guarded) {
+    if (dir === null) continue;
+    if (isInside(root, dir, platform) || isInside(dir, root, platform)) {
+      return `The dev state folder ${root} overlaps ${owner}'s own ${dir} — refusing.`;
+    }
+  }
+  return null;
+}
+
+/**
+ * Every file the bridge persists, NAMED — under `<state>/.cg-runtime/`, CG Bridge's own layout
+ * (`%ProgramData%\CG Bridge\.cg-runtime\`). Isolation is asserted by explicit flags, never by the
+ * absence of one: a path left to its default is a path that reads `~/.cg-runtime`, which on this
+ * machine names a real plant.
  */
 export function stationPaths(stateDir, platform) {
   const p = platform === 'win32' ? path.win32 : path.posix;
@@ -137,7 +180,7 @@ export function stationPaths(stateDir, platform) {
     bridgeLog: p.join(stateDir, 'bridge.log'),
     /**
      * `FIELD-FIXES-01-A` — every AMCP command the bridge sends, its reply line and its time. Beside
-     * `bridge.log`, as the installed app keeps its own beside its `bridge.log`.
+     * `bridge.log`, as CG Bridge keeps its own `amcp.log` beside the service's output in `logs\`.
      */
     amcpLog: p.join(stateDir, 'amcp.log'),
   };
@@ -220,8 +263,11 @@ function pathFlags(paths) {
 }
 
 /**
- * The bridge, as CG Control starts it (`sidecar.rs`: `--first-run`, the lifeline, 7911) — with every
- * path named, the Playout address as its flag, and its console listener on the internal port.
+ * The bridge, started as a station's bridge starts: in first-run (`--first-run`, as CG Bridge the
+ * service starts until a station admin picks its channels), on the control port 5280 and the template
+ * port 7911 CG Bridge binds, and with the stdin lifeline (`--exit-on-stdin-close`: it stops when this
+ * launcher does) — with every path named, the Playout address as its flag, and its console listener
+ * on the internal port (the launcher's own readiness probe).
  *
  * ⚠ NO `--caspar-host`, `--amcp-port` or `--osc-port`: any one of them makes the bridge build its
  * CasparCG connection from flags and ignore the one first-run writes from the Playout's channel
@@ -247,9 +293,10 @@ export function bridgeArgs(paths, playoutAddress, ports = {}) {
 }
 
 /**
- * The ONE writer of the Playout target — the bridge's own one-shot, exactly as CG Control's
- * `set_playout_address` runs it. It replaces the whole Playout group, so an issuer adopted from
- * the previous address is cleared and the next station-admin sign-in adopts again.
+ * The ONE writer of the dev station's Playout target — the bridge's own one-shot
+ * `--set-playout-address`, a DEV-ONLY writer now: CG Bridge's installed configuration is written by
+ * its installer through `--write-service-config`. It replaces the whole Playout group, so an issuer
+ * adopted from the previous address is cleared and the next station-admin sign-in adopts again.
  */
 export function setAddressArgs(paths, address) {
   return [
@@ -264,9 +311,11 @@ export function setAddressArgs(paths, address) {
 
 /**
  * The console server's environment: the caller's, minus the two variables that would move its bind,
- * plus the two the runtime's Vite config reads — the bridge's listener it relays `/pgm/` and
- * `/__cg/` to, and (`FIELD-FIXES-01` H) the one host a page asked for under `localhost` is sent
- * to, because the Playout's CORS list admits `127.0.0.1` and never `localhost`.
+ * plus the two the runtime's Vite config reads — `CG_BRIDGE_CONSOLE`, the bridge's internal listener
+ * it relays `/__cg/` to (the PROGRAM picture does not come that way any more: the console loads
+ * `/pgm/<n>?ticket=…` from the bridge's control port, 5280, directly), and (`FIELD-FIXES-01` H)
+ * `CG_CONSOLE_HOST`, the one host a page asked for under `localhost` is sent to, because the
+ * Playout's CORS list admits `127.0.0.1` and never `localhost`.
  */
 export function viteEnv(env, bridgeConsole) {
   const { HOST: _host, PORT: _port, ...rest } = env;
@@ -295,13 +344,6 @@ export function buildArgs() {
   return ['run', 'build', '--filter=@cg/caspar-bridge...', '--filter=@cg/runtime^...'];
 }
 
-/** `Y`, `yes` or a bare Enter. Anything else — including no answer at all — is a no. */
-export function answerIsYes(answer) {
-  if (typeof answer !== 'string') return false;
-  const a = answer.trim().toLowerCase();
-  return a === '' || a === 'y' || a === 'yes';
-}
-
 /** `tasklist /FO CSV /NH` → `{ name, pid }` per process. */
 export function parseTasklist(text) {
   const out = [];
@@ -316,8 +358,8 @@ export function parseTasklist(text) {
 
 /**
  * `netstat -ano` → who holds which port. A TCP LISTENER is recognised by its foreign address ending
- * `:0` — locale-independent, unlike the word LISTENING (the rule `sidecar.rs` and the connection
- * check use); a UDP socket has no state column and is always a holder.
+ * `:0` — locale-independent, unlike the word LISTENING (the rule the bridge's connection check uses,
+ * `connection-check.ts`); a UDP socket has no state column and is always a holder.
  */
 export function parseNetstat(text) {
   const out = [];
@@ -334,26 +376,33 @@ export function parseNetstat(text) {
 }
 
 /**
- * What stands in the dev station's way: the installed CG Control's processes (to ASK about), and
- * any OTHER program on one of its ports (to NAME — never to stop: it is not ours to close).
+ * 🔴 What stands in the dev station's way: every program on one of its ports, NAMED — and never
+ * stopped. None of them is ours to close: on a Playout machine CG Bridge IS the plant's bridge, and
+ * Windows restarts it five seconds after its process dies, so ending it is both useless and harmful.
+ * A process that holds no port is never in the way — CG Control included: it is only a console now,
+ * and it may even connect to the dev station.
  */
 export function assess(processes, listeners, ports = STATION_PORTS) {
   const nameOf = (pid) => processes.find((p) => p.pid === pid)?.name ?? 'another program';
-  const isInstalled = (name) => INSTALLED_IMAGES.includes(name.toLowerCase());
-  const installed = processes.filter((p) => isInstalled(p.name));
   const blocked = [];
   for (const want of ports) {
     const holder = listeners.find((l) => l.proto === want.proto && l.port === want.port);
     if (holder === undefined) continue;
-    const name = nameOf(holder.pid);
-    if (!isInstalled(name)) blocked.push({ ...want, pid: holder.pid, name });
+    blocked.push({ ...want, pid: holder.pid, name: nameOf(holder.pid) });
   }
-  return { installed, blocked };
+  return { blocked };
 }
 
-/** A port another program holds, in one line. */
+/**
+ * A port another program holds, in one line — CG Bridge by its name, with how to stop it by hand.
+ * The line only says; the dev station offers to stop nothing.
+ */
 export function blockedLine(b) {
   const port = b.proto === 'udp' ? `${String(b.port)}/udp` : String(b.port);
+  if (b.name.toLowerCase() === CG_BRIDGE_IMAGE) {
+    // One literal on one line, so a sweep for this sentence finds it (CLAUDE.md golden rule 9).
+    return `Port ${port} is held by CG Bridge (${b.name}, PID ${String(b.pid)}) — the CG Bridge service, or an older CG Control's own bridge. Stop it (Stop-Service CGBridge in an administrator PowerShell, or close that CG Control), then run pnpm dev:station again.`;
+  }
   return `Port ${port} is held by ${b.name} (PID ${String(b.pid)}) — stop it, then run pnpm dev:station again.`;
 }
 

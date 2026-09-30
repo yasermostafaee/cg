@@ -1,7 +1,7 @@
 /** `DEV-STATION-01` — the typed surface of `../src/station-sequence.mjs`. Update both together. */
 declare module '*station-sequence.mjs' {
+  /** Every program on a station port — named, never stopped. */
   export interface Seen {
-    readonly installed: readonly { readonly name: string; readonly pid: number }[];
     readonly blocked: readonly {
       readonly proto: 'tcp' | 'udp';
       readonly port: number;
@@ -29,11 +29,14 @@ declare module '*station-sequence.mjs' {
     readonly notes?: readonly string[];
     stop(): Promise<void>;
   }
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` — there is no `stop`: the sequence is given no way to end a process, so a
+   * CG Bridge service on the station's ports is named and refused, and never stopped.
+   */
   export interface DevStationDeps<R = unknown> {
     probe(): Promise<Seen>;
-    /** The operator's answer, or `null` when there is nobody to ask. */
+    /** The Playout address typed at the prompt, or `null` when there is nobody to ask. */
     ask(question: string): Promise<string | null>;
-    stop(pids: readonly number[]): Promise<void>;
     /** The build's exit code. */
     build(): Promise<number> | number;
     readPlayoutAddress(): string | null;
@@ -47,7 +50,7 @@ declare module '*station-sequence.mjs' {
     print(line: string): void;
   }
   export type Outcome =
-    | { outcome: 'declined' | 'blocked' | 'build-failed' | 'no-address' | 'failed' }
+    | { outcome: 'blocked' | 'build-failed' | 'no-address' | 'failed' }
     | { outcome: 'running'; running: unknown; fake: FakePlayout | undefined };
 
   export function runDevStation(

@@ -72,21 +72,31 @@ declare module '*station-plan.mjs' {
   export const OSC_PORT: 6251;
   export const BRIDGE_CONSOLE_PORT: 5175;
   export const STATION_PORTS: readonly StationPort[];
-  export const INSTALLED_IMAGES: readonly string[];
-  export const ASK: string;
-  export const DECLINED: string;
 
+  /** CG Control's own folder — `%APPDATA%\CG Control` on Windows. */
   export function installedStateDir(
     env: Record<string, string | undefined>,
     platform: string,
     home: string,
   ): string;
+  /** `CENTRAL-BRIDGE-01` — CG Bridge's own folder, `%ProgramData%\CG Bridge`; `null` off Windows. */
+  export function bridgeStateDir(
+    env: Record<string, string | undefined>,
+    platform: string,
+  ): string | null;
   export function devStateDir(
     env: Record<string, string | undefined>,
     platform: string,
     home: string,
   ): string;
   export function isInside(child: string, parent: string, platform: string): boolean;
+  /** The launcher's refusal when the dev state overlaps CG Control's or CG Bridge's folder, or `null`. */
+  export function stateOverlap(
+    root: string,
+    env: Record<string, string | undefined>,
+    platform: string,
+    home: string,
+  ): string | null;
   export function stationPaths(stateDir: string, platform: string): StationPaths;
   export function fakeModulePaths(repo: string): FakeModulePaths;
   /** `DEV-LOCAL-CASPAR-01` — `fake`, or `fake-local` with `--caspar`. */
@@ -105,14 +115,14 @@ declare module '*station-plan.mjs' {
     bridgeConsole: string,
   ): Record<string, string | undefined>;
   export function buildArgs(): string[];
-  export function answerIsYes(answer: string | null | undefined): boolean;
   export function parseTasklist(text: string): ProcessRow[];
   export function parseNetstat(text: string): Listener[];
+  /** Every program on a station port, named — never stopped. */
   export function assess(
     processes: readonly ProcessRow[],
     listeners: readonly Listener[],
     ports?: readonly StationPort[],
-  ): { installed: ProcessRow[]; blocked: Blocked[] };
+  ): { blocked: Blocked[] };
   export function blockedLine(b: Blocked): string;
   export function banner(input: {
     stateDir: string;

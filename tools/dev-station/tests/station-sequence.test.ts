@@ -1,16 +1,25 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
-import { afterEach, describe, expect, it } from 'vitest';
-import { ASK, CONSOLE_URL, DECLINED } from '../src/station-plan.mjs';
-import { isAlive, stopProcesses } from '../src/station-processes.mjs';
+import { afterEach, describe, expect, expectTypeOf, it } from 'vitest';
+import {
+  CONSOLE_URL,
+  assess,
+  type Listener,
+  type ProcessRow,
+  type StationPort,
+} from '../src/station-plan.mjs';
+import * as stationProcesses from '../src/station-processes.mjs';
 import { runDevStation, type DevStationDeps, type Seen } from '../src/station-sequence.mjs';
 
 /**
- * 🔴 `DEV-STATION-01` — **THE SEQUENCE: ask before stopping, build before starting, one origin.**
+ * 🔴 `DEV-STATION-01` — **THE SEQUENCE: name what holds the station's ports and stop NOTHING, build
+ * before starting, one origin.**
  *
- * The "installed app" here is a REAL process holding a REAL port, stopped — on a yes — by the real
- * stop code. Only its NAME is given (`cg-bridge.exe`), because the test cannot be the installed app;
- * the Windows reader that finds that name is pinned in `station-plan.test.ts`.
+ * `CENTRAL-BRIDGE-01` — the CG Bridge here is a REAL process holding a REAL port (an ephemeral one,
+ * never a station port), judged by the REAL `assess` and left running: the sequence is given no way
+ * to stop it, and the test proves it still holds its port afterwards. Only its NAME is given
+ * (`cg-bridge.exe`), because the test cannot be the service; the Windows reader that finds that name
+ * is pinned in `station-plan.test.ts`.
  */
 
 const children: ChildProcess[] = [];
@@ -41,8 +50,18 @@ function held(port: number): Promise<boolean> {
   });
 }
 
-/** A stand-in for CG Control's bridge: a process that holds the port until it is stopped. */
-async function fakeInstalledApp(): Promise<{ pid: number; port: number }> {
+/** Is this process still there? Signal 0 asks without touching it. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A stand-in for CG Bridge: a real process holding a real ephemeral port until the test ends. */
+async function holdPort(): Promise<{ pid: number; port: number }> {
   const port = await freePort();
   const child = spawn(
     process.execPath,
@@ -58,6 +77,13 @@ async function fakeInstalledApp(): Promise<{ pid: number; port: number }> {
   return { pid: child.pid ?? -1, port };
 }
 
+/** What the probe reads: the process list, the listeners, and which ports are the station's. */
+interface Holding {
+  readonly processes?: readonly ProcessRow[];
+  readonly listeners?: readonly Listener[];
+  readonly ports?: readonly StationPort[];
+}
+
 interface Harness {
   deps: DevStationDeps;
   calls: string[];
@@ -67,32 +93,23 @@ interface Harness {
 }
 
 function harness(
-  overrides: Partial<DevStationDeps> & { installedPid?: number; answer?: string | null } = {},
+  overrides: Partial<DevStationDeps> & { holding?: Holding; answer?: string | null } = {},
 ): Harness {
   const calls: string[] = [];
   const printed: string[] = [];
   const asked: string[] = [];
   const opened: string[] = [];
   let address: string | null = 'http://192.168.21.111:8080';
-  const { installedPid, answer, ...rest } = overrides;
+  const { holding, answer, ...rest } = overrides;
   const deps: DevStationDeps = {
+    // The REAL judgement of who holds what, over the tables the test gives.
     probe: async (): Promise<Seen> => {
       calls.push('probe');
-      return {
-        installed:
-          installedPid !== undefined && isAlive(installedPid)
-            ? [{ name: 'cg-bridge.exe', pid: installedPid }]
-            : [],
-        blocked: [],
-      };
+      return assess(holding?.processes ?? [], holding?.listeners ?? [], holding?.ports);
     },
     ask: async (question) => {
       asked.push(question);
-      return answer === undefined ? 'y' : answer;
-    },
-    stop: async (pids) => {
-      calls.push('stop');
-      await stopProcesses(pids, { graceMs: 1500 });
+      return answer === undefined ? null : answer;
     },
     build: () => {
       calls.push('build');
@@ -138,52 +155,94 @@ function harness(
 
 const OPTIONS = { fake: false, playout: undefined, open: true, stateDir: 'C:\\dev' } as const;
 
-describe('asks before stopping the installed CG Control', () => {
-  it('on "n" it does NOT stop it: the app keeps its port, nothing is built or started', async () => {
-    const app = await fakeInstalledApp();
-    const h = harness({ installedPid: app.pid, answer: 'n' });
+/** `CENTRAL-BRIDGE-01` — the one line that names CG Bridge on a port: what it is, how to stop it. */
+const cgBridgeLine = (port: string, pid: number): string =>
+  `Port ${port} is held by CG Bridge (cg-bridge.exe, PID ${String(pid)}) — the CG Bridge service, or an older CG Control's own bridge. Stop it (Stop-Service CGBridge in an administrator PowerShell, or close that CG Control), then run pnpm dev:station again.`;
+
+describe('🔴 `CENTRAL-BRIDGE-01` — the dev station stops NOTHING: what holds its ports is named, and it refuses', () => {
+  it('CG Bridge on a station port: ONE line naming it and how to stop it by hand — and the real process still holds its port afterwards', async () => {
+    const bridge = await holdPort();
+    // Control: both instruments see the stand-in before the run, so "still there" below reads something.
+    expect(alive(bridge.pid)).toBe(true);
+    expect(await held(bridge.port)).toBe(true);
+    const h = harness({
+      holding: {
+        processes: [{ name: 'cg-bridge.exe', pid: bridge.pid }],
+        listeners: [{ proto: 'tcp', port: bridge.port, pid: bridge.pid }],
+        // The test's own ephemeral port stands in for 5280: no station port is bound here.
+        ports: [{ proto: 'tcp', port: bridge.port }],
+      },
+    });
     const result = await runDevStation(OPTIONS, h.deps);
-    expect(result.outcome).toBe('declined');
-    expect(h.asked).toEqual([ASK]);
-    expect(h.printed).toEqual([DECLINED]);
-    expect(h.calls).not.toContain('stop');
-    expect(h.calls.some((c) => c === 'build' || c.startsWith('start'))).toBe(false);
-    expect(isAlive(app.pid)).toBe(true);
-    expect(await held(app.port)).toBe(true);
+    expect(result.outcome).toBe('blocked');
+    expect(h.printed).toEqual([cgBridgeLine(String(bridge.port), bridge.pid)]);
+    // Nothing asked, built or started: the probe was the whole run.
+    expect(h.asked).toEqual([]);
+    expect(h.calls).toEqual(['probe']);
+    // 🔴 And nothing stopped: the process is alive and still holds its port.
+    expect(alive(bridge.pid)).toBe(true);
+    expect(await held(bridge.port)).toBe(true);
   });
 
-  it('with nobody to ask (no terminal) it does not stop it either', async () => {
-    const app = await fakeInstalledApp();
-    const h = harness({ installedPid: app.pid, answer: null });
-    expect((await runDevStation(OPTIONS, h.deps)).outcome).toBe('declined');
-    expect(isAlive(app.pid)).toBe(true);
+  it('the sequence is given no way to stop a process: no `stop` dependency, and the process module exports none', () => {
+    expectTypeOf<DevStationDeps>().not.toHaveProperty('stop');
+    // Control: the type instrument does see a dependency that is there.
+    expectTypeOf<DevStationDeps>().toHaveProperty('probe');
+    expect(Object.keys(stationProcesses).sort()).toEqual(['probeStation', 'writeConsoleStub']);
   });
 
-  it('CONTROL — on "Y" it stops it, the port is freed, and the station starts', async () => {
-    const app = await fakeInstalledApp();
-    expect(await held(app.port)).toBe(true);
-    const h = harness({ installedPid: app.pid, answer: 'Y' });
-    const result = await runDevStation(OPTIONS, h.deps);
-    expect(result.outcome).toBe('running');
-    expect(h.calls.indexOf('stop')).toBeLessThan(h.calls.indexOf('build'));
-    expect(isAlive(app.pid)).toBe(false);
-    expect(await held(app.port)).toBe(false);
+  it('every held port is its own line, in the station’s order — CG Bridge’s three and another program’s console port', async () => {
+    const h = harness({
+      holding: {
+        processes: [
+          { name: 'cg-bridge.exe', pid: 1234 },
+          { name: 'node.exe', pid: 4242 },
+        ],
+        listeners: [
+          { proto: 'udp', port: 6251, pid: 1234 },
+          { proto: 'tcp', port: 5280, pid: 1234 },
+          { proto: 'tcp', port: 7911, pid: 1234 },
+          { proto: 'tcp', port: 5174, pid: 4242 },
+        ],
+      },
+    });
+    expect((await runDevStation(OPTIONS, h.deps)).outcome).toBe('blocked');
+    expect(h.printed).toEqual([
+      'Port 5174 is held by node.exe (PID 4242) — stop it, then run pnpm dev:station again.',
+      cgBridgeLine('5280', 1234),
+      cgBridgeLine('7911', 1234),
+      cgBridgeLine('6251/udp', 1234),
+    ]);
+    expect(h.asked).toEqual([]);
+    expect(h.calls).toEqual(['probe']);
+  });
+
+  it('🔴 CG Control running and holding no port: no question, no line, and the station starts', async () => {
+    const h = harness({
+      holding: { processes: [{ name: 'cg-control.exe', pid: 13468 }], listeners: [] },
+    });
+    expect((await runDevStation(OPTIONS, h.deps)).outcome).toBe('running');
+    expect(h.asked).toEqual([]);
+    expect(h.printed.filter((line) => line.startsWith('Port '))).toEqual([]);
     expect(h.calls).toContain('start http://192.168.21.111:8080');
   });
 
-  it('another program on a station port is NAMED and left alone — never asked about, never stopped', async () => {
+  it('CONTROL — the same process list with a program on a station port does refuse, naming only that program', async () => {
     const h = harness({
-      probe: async () => ({
-        installed: [],
-        blocked: [{ proto: 'tcp', port: 5174, pid: 4242, name: 'node.exe' }],
-      }),
+      holding: {
+        processes: [
+          { name: 'cg-control.exe', pid: 13468 },
+          { name: 'node.exe', pid: 4242 },
+        ],
+        listeners: [{ proto: 'tcp', port: 5280, pid: 4242 }],
+      },
     });
     expect((await runDevStation(OPTIONS, h.deps)).outcome).toBe('blocked');
-    expect(h.asked).toEqual([]);
-    expect(h.calls).not.toContain('stop');
     expect(h.printed).toEqual([
-      'Port 5174 is held by node.exe (PID 4242) — stop it, then run pnpm dev:station again.',
+      'Port 5280 is held by node.exe (PID 4242) — stop it, then run pnpm dev:station again.',
     ]);
+    expect(h.asked).toEqual([]);
+    expect(h.calls).toEqual(['probe']);
   });
 });
 
@@ -236,6 +295,16 @@ describe('the Playout address — asked once, remembered, changed by --playout',
     expect(result.outcome).toBe('running');
     expect(h.asked).toHaveLength(1);
     expect(h.calls).toContain('start http://192.168.21.111:8080');
+  });
+
+  it('none remembered and nobody to ask: one line, and nothing starts', async () => {
+    const h = harness({ readPlayoutAddress: () => null });
+    expect((await runDevStation(OPTIONS, h.deps)).outcome).toBe('no-address');
+    expect(h.asked).toHaveLength(1);
+    expect(h.printed).toEqual([
+      'No Playout address — run pnpm dev:station --playout <address>, or --fake.',
+    ]);
+    expect(h.calls.some((c) => c.startsWith('start'))).toBe(false);
   });
 
   it('remembered: not asked', async () => {

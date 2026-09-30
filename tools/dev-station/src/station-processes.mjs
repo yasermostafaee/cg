@@ -1,6 +1,7 @@
 /**
- * `DEV-STATION-01` — **WHO IS RUNNING, AND STOPPING IT**, for the launcher. Separate from the
- * sequence so the tests stop a real process with the real code.
+ * `DEV-STATION-01` — **WHO HOLDS THE STATION'S PORTS**, for the launcher: read, and never stopped.
+ * `CENTRAL-BRIDGE-01` took the stop code out: a CG Bridge service holding those ports is not the
+ * dev station's to end (`assess` in `station-plan.mjs` says why).
  */
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
@@ -36,69 +37,15 @@ function run(file, args) {
 }
 
 /**
- * The installed CG Control's processes, and any other program on the station's ports. Windows
- * reads `tasklist` and `netstat -ano` (the readers `sidecar.rs` uses). Elsewhere there is no
- * installed CG Control, and a held port is reported by the process that fails to bind it.
+ * Every program on one of the station's ports, by name. Windows reads `tasklist` and `netstat -ano`
+ * (the readers the bridge's connection check uses, `connection-check.ts`). Elsewhere there is no CG
+ * Bridge service, and a held port is reported by the process that fails to bind it.
  */
 export async function probeStation(platform = process.platform, ports = STATION_PORTS) {
-  if (platform !== 'win32') return { installed: [], blocked: [] };
+  if (platform !== 'win32') return { blocked: [] };
   const [tasks, table] = await Promise.all([
     run('tasklist', ['/FO', 'CSV', '/NH']),
     run('netstat', ['-ano']),
   ]);
   return assess(parseTasklist(tasks), parseNetstat(table), ports);
-}
-
-/** Is this process still there? */
-export function isAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (err) {
-    // EPERM: it exists and belongs to someone else — still alive.
-    return err instanceof Error && 'code' in err && err.code === 'EPERM';
-  }
-}
-
-async function waitGone(pids, ms) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (pids.every((pid) => !isAlive(pid))) return true;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  return pids.every((pid) => !isAlive(pid));
-}
-
-/**
- * Stop these processes: ASKED to close first (on Windows `taskkill /T` without `/F`, which a
- * window receives as a close, so CG Control shuts its own bridge down), then ended if they have
- * not gone within `graceMs`. Called only after the operator said yes.
- */
-export async function stopProcesses(pids, { platform = process.platform, graceMs = 8000 } = {}) {
-  if (pids.length === 0) return;
-  if (platform === 'win32') {
-    await Promise.all(pids.map((pid) => run('taskkill', ['/PID', String(pid), '/T'])));
-  } else {
-    for (const pid of pids) {
-      try {
-        process.kill(pid, 'SIGTERM');
-      } catch {
-        // Already gone.
-      }
-    }
-  }
-  if (await waitGone(pids, graceMs)) return;
-  const left = pids.filter((pid) => isAlive(pid));
-  if (platform === 'win32') {
-    await Promise.all(left.map((pid) => run('taskkill', ['/PID', String(pid), '/T', '/F'])));
-  } else {
-    for (const pid of left) {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch {
-        // Already gone.
-      }
-    }
-  }
-  await waitGone(left, 5000);
 }

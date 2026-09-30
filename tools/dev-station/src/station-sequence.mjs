@@ -2,15 +2,17 @@
  * 🔴 `DEV-STATION-01` — **THE LAUNCHER'S SEQUENCE**, with every side effect injected so the tests
  * drive the same code the command runs (`dev-station-cli.mjs` wires the real ones):
  *
- *   1. the installed CG Control in the way? ASK — and stop it only on a yes. Never without asking;
- *      any other program on the station's ports is NAMED and left alone;
+ *   1. anything on the station's ports? NAME every holder, one line per port, and refuse. 🔴 The
+ *      dev station stops NOTHING, and is given no way to: CG Bridge on a Playout machine is the
+ *      plant's bridge, and Windows restarts it five seconds after its process dies
+ *      (`CENTRAL-BRIDGE-01`). CG Control holds no port, so it is never in the way;
  *   2. BUILD — before anything starts, so no stale compiled code ever runs;
  *   3. the Playout — `--fake`'s own (a whole fake station, started fresh — or, with `--caspar`, the
  *      fake Playout in front of this machine's own CasparCG), `--playout <url>`, the remembered one,
  *      or asked for ONCE;
  *   4. START the bridge and the console, then the banner, then the browser.
  */
-import { ASK, CONSOLE_URL, DECLINED, answerIsYes, banner, blockedLine } from './station-plan.mjs';
+import { CONSOLE_URL, banner, blockedLine } from './station-plan.mjs';
 
 const ASK_ADDRESS = 'Playout address (for example 192.168.21.111): ';
 
@@ -19,20 +21,8 @@ const ASK_ADDRESS = 'Playout address (for example 192.168.21.111): ';
  * @param {object} deps — see `types/station-sequence.d.ts`
  */
 export async function runDevStation(options, deps) {
-  // 1 — who stands in the way.
-  let seen = await deps.probe();
-  if (seen.installed.length > 0) {
-    if (!answerIsYes(await deps.ask(ASK))) {
-      deps.print(DECLINED);
-      return { outcome: 'declined' };
-    }
-    await deps.stop(seen.installed.map((p) => p.pid));
-    seen = await deps.probe();
-    if (seen.installed.length > 0) {
-      deps.print('CG Control did not close — close it by hand, then run pnpm dev:station again.');
-      return { outcome: 'declined' };
-    }
-  }
+  // 1 — who stands in the way: named, and left exactly as it is.
+  const seen = await deps.probe();
   if (seen.blocked.length > 0) {
     for (const b of seen.blocked) deps.print(blockedLine(b));
     return { outcome: 'blocked' };

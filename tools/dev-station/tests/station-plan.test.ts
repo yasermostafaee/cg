@@ -6,11 +6,11 @@ import {
   BRIDGE_CONSOLE_PORT,
   CONSOLE_URL,
   STATION_PORTS,
-  answerIsYes,
   assess,
   banner,
   blockedLine,
   bridgeArgs,
+  bridgeStateDir,
   buildArgs,
   devStateDir,
   fakeModulePaths,
@@ -22,15 +22,20 @@ import {
   parseTasklist,
   previousStateDir,
   setAddressArgs,
+  stateOverlap,
   stationPaths,
   viteArgs,
   viteEnv,
 } from '../src/station-plan.mjs';
 
 /**
- * 🔴 `DEV-STATION-01` — **THE PLAN: one origin, the installed app's ports, its own state, and every
- * path named.** Each absence has its positive control beside it.
+ * 🔴 `DEV-STATION-01` — **THE PLAN: one origin, CG Bridge's ports, its own state, and every path
+ * named.** Each absence has its positive control beside it.
  */
+
+/** `CENTRAL-BRIDGE-01` — the one line that names CG Bridge on a port: what it is, how to stop it. */
+const cgBridgeLine = (port: string, name: string, pid: number): string =>
+  `Port ${port} is held by CG Bridge (${name}, PID ${String(pid)}) — the CG Bridge service, or an older CG Control's own bridge. Stop it (Stop-Service CGBridge in an administrator PowerShell, or close that CG Control), then run pnpm dev:station again.`;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE_CLI = path.resolve(here, '../../caspar-bridge/bin/caspar-bridge.mjs');
@@ -61,7 +66,7 @@ describe('the origin — exactly http://127.0.0.1:5174', () => {
     expect(lines).not.toMatch(/localhost/i);
   });
 
-  it('the station binds the installed app’s own ports, plus the one internal listener', () => {
+  it('the station binds CG Bridge’s three ports and the console’s, plus the one internal listener', () => {
     expect(STATION_PORTS).toEqual([
       { proto: 'tcp', port: 5174 },
       { proto: 'tcp', port: 5280 },
@@ -73,7 +78,7 @@ describe('the origin — exactly http://127.0.0.1:5174', () => {
 });
 
 describe('isolation — its own state folder, every path named', () => {
-  it('the dev state is %LOCALAPPDATA%\\CG Control Dev; the installed app’s is %APPDATA%\\CG Control; neither holds the other', () => {
+  it('the dev state is %LOCALAPPDATA%\\CG Control Dev; CG Control’s is %APPDATA%\\CG Control; neither holds the other', () => {
     const dev = devStateDir(WIN_ENV, 'win32', 'C:\\Users\\op');
     const installed = installedStateDir(WIN_ENV, 'win32', 'C:\\Users\\op');
     expect(dev).toBe('C:\\Users\\op\\AppData\\Local\\CG Control Dev');
@@ -122,7 +127,7 @@ describe('isolation — its own state folder, every path named', () => {
     }
   });
 
-  it('the bridge is started as CG Control starts it, with no flag that would override the plant connection', () => {
+  it('the bridge is started as a station’s bridge starts — first-run, the lifeline, 5280 and 7911 — with no flag that would override the plant connection', () => {
     const args = bridgeArgs(stationPaths('/s', 'linux'), 'http://192.168.21.111:8080');
     for (const flag of ['--first-run', '--exit-on-stdin-close']) expect(args).toContain(flag);
     expect(
@@ -151,6 +156,54 @@ describe('isolation — its own state folder, every path named', () => {
       '--set-playout-address',
       '192.168.21.111',
     ]);
+  });
+});
+
+describe('`CENTRAL-BRIDGE-01` — the dev state keeps out of CG Bridge’s folder too', () => {
+  const HOME = 'C:\\Users\\op';
+  const ENV = { ...WIN_ENV, ProgramData: 'C:\\ProgramData' };
+
+  it('CG Bridge’s folder is %ProgramData%\\CG Bridge — C:\\ProgramData when unset — and there is none off Windows', () => {
+    expect(bridgeStateDir(ENV, 'win32')).toBe('C:\\ProgramData\\CG Bridge');
+    expect(bridgeStateDir({ ProgramData: 'E:\\Data' }, 'win32')).toBe('E:\\Data\\CG Bridge');
+    expect(bridgeStateDir({}, 'win32')).toBe('C:\\ProgramData\\CG Bridge');
+    // An empty value names no folder, and a relative one would guard nothing.
+    expect(bridgeStateDir({ ProgramData: ' ' }, 'win32')).toBe('C:\\ProgramData\\CG Bridge');
+    expect(bridgeStateDir(ENV, 'linux')).toBeNull();
+    expect(bridgeStateDir(ENV, 'darwin')).toBeNull();
+  });
+
+  it('🔴 a dev folder inside it is refused, naming the folder; control: %LOCALAPPDATA%\\CG Control Dev overlaps neither', () => {
+    expect(stateOverlap('C:\\ProgramData\\CG Bridge\\dev', ENV, 'win32', HOME)).toBe(
+      "The dev state folder C:\\ProgramData\\CG Bridge\\dev overlaps CG Bridge's own C:\\ProgramData\\CG Bridge — refusing.",
+    );
+    // Whatever its casing — and the other way round: a dev folder that HOLDS CG Bridge's.
+    expect(stateOverlap('c:\\programdata\\cg bridge\\.cg-runtime', ENV, 'win32', HOME)).toMatch(
+      / overlaps CG Bridge's own C:\\ProgramData\\CG Bridge — refusing\.$/,
+    );
+    expect(stateOverlap('C:\\ProgramData', ENV, 'win32', HOME)).toBe(
+      "The dev state folder C:\\ProgramData overlaps CG Bridge's own C:\\ProgramData\\CG Bridge — refusing.",
+    );
+    // CG Control's folder is refused exactly as before.
+    expect(
+      stateOverlap('C:\\Users\\op\\AppData\\Roaming\\CG Control\\dev', ENV, 'win32', HOME),
+    ).toBe(
+      "The dev state folder C:\\Users\\op\\AppData\\Roaming\\CG Control\\dev overlaps CG Control's own C:\\Users\\op\\AppData\\Roaming\\CG Control — refusing.",
+    );
+    // CONTROL — the dev station's own folder overlaps neither; nor does a sibling whose name only
+    // starts with CG Bridge's.
+    const dev = devStateDir(ENV, 'win32', HOME);
+    expect(dev).toBe('C:\\Users\\op\\AppData\\Local\\CG Control Dev');
+    expect(stateOverlap(dev, ENV, 'win32', HOME)).toBeNull();
+    expect(stateOverlap('C:\\ProgramData\\CG Bridge Dev', ENV, 'win32', HOME)).toBeNull();
+  });
+
+  it('off Windows only CG Control’s folder is guarded: there is no CG Bridge folder to overlap', () => {
+    const env = { XDG_DATA_HOME: '/h/.local/share', ProgramData: '/h/.local/share' };
+    expect(stateOverlap('/h/.local/share/CG Control Dev', env, 'linux', '/h')).toBeNull();
+    expect(stateOverlap('/h/.local/share/CG Control/x', env, 'linux', '/h')).toBe(
+      "The dev state folder /h/.local/share/CG Control/x overlaps CG Control's own /h/.local/share/CG Control — refusing.",
+    );
   });
 });
 
@@ -241,21 +294,6 @@ describe('no stale code — the build covers what runs from dist', () => {
   });
 });
 
-describe('asking — a yes nobody typed is not a yes', () => {
-  it.each([
-    ['', true],
-    ['y', true],
-    ['Y', true],
-    [' yes ', true],
-    ['n', false],
-    ['no', false],
-    ['q', false],
-    [null, false],
-  ])('%j → %s', (answer, yes) => {
-    expect(answerIsYes(answer)).toBe(yes);
-  });
-});
-
 describe('who holds what — the Windows readers', () => {
   const TASKS = [
     '"System Idle Process","0","Services","0","8 K"',
@@ -281,22 +319,80 @@ describe('who holds what — the Windows readers', () => {
     expect(listeners.filter((l) => l.port === 5280)).toEqual([]);
   });
 
-  it('the installed CG Control is to ASK about; any other program on a port is NAMED, never stopped', () => {
-    const { installed, blocked } = assess(parseTasklist(TASKS), parseNetstat(NETSTAT));
-    expect(installed.map((p) => p.pid).sort()).toEqual([13468, 19360]);
+  it('🔴 every program on a station port is NAMED, one line per port — CG Bridge by its name — and CG Control, holding none, is no line at all', () => {
+    const { blocked } = assess(parseTasklist(TASKS), parseNetstat(NETSTAT));
     expect(blocked).toEqual([
+      { proto: 'tcp', port: 5174, pid: 19360, name: 'cg-bridge.exe' },
       { proto: 'tcp', port: 7911, pid: 4242, name: 'node.exe' },
       { proto: 'tcp', port: 5175, pid: 4242, name: 'node.exe' },
     ]);
-    const first = blocked[0];
-    if (first === undefined) throw new Error('nothing blocked');
-    expect(blockedLine(first)).toBe(
+    expect(blocked.map((b) => blockedLine(b))).toEqual([
+      cgBridgeLine('5174', 'cg-bridge.exe', 19360),
       'Port 7911 is held by node.exe (PID 4242) — stop it, then run pnpm dev:station again.',
+      'Port 5175 is held by node.exe (PID 4242) — stop it, then run pnpm dev:station again.',
+    ]);
+    // cg-control.exe (13468) is in the process list and on no line.
+    expect(blocked.some((b) => b.pid === 13468)).toBe(false);
+  });
+
+  it('🔴 `CENTRAL-BRIDGE-01` — cg-bridge.exe on 5280 is named as CG Bridge, with how to stop it by hand, and never an offer to', () => {
+    const { blocked } = assess(
+      [{ name: 'cg-bridge.exe', pid: 1234 }],
+      [{ proto: 'tcp', port: 5280, pid: 1234 }],
+    );
+    expect(blocked.map((b) => blockedLine(b))).toEqual([
+      "Port 5280 is held by CG Bridge (cg-bridge.exe, PID 1234) — the CG Bridge service, or an older CG Control's own bridge. Stop it (Stop-Service CGBridge in an administrator PowerShell, or close that CG Control), then run pnpm dev:station again.",
+    ]);
+  });
+
+  it('the service on all three of its ports is three lines, in the station’s order — the OSC one as 6251/udp', () => {
+    const { blocked } = assess(
+      [{ name: 'cg-bridge.exe', pid: 1234 }],
+      [
+        { proto: 'udp', port: 6251, pid: 1234 },
+        { proto: 'tcp', port: 7911, pid: 1234 },
+        { proto: 'tcp', port: 5280, pid: 1234 },
+      ],
+    );
+    expect(blocked.map((b) => blockedLine(b))).toEqual([
+      cgBridgeLine('5280', 'cg-bridge.exe', 1234),
+      cgBridgeLine('7911', 'cg-bridge.exe', 1234),
+      cgBridgeLine('6251/udp', 'cg-bridge.exe', 1234),
+    ]);
+  });
+
+  it('the image is matched whatever its casing and named as the reader reported it; control: any other image keeps the plain line', () => {
+    expect(blockedLine({ proto: 'tcp', port: 5280, pid: 7, name: 'CG-Bridge.EXE' })).toBe(
+      cgBridgeLine('5280', 'CG-Bridge.EXE', 7),
+    );
+    expect(blockedLine({ proto: 'tcp', port: 5280, pid: 7, name: 'cg-bridge-old.exe' })).toBe(
+      'Port 5280 is held by cg-bridge-old.exe (PID 7) — stop it, then run pnpm dev:station again.',
+    );
+    expect(blockedLine({ proto: 'udp', port: 6251, pid: 7, name: 'another program' })).toBe(
+      'Port 6251/udp is held by another program (PID 7) — stop it, then run pnpm dev:station again.',
     );
   });
 
+  it('🔴 CG Control running, holding no port, is not in the way; control: the same list with a program on a station port is', () => {
+    const processes = [
+      { name: 'cg-control.exe', pid: 13468 },
+      { name: 'node.exe', pid: 4242 },
+    ];
+    // CG Control connected to a CG Bridge: a connection, never a listener.
+    const connected = parseNetstat(
+      '  TCP    127.0.0.1:61234        127.0.0.1:5280         ESTABLISHED     13468',
+    );
+    expect(connected).toEqual([]);
+    expect(assess(processes, connected)).toEqual({ blocked: [] });
+    expect(assess(processes, [])).toEqual({ blocked: [] });
+    // CONTROL — the same processes, one of them on a station port: named, one line.
+    expect(assess(processes, [{ proto: 'tcp', port: 5280, pid: 4242 }])).toEqual({
+      blocked: [{ proto: 'tcp', port: 5280, pid: 4242, name: 'node.exe' }],
+    });
+  });
+
   it('control — nothing running, nothing held: nothing in the way', () => {
-    expect(assess([{ name: 'explorer.exe', pid: 1 }], [])).toEqual({ installed: [], blocked: [] });
+    expect(assess([{ name: 'explorer.exe', pid: 1 }], [])).toEqual({ blocked: [] });
   });
 });
 
