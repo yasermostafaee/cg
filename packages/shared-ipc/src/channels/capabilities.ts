@@ -91,8 +91,57 @@ export const BridgeCapabilitiesChannel = defineChannel(
      * in: in the `channel` phase the sign-in IS first-run's step 2.
      */
     setup: SetupPhaseSchema.optional(),
+    /**
+     * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **THIS BRIDGE'S RELEASE VERSION** (`0.10.0`), compared by a
+     * console by RELEASE LINE (major.minor, {@link sameReleaseLine}).
+     *
+     * ⚠ This does not undo the header's reasoning — the channel list stays, and still answers
+     * `B-153`'s question (does this bridge route what this page calls). The release line answers
+     * a second one that list cannot: CG Bridge and CG Control are ONE release installed on
+     * different machines, and between releases a channel can keep its name while its payload
+     * changes, so a console from another release may read the bridge's state wrongly with every
+     * channel present. A patch difference is allowed, so a patch bump never reads as a mismatch.
+     *
+     * OPTIONAL: a bridge that predates this field cannot say, and is read as a different release
+     * — which it is (it predates `0.10`).
+     */
+    bridgeVersion: z.string().optional(),
   }),
 );
+
+/** `0.10.0` → `0.10`; anything that is not `<major>.<minor>.<patch>` → `null`. */
+export function releaseLine(version: string | null | undefined): string | null {
+  const match = /^(\d+)\.(\d+)\.\d+$/.exec(version ?? '');
+  return match === null ? null : `${match[1] ?? ''}.${match[2] ?? ''}`;
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` — **IS THIS BRIDGE ON THIS CONSOLE'S RELEASE LINE?** The one comparison:
+ * major.minor equal, the patch free. A bridge that says nothing (older than `0.10`) is not.
+ */
+export function sameReleaseLine(
+  consoleVersion: string,
+  bridgeVersion: string | null | undefined,
+): boolean {
+  const mine = releaseLine(consoleVersion);
+  return mine !== null && mine === releaseLine(bridgeVersion);
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` — the ONE line a console shows when it is on another release than CG
+ * Bridge, and the refusal every request but the open doors meets: it names both versions, that
+ * nothing is sent, and the remedy (`R-006`).
+ */
+export function versionMismatchRefusal(
+  consoleVersion: string,
+  bridgeVersion: string | null | undefined,
+): string {
+  const bridge = bridgeVersion ?? 'older than 0.10';
+  return (
+    `CG Control ${consoleVersion} and CG Bridge ${bridge} are different releases, so nothing is ` +
+    'sent. Install the same release of both.'
+  );
+}
 
 /**
  * ⭐ **THE ONE PLACE `auth` IS READ OFF A CAPABILITIES ANSWER.**

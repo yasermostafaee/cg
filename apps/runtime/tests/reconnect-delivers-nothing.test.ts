@@ -22,6 +22,7 @@ import {
 } from '../src/platform/WebSocketRuntime.js';
 import { LibraryStore } from '../src/platform/library/LibraryStore.js';
 import { StackRetentionStore } from '../src/platform/stack/StackRetentionStore.js';
+import { currentBridgeCapabilities } from './support/currentBridge.js';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **A CONSOLE RE-DELIVERS NOTHING.**
@@ -227,6 +228,8 @@ function respondLikeBridge(sock: FakeSocket, report: StackRestoreReport | null):
         return report;
       case 'station.strays':
         return [];
+      case 'bridge.capabilities':
+        return currentBridgeCapabilities();
       case 'stack.snapshot':
         return [];
       case 'connections.health':

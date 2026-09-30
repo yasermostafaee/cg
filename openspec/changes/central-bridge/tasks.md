@@ -93,6 +93,10 @@
       computes the exact key (not normalised away) and every other line is byte for byte as it was. Twelve
       URL pins updated (registry, HTTP server, siblings, channel-templates, amcp-log, onair-position,
       owned-slot-occupancy, reconnect-reconciliation, serve-render, template-page). Bridge 1484/1484.
+      **Linux e2e discharged for 3.2 and 3.3** on `4274b7fc` (carries `dcde7685`):
+      https://github.com/yasermostafaee/cg/actions/runs/36674757252 — `completed`/`success`, the `ci`
+      job's `Test` step and the `e2e` job's `E2E` step both RAN (so `retention-honesty` on the bridge's
+      own files, and the notice's dismissal, ran on Linux).
 
 ## 4. The console ↔ bridge connection (`R-068`, `B-262`)
 
@@ -109,7 +113,21 @@
       the instrument that nothing on air changed, and the expired socket pushed nothing),
       `auth-revocation`.
 - [ ] 4.2 Per-socket channel scope over every channel-scoped publish and read route, with a coverage test.
-- [ ] 4.3 `bridge.capabilities.bridgeVersion`; the console's `major.minor` check — one line, no command.
+- [x] 4.3 `bridge.capabilities.bridgeVersion`; the console's `major.minor` check — one line, no command.
+      `releaseLine` / `sameReleaseLine` / `versionMismatchRefusal` live once in `@cg/shared-ipc`; the
+      bridge answers its own manifest's version or the CLI's (the bundle's inlined one); the console
+      compares at every connect, refuses every request but `bridge.capabilities` and `auth.*` in
+      `#invoke` before a frame is written, and shows the line in the skew banner (it outranks a skew).
+      Every other request waits for the capabilities answer first (a take pressed in the first round
+      trip went out to another release before the answer landed — found by a fake that raced it, shown
+      red-first). The capability list stays for `B-153` — the channel's own doc records why both exist.
+      Tests: runtime `bridgeSkew` (another line: the take refused, no frame — control: the handshake
+      went out; a press before a slow answer: refused, no frame — control: a slow same-release answer,
+      the take goes out after it; a patch difference: the take goes out; no version: "older than 0.10";
+      §5's planted `0.9` console against a REAL `0.10` bridge: the line, and no take or read written —
+      control: the handshake went out; a real matched pair: no mismatch), `bridgeSkewBanner.dom` (the
+      line, outranking a skew, following the answer), `mock-bridge-parity`, `bridgeTimeoutWords` (its
+      fake answers the release); bridge `auth-gate` (the version to an unsigned socket, own vs given).
 - [ ] 4.4 Audit rows name the user and the console machine (the socket's peer address).
 - [ ] 4.5 e2e: two consoles, one bridge (the multi-box take, the clear, the control).
 - [ ] 4.6 Tokens: none, expired, without channel 2 — refused; control: channel 2 works.

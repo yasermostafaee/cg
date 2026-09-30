@@ -201,6 +201,12 @@ export interface WebSocketRuntimeOptions {
   /** Inject a WebSocket implementation (default: the global `WebSocket`). */
   createWebSocket?: WebSocketFactory;
   /**
+   * `CENTRAL-BRIDGE-01` — this console's release version, compared with CG Bridge's by release line
+   * at connect. Defaults to the build stamp's (`__CG_BUILD__`, the number `tools/release` stamps);
+   * a test sets it to stand for another release.
+   */
+  consoleVersion?: string;
+  /**
    * B-085 — this console's DISPLAY copy of the template library: what it shows while CG Bridge
    * cannot be reached. 🔴 `CENTRAL-BRIDGE-01` (`B-294`): never sent — the bridge keeps the library
    * for every console. Injected by `createRuntimeBridge` backed by OPFS (persistent); defaults to
@@ -332,6 +338,16 @@ export class WebSocketRuntime implements RuntimeBridge {
   #resyncing = false;
   /** B-153 — channels this page needs that the connected bridge does not route. */
   #skew: readonly string[] | null = null;
+  /** `CENTRAL-BRIDGE-01` — this console's release, compared with CG Bridge's at connect. */
+  readonly #consoleVersion: string;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **ANOTHER RELEASE THAN CG BRIDGE: the one line, or `null`.**
+   * While set, every request but the open doors (`bridge.capabilities`, `auth.*`) is refused HERE,
+   * before a frame is written — "one line, no command". Learned at each connect from the
+   * capabilities answer; a bridge too old to answer is another release.
+   */
+  #versionMismatch: string | null = null;
+  readonly #versionSubs = new Subs<string | null>();
   /*
     🔴 `R-066` — THE PLAYOUT SESSION, three fields and no fourth.
 
@@ -400,8 +416,12 @@ export class WebSocketRuntime implements RuntimeBridge {
    * socket. The owner then read "this console is not signed in" beside `SIGNED IN AS …`, because
    * the sign-in's own resync delivered it a moment later and nothing took the refusal down.
    *
-   * ⚠ ONLY the resync waits here. The renderer's reads do not (see `useBridgeSnapshot`), and a
-   * pressed command must not either: a bridge too old to answer is answered by its own skew.
+   * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **every request now waits here**, but the capabilities
+   * question itself and `auth.*`: the same answer carries the bridge's release, and a request
+   * written before it lands would reach a bridge of another release (see `#invoke`). It used to say
+   * that only the resync waited, and that a pressed command must not, because a bridge too old to
+   * answer is answered by its own skew. That is still how such a bridge is answered — quickly, as
+   * `unknown channel` — and it is now also refused as another release.
    */
   #capsHandshake: Promise<void> | null = null;
   /**
@@ -482,6 +502,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#url = url;
     this.#createWs =
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
+    this.#consoleVersion = options.consoleVersion ?? __CG_BUILD__.version;
     // Default to in-memory (unhydrated, empty) display copies so tests can construct the runtime
     // with no store. The boot path injects OPFS-backed, hydrated ones.
     this.#library = options.library ?? new LibraryStore(new MemoryWorkspace());
@@ -615,6 +636,13 @@ export class WebSocketRuntime implements RuntimeBridge {
   #setSkew(value: readonly string[] | null): void {
     this.#skew = value;
     this.#skewSubs.emit(value);
+  }
+
+  /** `CENTRAL-BRIDGE-01` — the ONE write path for {@link #versionMismatch}, publishing on change. */
+  #setVersionMismatch(value: string | null): void {
+    if (this.#versionMismatch === value) return;
+    this.#versionMismatch = value;
+    this.#versionSubs.emit(value);
   }
 
   #setAuthCaps(value: AuthCapabilities): void {
@@ -849,12 +877,22 @@ export class WebSocketRuntime implements RuntimeBridge {
         .runtimeRequestChannelNames(ipcChannels)
         .filter((n) => !routed.has(n));
       this.#setSkew(missing.length === 0 ? null : missing);
+      // `CENTRAL-BRIDGE-01` — the release line, from the same answer (no second round trip).
+      this.#setVersionMismatch(
+        ipcChannels.sameReleaseLine(this.#consoleVersion, caps.bridgeVersion)
+          ? null
+          : ipcChannels.versionMismatchRefusal(this.#consoleVersion, caps.bridgeVersion),
+      );
     } catch (err) {
       if (err instanceof BridgeSkewError) {
         // The bridge predates the handshake itself. It cannot tell us WHICH channels it
         // lacks, so the honest answer names the channel that proved it rather than
         // inventing a list.
         this.#setSkew([ipcChannels.BridgeCapabilitiesChannel.name]);
+        // …and it is, by that very fact, another release (`CENTRAL-BRIDGE-01`).
+        this.#setVersionMismatch(
+          ipcChannels.versionMismatchRefusal(this.#consoleVersion, undefined),
+        );
         return;
       }
       // A timeout, a disconnect mid-handshake, anything else: we do not KNOW there is skew,
@@ -1309,6 +1347,24 @@ export class WebSocketRuntime implements RuntimeBridge {
       answered — `BridgeDisconnectedError` is the honest answer, as it was before.
     */
     if (this.#authHandshake !== null) await this.#authHandshake;
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (`R-068`) — ANOTHER RELEASE THAN CG BRIDGE SENDS NOTHING but the
+      questions that can put it right: the capabilities it asks at every connect, and `auth.*`.
+
+      ⚠ **AND IT WAITS FOR THE ANSWER FIRST.** Until the capabilities answer lands,
+      `#versionMismatch` still holds the PREVIOUS connection's verdict — none, on a first connect —
+      so a take pressed in that first round trip reached a bridge of another release: the refusal
+      held only after the answer, which is not "before a frame is written". `#checkSkew` never
+      throws, so the wait always ends; a timed-out answer leaves nothing known and refuses nothing,
+      which is `B-153`'s rule that a guard must not take a working station off air.
+    */
+    const mayPutItRight =
+      channel.name === ipcChannels.BridgeCapabilitiesChannel.name ||
+      channel.name.startsWith('auth.');
+    if (!mayPutItRight && this.#capsHandshake !== null) await this.#capsHandshake;
+    if (this.#versionMismatch !== null && !mayPutItRight) {
+      throw new Error(this.#versionMismatch);
+    }
     if (this.#status !== 'live' || this.#ws === null || this.#ws.readyState !== WS_OPEN) {
       throw new BridgeDisconnectedError();
     }
@@ -1385,6 +1441,10 @@ export class WebSocketRuntime implements RuntimeBridge {
     skew: (): readonly string[] | null => this.#skew,
     onSkewChanged: (handler: (missing: readonly string[] | null) => void): Unsubscribe =>
       this.#skewSubs.add(handler),
+    // `CENTRAL-BRIDGE-01` — another release than CG Bridge: the one line, or `null`.
+    versionMismatch: (): string | null => this.#versionMismatch,
+    onVersionMismatchChanged: (handler: (line: string | null) => void): Unsubscribe =>
+      this.#versionSubs.add(handler),
   };
 
   /**

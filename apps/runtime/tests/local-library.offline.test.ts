@@ -3,6 +3,7 @@ import { MemoryWorkspace } from '@cg/storage';
 import type { StackItemState } from '@cg/shared-schema';
 import { parseWsFrame, serializeWsFrame, type TemplateInfo } from '@cg/shared-ipc';
 import { LibraryStore } from '../src/platform/library/LibraryStore.js';
+import { currentBridgeCapabilities } from './support/currentBridge.js';
 import {
   BridgeDisconnectedError,
   TEMPLATE_IMPORT_NEEDS_BRIDGE,
@@ -98,6 +99,8 @@ function respondLikeBridge(sock: FakeSocket, stack: StackItemState[] = []): void
       }
       case 'templates.remove':
         return { ok: true };
+      case 'bridge.capabilities':
+        return currentBridgeCapabilities();
       case 'stack.snapshot':
         return stack;
       case 'stack.restore-report':

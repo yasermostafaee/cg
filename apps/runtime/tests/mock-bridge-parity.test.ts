@@ -98,7 +98,17 @@ const BRIDGE_SURFACE: {
     keyboard: ['language', 'reportsLanguage'],
     // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.
     // `B-153` — `skew` names the channels the connected bridge PROCESS does not route.
-    link: ['status', 'onStatusChanged', 'resyncing', 'onResyncingChanged', 'skew', 'onSkewChanged'],
+    // `CENTRAL-BRIDGE-01` — `versionMismatch`: another release than CG Bridge (the mock: never).
+    link: [
+      'status',
+      'onStatusChanged',
+      'resyncing',
+      'onResyncingChanged',
+      'skew',
+      'onSkewChanged',
+      'versionMismatch',
+      'onVersionMismatchChanged',
+    ],
     // `C-037`/`R-066` — the Playout sign-in. The mock reports `off` (test mode has no bridge
     // process and no Playout), so the shapes match while the ANSWERS differ, which is exactly
     // what this guard is for: it compares the surface, never the behaviour.

@@ -3,6 +3,7 @@ import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
+import { versionMismatchRefusal } from '@cg/shared-ipc';
 import { BridgeSkewBanner } from '../src/renderer/features/status/BridgeSkewBanner.js';
 import { colors, cssVars } from '../src/renderer/theme.js';
 
@@ -42,17 +43,30 @@ afterEach(async () => {
 });
 
 type Listener = (missing: readonly string[] | null) => void;
+type VersionListener = (line: string | null) => void;
 
 async function mount(
   initial: readonly string[] | null,
-): Promise<{ el: HTMLElement; push: (next: readonly string[] | null) => Promise<void> }> {
+  mismatch: string | null = null,
+): Promise<{
+  el: HTMLElement;
+  push: (next: readonly string[] | null) => Promise<void>;
+  pushVersion: (next: string | null) => Promise<void>;
+}> {
   const listeners = new Set<Listener>();
+  const versionListeners = new Set<VersionListener>();
   const stub = {
     link: {
       skew: () => initial,
       onSkewChanged: (l: Listener) => {
         listeners.add(l);
         return () => listeners.delete(l);
+      },
+      // `CENTRAL-BRIDGE-01` — the release-line mismatch the same banner reports.
+      versionMismatch: () => mismatch,
+      onVersionMismatchChanged: (l: VersionListener) => {
+        versionListeners.add(l);
+        return () => versionListeners.delete(l);
       },
     },
   };
@@ -69,6 +83,11 @@ async function mount(
     push: async (next) => {
       await act(async () => {
         for (const l of listeners) l(next);
+      });
+    },
+    pushVersion: async (next) => {
+      await act(async () => {
+        for (const l of versionListeners) l(next);
       });
     },
   };
@@ -137,5 +156,34 @@ describe('guard item 5 — the bridge-skew banner renders under its condition an
       expect(fill).not.toBe(asRendered(alarm));
     }
     expect((b as HTMLElement).dataset['tone']).toBe('caution');
+  });
+});
+
+describe('CENTRAL-BRIDGE-01 — another release than CG Bridge is one line, and it outranks a skew', () => {
+  const LINE = versionMismatchRefusal('0.10.0', '0.9.1');
+  const mismatchBanner = (el: HTMLElement): HTMLElement | null =>
+    el.querySelector('[data-version-mismatch-banner]');
+
+  it('shows the one line — both versions, nothing sent, the remedy — and no skew list beside it', async () => {
+    const { el } = await mount(['stack.setActiveLook'], LINE);
+    const b = mismatchBanner(el);
+    expect(b, 'the mismatch line did not render').not.toBeNull();
+    expect(b?.getAttribute('role')).toBe('alert');
+    expect(b?.textContent).toContain('0.10.0');
+    expect(b?.textContent).toContain('0.9.1');
+    expect(b?.textContent).toContain('nothing is sent');
+    // It outranks the skew: this console sends nothing, so a list of what it cannot send is moot.
+    expect(banner(el)).toBeNull();
+  });
+
+  it('follows the connect-time answer: a mismatch learned after mount shows; control: cleared, the skew is back', async () => {
+    const { el, pushVersion } = await mount(['stack.setActiveLook']);
+    expect(mismatchBanner(el)).toBeNull();
+    expect(banner(el)).not.toBeNull();
+    await pushVersion(LINE);
+    expect(mismatchBanner(el)).not.toBeNull();
+    await pushVersion(null);
+    expect(mismatchBanner(el)).toBeNull();
+    expect(banner(el)).not.toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import {
   WebSocketRuntime,
   type WebSocketLike,
 } from '../src/platform/WebSocketRuntime.js';
+import { currentBridgeCapabilities } from './support/currentBridge.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01-C` C2 — **A BRIDGE THAT DOES NOT ANSWER IS SAID IN WORDS, AND THE CHECK IS
@@ -22,7 +23,11 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** A socket that answers the capability handshake — every channel — and then nothing at all. */
+/**
+ * A socket that answers the capability handshake — every channel, and this console's own release
+ * (`CENTRAL-BRIDGE-01`: one that named none would be another release, and nothing would be sent) —
+ * and then nothing at all.
+ */
 function silentBridge(): WebSocketLike {
   const listeners = new Map<string, ((ev?: unknown) => void)[]>();
   return {
@@ -33,7 +38,7 @@ function silentBridge(): WebSocketLike {
       const response = {
         type: 'response',
         id: frame.id,
-        payload: { channels: ipc.runtimeRequestChannelNames(ipc) },
+        payload: currentBridgeCapabilities(),
       };
       setTimeout(() => {
         for (const l of listeners.get('message') ?? []) l({ data: JSON.stringify(response) });
@@ -51,10 +56,16 @@ function silentBridge(): WebSocketLike {
   } as unknown as WebSocketLike;
 }
 
+/**
+ * Live AND handshaken. `CENTRAL-BRIDGE-01` — every request waits for the capabilities answer, so a
+ * test that installs fake timers before that answer lands would arm its request's timeout late, part
+ * way through the advance, and measure the handshake rather than the wait. The answer is in once
+ * `auth.capabilities()` holds it.
+ */
 async function live(): Promise<WebSocketRuntime> {
   const rt = new WebSocketRuntime('ws://fake', { createWebSocket: () => silentBridge() });
   const start = Date.now();
-  while (rt.link.status() !== 'live') {
+  while (rt.link.status() !== 'live' || rt.auth.capabilities() === null) {
     if (Date.now() - start > 5000) throw new Error('never live');
     await new Promise((r) => setTimeout(r, 10));
   }

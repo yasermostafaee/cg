@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   AppInfoChannel,
@@ -459,6 +460,12 @@ export interface BridgeOptions {
    * anyone. Absent (the dev bridge, every test) = auth follows the configuration, as before.
    */
   requireAuth?: boolean;
+  /**
+   * `CENTRAL-BRIDGE-01` (`R-068`) — the release this bridge is (`0.10.0`), told to every console on
+   * `bridge.capabilities` so a console on another release line sends nothing. Absent = this
+   * package's own `package.json` version (the number `tools/release` stamps), or none if unreadable.
+   */
+  version?: string;
   /**
    * 🔴 `DESKTOP-APPS-01` — **THIS BRIDGE IS AN INSTALLED STATION THAT MAY STILL BE IN FIRST-RUN**
    * (`--first-run`, which only the desktop app passes). Two things follow, and nothing else:
@@ -1026,6 +1033,22 @@ function rateWindow(limit: number, windowMs: number): { admit: (nowMs: number) =
 export function refusedByAuth(route: Route, state: AuthGateState): boolean {
   if (state === 'off' || state === 'signed-in') return false;
   return !openToUnauthenticated(route.channel.name);
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` (`R-068`) — this package's own version, the number `tools/release` stamps into
+ * `tools/caspar-bridge/package.json` (`src/` and `dist/` both sit one level below it). `null` when it
+ * cannot be read — a console then reads the bridge as another release and sends nothing, which is
+ * the safe direction.
+ */
+function ownPackageVersion(): string | null {
+  try {
+    const manifest = fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8');
+    const version = (JSON.parse(manifest) as { version?: unknown }).version;
+    return typeof version === 'string' ? version : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1693,6 +1716,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
 `),
   );
   const playoutConfigPath = options.playoutConfigPath;
+  // `CENTRAL-BRIDGE-01` (`R-068`) — the release this bridge is: given, or its own package's.
+  const bridgeVersion = options.version ?? ownPackageVersion();
   // `CENTRAL-BRIDGE-01` (D3) — CG Bridge never answers a socket with auth off.
   if (options.requireAuth === true && auth.playout === null) {
     throw new Error(AUTH_REQUIRED_START_FAILURE);
@@ -2127,6 +2152,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
 
   const routes = buildRoutes(runtime, {
     setupPhase,
+    // `CENTRAL-BRIDGE-01` — this bridge's release, told to every console at connect.
+    ...(bridgeVersion !== null ? { bridgeVersion } : {}),
     playoutSources,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
@@ -3068,6 +3095,8 @@ export function buildRoutes(
     persistPath?: string;
     /** `CENTRAL-BRIDGE-01` — this machine's OSC port over every applied config ({@link withBridgeOscPort}). */
     oscPort?: number;
+    /** `CENTRAL-BRIDGE-01` — the release this bridge is, for `bridge.capabilities` (`0.10.0`). */
+    bridgeVersion?: string;
     fixedLayersPath?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
@@ -3899,6 +3928,8 @@ export function buildRoutes(
       const phase = setupPhase();
       return phase === null ? {} : { setup: phase };
     })(),
+    // `CENTRAL-BRIDGE-01` — the release a console compares by release line (`sameReleaseLine`).
+    ...(paths.bridgeVersion !== undefined ? { bridgeVersion: paths.bridgeVersion } : {}),
   }));
   routes.set(capabilities.channel.name, capabilities);
   return routes;

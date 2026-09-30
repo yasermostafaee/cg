@@ -138,6 +138,38 @@ pushed nothing (the amendment to `playout-auth-signin`'s expiry requirement, 202
 - **WHEN** a socket's token expires or is revoked **THEN** its reads are refused as its intents are, and
   it is pushed nothing — control: a console whose token is still valid is answered and pushed as before
 
+### Requirement: A console on another release line than CG Bridge SHALL send nothing
+
+`bridge.capabilities` SHALL carry the bridge's release version (`bridgeVersion`, the number
+`tools/release` stamps), answered to any socket. At every connect a console SHALL compare it with its
+own by release line — major.minor equal, the patch free — and a bridge that names none SHALL be read as
+another release. On another release line the console SHALL show ONE line naming both versions, that
+nothing is sent and the remedy, and SHALL refuse every request but `bridge.capabilities` and `auth.*`
+before a frame is written. Every other request SHALL wait for that answer before it is decided, so a press
+in the first round trip is judged like any other; an answer that never comes leaves nothing known and
+refuses nothing. The channel list (`B-153`) SHALL stay as it is, beside it: it answers whether this bridge
+routes what the page calls, and reports without refusing.
+
+#### Scenario: Another release line sends nothing
+
+- **WHEN** a console `0.10.0` connects to a bridge `0.9.1` **THEN** it shows the one line and a take is
+  refused before any frame is written — control: the capabilities question went out and was answered
+
+#### Scenario: A press before the answer waits for it
+
+- **WHEN** a take is pressed after a console `0.10.0` connects to a bridge `0.9.1` and before the
+  capabilities answer lands **THEN** it waits for the answer and is refused with no frame written —
+  control: the same slow answer from a `0.10.0` bridge, and the take goes out after it
+
+#### Scenario: A patch difference is the same release
+
+- **WHEN** a console `0.10.0` connects to a bridge `0.10.3` **THEN** nothing is shown and a take goes out
+
+#### Scenario: A bridge that names no release
+
+- **WHEN** a bridge answers without `bridgeVersion` **THEN** the console reads it as a release older than
+  `0.10` and sends nothing
+
 ## MODIFIED Requirements
 
 ### Requirement: A restore refuses to decide rather than act on absent evidence

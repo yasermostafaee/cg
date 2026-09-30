@@ -102,7 +102,11 @@ async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void
  * handshake — with whatever channel list the test dictates. Everything else is ignored,
  * which is all these tests need: the connect-time check is the unit under test.
  */
-function fakeBridge(reply: (channel: string) => unknown | 'unknown-channel'): WebSocketLike {
+function fakeBridge(
+  reply: (channel: string) => unknown | 'unknown-channel',
+  /** How long this channel's answer takes, in ms (default 0). */
+  delayFor: (channel: string) => number = () => 0,
+): WebSocketLike {
   const listeners = new Map<string, ((ev?: unknown) => void)[]>();
   const socket: WebSocketLike = {
     readyState: 1,
@@ -120,7 +124,7 @@ function fakeBridge(reply: (channel: string) => unknown | 'unknown-channel'): We
       // Asynchronously, like a real socket — so the connect path is exercised as it runs.
       setTimeout(() => {
         for (const l of listeners.get('message') ?? []) l({ data: JSON.stringify(response) });
-      }, 0);
+      }, delayFor(frame.channel));
     },
     close() {
       /* nothing to tear down */
@@ -196,6 +200,149 @@ describe('B-153 — the bridge is asked what it can do, at connect', () => {
     // being null before it ran.
     await new Promise((r) => setTimeout(r, 300));
     expect(runtime.link.skew(), 'a matched pair must be silent').toBeNull();
+    // `CENTRAL-BRIDGE-01` — …and a real bridge of this build is this console's release.
+    expect(runtime.link.versionMismatch(), 'a matched pair read as two releases').toBeNull();
+  });
+});
+
+// ── `CENTRAL-BRIDGE-01` (`R-068`) — another release than CG Bridge sends nothing ─────────────
+
+describe('CENTRAL-BRIDGE-01 — the release line is checked at connect: one line, no command', () => {
+  const all = ipc.runtimeRequestChannelNames(ipc);
+  /** Not a channel: the entry `bridgeOf` writes when the handshake's answer is delivered. */
+  const ANSWERED = '(capabilities answered)';
+
+  /**
+   * A bridge answering the handshake with `bridgeVersion` (after `handshakeMs`), and
+   * `{ accepted: true }` to anything else.
+   */
+  function bridgeOf(
+    bridgeVersion: string | undefined,
+    sent: string[],
+    handshakeMs = 0,
+  ): WebSocketLike {
+    return fakeBridge(
+      (channel) => {
+        sent.push(channel);
+        if (channel === ipc.BridgeCapabilitiesChannel.name) {
+          // Marks the moment the answer is delivered: this timer is armed first, so it fires
+          // just before the answer's own timer of the same delay.
+          setTimeout(() => sent.push(ANSWERED), handshakeMs);
+          return { channels: all, ...(bridgeVersion !== undefined ? { bridgeVersion } : {}) };
+        }
+        return { accepted: true };
+      },
+      (channel) => (channel === ipc.BridgeCapabilitiesChannel.name ? handshakeMs : 0),
+    );
+  }
+
+  it('🔴 a take pressed BEFORE the release answer lands waits for it — and is refused, no frame written', async () => {
+    /*
+      The window the first spelling left open: the refusal read `#versionMismatch` at once, and
+      until the answer lands that holds no verdict, so the take went out to another release.
+    */
+    const sent: string[] = [];
+    runtime = new WebSocketRuntime('ws://fake', {
+      consoleVersion: '0.10.0',
+      createWebSocket: () => bridgeOf('0.9.1', sent, 200),
+    });
+    await waitFor(() => runtime?.link.status() === 'live');
+    expect(runtime.link.versionMismatch(), 'the answer has not landed yet').toBeNull();
+
+    await expect(runtime.stack.take({ itemId: 'row-1' })).rejects.toThrow(
+      ipc.versionMismatchRefusal('0.10.0', '0.9.1'),
+    );
+    expect(sent, 'a take reached another release before its answer').not.toContain('stack.take');
+  });
+
+  it('CONTROL — the same slow answer from the SAME release: the take waits for it, then goes out', async () => {
+    const sent: string[] = [];
+    runtime = new WebSocketRuntime('ws://fake', {
+      consoleVersion: '0.10.0',
+      createWebSocket: () => bridgeOf('0.10.0', sent, 200),
+    });
+    await waitFor(() => runtime?.link.status() === 'live');
+    await expect(runtime.stack.take({ itemId: 'row-1' })).resolves.toEqual({ accepted: true });
+    // It went out AFTER the answer landed — the order the wait promises. (The answer must be IN
+    // the list: an absent one reads as index -1, which every take would follow.)
+    const answeredAt = sent.indexOf(ANSWERED);
+    expect(answeredAt, 'the take resolved before the answer landed').toBeGreaterThanOrEqual(0);
+    expect(sent.indexOf('stack.take')).toBeGreaterThan(answeredAt);
+  });
+
+  it('🔴 a bridge on ANOTHER release line: the line names both, and a take is refused HERE — no frame written', async () => {
+    const sent: string[] = [];
+    runtime = new WebSocketRuntime('ws://fake', {
+      consoleVersion: '0.10.0',
+      createWebSocket: () => bridgeOf('0.9.1', sent),
+    });
+    await waitFor(() => runtime?.link.versionMismatch() !== null);
+    const line = runtime.link.versionMismatch();
+    expect(line).toBe(ipc.versionMismatchRefusal('0.10.0', '0.9.1'));
+
+    await expect(runtime.stack.take({ itemId: 'row-1' })).rejects.toThrow(line ?? '');
+    expect(sent, 'a command went out from another release').not.toContain('stack.take');
+    // CONTROL — the socket works: the handshake itself went out and was answered.
+    expect(sent).toContain(ipc.BridgeCapabilitiesChannel.name);
+  });
+
+  it('a PATCH difference is the same release line — CONTROL: the take goes out', async () => {
+    const sent: string[] = [];
+    runtime = new WebSocketRuntime('ws://fake', {
+      consoleVersion: '0.10.0',
+      createWebSocket: () => bridgeOf('0.10.3', sent),
+    });
+    await waitFor(() => runtime?.link.status() === 'live');
+    await new Promise((r) => setTimeout(r, 100)); // the handshake answered
+    expect(runtime.link.versionMismatch()).toBeNull();
+    await expect(runtime.stack.take({ itemId: 'row-1' })).resolves.toEqual({ accepted: true });
+    expect(sent).toContain('stack.take');
+  });
+
+  it('🔴 §5 — a planted 0.9 console against a REAL 0.10 bridge: the line, and nothing sent', async () => {
+    handle = await createBridge({
+      port: 0,
+      version: '0.10.0',
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+    });
+    const written: string[] = [];
+    runtime = new WebSocketRuntime(`ws://127.0.0.1:${String(handle.port)}`, {
+      consoleVersion: '0.9.1',
+      createWebSocket: (url) => {
+        // Every frame this console writes, by channel — "nothing sent" is read on the wire.
+        const ws = wsFactory(url);
+        const send = ws.send.bind(ws);
+        ws.send = (data: string): void => {
+          written.push((JSON.parse(data) as { channel?: string }).channel ?? '');
+          send(data);
+        };
+        return ws;
+      },
+    });
+    await waitFor(() => runtime?.link.versionMismatch() !== null);
+    const line = runtime.link.versionMismatch();
+    expect(line).toBe(ipc.versionMismatchRefusal('0.9.1', '0.10.0'));
+
+    await expect(runtime.stack.take({ itemId: 'row-1' })).rejects.toThrow(line ?? '');
+    await expect(runtime.stack.snapshot()).rejects.toThrow(line ?? '');
+    expect(written).not.toContain('stack.take');
+    expect(written).not.toContain('stack.snapshot');
+    // CONTROL — the socket and the bridge work: the handshake went out and was answered.
+    expect(written).toContain(ipc.BridgeCapabilitiesChannel.name);
+  });
+
+  it('a bridge that names NO release predates 0.10 — another release, and it says so', async () => {
+    const sent: string[] = [];
+    runtime = new WebSocketRuntime('ws://fake', {
+      consoleVersion: '0.10.0',
+      createWebSocket: () => bridgeOf(undefined, sent),
+    });
+    await waitFor(() => runtime?.link.versionMismatch() !== null);
+    expect(runtime.link.versionMismatch()).toContain('older than 0.10');
   });
 });
 
@@ -211,7 +358,20 @@ describe('B-152 — a malformed response rejects its caller instead of crashing 
       it reachable on every boot. Asserted as a rejection the caller can act on.
     */
     runtime = new WebSocketRuntime('ws://fake', {
-      createWebSocket: () => fakeBridge(() => ({ nothing: 'that matches the contract' })),
+      /*
+        `CENTRAL-BRIDGE-01` — the handshake is answered in shape and names this console's release:
+        a bridge that cannot answer it is another release, and the version gate would then refuse
+        the read below before its envelope was ever reached — measuring the gate, not the pump.
+      */
+      createWebSocket: () =>
+        fakeBridge((channel) =>
+          channel === ipc.BridgeCapabilitiesChannel.name
+            ? {
+                channels: ipc.runtimeRequestChannelNames(ipc),
+                bridgeVersion: __CG_BUILD__.version,
+              }
+            : { nothing: 'that matches the contract' },
+        ),
     });
 
     await waitFor(() => runtime?.link.status() === 'live');

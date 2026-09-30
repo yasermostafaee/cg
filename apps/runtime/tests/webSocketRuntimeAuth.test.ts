@@ -252,7 +252,16 @@ class FakeBridge {
     if (frame.type !== 'request') return null;
     if (frame.channel === ipc.BridgeCapabilitiesChannel.name) {
       if (this.capabilities === null) return null;
-      return { type: 'response', id: frame.id, payload: this.capabilities };
+      /*
+        `CENTRAL-BRIDGE-01` — this fake is a CURRENT bridge, so it names this console's release
+        (a console on another release line sends nothing). A spec about another release sets
+        `bridgeVersion` itself.
+      */
+      return {
+        type: 'response',
+        id: frame.id,
+        payload: { bridgeVersion: __CG_BUILD__.version, ...this.capabilities },
+      };
     }
     if (frame.channel === ipc.AuthSignOutChannel.name) {
       if (this.signOutAnswer.kind === 'silent') return null;
@@ -315,6 +324,8 @@ function playoutCapabilities(): Capabilities {
     signInUrl: 'https://playout.example.test/api/cg/auth/token',
     refreshUrl: 'https://playout.example.test/api/cg/auth/refresh',
     authContractVersion: '1.1',
+    // `CENTRAL-BRIDGE-01` — a current bridge names this console's release.
+    bridgeVersion: __CG_BUILD__.version,
   };
 }
 

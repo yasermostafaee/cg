@@ -27,6 +27,7 @@ import {
   type WebSocketLike,
 } from '../src/platform/WebSocketRuntime.js';
 import { StackRetentionStore } from '../src/platform/stack/StackRetentionStore.js';
+import { currentBridgeCapabilities } from './support/currentBridge.js';
 
 /**
  * B-092 — the stack survives a restart of the BRIDGE process.
@@ -295,6 +296,8 @@ function respondLikeBridge(
         return report;
       case 'station.strays':
         return [];
+      case 'bridge.capabilities':
+        return currentBridgeCapabilities();
       case 'stack.snapshot':
         return bridgeStack;
       case 'connections.health':

@@ -565,6 +565,9 @@ const bridgeOptions = {
   host: args.host,
   port: bridgePort,
   connection,
+  // `CENTRAL-BRIDGE-01` — the release every console compares at connect (the bundle's inlined
+  // version; from source, this package's manifest).
+  ...(bridgeVersion() !== 'unknown' ? { version: bridgeVersion() } : {}),
   persistPath,
   stackPath,
   fixedLayersPath,

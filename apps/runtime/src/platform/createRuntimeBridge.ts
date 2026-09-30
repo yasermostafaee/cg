@@ -167,6 +167,9 @@ export function createMockBridge(): RuntimeBridge {
       // reported "checked, fine" would be a claim nobody made.
       skew: () => null,
       onSkewChanged: () => () => undefined,
+      // `CENTRAL-BRIDGE-01` — no CG Bridge in test mode, so no release to differ from.
+      versionMismatch: () => null,
+      onVersionMismatchChanged: () => () => undefined,
     },
 
     /*

@@ -265,6 +265,16 @@ export interface RuntimeBridge {
      */
     skew(): readonly string[] | null;
     onSkewChanged(handler: (missing: readonly string[] | null) => void): Unsubscribe;
+    /**
+     * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **THIS CONSOLE IS ANOTHER RELEASE THAN CG BRIDGE**: the one
+     * line to show, or `null` when the release lines match (or nothing is known yet).
+     *
+     * Unlike {@link skew} this REFUSES: while it is set, nothing is sent but the capabilities
+     * question and `auth.*`. CG Bridge and CG Control are one release installed apart, and a
+     * console from another release may read the bridge's state wrongly with every channel present.
+     */
+    versionMismatch(): string | null;
+    onVersionMismatchChanged(handler: (line: string | null) => void): Unsubscribe;
   };
 
   stack: {

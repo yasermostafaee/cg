@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AUTH_REQUIRED_REFUSAL,
@@ -117,6 +118,28 @@ describe('C-037 §1 — an unauthenticated socket gets two answers, not every an
 
     const out = await client.ask('o', 'auth.sign-out', undefined);
     expect(out.error, 'auth.sign-out must answer an unsigned socket').toBeUndefined();
+  });
+
+  it('🔴 CENTRAL-BRIDGE-01 — capabilities carries the bridge’s RELEASE to an unsigned socket: its own package’s by default, or the one it was given', async () => {
+    const started = await startAuthedBridge();
+    handle = started.handle;
+    playout = started.playout;
+    const client = await openClient(handle);
+    const own = (
+      JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+        version: string;
+      }
+    ).version;
+    const caps = await client.ask('c', 'bridge.capabilities', {});
+    expect((caps.payload as { bridgeVersion?: string }).bridgeVersion).toBe(own);
+
+    // …and the CLI's (the shipped bundle inlines its version) wins over the manifest.
+    const given = await startAuthedBridge({ version: '0.10.7' });
+    const second = await openClient(given.handle);
+    const caps2 = await second.ask('c2', 'bridge.capabilities', {});
+    expect((caps2.payload as { bridgeVersion?: string }).bridgeVersion).toBe('0.10.7');
+    await given.handle.close();
+    await given.playout.stop();
   });
 
   it('capabilities carries the SIGN-IN ADDRESS, so the console never has to guess it', async () => {

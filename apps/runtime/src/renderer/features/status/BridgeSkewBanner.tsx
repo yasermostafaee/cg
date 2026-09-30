@@ -81,11 +81,33 @@ function detailFor(missing: readonly string[]): string {
 
 export function BridgeSkewBanner(): JSX.Element | null {
   const [missing, setMissing] = useState<readonly string[] | null>(() => window.cg.link.skew());
+  const [mismatch, setMismatch] = useState<string | null>(() => window.cg.link.versionMismatch());
 
   useEffect(() => {
     setMissing(window.cg.link.skew());
     return window.cg.link.onSkewChanged(setMissing);
   }, []);
+  useEffect(() => {
+    setMismatch(window.cg.link.versionMismatch());
+    return window.cg.link.onVersionMismatchChanged(setMismatch);
+  }, []);
+
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (`R-068`) — ANOTHER RELEASE THAN CG BRIDGE, and it outranks a skew: this
+    console sends nothing, so a list of channels it could not send is beside the point. One line,
+    the state and the remedy, no prose (the operator-surface rule).
+  */
+  if (mismatch !== null) {
+    return (
+      <div style={styles.banner} role="alert" data-version-mismatch-banner data-tone="caution">
+        <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
+        <span style={styles.text}>
+          <span style={styles.headline}>DIFFERENT RELEASES</span>
+          <span style={styles.detail}>{mismatch}</span>
+        </span>
+      </div>
+    );
+  }
 
   // `null` is "no skew known" — the healthy case AND the case where the handshake could not
   // be completed. Neither is something to shout about: an unanswered handshake is not
