@@ -153,7 +153,13 @@
       over-length case), runtime
       `auditPanel.legibility.dom` (the title and `data-audit-console` — control: a row without it has no
       title).
-- [ ] 4.5 e2e: two consoles, one bridge (the multi-box take, the clear, the control).
+- [x] 4.5 e2e: two consoles, one bridge (the multi-box take, the clear, the control).
+      `two-consoles.spec.ts`: an in-process bridge with auth ON against the fake Playout, the AMCP mock
+      behind it, two browser contexts signed in through the real form as two operators of channel 1.
+      A takes a two-box page on bed 59 → B shows ON AIR within 1 s; the plate band holds both boxes
+      (the instrument, shown live); B clears → A shows it cleared within 1 s and the mock's stage holds
+      nothing on 60–79 — CONTROL: the logo on row 80 stays ON AIR on both consoles and on the mock.
+      Passed locally on Windows (a signal, not the discharge — the Linux run is CI's).
 - [x] 4.6 Tokens: none, expired, without channel 2 — refused; control: channel 2 works.
       `central-bridge-tokens.integration` on the authed two-channel rig, read at the fake CasparCG's
       own trace: no token — a take and a read refused with the sign-in sentence, no write, no push;

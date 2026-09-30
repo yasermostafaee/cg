@@ -170,6 +170,20 @@ routes what the page calls, and reports without refusing.
 - **WHEN** a bridge answers without `bridgeVersion` **THEN** the console reads it as a release older than
   `0.10` and sends nothing
 
+### Requirement: Every console on one CG Bridge SHALL see a press made on another within a second
+
+CG Bridge SHALL hold the one state every console acts on — there is no per-console copy to disagree —
+and SHALL push each change of what is on a channel to every console told that channel, so a take or a
+clear pressed on one console is shown on every other within one second. A clear of a multi-box row SHALL
+leave none of its boxes on the plate band, and SHALL leave every other row on the channel as it was.
+
+#### Scenario: Two consoles, one bridge
+
+- **WHEN** console A takes a multi-box page and console B, signed in as another operator of the same
+  channel, clears it **THEN** B shows it ON AIR within a second of the take, A shows it cleared within a
+  second of the clear, and the core holds nothing on layers 60–79 — control: another row on the same
+  channel stays ON AIR on both consoles and on the core
+
 ### Requirement: A console SHALL be told only the channels its sign-in holds
 
 CG Bridge SHALL tell each socket only the state of the channels its principal's grant holds, judged by
