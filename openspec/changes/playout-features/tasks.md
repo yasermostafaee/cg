@@ -21,7 +21,7 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 
 ## 2. B — `ownOutputOf` (`B-298`)
 
-- [ ] 2.1 Parse and join; the one predicate; picker title; bridge refusal (take, switch, swap)
+- [x] 2.1 Parse and join; the one predicate; picker title; bridge refusal (take, switch, swap)
 - [ ] 2.2 Tests; gate; pushed; CI read
 
 ## 3. C — the playlist output as a box source (`R-075`)

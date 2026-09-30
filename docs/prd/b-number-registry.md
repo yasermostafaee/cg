@@ -3100,3 +3100,17 @@ Measured free before use: `git grep -n --untracked -E "^## \[.\] (B-29[3-9]|P-06
 `C-044`, `C-045`, `P-060` and `R-077`, which returned one hit each; no stash.
 
 ⇒ **Next free after this session is `B-298`**, **`D-162`**, **`P-063`**, **`R-080`** and **`C-049`**.
+
+### 2026-09-30 — `PLAYOUT-FEATURES-01` takes `B-298`
+
+- `B-298` — an NDI input that is a channel's own output could be taken on that channel (part B, D10
+  `ownOutputOf`) — [bugs-runtime.md](bugs-runtime.md).
+- Not new: `R-075`, `R-076`, `R-077` and `B-286` are the items this prompt builds (filed by `RELEASE-091-01`
+  and `PLAYOUT-SOURCES-01`).
+
+Measured free before use: `git grep -n -E "^## \[.\] (B-29[89]|B-30[0-9]|R-08[0-9]|C-049|P-063)" <branch> --
+docs` on every local branch (`ai-stale`, `design/live-source-multibox`, `dev`, `main`) and with `--untracked`
+returned nothing, against positive controls on `B-297`, `R-079`, `C-048` and `P-062`, which returned one hit
+each; no stash.
+
+⇒ **Next free after this entry is `B-299`**, **`D-162`**, **`P-063`**, **`R-080`** and **`C-049`**.

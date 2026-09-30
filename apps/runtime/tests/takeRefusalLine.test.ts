@@ -86,6 +86,28 @@ describe('`ROUTE-PLATES-01` — contract v1.3’s two lines', () => {
     });
   });
 
+  it('🔴 `B-298`: `Bed 59 · Plate 1: “NDI کانالِ ۲” is the own output of CH 2 (would loop).` — the name apart', () => {
+    const line = takeRefusalLine(
+      'Bed 59',
+      {
+        code: 'source-own-output',
+        plateId: 'guest-1',
+        sourceId: 'in-li-ndi-own2',
+        sourceName: 'NDI کانالِ ۲',
+        sourceOrigin: 'input',
+      },
+      { plateLabel: 'Plate 1', channel: 2 },
+    );
+    expect(line.text).toBe(
+      'Bed 59 · Plate 1: “NDI کانالِ ۲” is the own output of CH 2 (would loop).',
+    );
+    expect(line.unseatable).toEqual({
+      plate: 'Plate 1',
+      name: 'NDI کانالِ ۲',
+      rest: ' is the own output of CH 2 (would loop).',
+    });
+  });
+
   it('🔴 rule 5: `Bed 59 · Plate 1: waiting for the Playout’s input list.` — no source named, no epoch', () => {
     const line = takeRefusalLine(
       'Bed 59',

@@ -11,7 +11,9 @@ import {
 } from 'react';
 import { Cable, Check, Film } from 'lucide-react';
 import {
+  ownOutputTitle,
   sourceBindable,
+  sourceLoopsOn,
   sourceShowableOn,
   type ConsoleMediaItem,
   type SourceDefinition,
@@ -346,18 +348,22 @@ function InputsTab({
   const rows: VirtualRow[] = shown.map((source) => {
     // `ROUTE-PLATES-01` — v1.3 rule 1, asked of the one predicate the bridge's refusal asks.
     const offChannel = channel !== undefined && !sourceShowableOn(source, channel);
+    // `PLAYOUT-FEATURES-01` B (`B-298`) — the row channel's own output: it would loop there.
+    const loops = channel !== undefined && sourceLoopsOn(source, channel);
     const bindable = sourceBindable(source);
     const selected = source.id === value;
     return {
       kind: 'option',
       key: source.id,
-      disabled: !bindable || offChannel,
+      disabled: !bindable || offChannel || loops,
       selected,
-      ...(offChannel
-        ? { title: `Not available on CH ${String(channel)}` }
-        : !bindable && source.reason !== undefined
-          ? { title: source.reason }
-          : {}),
+      ...(loops
+        ? { title: ownOutputTitle(channel) }
+        : offChannel
+          ? { title: `Not available on CH ${String(channel)}` }
+          : !bindable && source.reason !== undefined
+            ? { title: source.reason }
+            : {}),
       data: { 'data-picker-input': source.id },
       content: (
         <span className="cg-picker-row">

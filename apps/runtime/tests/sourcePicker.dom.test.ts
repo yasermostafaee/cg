@@ -70,6 +70,14 @@ const CATALOG: SourceCatalog = {
       reason: 'no signal',
     },
     {
+      // `PLAYOUT-FEATURES-01` B (`B-298`) — an NDI input that is CH 2's own output (D10 `ownOutputOf`).
+      id: 'in-own2',
+      name: 'خروجی کانال ۲',
+      origin: 'input',
+      producer: { kind: 'ndi', source: 'APASAI (APASAI-CGTEST2)' },
+      ownOutputOf: 2,
+    },
+    {
       id: 'md-m-recent',
       name: 'تیتراژ خبر ۲۰',
       origin: 'media',
@@ -235,10 +243,11 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
       'No layer',
       'Channel one only',
       'Studio 7',
+      'خروجی کانال ۲',
     ]);
     expect(panel.textContent).not.toMatch(/NDI|Stream|rtsp|STUDIO-PC/);
     const tabs = [...panel.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
-    expect(tabs).toEqual(['Inputs 6', `Media ${String(LIBRARY.length)}`]);
+    expect(tabs).toEqual(['Inputs 7', `Media ${String(LIBRARY.length)}`]);
   });
 
   it('opens on the tab of the current binding — Media for a media item, Inputs otherwise', async () => {
@@ -254,6 +263,30 @@ describe('open — the call site’s choices, then Inputs and Media', () => {
 });
 
 describe('what cannot be chosen is SHOWN, disabled, with the reason — never hidden', () => {
+  it('🔴 `B-298` — CH 2’s own output is disabled on a CH 2 row with `Own output of CH 2 (would loop)` — control: enabled on CH 1, and an unmarked NDI input is enabled on CH 2', async () => {
+    const onChange = vi.fn();
+    const panel = await openPicker(await render({ onChange, channel: 2 }));
+    const own = panel.querySelector<HTMLElement>('[data-picker-input="in-own2"]');
+    expect(own?.getAttribute('aria-disabled')).toBe('true');
+    expect(own?.getAttribute('title')).toBe('Own output of CH 2 (would loop)');
+    await act(async () => {
+      own?.click();
+      await Promise.resolve();
+    });
+    expect(onChange).not.toHaveBeenCalled();
+    // Control — an NDI input with no `ownOutputOf` is offered on the same row.
+    const studio = panel.querySelector<HTMLElement>('[data-picker-input="in-studio1"]');
+    expect(studio?.getAttribute('aria-disabled')).toBe('false');
+    await closePicker();
+    act(() => root?.unmount());
+    host?.remove();
+    // Control — on a CH 1 row the same input is offered.
+    const one = await openPicker(await render({ channel: 1 }));
+    const again = one.querySelector<HTMLElement>('[data-picker-input="in-own2"]');
+    expect(again?.getAttribute('aria-disabled')).toBe('false');
+    expect(again?.getAttribute('title')).toBeNull();
+  });
+
   it('an unusable input (a route with no layer) is disabled, says why, and cannot be picked', async () => {
     const onChange = vi.fn();
     const panel = await openPicker(await render({ onChange }));

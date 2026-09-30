@@ -106,6 +106,8 @@ export interface FakeInput {
   readonly available?: boolean;
   readonly reason?: string;
   readonly compatibleChannels?: readonly { casparHost: string; casparChannel: number }[];
+  /** `PLAYOUT-FEATURES-01` B (`2.9.1`) — an NDI input that is one of this server's own channel outputs. */
+  readonly ownOutputOf?: { casparHost: string; casparChannel: number };
 }
 
 /**

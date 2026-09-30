@@ -78,6 +78,12 @@ export const PlayoutInputSchema = z.object({
   available: z.boolean().optional().catch(undefined),
   reason: z.string().trim().min(1).optional().catch(undefined),
   compatibleChannels: z.array(PlayoutCompatibleChannelSchema).optional().catch(undefined),
+  /**
+   * `PLAYOUT-FEATURES-01` B (`2.9.1`, ROUTE-ON-DONE §3) — this input is one of the Playout's OWN channel
+   * outputs (an NDI source named `<machine> (<a channel's NDI name>)`). RELIABLE when present; its
+   * ABSENCE means unknown, not safe. Only in the D10 of the server that owns the output.
+   */
+  ownOutputOf: PlayoutCompatibleChannelSchema.optional().catch(undefined),
 });
 export type PlayoutInput = z.infer<typeof PlayoutInputSchema>;
 
@@ -409,6 +415,12 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
                 .filter((c): c is number => c !== null),
             ),
           ].sort((a, b) => a - b);
+    // `PLAYOUT-FEATURES-01` B — which of OUR channels it is the own output of, by D4's join (a loopback
+    // host names the Playout that listed it). A pair naming none of ours loops on none of ours.
+    const ownOutputOf =
+      i.ownOutputOf === undefined
+        ? null
+        : input.channelFor(i.ownOutputOf.casparHost, i.ownOutputOf.casparChannel);
     const unusable = unusableReason(i, producer, input.hostIsOurs);
     const status: SourceDefinition['status'] = departed
       ? 'unavailable'
@@ -434,6 +446,7 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
       ...(departed ? { departed: true as const } : {}),
       ...(reason !== undefined ? { reason } : {}),
       ...(channels !== undefined ? { channels } : {}),
+      ...(ownOutputOf !== null ? { ownOutputOf } : {}),
     };
   };
 
@@ -539,6 +552,35 @@ export function sourceShowableOn(entry: SourceDefinition, channel: number): bool
   if (isPlayoutRoute(entry)) return entry.channels?.includes(channel) === true;
   return entry.channels === undefined || entry.channels.includes(channel);
 }
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` B (`B-298`) — **WOULD THIS ENTRY LOOP ON STATION CHANNEL `channel`?** It is that
+ * channel's own output (D10's `ownOutputOf`). The picker's disabled row and the bridge's refusal — a take,
+ * a look switch, a swap — all ask THIS. An entry without `ownOutputOf` loops nowhere: its absence is not
+ * guessed at.
+ */
+export function sourceLoopsOn(
+  entry: Pick<SourceDefinition, 'ownOutputOf'>,
+  channel: number,
+): boolean {
+  return entry.ownOutputOf === channel;
+}
+
+/** `B-298` — the picker's `title` for an input that is the row channel's own output. */
+export function ownOutputTitle(channel: number): string {
+  return `Own output of CH ${String(channel)} (would loop)`;
+}
+
+/** `B-298` — the refusal's clause, the NAME apart so a console can isolate it. */
+export function ownOutputWords(
+  name: string,
+  channel: number,
+): { readonly name: string; readonly rest: string } {
+  return { name, rest: ` is the own output of CH ${String(channel)} (would loop).` };
+}
+
+/** The refusal code a take, a switch or a swap carries for an input that would loop (`B-298`). */
+export const SOURCE_OWN_OUTPUT_CODE = 'source-own-output';
 
 /**
  * `ROUTE-PLATES-01` — the clause for an entry that may not be shown on a channel, the entry's NAME

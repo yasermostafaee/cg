@@ -111,6 +111,10 @@ import {
   // `ROUTE-PLATES-01` — which entries are Playout routes, and on which channels one may be shown.
   isPlayoutRoute,
   sourceShowableOn,
+  // `PLAYOUT-FEATURES-01` B — an input that is a channel's own output loops there.
+  sourceLoopsOn,
+  ownOutputWords,
+  SOURCE_OWN_OUTPUT_CODE,
   unbindableChange,
   redactUrlCredentials,
   // `MEDIA-PLATES-01` — a clip's playback settings, through the ONE reader.
@@ -6476,9 +6480,11 @@ export class CasparRuntime {
     */
     const seatableCatalog: SourceCatalog = {
       ...this.#sourceCatalog,
-      // `ROUTE-PLATES-01` — and only on a channel the entry may be shown on (v1.3 rule 1).
+      // `ROUTE-PLATES-01` — and only on a channel the entry may be shown on (v1.3 rule 1), and
+      // `PLAYOUT-FEATURES-01` B (`B-298`) — never on the channel whose own output it is.
       sources: this.#sourceCatalog.sources.filter(
-        (s) => sourceSeatable(s) && sourceShowableOn(s, slot.channel),
+        (s) =>
+          sourceSeatable(s) && sourceShowableOn(s, slot.channel) && !sourceLoopsOn(s, slot.channel),
       ),
     };
     const bindings = resolveLookBindings({
@@ -6979,6 +6985,21 @@ export class CasparRuntime {
     const collision = prospective.collisions[0];
     if (collision !== undefined) {
       return { reason: 'live-source-duplicate', message: seatCollisionMessage(collision) };
+    }
+    /*
+      🔴 `PLAYOUT-FEATURES-01` B (`B-298`) — A BINDING TO THIS CHANNEL'S OWN OUTPUT WOULD LOOP. Refused
+      HERE, from the prospective maps, before anything is written or sent: the take's resolver names it
+      for a plate it must resolve, but a swap or an UPDATE of a plate already punched never reaches that
+      question — the planner resolves such a plate from the seatable entries alone, and the looping one
+      is not among them. The same clause as the take's.
+    */
+    for (const frame of prospective.frames) {
+      if (!sourceLoopsOn(frame.source, slot.channel)) continue;
+      const words = ownOutputWords(frame.source.name, slot.channel);
+      return {
+        reason: SOURCE_OWN_OUTPUT_CODE,
+        message: `Plate "${frame.plateId}": “${words.name}”${words.rest}`,
+      };
     }
 
     /*

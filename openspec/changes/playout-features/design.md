@@ -63,3 +63,16 @@ plate on it.
 6. **The fake Playout** models `licensed` (default), `not_included`, `cap-1` and `grace`, and `null` (before
    `2.9.2`). It does NOT also refuse D1/D2 under `not_included`: a token issued before the license went stays
    valid (their §4), and that — a signed-in console on an unlicensed Playout — is the case the refusal is for.
+
+## B — `ownOutputOf` (`B-298`)
+
+1. **Parsed as optional and joined by D4's rule** (`buildPlayoutSourceCatalog` → `SourceDefinition.ownOutputOf`,
+   our channel number). A pair naming none of this station's channels loops on none of them. Absent is
+   "unknown", never "safe" — and never inferred from the NDI name.
+2. **One predicate, `sourceLoopsOn`**, beside `sourceShowableOn` rather than folded into it: the words differ
+   (`Own output of CH n (would loop)` against `Not available on CH n`), and a row's line reads its code as
+   recorded (`source-own-output`), never the entry's current state.
+3. **Three bridge doors ask it:** the take's resolver (`resolvePlateAssignments`), the seating filter in
+   `#planLiveSeating`, and `#refuseBindingChange` — the door a swap and an UPDATE pass. The last was needed:
+   for a plate already on air the planner never asks the resolver, and a swap to a looping input was
+   accepted (`ok: true`) with nothing sent. Measuring that found the same hole for rule 1 — `B-299`.

@@ -1,5 +1,8 @@
 import {
   notShowableWords,
+  ownOutputWords,
+  SOURCE_OWN_OUTPUT_CODE,
+  sourceLoopsOn,
   sourceSeatable,
   sourceShowableOn,
   unseatableClause,
@@ -56,13 +59,19 @@ export const LIVE_PLATE_SOURCE_UNUSABLE = 'source-unusable';
  * on (a Playout route's `compatibleChannels`). Refused before any AMCP, all or nothing.
  */
 export const LIVE_PLATE_SOURCE_NOT_SHOWABLE = 'source-not-showable';
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` B (`B-298`) — the entry is the row channel's OWN output (D10's `ownOutputOf`):
+ * shown there it would loop. Refused before any AMCP, all or nothing; offered on every other channel.
+ */
+export const LIVE_PLATE_SOURCE_OWN_OUTPUT = SOURCE_OWN_OUTPUT_CODE;
 
 export interface PlateAssignmentRefusal {
   readonly errorCode:
     | typeof LIVE_PLATE_UNASSIGNED
     | typeof LIVE_PLATE_SOURCE_UNAVAILABLE
     | typeof LIVE_PLATE_SOURCE_UNUSABLE
-    | typeof LIVE_PLATE_SOURCE_NOT_SHOWABLE;
+    | typeof LIVE_PLATE_SOURCE_NOT_SHOWABLE
+    | typeof LIVE_PLATE_SOURCE_OWN_OUTPUT;
   /** NAMES the plate — see the note on {@link resolvePlateAssignments}. */
   readonly message: string;
   /** The plates that could not be resolved, in declaration order. */
@@ -153,6 +162,7 @@ export function resolvePlateAssignments(input: {
   const stale: string[] = [];
   const unseatable: { plateId: string; source: SourceDefinition }[] = [];
   const notShowable: { plateId: string; source: SourceDefinition }[] = [];
+  const loops: { plateId: string; source: SourceDefinition }[] = [];
 
   for (const declaration of input.declarations) {
     // The plate's operator-facing handle is its `sourceId` — the SCENE's vocabulary
@@ -177,6 +187,11 @@ export function resolvePlateAssignments(input: {
       unseatable.push({ plateId, source });
       continue;
     }
+    // `PLAYOUT-FEATURES-01` B (`B-298`) — usable, but this row's channel's OWN output: it would loop.
+    if (input.channel !== undefined && sourceLoopsOn(source, input.channel)) {
+      loops.push({ plateId, source });
+      continue;
+    }
     // `ROUTE-PLATES-01` — the fifth: usable, but not on this row's channel (v1.3 rule 1).
     if (input.channel !== undefined && !sourceShowableOn(source, input.channel)) {
       notShowable.push({ plateId, source });
@@ -189,12 +204,25 @@ export function resolvePlateAssignments(input: {
     unassigned.length === 0 &&
     stale.length === 0 &&
     unseatable.length === 0 &&
-    notShowable.length === 0
+    notShowable.length === 0 &&
+    loops.length === 0
   ) {
     return { ok: true, plates };
   }
 
   if (unassigned.length === 0 && stale.length === 0 && unseatable.length === 0) {
+    if (loops.length > 0) {
+      // `B-298` — only the first is named: the take stops there.
+      const first = loops[0] as { plateId: string; source: SourceDefinition };
+      const words = ownOutputWords(first.source.name, input.channel as number);
+      return {
+        ok: false,
+        errorCode: LIVE_PLATE_SOURCE_OWN_OUTPUT,
+        plateIds: loops.map((u) => u.plateId),
+        refused: first,
+        message: `Plate "${first.plateId}": “${words.name}”${words.rest}`,
+      };
+    }
     // Only the first is named: the take stops there, as for an unseatable entry.
     const first = notShowable[0] as { plateId: string; source: SourceDefinition };
     const words = notShowableWords(first.source.name, input.channel as number);

@@ -13035,3 +13035,24 @@ loopback Playout address nothing is rewritten. ⚠ One edge stays, the same for 
 Bridge ON the Playout machine given the machine's network address as its Playout (instead of the
 installer's loopback default) rewrites both to that address while it drives `127.0.0.1`, so neither joins —
 an undocumented configuration; both documents say `/S` alone there.
+
+## [~] B-298 — An NDI input that is a channel's own output could be taken on that channel: a feedback loop ⟨priority: medium — nothing tells an operator which NDI name is which channel's output⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B · `openspec/changes/playout-features/` (§2)
+
+**Found:** the Playout lists NDI inputs by the name its NDI finder sees — on `.111`, `MTA (APASAI)` is
+channel 1's own output, and `MTA (APASAI-CGTEST2)` is channel 2's (`PLAYOUT-CG-RESPONSE-ROUTE-ON-DONE-v1.md`
+§1.2). Nothing in the console said which, so a plate on channel 1 could be bound to channel 1's own
+output: a picture of itself inside itself, a frame later each time. We asked for a mark (our
+`CG-CONTROL-REPLY-ROUTE-ON-SOURCES-2026-09-29.md` §3); `2.9.1` gives it: `ownOutputOf: {casparHost,
+casparChannel}` on such a D10 input — RELIABLE when present, and its ABSENCE means "unknown", not "safe"
+(their §3), only in the D10 of the server that owns the output. **Fix:** the mark is parsed and joined to
+this station's channel by D4's host rule (a loopback host names the Playout that listed it); ONE
+predicate, `sourceLoopsOn`, is asked by the picker (the row disabled, `Own output of CH n (would loop)` in
+its `title`) and by the bridge — the take's resolver (`source-own-output`, `“name” is the own output of CH
+n (would loop).`), the seating filter, and the binding door a swap and an UPDATE pass
+(`#refuseBindingChange`, which a plate already on air never reached through the resolver). Every other
+channel, and an input without the mark, is unchanged; nothing is guessed from a name. **Tests:**
+`route-plates.integration.test.ts` (`B-298`: refused on its own channel with nothing sent; control: CH 1's
+output and an unmarked input play on CH 2; a swap to it refused, control: a swap to the unmarked input
+lands), `sourcePicker.dom.test.ts`, `takeRefusalLine.test.ts`. **Owed:** `.111` lists `MTA (APASAI)` with
+`ownOutputOf` channel 1; CG's test channel is 2, so there it is offered (the control) — the refusal needs
+`MTA (APASAI-CGTEST2)` listed, which the Playout team offered to add.

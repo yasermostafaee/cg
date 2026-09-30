@@ -150,6 +150,12 @@ const MESSAGES: Readonly<Record<string, string>> = {
   */
   'source-not-showable':
     'A source this row is bound to cannot be shown on this channel — nothing was sent. Bind another source.',
+  // `PLAYOUT-FEATURES-01` B (`B-298`) — an input that is this channel's own output would loop.
+  'source-own-output':
+    'A source this row is bound to is this channel’s own output and would loop — nothing was sent. Bind another source.',
+  // `PLAYOUT-FEATURES-01` D (`R-077`) — the Playout's own message is on the row; this is for a surface with only the code.
+  'cg-unlicensed':
+    'The Playout’s license does not allow CG Control on this channel — nothing was sent.',
   'route-epoch-waiting': 'Waiting for the Playout’s input list — nothing was sent.',
   'route-epoch-stale': 'The Playout’s input list changed — nothing was sent. Take again.',
   'route-window-missed': 'The Playout input did not start in time — nothing was shown. Take again.',

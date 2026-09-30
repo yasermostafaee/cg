@@ -893,3 +893,75 @@ describe('FIELD-FIXES-01-A holds for route plates exactly as for any other', () 
     expect(seat?.producer).toBe('"udp://239.255.0.1:5000?reuse=1"');
   });
 });
+
+// ── `PLAYOUT-FEATURES-01` B (`B-298`) — an NDI input that is a channel's own output ──────────────
+
+describe('PLAYOUT-FEATURES-01 B (B-298) — `ownOutputOf`: refused on its own channel, offered on every other', () => {
+  const ndi = (id: string, name: string, source: string, own?: number): FakeInput => ({
+    id,
+    name,
+    casparHost: '127.0.0.1',
+    producer: { kind: 'ndi', source },
+    format: '1080i5000',
+    aspect: 1.7778,
+    // The loopback host names the Playout that listed it (their §3).
+    ...(own !== undefined ? { ownOutputOf: { casparHost: '127.0.0.1', casparChannel: own } } : {}),
+  });
+  const WITH_OWN: readonly FakeInput[] = [
+    ...INPUTS,
+    ndi('li-ndi-own2', 'NDI کانالِ ۲', 'APASAI (APASAI-CGTEST2)', 2),
+    ndi('li-ndi-own1', 'NDI کانالِ ۱', 'APASAI (APASAI)', 1),
+  ];
+  const OWN_2 = inputSourceId('li-ndi-own2');
+  const OWN_1 = inputSourceId('li-ndi-own1');
+  const STUDIO = inputSourceId('li-studio1');
+
+  it('🔴 the own output of CH 2, taken on CH 2, is refused before any AMCP, naming it and the loop', async () => {
+    const { r, sources, mark, sentSince } = await boot({
+      assignments: bind('single', { l1: OWN_2 }),
+      provider: new LocalPlayoutSources({ inputs: WITH_OWN }),
+    });
+    expect(sources.catalog().sources.find((s) => s.id === OWN_2)?.ownOutputOf).toBe(2);
+    expect(await r.loadFixed(BED, ROW, 'single', {})).toEqual({ accepted: true });
+    const from = await mark();
+    const verdict = await r.take(ROW);
+    expect(verdict).toMatchObject({
+      accepted: false,
+      errorCode: 'source-own-output',
+      message: 'Plate "l1": “NDI کانالِ ۲” is the own output of CH 2 (would loop).',
+    });
+    expect(await sentSince(from)).toEqual([]);
+    expect(row(r)?.takeRefusal).toMatchObject({
+      code: 'source-own-output',
+      plateId: 'l1',
+      sourceName: 'NDI کانالِ ۲',
+    });
+  });
+
+  it('control: the own output of CH 1 plays on CH 2, and an NDI input with no `ownOutputOf` plays too', async () => {
+    const { r, mock, mark, sentSince } = await boot({
+      assignments: bind('duo', { l1: OWN_1, l2: STUDIO }),
+      provider: new LocalPlayoutSources({ inputs: WITH_OWN }),
+    });
+    const from = await mark();
+    await take(r, 'duo');
+    const lines = await sentSince(from);
+    expect(lines.some((l) => /^PLAY 2-\d+ \[NDI\] "APASAI \(APASAI\)"$/.test(l))).toBe(true);
+    expect(lines.some((l) => /^PLAY 2-\d+ \[NDI\] "STUDIO-PC \(Cam 1\)"$/.test(l))).toBe(true);
+    expect(mock.layerState({ channel: 2, layer: layerOf(r, 'l1') })?.producer).toBeDefined();
+  });
+
+  it('🔴 a SWAP to the own output of CH 2, on CH 2, is refused and nothing is sent — control: a swap to the unmarked input lands', async () => {
+    const { r, mark, sentSince } = await boot({
+      assignments: bind('single', { l1: OWN_1 }),
+      provider: new LocalPlayoutSources({ inputs: WITH_OWN }),
+    });
+    await take(r, 'single');
+    const from = await mark();
+    const refused = await r.swapLiveSource(ROW, 'l1', OWN_2);
+    expect(refused.ok).toBe(false);
+    expect(await sentSince(from)).toEqual([]);
+    expect((await r.swapLiveSource(ROW, 'l1', STUDIO)).ok).toBe(true);
+    expect((await sentSince(from)).some((l) => l.includes('[NDI] "STUDIO-PC (Cam 1)"'))).toBe(true);
+  });
+});

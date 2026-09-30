@@ -356,6 +356,12 @@ export const SourceDefinitionSchema = z.object({
    * joined from D10's `compatibleChannels` by the same rule as D4. Absent = any channel.
    */
   channels: z.array(z.number().int().positive()).optional(),
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` B (`B-298`) — THIS STATION'S CHANNEL whose OWN OUTPUT this input is (D10's
+   * `ownOutputOf`, `2.9.1`, joined by D4's rule). Shown there it would loop, so it is refused on THAT
+   * channel and offered on every other. Absent = unknown, never "safe": nothing is guessed from a name.
+   */
+  ownOutputOf: z.number().int().positive().optional(),
   /** `PLAYOUT-SOURCES-01` — a media item's facts, for the picker's second line. Media only. */
   media: z
     .object({

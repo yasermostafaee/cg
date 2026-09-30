@@ -1,6 +1,8 @@
 import {
   CG_UNLICENSED_CODE,
   notShowableWords,
+  ownOutputWords,
+  SOURCE_OWN_OUTPUT_CODE,
   unseatableWords,
   type SourceDefinition,
   type TemplateInfo,
@@ -100,6 +102,24 @@ export function takeRefusalLine(
   if (refusal.code === NOT_SHOWABLE_CODE && context.channel !== undefined) {
     // `“ورودی ۴” can't be shown on CH 2.` — the bridge's own clause (`notShowableWords`).
     const words = notShowableWords(
+      refusal.sourceName ?? context.entry?.name ?? 'the source',
+      context.channel,
+    );
+    const plate = context.plateLabel ?? null;
+    const who = plate === null ? rowName : `${rowName} · ${plate}`;
+    const clause = `“${words.name}”${words.rest}`;
+    return {
+      row: rowName,
+      source: null,
+      input: null,
+      clause,
+      text: `${who}: ${clause}`,
+      unseatable: { plate, name: words.name, rest: words.rest },
+    };
+  }
+  if (refusal.code === SOURCE_OWN_OUTPUT_CODE && context.channel !== undefined) {
+    // `B-298` — `“NDI کانالِ ۱” is the own output of CH 1 (would loop).` — the bridge's own clause.
+    const words = ownOutputWords(
       refusal.sourceName ?? context.entry?.name ?? 'the source',
       context.channel,
     );
