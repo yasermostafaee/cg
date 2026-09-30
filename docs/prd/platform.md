@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS OPEN** — `0.9.0` and `0.9.1` are never delivered; `CENTRAL-BRIDGE-01` (`0.10.0`) sets it (the owner, 2026-09-30 — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.10.0`** — `0.9.0` and `0.9.1` were never delivered; `CENTRAL-BRIDGE-01` sets it at `0.10.0` (2026-09-30 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1782,6 +1782,9 @@ this release, as its header prescribes for an ordinary release.
 
 ### 🔴 THE FLOOR IS OPEN until `CENTRAL-BRIDGE-01` sets it at `0.10.0` (the owner, 2026-09-30)
 
+**Superseded (2026-09-30): `CENTRAL-BRIDGE-01` has set it — see the next section.** What follows is
+the record of the open interval.
+
 **Neither `0.9.0` nor `0.9.1` is delivered.** The owner's own check of `0.9.0` found the faults
 [[P-060]] carries, and its draft is retitled `v0.9.0 — superseded, do not use`; `RELEASE-091-01`
 DELTA B (B0) decided `0.9.1` is not handed to a client either — `CENTRAL-BRIDGE-01` (`0.10.0`, one
@@ -1790,6 +1793,42 @@ decision of 2026-09-30 leaves it **open**, and `CENTRAL-BRIDGE-01` sets it at `0
 release a client will hold. Until then no release a client holds constrains a format: the policy above
 applies as it did before `0.9.0`. The list in the section above is what `0.9.0` would have been held
 to; `CENTRAL-BRIDGE-01` writes `0.10.0`'s when it sets the floor.
+
+### 🔴 THE FLOOR IS SET — `0.10.0` (2026-09-30, `CENTRAL-BRIDGE-01` §1 E)
+
+**`0.10.0` is the first release a client will hold** — CG Bridge, CG Control and CG Designer, one
+version (`tools/release/src/release-version.mjs` reads the nine files that carry it; CG Bridge's
+installer is built from the same number). **The policy above reverses from this release.** Everything
+`0.10.0` can open must keep opening in every later release; a shim that keeps it opening is a
+requirement with a test; removing one is a breaking change that needs its own decision and a
+migration story.
+
+**What `0.10.0` opens, and so must keep opening:**
+
+- a `.vcg` template package — manifest `schemaVersion: 1`, `formatVersion: '1.0'`
+  (`packages/shared-schema/src/manifest.ts:54`, `:56`), its scene `schemaVersion: 1`
+  (`packages/shared-schema/src/scene.ts:545`);
+- a CG Designer project, `.cgproj` — `formatVersion: '1.0'`
+  (`packages/shared-schema/src/project-package.ts:56`);
+- CG Bridge's configuration, `%ProgramData%\CG Bridge\cg-bridge.json` — read at every start through
+  `ServiceConfigSchema` (`tools/caspar-bridge/src/service-config.ts:22`), which is STRICT: a key a
+  later release adds must be optional there, and a key it drops must still parse;
+- CG Bridge's station files, `%ProgramData%\CG Bridge\.cg-runtime\` — the `bridge-*.json` stores
+  (its own stack and Playout session among them) and the template registry under `bridge-templates\`;
+- a CG Control `0.9.x` user's `%APPDATA%\CG Control\.cg-runtime\`, which CG Bridge's installer imports
+  ONCE (`tools/caspar-bridge/src/import-state.ts`) — the one reader of a pre-floor shape, kept because
+  a station moving to `0.10.0` has nothing else to carry its layers over with;
+- what each app keeps in its own WebView2 storage — CG Control's station record
+  `cg.runtime.station.v1` (`apps/runtime/src/platform/stationAddress.ts`) and its display copies of
+  the library and the stack; the Designer's workspace;
+- the console ↔ CG Bridge protocol within `0.10.x`: a console and a bridge of the same `major.minor`
+  must work together, because that is the line the version check draws (`sameReleaseLine`,
+  `packages/shared-ipc/src/channels/capabilities.ts`) — a patch may add, never break.
+
+Every record or comment that cites this item's licence ("nothing has shipped", "no conversion is
+owed") was written before `0.10.0` and is history from this date. `CG_RUNTIME_VERSION`
+(`packages/shared-schema/src/runtime-version.ts`) is a rendering-CONTRACT version and is untouched by
+this release, as its header prescribes for an ordinary release.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 

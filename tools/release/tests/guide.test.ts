@@ -26,22 +26,69 @@ const source = fs.readFileSync(GUIDE, 'utf8');
  * source's spelling where CSS changes the case on screen (`PLAYOUT` is the heading `Playout`).
  */
 const LABELS: readonly { shown: string; text?: string; file: string }[] = [
-  { shown: 'STARTING BRIDGE', file: 'apps/runtime/src-tauri/starting/start.js' },
+  // `CENTRAL-BRIDGE-01` — the splash says the console is connecting; it starts no bridge.
+  { shown: 'CONNECTING', text: "phase('CONNECTING')", file: 'apps/runtime/src/renderer/main.tsx' },
   {
     shown: 'Set up CG Control',
     file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
+  // `CENTRAL-BRIDGE-01` (D8) — CG Control's first question, and where a separate server goes.
+  {
+    shown: 'Playout address',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+  },
+  {
+    shown: 'CG Bridge address',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+  },
+  // `CENTRAL-BRIDGE-01` §1 C — the lines a console shows, each with what to do.
+  {
+    shown: 'CG Bridge not reachable at',
+    file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
+  },
+  {
+    shown: 'nothing is listening on port',
+    file: 'apps/runtime/src/renderer/hooks/useBridgeReachability.ts',
+  },
+  {
+    shown: 'does not answer (switched off, a wrong address, or a firewall)',
+    file: 'apps/runtime/src/renderer/hooks/useBridgeReachability.ts',
+  },
+  {
+    shown: 'something there answers, but not as CG Bridge',
+    file: 'apps/runtime/src/renderer/hooks/useBridgeReachability.ts',
+  },
+  {
+    shown: 'Set up again',
+    file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
+  },
+  {
+    shown: 'CG Bridge needs a station admin to sign in',
+    file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
+  },
+  {
+    shown: 'Sign in CG Bridge…',
+    file: 'apps/runtime/src/renderer/features/status/BridgeSessionBanner.tsx',
+  },
+  {
+    shown: 'CG Bridge:',
+    text: 'CG Bridge: <bdi>',
+    file: 'apps/runtime/src/renderer/features/status/BridgeSessionBanner.tsx',
+  },
+  {
+    shown: 'are different releases',
+    file: 'packages/shared-ipc/src/channels/capabilities.ts',
   },
   {
     shown: 'PLAYOUT',
     text: '>Playout<',
     file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
   },
+  // `CENTRAL-BRIDGE-01` — the gate's Connect (the station's Playout is checked on open, unpressed).
   {
-    shown: 'Check',
-    text: 'Check',
-    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+    shown: 'Connect',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
   },
-  { shown: 'Connect', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'waiting for sign-in', file: 'tools/caspar-bridge/src/connection-check.ts' },
   {
     shown: 'SIGN IN',
@@ -81,7 +128,8 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   },
   { shown: 'LOG', file: 'apps/runtime/src/renderer/features/shell/AppHeader.tsx' },
   { shown: 'Audit log', file: 'apps/runtime/src/renderer/features/audit/AuditPanel.tsx' },
-  { shown: 'Open log folder', file: 'apps/runtime/src/renderer/features/audit/AuditPanel.tsx' },
+  // `CENTRAL-BRIDGE-01` — CG Bridge's logs, one zip (the old `Open log folder` was CG Control's own).
+  { shown: 'Download logs', file: 'apps/runtime/src/renderer/features/audit/AuditPanel.tsx' },
   { shown: 'SETTINGS', file: 'apps/runtime/src/renderer/features/shell/AppHeader.tsx' },
   {
     shown: `Version ${VERSION}`,
@@ -117,28 +165,37 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
 ];
 
 describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
-  it('carries its seven sections, in the prompt’s order', () => {
+  it('carries its nine sections, in the prompt’s order — CG Bridge before CG Control, CG Designer last', () => {
     const headings = [...source.matchAll(/^##\s+(.*)$/gm)].map((m) => m[1]);
     expect(headings).toEqual([
       '۱. در بسته چه هست',
       '۲. پیش‌نیازها',
-      '۳. نصب CG Control',
-      '۴. اجرای نخست',
-      '۵. نصب CG Designer',
-      '۶. گزارش مشکل',
-      '۷. محدودیت‌های این نسخهٔ آزمایشی',
+      '۳. نصب CG Bridge',
+      '۴. نصب CG Control',
+      '۵. اجرای نخست',
+      '۶. نصب CG Designer',
+      '۷. پیغام‌های CG Control',
+      '۸. گزارش مشکل',
+      '۹. محدودیت‌های این نسخهٔ آزمایشی',
     ]);
   });
 
-  it(`names this release (${VERSION}) and both installers by the names the release gives them`, () => {
+  it(`names this release (${VERSION}) and the three installers by the names the release gives them`, () => {
     const files = releaseFiles(VERSION);
     expect(source).toContain(`\`${VERSION}\``);
+    expect(source).toContain(`\`${files.bridge.name}\``);
     expect(source).toContain(`\`${files.control.name}\``);
     expect(source).toContain(`\`${files.designer.name}\``);
     expect(source).toContain(`\`${files.sums}\``);
     // Never the built names: GitHub rewrites the space, so a client never downloads those.
     expect(source).not.toContain(files.control.built);
     expect(source).not.toContain(files.designer.built);
+  });
+
+  it('`CENTRAL-BRIDGE-01` — no "one CG Control per channel" limit: several consoles share one CG Bridge', () => {
+    // The 0.9.x guide's own limit sentence, pinned as an ABSENCE — and the positive it became.
+    expect(source).not.toContain('دو CG Control روی یک کانال پشتیبانی نمی‌شود');
+    expect(source).toContain('چند CG Control می‌توانند هم‌زمان به یک CG Bridge وصل شوند');
   });
 
   it('every label it quotes is one an app shows — checked against the source that renders it', () => {

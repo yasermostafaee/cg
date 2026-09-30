@@ -1,6 +1,7 @@
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` B1 — **ONE VERSION FOR THE THREE PARTS A CLIENT INSTALLS**: CG Control,
- * CG Designer, and the bridge CG Control runs as its sidecar.
+ * CG Designer, and the bridge — since `CENTRAL-BRIDGE-01`, CG Bridge, the service with its own
+ * installer (`tools/bridge-installer`, built with `/DVERSION=` from this number).
  *
  * Each part writes its version in more than one file, and each file feeds a different reader:
  *

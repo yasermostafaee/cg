@@ -8,6 +8,8 @@ declare module '*release-files.mjs' {
     readonly name: string;
   }
   export function releaseFiles(version: string): {
+    /** `CENTRAL-BRIDGE-01` — CG Bridge's own installer: its built name is its release name. */
+    readonly bridge: InstallerNames;
     readonly control: InstallerNames;
     readonly designer: InstallerNames;
     readonly guide: string;

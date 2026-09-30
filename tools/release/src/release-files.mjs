@@ -1,13 +1,15 @@
 /**
- * 🔴 `CLIENT-TEST-RELEASE-01` B4 — **THE RELEASE'S FOUR FILES, NAMED ONCE.** The draft release holds
- * exactly: CG Control's installer, CG Designer's, the Persian install guide, and `SHA256SUMS.txt` over
- * the other three. Their names live here and nowhere else — the workflow assembles and reads back
+ * 🔴 `CLIENT-TEST-RELEASE-01` B4 — **THE RELEASE'S FILES, NAMED ONCE.** The draft release holds
+ * exactly: `CENTRAL-BRIDGE-01` — CG Bridge's installer (the service, installed first, on the Playout
+ * machine or beside it), CG Control's, CG Designer's, the Persian install guide, and `SHA256SUMS.txt`
+ * over the other four. Their names live here and nowhere else — the workflow assembles and reads back
  * with them, and the guide's test holds the guide to them.
  *
- * WHY THE INSTALLERS ARE RENAMED: Tauri names them `CG Control_<v>_x64-setup.exe`, and GitHub renames
- * a release asset whose name has a space — so the name a client downloads would not be the one
+ * WHY THE APPS' INSTALLERS ARE RENAMED: Tauri names them `CG Control_<v>_x64-setup.exe`, and GitHub
+ * renames a release asset whose name has a space — so the name a client downloads would not be the one
  * `SHA256SUMS.txt` and the guide give, and `sha256sum -c` would fail. The release names drop the space;
- * the version stays in them.
+ * the version stays in them. CG Bridge's own installer is built with no space (`cg-bridge.nsi`), so its
+ * built name IS its release name.
  *
  *   node tools/release/src/release-files.mjs expect <version>
  *   node tools/release/src/release-files.mjs assemble <version> <installers dir> <guide.pdf> <out dir>
@@ -24,9 +26,13 @@ import { fileURLToPath } from 'node:url';
 /** The sums' own name — the same in every release. */
 const SUMS_NAME = 'SHA256SUMS.txt';
 
-/** The four files of release `version`: each installer's built name and release name, the guide, the sums. */
+/** The five files of release `version`: each installer's built name and release name, the guide, the sums. */
 export function releaseFiles(version) {
   return {
+    bridge: {
+      built: `CG-Bridge_${version}_x64-setup.exe`,
+      name: `CG-Bridge_${version}_x64-setup.exe`,
+    },
     control: {
       built: `CG Control_${version}_x64-setup.exe`,
       name: `CG-Control_${version}_x64-setup.exe`,
@@ -40,10 +46,16 @@ export function releaseFiles(version) {
   };
 }
 
-/** The four names, sorted — what the release must hold, no more and no fewer. */
+/** The five names, sorted — what the release must hold, no more and no fewer. */
 export function expectedAssets(version) {
   const files = releaseFiles(version);
-  return [files.control.name, files.designer.name, files.guide, files.sums].sort();
+  return [
+    files.bridge.name,
+    files.control.name,
+    files.designer.name,
+    files.guide,
+    files.sums,
+  ].sort();
 }
 
 /** `sha256sum`'s own format: the hash, two spaces, the name; LF; one line per file, by name. */
@@ -60,13 +72,13 @@ export function sha256Sums(dir, names) {
 }
 
 /**
- * Copy both installers under their release names and the guide into `outDir`, write
- * `SHA256SUMS.txt` over those three, and refuse unless `outDir` then holds exactly the four.
+ * Copy the three installers under their release names and the guide into `outDir`, write
+ * `SHA256SUMS.txt` over those four, and refuse unless `outDir` then holds exactly the five.
  */
 export function assembleRelease({ version, installersDir, guidePdf, outDir }) {
   const files = releaseFiles(version);
   fs.mkdirSync(outDir, { recursive: true });
-  for (const installer of [files.control, files.designer]) {
+  for (const installer of [files.bridge, files.control, files.designer]) {
     const from = path.join(installersDir, installer.built);
     if (!fs.existsSync(from)) throw new Error(`${installer.built} is not in ${installersDir}`);
     fs.copyFileSync(from, path.join(outDir, installer.name));
@@ -76,7 +88,7 @@ export function assembleRelease({ version, installersDir, guidePdf, outDir }) {
   }
   fs.writeFileSync(
     path.join(outDir, files.sums),
-    sha256Sums(outDir, [files.control.name, files.designer.name, files.guide]),
+    sha256Sums(outDir, [files.bridge.name, files.control.name, files.designer.name, files.guide]),
   );
   const held = fs.readdirSync(outDir).sort();
   const expected = expectedAssets(version);

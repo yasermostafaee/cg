@@ -19,8 +19,9 @@ import {
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-// The release this tree is — moved by hand with each bump (`P-060`: `0.9.1`), which is the point.
-const RELEASE = '0.9.1';
+// The release this tree is — moved by hand with each bump (`P-060`: `0.9.1`; `CENTRAL-BRIDGE-01`:
+// `0.10.0`), which is the point.
+const RELEASE = '0.10.0';
 
 let scratch: string | null = null;
 
@@ -60,7 +61,10 @@ describe('CLIENT-TEST-RELEASE-01 B1 — one version for CG Control, CG Designer 
     expect(() => releaseVersion(root)).toThrow(
       /apps\/designer\/src-tauri\/tauri\.conf\.json: 0\.9\.2/,
     );
-    expect(() => releaseVersion(root)).toThrow(/tools\/caspar-bridge\/package\.json: 0\.9\.1/);
+    // The files left alone name the release itself — derived, so the next bump cannot strand it.
+    expect(() => releaseVersion(root)).toThrow(
+      new RegExp(`tools/caspar-bridge/package\\.json: ${RELEASE.replaceAll('.', '\\.')}`),
+    );
   });
 
   it('CONTROL — the parts agreeing on a placeholder is not a release', () => {
