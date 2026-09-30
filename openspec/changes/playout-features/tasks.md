@@ -7,7 +7,7 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 - [x] 0.1 The three letters adopted into `docs/integration/playout/` (scanned for credentials first), README rows
 - [x] 0.2 `design.md` §0: what the guard refused before this change; the reveal's timing; the backup path;
       the B-292 silence check against a tick error
-- [ ] 0.3 PRD: `B-298` filed; `R-075`, `R-076`, `R-077`, `B-286` moved to `[~]`; the loopback AMCP limit filed
+- [x] 0.3 PRD: `B-298` filed; `R-075`, `R-076`, `R-077`, `B-286` moved to `[~]`; the loopback AMCP limit filed
       under `R-077`; the registry
 
 ## 1. D — the CG license (`R-077`)
@@ -56,9 +56,9 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 - [x] 5.3 Console: the audio reader (their method); the speaker toggle, remembered
 - [x] 5.4 Console: the meter (8 bars and the scale) and the loudness badge; stale reads −60
 - [x] 5.5 Fakes: the feed's `/audio.wav`; the fake Playout's meters stream
-- [ ] 5.6 Tests; e2e with screenshots; gate; pushed; CI read
+- [x] 5.6 Tests; e2e with screenshots; gate; pushed; CI read — `0c0c291c` went RED: its PR run https://github.com/yasermostafaee/cg/actions/runs/36782520980 failed `shell-chrome.spec.ts` §C3 on both attempts (the PROGRAM strip 32 px against the reference's 31: the speaker toggle took PVW's 25 px). Fixed forward in `d5f91ca4` (the toggle is the strip's 24 px content box; `programme-sound.spec` pins 31 px off and on; the whole runtime e2e ran locally first; `pnpm gate` 99/99, 0 cached): PR run https://github.com/yasermostafaee/cg/actions/runs/36786735218 (`E2E (Playwright)` RAN: runtime 317 passed + 1 flaky — the pre-existing `first-run.spec.ts:129`, red 3/3 locally at `a8b59df5` too — designer 293 passed; `programme-sound.spec` and `shell-chrome.spec` §C3 passed; `Lint • Typecheck • Test • Build` success); Desktop run https://github.com/yasermostafaee/cg/actions/runs/36786735207 (Installers, Installer smoke and CG Bridge smoke success)
 
 ## 6. Close
 
-- [ ] 6.1 `pnpm openspec validate --all --strict`; the report
+- [x] 6.1 `pnpm openspec validate --all --strict` (92 passed, 0 failed); the report
       `Claude outputs/REPORT-PLAYOUT-FEATURES-01-v1-<date>.md`

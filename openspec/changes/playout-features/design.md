@@ -151,7 +151,9 @@ plate on it.
 4. **The speaker is off by default, per console and remembered** (`cg.runtime.pgm-audio.v1`, `{ on }`). A
    browser starts sound only after a press on the page: the press on the speaker is one; after a reload the
    remembered speaker starts as soon as the page has had one (`navigator.userActivation.hasBeenActive` — the
-   press that shows the monitors), or at the first press or key otherwise (`waiting` until then).
+   press that shows the monitors), or at the first press or key otherwise (`waiting` until then). The toggle is
+   the PROGRAM strip's content box (24 px, `--r-pgm-strip-toggle`), one px under PVW's transport, so the
+   reference's 31 px strip holds — `shell-chrome.spec.ts` §C3 pins it, and caught the 25 px first spelling in CI.
 5. **The meters are read ONCE, by CG Bridge, with its own session** (`playout-meters.ts`): a streaming request
    with the bearer in `Authorization` (never `EventSource`, never a query), reconnecting on close or on 35 s
    of silence (the Playout pings every 15 s), `404` read as a Playout before `2.9.2` (asked again every
