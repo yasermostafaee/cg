@@ -93,8 +93,13 @@ const NON_VERB_ACTIONS = [
   /*
     🔴 `B-260` (a) — the two TEMPLATE mutations that wrote no row: a re-delivery that changed the
     catalogue, and a removal from it. Catalogue writes, not playout verbs — neither carries a
-    `slot` or reaches air on its own. Driven by `tests/lock-scope.integration.test.ts`, which
-    asserts one row per change and none for a re-delivery that changes nothing.
+    `slot` or reaches air on its own. `template-remove` is driven by
+    `tests/lock-scope.integration.test.ts`.
+
+    ⚠ `template-redeliver` has NO WRITER since `CENTRAL-BRIDGE-01` (`B-294`) — a console
+    re-delivers nothing, and the socket refuses the frame before any gate (pinned, with its
+    absence of a row, in `lock-scope`). It is named here because the schema keeps it for older
+    logs, and this partition is over the schema.
   */
   'template-redeliver',
   'template-remove',
@@ -621,26 +626,6 @@ describe('B-141 — an audit write can never take the station off air', () => {
   );
 });
 
-describe('B-141 — a REDELIVERY is not an operator import', () => {
-  it(
-    'the SPA replaying its library after a reconnect writes no rows',
-    { timeout: 60_000 },
-    async () => {
-      const { r, file } = await boot({ reachable: true });
-      // The operator's import: one row.
-      r.templateImport(TEMPLATE, HTML);
-      // Three redeliveries — what a resync does on every reconnect. A log that has to
-      // be scrolled past is a log that stops being read.
-      r.templateImport(TEMPLATE, HTML, true);
-      r.templateImport(TEMPLATE, HTML, true);
-      r.templateImport(TEMPLATE, HTML, true);
-
-      const rows = await entriesOnDisk(file, 1);
-      expect(forAction(rows, 'import')).toHaveLength(1);
-    },
-  );
-});
-
 /**
  * 🔴 **`TIMING-WIRE-22 · DELTA B · R3` — A TIMING SET IS IN THE LOG.**
  *
@@ -741,8 +726,8 @@ describe('DELTA B · R3 — set-pass-timing is recorded, at its real outcome', (
     { timeout: 60_000 },
     async () => {
       /*
-        It answers `ok: true`, so an "audit every accepted call" reading logs it. The
-        `redelivery` precedent is the same shape: a log with rows for actions nobody performed
+        It answers `ok: true`, so an "audit every accepted call" reading logs it. The retired
+        `redelivery` set the precedent (`B-141`): a log with rows for actions nobody performed
         is a log people stop reading, and this one would fill with them — the console sends a
         patch built from a draft, and a draft with nothing outstanding produces exactly this.
       */

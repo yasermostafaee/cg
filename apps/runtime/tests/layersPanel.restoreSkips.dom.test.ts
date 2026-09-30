@@ -98,6 +98,11 @@ function stubBridge(skips: RestoreSkip[]): void {
         return () => undefined;
       },
       onRestoreMigrations: () => () => undefined,
+      // `CENTRAL-BRIDGE-01` — the report is the bridge's; its dismissal goes there, recorded here.
+      dismissRestoreReport: (req: unknown) => {
+        dismissals.push(req);
+        return Promise.resolve({ ok: true });
+      },
       clearAll: () => Promise.resolve({ ok: true, cleared: 0 }),
       removeAll: () => Promise.resolve({ ok: true, removed: 0 }),
       take: () => Promise.resolve({ accepted: true }),
@@ -108,6 +113,9 @@ function stubBridge(skips: RestoreSkip[]): void {
   };
   (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
+
+/** The dismissals the panel sent to the bridge, in order. */
+const dismissals: unknown[] = [];
 
 async function renderPanel(): Promise<HTMLDivElement> {
   container = document.createElement('div');
@@ -195,9 +203,8 @@ it('B-108: ONE lost row reads as one row, not "1 rows"', async () => {
 });
 
 it('B-108 THE NO-FALSE-ALARM CASE: nothing is announced when nothing was lost', async () => {
-  // The empty report is what a healthy reconnect produces — including the page
-  // reload against a live bridge, whose every skip is the benign already-held one
-  // and is filtered out upstream in `#resync`.
+  // The empty report is what a clean bridge start produces — the benign already-held
+  // skip is filtered out on the bridge (`CENTRAL-BRIDGE-01`).
   stubBridge([]);
   const el = await renderPanel();
   expect(notice(el)).toBeNull();
@@ -213,10 +220,14 @@ it('B-108: dismissing THIS report does not silence the NEXT one', async () => {
     'button[aria-label="Dismiss the restore notice"]',
   );
   expect(dismiss).not.toBeNull();
+  dismissals.length = 0;
   await act(async () => {
     dismiss?.click();
   });
   expect(notice(el)).toBeNull();
+  // `CENTRAL-BRIDGE-01` — and it went to the bridge, so every console stops showing it. One
+  // declared channel: sent bare, as the bulk verbs are.
+  expect(dismissals).toEqual([{ part: 'skipped' }]);
 
   // A DIFFERENT report arrives (a second reconnect lost a different row): it shows.
   await act(async () => {

@@ -114,6 +114,11 @@ function stubBridge(migrations: RestoreMigration[], skips: RestoreSkip[] = []): 
         handler(migrations);
         return () => undefined;
       },
+      // `CENTRAL-BRIDGE-01` — the report is the bridge's; its dismissal goes there, recorded here.
+      dismissRestoreReport: (req: unknown) => {
+        dismissals.push(req);
+        return Promise.resolve({ ok: true });
+      },
       clearAll: () => Promise.resolve({ ok: true, cleared: 0 }),
       removeAll: () => Promise.resolve({ ok: true, removed: 0 }),
       take: () => Promise.resolve({ accepted: true }),
@@ -124,6 +129,9 @@ function stubBridge(migrations: RestoreMigration[], skips: RestoreSkip[] = []): 
   };
   (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
+
+/** The dismissals the panel sent to the bridge, in order. */
+const dismissals: unknown[] = [];
 
 async function renderPanel(): Promise<HTMLDivElement> {
   container = document.createElement('div');
@@ -259,10 +267,13 @@ it('dismissing THIS report does not silence the NEXT one', async () => {
     'button[aria-label="Dismiss the migrated-row notice"]',
   );
   expect(dismiss).not.toBeNull();
+  dismissals.length = 0;
   await act(async () => {
     dismiss?.click();
   });
   expect(migrations(el)).toBeNull();
+  // `CENTRAL-BRIDGE-01` — and on the bridge, for every console.
+  expect(dismissals).toEqual([{ part: 'migrated' }]);
 
   await act(async () => {
     root?.unmount();

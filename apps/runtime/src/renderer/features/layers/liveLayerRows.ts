@@ -36,10 +36,11 @@ import {
  * from a different surface. For a row that exists, the answer is the row.
  *
  * 🔴 **THE STRANDED CASE IS THE EXCEPTION, AND IT IS THE WHOLE POINT OF `B-145`.**
- * The ledger is keyed by `itemId` and adopted from disk at boot; the browser
- * re-delivers its own stack intent separately (`B-092`). Those two can legitimately
- * disagree — the operator removed the row while the bridge was down — and the
- * result is a producer lit on air belonging to a row that is not there. That is
+ * The ledger is keyed by `itemId` and adopted from disk at boot; the stack is
+ * restored from ANOTHER file (`CENTRAL-BRIDGE-01` — it was a console's re-delivery,
+ * `B-092`). Those two can legitimately disagree — a stack file lost or unusable, a
+ * row the restore skipped — and the result is a producer lit on air belonging to a
+ * row that is not there. That is
  * `B-145`'s opening sentence: *"the layers stay lit and nothing in the product can
  * name them, clear them or re-adopt them."*
  *
@@ -199,10 +200,11 @@ export interface LiveLayerRowView {
  * - `stack-delivery-pending` — 🔴 **the one a first cut of this file missed, and the one
  *   that matters most.** `useBridgeSnapshot`’s `ready` flag *“latches on the FIRST arrival
  *   and never clears”*, so after a reconnect it still reads `true` while the stack is `[]` —
- *   and a restarted bridge serves its FULL adopted ledger before the browser has
- *   re-delivered a single row (`B-092`). Read naively, **every seated layer would read
- *   STRANDED with RELEASE armed, in exactly the bridge-restart scenario `B-145` exists
- *   for.**
+ *   and in the window before the re-pull lands, the ledger push can already be here. It
+ *   used to be worse: a restarted bridge served its FULL ledger before the browser had
+ *   re-delivered a single row (`B-092`; since `CENTRAL-BRIDGE-01` the bridge restores its
+ *   own stack before it listens). Read naively, **every seated layer would read STRANDED
+ *   with RELEASE armed, in exactly the bridge-restart scenario `B-145` exists for.**
  *
  * ⭐ **AN EMPTY STACK IS NOT, BY ITSELF, BLINDNESS — owner decision, 2026-08-20.** The first
  * fix suppressed the alarm for EVERY empty stack, which traded a true positive for safety: an
@@ -224,13 +226,11 @@ export interface LiveLayerRowView {
  * console is 200 ms from restoring exactly those rows. Arming a control that cuts a live guest
  * on a derived neighbour of the real fact is what `B-101` is about.
  *
- * ⚠ **THE RESIDUAL, stated rather than papered over.** This closes the SELF race completely.
- * It does not close the MULTI-BROWSER one: one bridge serves many browsers, and this browser
- * cannot know that another is about to restore the rows that would explain a layer. That is
- * genuinely undecidable from here and would need a bridge-side “every client has re-delivered”
- * fact, which does not exist. So a second console CAN still see a transient stranded verdict
- * during another console’s restore — the confirm dialog remains the last guard, and it names
- * the plate and producer for that reason.
+ * ✅ **THE RESIDUAL THIS USED TO STATE IS CLOSED — `CENTRAL-BRIDGE-01`.** It read: one bridge
+ * serves many browsers, and this browser cannot know that another is about to restore the rows
+ * that would explain a layer. No console restores rows any more: the bridge restores its own
+ * stack at start, before any console connects, so there is no other console's restore to wait
+ * for. The confirm dialog stays the last guard, and it names the plate and producer.
  */
 export type LiveLayerBlindness = 'link-down' | 'stack-not-arrived' | 'stack-delivery-pending';
 

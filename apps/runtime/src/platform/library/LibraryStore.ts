@@ -1,46 +1,30 @@
-import {
-  describeTemplateReferences,
-  type FixedLayerBank,
-  type TemplateInfo,
-  type TemplateReference,
-} from '@cg/shared-ipc';
+import type { TemplateInfo } from '@cg/shared-ipc';
 import type { Workspace } from '@cg/storage';
 
 /**
- * One registered template: the operator-facing metadata plus the produced
- * self-contained standalone HTML (runtime + scene + assets inlined). The HTML is
- * what the bridge serves to CasparCG over HTTP, so it is retained here and
- * re-delivered to the bridge on every (re)connect.
+ * One registered template, as this console last saw CG Bridge accept it: the operator-facing
+ * metadata plus the produced self-contained standalone HTML (runtime + scene + assets inlined).
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`): a DISPLAY copy — the offline Library and the offline PVW page
+ * read it; it is never sent to the bridge, which keeps the library for every console.
  */
 export interface LibraryEntry {
   template: TemplateInfo;
   html: string;
   /**
    * 🔴 `CHANNEL-TEMPLATES-01` — the channel this browser imported it ON. Each channel has its own
-   * list, so a record is that channel's and is re-delivered to that channel only.
+   * list, so a record is that channel's.
    *
    * ABSENT on a record written before the per-channel lists: the station-wide library it was
    * part of is every channel's list now, so such a record answers for any channel that holds no
-   * record of its own for the template, and is re-delivered naming no channel — which the bridge
-   * reads as "restore it if no channel lists it", never as a replacement.
+   * record of its own for the template.
    */
   channel?: number;
   /**
    * `CHANNEL-TEMPLATES-01` — a pre-channel record only: the channels the template was REMOVED from
-   * in this browser. It no longer answers for them, and — having been acted on — it is no longer
-   * re-delivered (a channel-less restore could otherwise put back what a channel removed once the
-   * bridge's process-lifetime tombstones are gone). It still answers for every other channel: a
+   * in this browser. It no longer answers for them. It still answers for every other channel: a
    * removal on CH 2 leaves CH 1's offline list and CH 1's PVW page exactly as they were.
    */
   removedOn?: number[];
-}
-
-export interface RemoveResult {
-  ok: boolean;
-  reason?: 'in-use' | 'unknown-template';
-  message?: string;
-  /** `B-212` — with `in-use`: where each referencing item is. */
-  references?: TemplateReference[];
 }
 
 const DIR = 'library';
@@ -68,17 +52,17 @@ function hiddenOn(entry: LibraryEntry, channel: number): boolean {
 }
 
 /**
- * Browser-local, file-based source of truth for the Runtime template library
- * (B-085). Backed by a `@cg/storage` `Workspace` (OPFS in the browser, in-memory
- * in tests), so the library is owned by the SPA — not the bridge process — and
- * therefore works with the bridge fully down and survives a page reload.
+ * Browser-local, file-based DISPLAY copy of the Runtime template library (B-085). Backed by a
+ * `@cg/storage` `Workspace` (OPFS in the browser, in-memory in tests), so the Library stays visible
+ * with CG Bridge fully down and across a page reload.
  *
- * This class is pure persistence + an in-memory index: it knows nothing about the
- * SPA↔bridge link. The `WebSocketRuntime` owns delivery/reconcile to the bridge
- * (it is the thing that knows the connection state), which keeps this store
- * unit-testable off any socket. It REPLACES `WebSocketRuntime.#retained` — the
- * index IS the retention set re-delivered on reconnect (`entries()`), now
- * persistent.
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`): it used to be the library's "source of truth", re-delivered to
+ * the bridge on every connect. With one bridge serving several consoles each console's copy was a
+ * claim on the truth, and a stale one could win; the library is CG Bridge's now. This store is
+ * written only after the bridge accepted an import or a removal, and nothing sends it.
+ *
+ * This class is pure persistence + an in-memory index: it knows nothing about the SPA↔bridge link
+ * (the `WebSocketRuntime` does), which keeps it unit-testable off any socket.
  *
  * 🔴 `CHANNEL-TEMPLATES-01` — PER CHANNEL, like the bridge's lists: what this browser imported on
  * each channel, plus the pre-channel records it held before the lists existed.
@@ -168,20 +152,9 @@ export class LibraryStore {
   }
 
   /**
-   * The full retention/delivery set (metadata + HTML, each with its channel) for reconcile-on-connect.
-   * A pre-channel record a channel has removed is not in it (see {@link LibraryEntry.removedOn}).
-   */
-  entries(): LibraryEntry[] {
-    return [
-      ...this.#own.values(),
-      ...[...this.#legacy.values()].filter((e) => (e.removedOn ?? []).length === 0),
-    ];
-  }
-
-  /**
-   * Register (or replace) a template on `channel`. A LOCAL operation — persist + index, no
-   * bridge round-trip — so it succeeds with the bridge process unreachable. With no channel, a
-   * record that answers for every channel (a caller that names none).
+   * Record (or replace) a template on `channel` — persist + index. The `WebSocketRuntime` calls it
+   * only after CG Bridge accepted the import (`CENTRAL-BRIDGE-01`). With no channel, a record that
+   * answers for every channel (a caller that names none).
    */
   async import(
     template: TemplateInfo,
@@ -201,9 +174,9 @@ export class LibraryStore {
   }
 
   /**
-   * Unconditional local delete — used when the authority for the removal lives
-   * elsewhere and has already allowed it (the live path, where the bridge is
-   * authoritative for refuse-while-referenced).
+   * Unconditional local delete — the authority for the removal is the bridge, which has already
+   * allowed it (it is authoritative for refuse-while-referenced; an offline removal is refused
+   * before it reaches here — `CENTRAL-BRIDGE-01`).
    *
    * `CHANNEL-TEMPLATES-01` — from `channel` (no channel: from every channel). A pre-channel
    * record for the template answers for every channel, so a removal naming one channel does not
@@ -236,48 +209,6 @@ export class LibraryStore {
     };
     this.#legacy.set(templateId, kept);
     await this.#ws.writeJson(pathFor(templateId, undefined), kept);
-  }
-
-  /**
-   * Guarded removal (the offline path). Enforces R-005 refuse-while-referenced
-   * against the caller-supplied REFERENCES (the WebSocketRuntime reads the last-known
-   * stack, which is exact while disconnected because the bridge is the sole mutator
-   * of the stack and cannot change it while unreachable).
-   *
-   * `B-212` — it used to take a COUNT, and the sentence it produced could only say
-   * how many. The places come in, and the wording is the ONE shared spelling; `bank`
-   * is whatever the caller knows (offline, usually nothing — the layers are then
-   * named as CasparCG names them, which is still a place the operator can find).
-   *
-   * `CHANNEL-TEMPLATES-01` — the caller passes the references on `channel` only: a row on
-   * another channel takes its template from that channel's list.
-   */
-  async remove(
-    templateId: string,
-    references: readonly TemplateReference[],
-    bank: FixedLayerBank | null = null,
-    channel?: number,
-  ): Promise<RemoveResult> {
-    if (!this.has(templateId, channel)) {
-      return {
-        ok: false,
-        reason: 'unknown-template',
-        message:
-          channel === undefined
-            ? `Template “${templateId}” is not registered.`
-            : `Template “${templateId}” is not on CH ${String(channel)}.`,
-      };
-    }
-    if (references.length > 0) {
-      return {
-        ok: false,
-        reason: 'in-use',
-        message: describeTemplateReferences(references, bank),
-        references: [...references],
-      };
-    }
-    await this.delete(templateId, channel);
-    return { ok: true };
   }
 
   /** One template on `channel` (or station-wide), as {@link list} would answer it. */

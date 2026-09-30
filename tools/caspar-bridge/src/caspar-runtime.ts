@@ -68,6 +68,7 @@ import {
   type RestoreMigration,
   type RestoreSkip,
   type RestoreSkipReason,
+  type StackRestoreReport,
   type PlayoutLayerState,
   type LiveLayerState,
   type DelimiterOption,
@@ -218,7 +219,7 @@ import {
   releaseLivePlate,
   type LivePlateRelease,
 } from './live-plate-release.js';
-import { TemplateRegistry, templateVersionId } from './template-registry.js';
+import { TemplateRegistry } from './template-registry.js';
 import { DelimiterStore } from './delimiter-store.js';
 import {
   TemplateHttpServer,
@@ -1273,6 +1274,8 @@ export class CasparRuntime {
    * browser asked for it, and the operator may be looking at the console when it lands.
    */
   readonly emptiedAirChanged = new Emitter<EmptiedAirNotice | null>();
+  /** `CENTRAL-BRIDGE-01` (`B-294`) — the restore report, raised at start and narrowed by a dismissal. */
+  readonly restoreReportChanged = new Emitter<StackRestoreReport | null>();
   /** `RELEASE-091-01` (DELTA B, B1) — the layers cleared outside CG Control, pushed on change. */
   readonly clearedOutsideChanged = new Emitter<readonly ClearedOutsideLayer[]>();
   /**
@@ -1392,6 +1395,12 @@ export class CasparRuntime {
    * would be the same class of defect as the ledger that outlived its producers (`B-227`).
    */
   #emptiedAir: EmptiedAirNotice | null = null;
+  /**
+   * `CENTRAL-BRIDGE-01` (`B-294`) — what this process's restore did not bring back as it was, or
+   * `null`. Process state like `#emptiedAir`, for its reason: it describes the start THIS process
+   * made.
+   */
+  #restoreReport: StackRestoreReport | null = null;
   /**
    * 🔴 **The ADOPTED coordinates nothing has confirmed since the restart.**
    *
@@ -1866,18 +1875,6 @@ export class CasparRuntime {
   readonly #rehearseBusy = new Set<string>();
   /** R-022 — the startup volume re-assert is once per process, not per sweep. */
   #volumesReasserted = false;
-  /**
-   * R-028 part B — ids this bridge REMOVED, so a reconnecting browser's
-   * re-delivery cannot bring them back. Process-lifetime only, deliberately: a
-   * bridge restart re-reads the persisted registry, and a template absent from
-   * it is indistinguishable from one that was never imported — at which point a
-   * browser's re-delivery is the desired REPAIR rather than a resurrection. The
-   * tombstone only needs to outlive the reconnects of the session that removed.
-   *
-   * `CHANNEL-TEMPLATES-01` — PER CHANNEL: a removal is an act on one channel's
-   * list, so it guards that list and no other. channel → ids removed there.
-   */
-  readonly #removedTemplates = new Map<number, Set<string>>();
   readonly #templateServer: TemplateHttpServer;
   #serveOptions: TemplateServeOptions;
   /** Kept for `setConfig`'s serve re-derivation (explicit overrides keep winning). */
@@ -2784,9 +2781,9 @@ export class CasparRuntime {
       const position = this.#positions.get(item.itemId);
       // R-048 (6.9 / 6.9d) — the source override joins the snapshot at the same
       // point and for the same reasons: the row must be able to SAY that a plate
-      // is not on its configured source, and the browser's retention mirrors what
-      // it is published (`StackRetentionStore.toRetained`), which is what carries
-      // it across a bridge restart. Both are spread conditionally so an item with
+      // is not on its configured source, and the bridge's own stack file keeps what
+      // it is published (`retainedFromStackItem`, `CENTRAL-BRIDGE-01`), which is what
+      // carries it across a bridge restart. Both are spread conditionally so an item with
       // neither is the identical object it was before either field existed.
       const sourceOverride = this.#sourceOverrides.get(item.itemId);
       // Session BM — and the per-look composition, beside it and for the same reason.
@@ -3266,12 +3263,13 @@ export class CasparRuntime {
   }
 
   /**
-   * B-092 — rebuild the stack from the browser's RETAINED intent.
+   * B-092 — rebuild the stack from its RETAINED intent. 🔴 `CENTRAL-BRIDGE-01` (`B-294`): the
+   * intent is the bridge's own file now (`stack-store.ts`), restored by `createBridge` at start,
+   * before any console connects — a console re-delivers nothing, and no socket route reaches this.
    *
    * The stack otherwise lives ONLY in this process's Reconciler and dies with
-   * it: a restarted bridge boots empty, the SPA re-pulls that empty snapshot,
-   * and every row the operator built disappears. The browser owns the intent
-   * across the death; this puts it back.
+   * it: a restarted bridge boots empty, and every row the operator built
+   * disappears. This puts it back.
    *
    * This method deliberately does NOT go through `load()`. `load()` ADOPTS the
    * layer first — a hard `CLEAR` before its first `CG ADD` there — and on a
@@ -3283,16 +3281,17 @@ export class CasparRuntime {
    *   1. HERE: seed the Reconciler, take the retained layer, bind OSC interest,
    *      restore the position override, publish. The rows are back immediately
    *      — before CasparCG is even reachable — and NOTHING is sent to the wire.
-   *   2. `#decidePendingRestores`: once real occupancy is knowable, adopt the
-   *      layer without clearing it (a producer survived) or re-ADD onto it (the
-   *      layer is empty). Neither branch can ever clear a live layer.
+   *   2. `#decidePendingRestores`: once real occupancy is knowable (the start
+   *      check's `INFO`, or the OSC sample), adopt the layer without clearing it
+   *      (a producer survived) or, the layer being empty, send NOTHING and say
+   *      so (`C-047`: detect and say). Neither branch can ever clear a layer.
    *
-   * Skipped, never fatal: an item this bridge ALREADY holds (local intent must
-   * never clobber a live bridge's own state — a page reload against a healthy
-   * bridge changes nothing), an unregistered template (the SPA re-delivers its
-   * library first, so this means the template is genuinely gone), or an
-   * exhausted layer range. B-108 — every skip is reported WITH ITS REASON, per
-   * item, because a bare count cannot tell the operator which rows are gone.
+   * Skipped, never fatal: an item this bridge ALREADY holds (never clobbered),
+   * an unregistered template (the bridge persists its templates beside its stack,
+   * so this means the template is genuinely gone), or an exhausted layer range.
+   * B-108 — every skip is reported WITH ITS REASON, per item, because a bare count
+   * cannot tell the operator which rows are gone — and the report is standing
+   * bridge state ({@link restoreReport}), since no console made this call.
    *
    * ⭐ **B-109 / B-107 — step 2 runs ONLY for a restorable state.** A row retained
    * as `cleared` (the operator emptied that layer) or `error` (it never got what it
@@ -3626,10 +3625,10 @@ export class CasparRuntime {
     }
 
     // If the primary session is ALREADY healthy the `to === 'healthy'`
-    // transition fired long ago and will not fire again (the late-page-reload
-    // case) — but the tap has been filling ever since, so the answer is
-    // available right now. Without this branch those items would sit pending
-    // forever, visible but never adopted or re-ADDed.
+    // transition has fired and will not fire again (a restore that lands after
+    // the first connection) — but the tap has been filling ever since, so the
+    // answer is available right now. Without this branch those items would sit
+    // pending forever, visible but never decided.
     //
     // Gated on the PENDING set, not on `restored`: a restore of nothing but cleared
     // and errored rows restores rows but licenses no wire action, and sampling
@@ -3645,7 +3644,52 @@ export class CasparRuntime {
         false,
       );
     }
+    this.#setRestoreReport(skipped, migrated);
     return { restored, skipped, migrated };
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`B-294`, `B-108`) — **THE RESTORE'S REPORT IS STANDING BRIDGE STATE.**
+   * The restore runs here, at the bridge's start, before any console connects — so what it did not
+   * bring back cannot be a console's return value any more. It is held, pulled on connect, pushed
+   * on change and dismissed for every console at once, as the restart notice is. The BENIGN skip
+   * (`already-held`: the live bridge has the row) is left out, as the console used to leave it out.
+   */
+  #setRestoreReport(skipped: readonly RestoreSkip[], migrated: readonly RestoreMigration[]): void {
+    const said = skipped.filter((s) => s.reason !== 'already-held');
+    const report: StackRestoreReport | null =
+      said.length === 0 && migrated.length === 0
+        ? null
+        : { at: new Date().toISOString(), skipped: said, migrated: [...migrated] };
+    if (report === null && this.#restoreReport === null) return;
+    this.#restoreReport = report;
+    this.restoreReportChanged.emit(report);
+  }
+
+  /** `CENTRAL-BRIDGE-01` — the standing restore report, or `null`. */
+  restoreReport(): StackRestoreReport | null {
+    return this.#restoreReport;
+  }
+
+  /**
+   * Dismiss one half of the report, for every console — with a `channel`, only that channel's
+   * rows (a skip by its retained slot, a migration by the row it came from; a row naming no
+   * channel goes with any dismissal). Changes nothing on the wire and nothing on the stack;
+   * `ok: false` when nothing was left to dismiss.
+   */
+  dismissRestoreReport(part: 'skipped' | 'migrated', channel?: number): { ok: boolean } {
+    const report = this.#restoreReport;
+    if (report === null) return { ok: false };
+    const kept = (rowChannel: number | undefined): boolean =>
+      channel !== undefined && rowChannel !== undefined && rowChannel !== channel;
+    const next: StackRestoreReport =
+      part === 'skipped'
+        ? { ...report, skipped: report.skipped.filter((s) => kept(s.slot?.channel)) }
+        : { ...report, migrated: report.migrated.filter((m) => kept(m.from.channel)) };
+    if (next[part].length === report[part].length) return { ok: false };
+    this.#restoreReport = next.skipped.length === 0 && next.migrated.length === 0 ? null : next;
+    this.restoreReportChanged.emit(this.#restoreReport);
+    return { ok: true };
   }
 
   // ── DESKTOP-APPS-01-D j — items of ours on a channel this station does not declare ──
@@ -7513,9 +7557,9 @@ export class CasparRuntime {
       nothing failed, and answering `false` would put a refusal on the surface for a press the
       operator never made.
 
-      ⚠ AND IT WRITES NO ROW — the `redelivery` precedent. It answers `ok: true`, so an
-      "audit every accepted call" reading would log it; a log with a row for a press nobody
-      made is a log people stop reading.
+      ⚠ AND IT WRITES NO ROW — the precedent the retired `redelivery` set (`B-141`). It answers
+      `ok: true`, so an "audit every accepted call" reading would log it; a log with a row for a
+      press nobody made is a log people stop reading.
     */
     if (timing.passes === undefined && timing.delayMs === undefined) return { ok: true };
     const detail: AuditDetail = { ...this.#itemDetail(itemId), timing: asked };
@@ -13113,71 +13157,30 @@ export class CasparRuntime {
    * and every other channel keeps the version it lists. The version is stored once however many
    * channels list it. With no channel (a caller that predates the lists), every declared channel.
    *
-   * R-028 part B — the reconciliation policy, enforced here because this is where a removal
-   * actually happens. An operator's import (no `redelivery` flag) always wins and clears the
-   * channel's tombstone. A reconnect RE-DELIVERY:
-   *
-   *   - WITH a channel restores that channel's entry, or repairs it (`B-085`'s local-wins, on
-   *     that one channel) — and is ignored when the template was deliberately REMOVED there;
-   *   - WITHOUT one cannot say which channel's version it means, so it only RESTORES a template
-   *     no channel lists (onto every declared channel it was not removed from) and never
-   *     replaces a version a channel holds.
-   *
-   * An ignored re-delivery answers `skipped: true`, for honesty.
+   * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **AN OPERATOR'S IMPORT IS THE ONLY KIND THERE IS.** R-028
+   * part B's reconnect RE-DELIVERY (a console replaying its whole library on every connect, with
+   * tombstones so it could not resurrect a removal) is gone: the bridge keeps the library for
+   * every console, and the socket refuses a frame that says it is a re-delivery.
    */
   templateImport(
     template: TemplateInfo,
     html: string,
-    redelivery = false,
     channel?: number,
-  ): { registered: boolean; templateId: string; skipped?: boolean } {
+  ): { registered: boolean; templateId: string } {
     /*
       B-141 — THE FIFTEENTH ACTION, and the one the change's own bookkeeping had
       lost: `import` is neither in the seven playout verbs nor among the three
       named as having no bridge operation. It HAS one, right here.
-
-      ⚠ A REDELIVERY IS NOT AN OPERATOR IMPORT and gets no line. It is the SPA
-      replaying its entire library after every reconnect (B-085) — a burst of
-      entries, on a schedule nobody chose, for something nobody did. A log that
-      has to be scrolled past is a log that stops being read, and the whole
-      complaint in B-141 is that this one is not read because it says nothing.
 
       Recorded outside `#audited`: this method is SYNCHRONOUS and answers
       `{ registered }` rather than `{ accepted }`, so it shares no shape with the
       wrapper. What it does share is `#recordOutcome` — the mapping lives in one
       place even though the call shapes are two.
     */
-    if (redelivery) {
-      /*
-        🔴 `B-260` (a) — **A RE-DELIVERY THAT CHANGES THE CATALOGUE WRITES A ROW.**
-
-        The paragraph above still holds for the re-delivery that changes NOTHING — the burst a
-        reconnect sends, byte-identical to what the bridge holds — and that one stays silent.
-        But a re-delivery can REGISTER an id or REPLACE a held one's HTML (`B-085`'s local-wins
-        repair), and either changes what the next take puts on air. `B-260` measured a locked
-        console doing exactly that with nothing in the record; "every template mutation writes
-        a row" has no exceptions.
-
-        Classified BEFORE the import, because afterwards the held copy is the new one and
-        every re-delivery would read as unchanged.
-      */
-      const change = this.templateRedeliveryChange(template, html, channel);
-      const result = this.#templateImportImpl(template, html, true, channel);
-      if (change === 'register' || change === 'replace') {
-        this.#recordOutcome(
-          'template-redeliver',
-          { templateId: template.templateId },
-          {
-            outcome: 'ok',
-          },
-        );
-      }
-      return result;
-    }
     const detail: AuditDetail = { templateId: template.templateId };
-    let result: { registered: boolean; templateId: string; skipped?: boolean };
+    let result: { registered: boolean; templateId: string };
     try {
-      result = this.#templateImportImpl(template, html, false, channel);
+      result = this.#templateImportImpl(template, html, channel);
     } catch (err) {
       this.#recordOutcome('import', detail, { outcome: 'failed', errorCode: 'internal-error' });
       throw err;
@@ -13189,41 +13192,10 @@ export class CasparRuntime {
   #templateImportImpl(
     template: TemplateInfo,
     html: string,
-    redelivery: boolean,
     channel: number | undefined,
-  ): { registered: boolean; templateId: string; skipped?: boolean } {
+  ): { registered: boolean; templateId: string } {
     const templateId = template.templateId;
-    let targets: readonly number[];
-    if (redelivery) {
-      const change = this.templateRedeliveryChange(template, html, channel);
-      if (change === 'tombstoned') return { registered: false, templateId, skipped: true };
-      if (channel === undefined && this.#templates.hasAny(templateId)) {
-        /*
-          A re-delivery that names no channel of a template some channel lists. It cannot say
-          whose version it would repair, so it repairs none: the template IS available, which
-          is all the caller needs. Skipped when its copy differs — for honesty.
-        */
-        const same = this.#templates.versionAny(templateId) === templateVersionId(template, html);
-        return same
-          ? { registered: true, templateId }
-          : { registered: true, templateId, skipped: true };
-      }
-      // NOTE — an id the channel ALREADY lists is deliberately NOT skipped.
-      //
-      // An earlier draft kept the bridge's copy ("the catalogue of record is
-      // newer"), which quietly REVERSED B-085's documented local-wins policy:
-      // a browser that fixed a template while offline would reconnect, be
-      // ignored, and the STALE html would keep going to air with no signal
-      // that the correction never landed. Nothing here can tell which copy is
-      // newer, so the safe direction is the documented one — now on the ONE
-      // channel the re-delivery names — and the tombstone above is the narrower
-      // fix part A actually asked for (stop RESURRECTION, not stop repair).
-      targets = channel === undefined ? this.#redeliveryRestoreTargets(templateId) : [channel];
-    } else {
-      targets = channel === undefined ? this.#declaredChannels() : [channel];
-      // An operator re-importing a previously removed template revives it — on those channels.
-      for (const target of targets) this.#removedTemplates.get(target)?.delete(templateId);
-    }
+    const targets: readonly number[] = channel === undefined ? this.#declaredChannels() : [channel];
     const { changed } = this.#templates.importOn(targets, template, html);
     if (changed.length > 0) {
       // R-028 (o1) — every browser converges on the same catalogue.
@@ -13233,53 +13205,6 @@ export class CasparRuntime {
       this.#publishFixedStateIfChanged();
     }
     return { registered: targets.length > 0, templateId };
-  }
-
-  /**
-   * The channels a re-delivery that names NO channel restores a template onto: every declared
-   * channel it was not deliberately removed from. Asked only for a template no channel lists.
-   */
-  #redeliveryRestoreTargets(templateId: string): number[] {
-    return this.#declaredChannels().filter(
-      (channel) => this.#removedTemplates.get(channel)?.has(templateId) !== true,
-    );
-  }
-
-  /**
-   * 🔴 `B-260` — **WHAT A RE-DELIVERY OF THIS TEMPLATE WOULD DO TO THE CATALOGUE**, asked
-   * before it is applied.
-   *
-   *   - `tombstoned` — the id was deliberately removed; the re-delivery is ignored (R-028 B).
-   *   - `register`   — the bridge does not hold the id; the re-delivery would ADD it.
-   *   - `replace`    — the bridge holds a DIFFERENT copy; the re-delivery would OVERWRITE it.
-   *   - `none`       — the bridge already holds exactly this; nothing would change.
-   *
-   * Two readers, one answer: `templateImport` writes its row from it, and the bridge's lock
-   * gate refuses a `replace` under a lock — so "would this overwrite?" cannot be answered two
-   * ways.
-   *
-   * `CHANNEL-TEMPLATES-01` — asked of the ONE channel the re-delivery names, whose list holds a
-   * copy when it holds the id; "exactly this" is the same VERSION (`templateVersionId`: the
-   * content, canonical). A re-delivery that names no channel never replaces: it answers `none`
-   * for a template some channel lists, and otherwise `register` — or `tombstoned` when every
-   * declared channel removed it.
-   */
-  templateRedeliveryChange(
-    template: TemplateInfo,
-    html: string,
-    channel?: number,
-  ): 'tombstoned' | 'register' | 'replace' | 'none' {
-    const templateId = template.templateId;
-    if (channel === undefined) {
-      if (this.#templates.hasAny(templateId)) return 'none';
-      const declared = this.#declaredChannels();
-      if (declared.length === 0) return 'none';
-      return this.#redeliveryRestoreTargets(templateId).length === 0 ? 'tombstoned' : 'register';
-    }
-    if (this.#removedTemplates.get(channel)?.has(templateId) === true) return 'tombstoned';
-    const held = this.#templates.versionOn(channel, templateId);
-    if (held === null) return 'register';
-    return held === templateVersionId(template, html) ? 'none' : 'replace';
   }
 
   /**
@@ -13313,24 +13238,18 @@ export class CasparRuntime {
   /**
    * 🔴 `CHANNEL-TEMPLATES-01` decision 4 — **THE CHANNELS A TEMPLATE REQUEST THAT NAMES NO CHANNEL
    * WOULD CHANGE**, for the permission gate and a channel-scoped lock: an import lists the
-   * template on every declared channel; a re-delivery changes only the channels it would restore
-   * it onto (none, while any channel lists it); a removal takes it off every channel listing it.
-   * A request that NAMES its channel is judged on that one, like every other channel-bearing
+   * template on every declared channel; a removal takes it off every channel listing it. A
+   * request that NAMES its channel is judged on that one, like every other channel-bearing
    * request (`channelsForRequest`'s case (a)).
    */
   templateActionFootprint(
     action: 'import' | 'remove',
-    req: { templateId?: string; template?: TemplateInfo; html?: string; redelivery?: boolean },
+    req: { templateId?: string; template?: TemplateInfo },
   ): readonly number[] {
     if (action === 'remove') {
       return req.templateId === undefined ? [] : this.#templates.channelsListing(req.templateId);
     }
-    const template = req.template;
-    if (template === undefined) return [];
-    if (req.redelivery !== true) return this.#declaredChannels();
-    return this.#templates.hasAny(template.templateId)
-      ? []
-      : this.#redeliveryRestoreTargets(template.templateId);
+    return req.template === undefined ? [] : this.#declaredChannels();
   }
 
   /**
@@ -13467,17 +13386,9 @@ export class CasparRuntime {
       };
     }
 
+    // `CENTRAL-BRIDGE-01` (`B-294`) — no tombstone: R-028 part B kept one so a console's reconnect
+    // re-delivery could not bring a removed template back, and a console re-delivers nothing now.
     this.#templates.removeFrom(targets, templateId);
-    // R-028 part B — remember the removal, so a browser that still holds a
-    // local copy cannot resurrect it by reconnecting (see `templateImport`).
-    for (const target of targets) {
-      let removed = this.#removedTemplates.get(target);
-      if (removed === undefined) {
-        removed = new Set();
-        this.#removedTemplates.set(target, removed);
-      }
-      removed.add(templateId);
-    }
     // R-028 (o1) — every browser converges on the same catalogue.
     this.templatesChanged.emit(this.#templates.listAll());
     return { ok: true };

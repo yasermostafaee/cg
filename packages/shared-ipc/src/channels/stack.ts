@@ -5,7 +5,6 @@ import {
   LayerSlotSchema,
   LiveSourceLookOverrideSchema,
   PositionSchema,
-  RetainedStackItemSchema,
   StackItemStateSchema,
 } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
@@ -688,8 +687,9 @@ export const StackSnapshotChannel = defineChannel(
  *   `already-held`     — the live bridge already has this item (a page reload
  *                        against a healthy bridge). Nothing is lost, the row is
  *                        still there, and surfacing it would be a false alarm.
- *   `unknown-template` — the SPA re-delivers its library FIRST, so this means the
- *                        template is genuinely gone. The row is LOST.
+ *   `unknown-template` — the bridge restores its own library before its stack
+ *                        (`CENTRAL-BRIDGE-01`), so this means the template is
+ *                        genuinely gone. The row is LOST.
  *   `no-layer`         — the range is exhausted. The row is LOST.
  *   `fixed-slot-taken` — R-021 stage 4. The row's retained coordinate is a
  *                        DECLARED operator row that another restored item had
@@ -838,40 +838,58 @@ export const RestoreSkipSchema = z.object({
 export type RestoreSkip = z.infer<typeof RestoreSkipSchema>;
 
 /**
- * B-092 — re-deliver the browser's RETAINED stack intent to the bridge, so the
- * stack survives a restart of the bridge process (it otherwise lives only in
- * the bridge's in-memory Reconciler). Issued on every (re)connect, right after
- * the retained templates and BEFORE the snapshot re-pull, so the snapshot the
- * SPA adopts is the RESTORED stack instead of a fresh bridge's empty one.
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **WHAT THE BRIDGE'S OWN RESTORE DID NOT BRING BACK AS IT WAS.**
  *
- * The bridge REBUILDS state from these intents and publishes immediately, but
- * sends NOTHING to CasparCG at that moment: the adopt-vs-re-ADD decision waits
- * until real OSC occupancy is knowable, so a restore can never CLEAR a live
- * layer. A partial restore is normal, never an error.
+ * There is no `stack.restore` any more. One bridge serves every console, so the stack is the
+ * bridge's: it persists it and restores it itself at start, before any console connects, and no
+ * console re-delivers a stack or a template (`B-092`'s re-delivery was a fight once two consoles
+ * held two copies). What survives of that call is its REPORT, and the report is now standing
+ * bridge state like the restart notice (`air.emptied`): held by the bridge, pulled on connect,
+ * pushed on change, dismissed for every console at once.
  *
- * ⭐ **B-108 — `skipped` is a LIST, not a count, and it REPLACED the count rather
- * than joining it.** It was `skipped: number`, and nothing consumed it:
- * `WebSocketRuntime.#resync` awaited the call and discarded the result, so rows the
- * bridge could not re-seat vanished from the operator's stack with nothing said.
- * A count could not have fixed that even if it had been read — the operator needs to
- * know WHICH rows are gone and WHY, and one of the three reasons is benign and must
- * raise no alarm at all. Carrying both a count and a list would be two shapes of one
- * fact, which is how they come to disagree.
+ * ⭐ **`B-108` — every row that did not come back is NAMED, with its reason** (`skipped`, a list,
+ * never a count), and every row that came back on a different row is reported apart
+ * (`migrated`) — the surface introduces the first with "did not come back" and the second must
+ * not be read that way. `null` when there is nothing to say: no restore, a clean one, or both
+ * halves dismissed.
  */
-export const StackRestoreChannel = defineChannel(
-  'stack.restore',
-  z.object({ items: z.array(RetainedStackItemSchema) }),
+export const StackRestoreReportSchema = z.object({
+  /** When the bridge restored its stack (ISO) — its start. */
+  at: z.string().datetime(),
+  skipped: z.array(RestoreSkipSchema),
+  migrated: z.array(RestoreMigrationSchema),
+});
+export type StackRestoreReport = z.infer<typeof StackRestoreReportSchema>;
+
+/** Pull the standing report (initial state on client connect). */
+export const StackRestoreReportChannel = defineChannel(
+  'stack.restore-report',
+  z.void(),
+  StackRestoreReportSchema.nullable(),
+);
+
+/** Pushed when the report is raised (a restore at start) or narrowed by a dismissal. */
+export const StackRestoreReportChangedChannel = definePublishChannel(
+  'stack.restore-report-changed',
+  StackRestoreReportSchema.nullable(),
+);
+
+/**
+ * Dismiss one half of the report. Bridge-side for the reason `air.dismiss-emptied` is: two
+ * operators on two consoles must not disagree about whether the station is still reporting it.
+ * The two halves are dismissed apart, as the console shows them apart. Changes nothing on air.
+ *
+ * With a `channel`, only that channel's rows go (a skip by its retained slot, a migration by the
+ * row it came from) — the console shows one channel's rows, and an operator on channel 1 must not
+ * clear what channel 2's operator has not read. Rows naming no channel go with any dismissal.
+ */
+export const StackRestoreReportDismissChannel = defineChannel(
+  'stack.dismiss-restore-report',
   z.object({
-    restored: z.number().int().nonnegative(),
-    skipped: z.array(RestoreSkipSchema),
-    /**
-     * Rows that came back on a DIFFERENT row than the one retained (see
-     * {@link RestoreMigrationSchema}). Defaulted rather than required so a bridge that
-     * predates the bed bank still parses against this contract — the additive rule
-     * `TemplateLook.fits` states in full.
-     */
-    migrated: z.array(RestoreMigrationSchema).default([]),
+    part: z.enum(['skipped', 'migrated']),
+    channel: z.number().int().positive().optional(),
   }),
+  z.object({ ok: z.boolean() }),
 );
 
 /**

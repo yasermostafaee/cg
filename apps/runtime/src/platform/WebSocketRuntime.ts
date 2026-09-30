@@ -48,7 +48,10 @@ import {
   StackRemoveAllChannel,
   StackRemoveChannel,
   StackStopAllChannel,
-  StackRestoreChannel,
+  StackRestoreReportChangedChannel,
+  StackRestoreReportChannel,
+  StackRestoreReportDismissChannel,
+  type StackRestoreReport,
   StackStopChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
@@ -129,7 +132,6 @@ import {
   type RestoreMigration,
   type RestoreSkip,
   type TemplateInfo,
-  type TemplateReference,
 } from '@cg/shared-ipc';
 import { MemoryWorkspace } from '@cg/storage';
 import type {
@@ -199,32 +201,17 @@ export interface WebSocketRuntimeOptions {
   /** Inject a WebSocket implementation (default: the global `WebSocket`). */
   createWebSocket?: WebSocketFactory;
   /**
-   * Reconnect-reconciliation — called when a retained template's re-delivery
-   * fails during the post-reconnect resync (the resync itself continues). The
-   * renderer wires this to its command-error surface; default: console.error.
-   */
-  onResyncError?: (message: string) => void;
-  /**
-   * `DELTA-MULTI-CHANNEL-01-A` A3 — called with a message `onResyncError` raised, once a later
-   * resync has done what it said failed (that template re-delivered, the stack restored): the
-   * notice is no longer true, so it withdraws itself. Default: nothing.
-   */
-  onResyncResolved?: (message: string) => void;
-  /**
-   * B-085 — the browser-local template library (source of truth). Injected by
-   * `createRuntimeBridge` backed by OPFS (persistent). Defaults to an in-memory
-   * store so transport/reconnect tests can construct the runtime with no library
-   * and still exercise delivery + reconcile. Must be `hydrate()`-ed before the
-   * renderer reads `templates.list()` (the boot path awaits it).
+   * B-085 — this console's DISPLAY copy of the template library: what it shows while CG Bridge
+   * cannot be reached. 🔴 `CENTRAL-BRIDGE-01` (`B-294`): never sent — the bridge keeps the library
+   * for every console. Injected by `createRuntimeBridge` backed by OPFS (persistent); defaults to
+   * an in-memory store. Must be `hydrate()`-ed before the renderer reads `templates.list()`.
    */
   library?: LibraryStore;
   /**
-   * B-092 — the browser-local retention of the operator's stack INTENT, so the
-   * stack survives a bridge-process restart. Injected by `createRuntimeBridge`
-   * backed by OPFS (persistent). Defaults to an in-memory store so transport
-   * tests can construct the runtime with no retention and still exercise
-   * delivery + reconcile. Must be `hydrate()`-ed before the first connect for
-   * the retention to be re-delivered (the boot path awaits it).
+   * B-092 — this console's DISPLAY copy of the stack: what it shows while CG Bridge cannot be
+   * reached (the offline view). 🔴 `CENTRAL-BRIDGE-01` (`B-294`): never sent — the bridge keeps and
+   * restores the stack itself. Injected by `createRuntimeBridge` backed by OPFS (persistent);
+   * defaults to an in-memory store.
    */
   stackRetention?: StackRetentionStore;
 }
@@ -254,6 +241,18 @@ export class BridgeDisconnectedError extends Error {
     this.name = 'BridgeDisconnectedError';
   }
 }
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — a template import or removal needs CG Bridge: it keeps the
+ * library for every console, and a console's own copy is only for display. Offline, nothing is
+ * changed — said, with the remedy (`R-006`).
+ */
+export const TEMPLATE_IMPORT_NEEDS_BRIDGE =
+  'CG Bridge is not reachable, so the template was not imported — nothing was changed. ' +
+  'Import it again once CG Bridge is back.';
+export const TEMPLATE_REMOVE_NEEDS_BRIDGE =
+  'CG Bridge is not reachable, so the template was not removed — nothing was changed. ' +
+  'Remove it again once CG Bridge is back.';
 
 interface Pending {
   resolve: (value: unknown) => void;
@@ -289,7 +288,6 @@ class Subs<T> {
 export class WebSocketRuntime implements RuntimeBridge {
   readonly #url: string;
   readonly #createWs: WebSocketFactory;
-  readonly #onResyncError: (message: string) => void;
   #ws: WebSocketLike | null = null;
   #status: BridgeLinkStatus = 'disconnected';
   #everOpened = false;
@@ -300,58 +298,36 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #pending = new Map<string, Pending>();
 
   /**
-   * B-085, re-scoped by R-028 (o1): the browser-local library is now the
-   * OFFLINE FALLBACK and the reconnect re-delivery set — the BRIDGE's
-   * persisted registry is the catalogue of record (one bridge, many browsers,
-   * one library). While live, `templates.list/get` are served from the bridge;
-   * with the link down they answer from this retained copy (this browser's own
-   * imports), display-only. `#resync()` still re-delivers `#library.entries()`
-   * FIRST on every reconnect so an offline import reaches the bridge (per-id
-   * conflict policy: local-wins, unchanged).
+   * B-085, re-scoped by R-028 (o1) and by `CENTRAL-BRIDGE-01` (`B-294`): the BRIDGE's persisted
+   * registry is the one library (one bridge, many consoles). This is the DISPLAY copy: while live,
+   * `templates.list/get` are served from the bridge; with the link down they answer from here,
+   * display-only. It is written only after the bridge accepted an import or a removal, and it is
+   * NEVER sent — an import or a removal needs CG Bridge, and an offline one is refused.
    */
   readonly #library: LibraryStore;
 
   /**
-   * B-085 — the last stack snapshot seen over the link. Drives the OFFLINE
-   * refuse-while-referenced check for `templates.remove`: while disconnected the
-   * bridge is the sole mutator of the stack and cannot change it, so the last
-   * value the SPA saw IS the current stack (empty before the first connect).
-   */
-  #lastStack: readonly StackItemState[] = [];
-
-  /**
-   * B-092 — the browser-local stack INTENT, mirrored from every snapshot the
-   * SPA sees and re-delivered to the bridge on every (re)connect. This is what
-   * makes the stack survive a bridge restart: without it a restarted bridge
-   * boots empty, the re-pull below returns `[]`, and every row disappears.
+   * B-092 — this console's DISPLAY copy of the stack, mirrored from every snapshot it sees, so the
+   * list stays visible while CG Bridge cannot be reached (the offline view). 🔴 `CENTRAL-BRIDGE-01`
+   * (`B-294`): NEVER sent. The bridge keeps and restores the stack itself — with several consoles
+   * on one bridge, a re-delivered copy was how an older stack could win.
    */
   readonly #stackRetention: StackRetentionStore;
 
   /**
-   * B-092 — true while `#resync` is re-delivering retained stack intent and
-   * re-pulling the snapshot.
+   * 🔴 **IS THE CONNECT-TIME RESYNC IN FLIGHT?** — the fact that decides whether an EMPTY stack
+   * is an answer or a not-yet, for the live-sources surface (`useBridgeSnapshot`'s `ready`
+   * latches on the first arrival and never clears, so after a reconnect it reads `true` while
+   * this window is open and the renderer had nothing else to ask).
    *
-   * Mirroring is SUPPRESSED for that window, and this is load-bearing: the
-   * snapshot a freshly-booted bridge publishes before (or instead of) a
-   * successful restore is EMPTY, and mirroring it would erase the very
-   * retention that fixes the bug — permanently, since the store is persistent.
-   * A restore that fails therefore leaves the retention untouched for the next
-   * connect. Outside this window an empty snapshot is a real one (Remove All)
-   * and is mirrored normally.
-   */
-  /**
-   * 🔴 **IS A STACK DELIVERY IN FLIGHT?** — the fact that decides whether an EMPTY stack
-   * is an answer or a not-yet.
+   * Mirroring into the display copy is suppressed for the window too: the snapshot is re-pulled at
+   * its end, and that is the one mirrored. (It used to be load-bearing for the re-delivery — an
+   * empty snapshot mirrored before the restore erased the stack being delivered. There is no
+   * delivery now: `CENTRAL-BRIDGE-01`.)
    *
-   * It has always existed here to suppress retention mirroring; what it did NOT do was
-   * leave this class. That absence is what forced the live-sources surface to treat every
-   * empty stack as blindness: `useBridgeSnapshot`'s `ready` latches on the first arrival
-   * and never clears, so after a reconnect it reads `true` while this window is open and
-   * the renderer had nothing else to ask.
-   *
-   * Every write goes through {@link #setResyncing} so the five sites cannot drift — the
-   * same shape as `#setStatus`, and for the same reason: a second, silently-diverging
-   * spelling of the same state is what golden rule 6 forbids.
+   * Every write goes through {@link #setResyncing} so the sites cannot drift — the same shape as
+   * `#setStatus`, and for the same reason: a second, silently-diverging spelling of the same state
+   * is what golden rule 6 forbids.
    */
   #resyncing = false;
   /** B-153 — channels this page needs that the connected bridge does not route. */
@@ -429,13 +405,6 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   #capsHandshake: Promise<void> | null = null;
   /**
-   * `DELTA-MULTI-CHANNEL-01-A` A3 — every resync failure this console has SAID and not yet seen
-   * undone, by what failed (`template:<id>`, `restore`). A later resync that does it withdraws the
-   * message through `#onResyncResolved`.
-   */
-  readonly #resyncFailures = new Map<string, string>();
-  readonly #onResyncResolved: (message: string) => void;
-  /**
    * 🔴 The bridge has told us it is refusing this console's intents for want of a principal.
    *
    * The only thing that can know about a REVOCATION: the token is unexpired, the socket is up,
@@ -450,12 +419,11 @@ export class WebSocketRuntime implements RuntimeBridge {
 
   readonly #stackSubs = new Subs<readonly StackItemState[]>();
   /**
-   * B-108 — the rows the last restore could NOT bring back, with the reason.
-   *
-   * NOT a bridge PUBLISH channel: this is a fact about a call THIS browser made, so
-   * it belongs to this client and not to every client attached to the bridge.
-   * Broadcasting it would tell a second operator's browser that rows IT never had
-   * failed to restore.
+   * B-108 — the rows the bridge's restore could NOT bring back, with the reason, and the rows it
+   * brought back on a different row. 🔴 `CENTRAL-BRIDGE-01` (`B-294`): the restore is the BRIDGE's
+   * now, made at its start, so its report is standing bridge state — pulled on connect
+   * (`stack.restore-report`), pushed on change, dismissed for every console at once. The two
+   * halves reach the renderer through the two seams they always had.
    */
   readonly #restoreSkipSubs = new Subs<readonly RestoreSkip[]>();
   readonly #restoreMigrationSubs = new Subs<readonly RestoreMigration[]>();
@@ -483,14 +451,12 @@ export class WebSocketRuntime implements RuntimeBridge {
   /** R-030 — the bridge-owned channel raster + video-mode reading. */
   readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
   readonly #stationChannelsSubs = new Subs<StationChannels>();
-  /** `DESKTOP-APPS-01-D` j — subscribers to the strays, and the item ids the bridge lists. */
-  readonly #straySubs = new Subs<readonly ipcChannels.StationStray[]>();
   /**
-   * The strays' item ids as the bridge last listed them. A stray is not on the stack, so a
-   * mirror of the snapshot alone would drop it from the retention — and the next restart would
-   * forget a graphic still on air. The retention KEEPS a retained item whose id is listed here.
+   * `DESKTOP-APPS-01-D` j — subscribers to the strays. (The retention used to keep them so a
+   * re-delivery could not forget one; the bridge persists its strays itself now —
+   * `CENTRAL-BRIDGE-01`.)
    */
-  #strayIds: ReadonlySet<string> = new Set();
+  readonly #straySubs = new Subs<readonly ipcChannels.StationStray[]>();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
   readonly #sourceCatalogSubs = new Subs<ConsoleSourceCatalog>();
   readonly #sourceAssignmentSubs = new Subs<SourceAssignments>();
@@ -516,12 +482,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#url = url;
     this.#createWs =
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
-    this.#onResyncError =
-      options.onResyncError ?? ((message) => console.error(`[WebSocketRuntime] ${message}`));
-    this.#onResyncResolved = options.onResyncResolved ?? (() => undefined);
-    // Default to an in-memory (unhydrated, empty) library so tests can construct
-    // the runtime with no store and still exercise delivery + reconcile. The boot
-    // path injects an OPFS-backed, hydrated store.
+    // Default to in-memory (unhydrated, empty) display copies so tests can construct the runtime
+    // with no store. The boot path injects OPFS-backed, hydrated ones.
     this.#library = options.library ?? new LibraryStore(new MemoryWorkspace());
     this.#stackRetention = options.stackRetention ?? new StackRetentionStore(new MemoryWorkspace());
     this.#connect();
@@ -601,12 +563,9 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#authHandshake = this.#session === null ? null : this.#presentToken();
       // `DELTA-MULTI-CHANNEL-01-A` A3 — recorded, not awaited here (B-153): the resync waits on it.
       this.#capsHandshake = this.#checkSkew();
-      // B-085 — reconcile the browser-local library to the bridge on EVERY connect:
-      // deliver the retained templates so the bridge can serve them. On the FIRST
-      // connect this delivers a library imported while boot-disconnected (offline
-      // import); on a RECONNECT it additionally re-pulls the stack/health/lock
-      // snapshots (first-connect snapshots come from the renderer's
-      // `useBridgeSnapshot`). Delivery on an empty library is a no-op.
+      // On EVERY connect: read the bridge's standing restore report and its strays; on a
+      // RECONNECT also re-pull the stack/health/lock snapshots (first-connect snapshots come from
+      // the renderer's `useBridgeSnapshot`). `CENTRAL-BRIDGE-01` — nothing is delivered.
       void this.#resync(reconnected);
     });
     ws.addEventListener('message', (ev) => {
@@ -1013,191 +972,62 @@ export class WebSocketRuntime implements RuntimeBridge {
   }
 
   /**
-   * Reconcile on (re)connect: FIRST re-deliver every template in the browser-local
-   * library — a bridge restart wiped its in-memory registry, and an offline import
-   * never reached it — THEN (on a RECONNECT only) re-pull the full snapshot and
-   * push it to subscribers. All re-delivery frames are written before yielding, so
-   * single-socket FIFO plus the bridge's synchronous registration guarantee any
-   * operator load issued after the connect resolves against a populated registry.
-   * A failed re-delivery is surfaced and never aborts the rest.
+   * Catch up on (re)connect: read the bridge's standing restore report and its strays, THEN (on a
+   * RECONNECT only) re-pull the full snapshot and push it to subscribers. 🔴 `CENTRAL-BRIDGE-01`
+   * (`B-294`): it DELIVERS nothing — no template, no stack. The bridge is the one store.
    */
   async #resync(rePullSnapshots = true): Promise<void> {
     /*
-      🔴 `DELTA A` — **A GATED CONSOLE DELIVERS NOTHING.** With auth on and no principal
-      seated, every frame below would be refused for want of one — which is the gate working,
-      and is not something to narrate at the operator one banner per template. The sign-in
-      surface is what they should be looking at, and `signIn` runs this same resync the moment
-      they are through it.
+      🔴 `DELTA A` — **A GATED CONSOLE ASKS NOTHING.** With auth on and no principal seated,
+      every frame below would be refused for want of one — which is the gate working. The
+      sign-in surface is what they should be looking at, and `signIn` runs this same resync the
+      moment they are through it.
 
       ⚠ It reads the state AFTER the connect-time handshake has settled, because `#invoke`
       waits on it and so does this: an early read would see `unknown` on every connect.
 
       🔴 `DELTA-MULTI-CHANNEL-01-A` A3 — **AND AFTER THE BRIDGE HAS SAID WHETHER IT
       AUTHENTICATES.** With no token held there is no `auth` handshake to wait for, and the read
-      above came back `unknown` — not `signed-out` — so this guard let the re-delivery through to a
+      above came back `unknown` — not `signed-out` — so this guard let the resync through to a
       gate with nobody on the socket. ADR 0010 rule 4 gives such a socket the capabilities door and
-      `auth.*`, nothing else: an automatic delivery cannot run under anyone before a sign-in, so it
-      WAITS for it (the sign-in runs this resync). A bridge too old to answer stays `unknown` and
-      delivers as it always did.
+      `auth.*`, nothing else, so the resync WAITS for a sign-in (the sign-in runs this resync). A
+      bridge too old to answer stays `unknown` and is read as it always was.
     */
     if (this.#authHandshake !== null) await this.#authHandshake;
     if (this.#capsHandshake !== null) await this.#capsHandshake;
     const gate = this.#authState();
     if (gate.kind === 'signed-out' || gate.kind === 'expired') return;
-    /*
-     * 🔴 THE RETENTION GUARD IS RAISED **HERE**, BEFORE THE FIRST `await` — and the
-     * reason is a race this change's E2E caught, not a tidy-up.
-     *
-     * `#resyncing` used to be set further down, just before the restore. Everything
-     * above it — the template re-deliveries — contains awaits, so the guard went up
-     * one macrotask AFTER the socket opened. In that window `#setStatus('live')` has
-     * already fired, the renderer's `useBridgeSnapshot` re-pulls on the link change,
-     * and `stack.snapshot()` now takes the LIVE branch: it asks a freshly-booted
-     * bridge, gets `[]`, and calls `#mirrorStack([])`.
-     *
-     * That mirror ERASES THE RETAINED STACK — the exact failure B-092's own
-     * `mirror()` docstring warns about ("the bug would erase its own fix") — and it
-     * erases it BEFORE the restore reads it, so the restore then re-delivers nothing
-     * and the operator's rows are gone for good. It is a RACE, so it lost silently
-     * some of the time and looked like flake: a bridge restart that dropped the whole
-     * stack on one run and worked on the next.
-     *
-     * `#resync` is invoked synchronously from the socket's `open` handler, so setting
-     * the flag as the FIRST statement closes the window completely: any pull the
-     * renderer issues during the resync resolves with the guard already up and
-     * mirrors nothing. It is cleared on every exit path below, as before.
-     */
+    /* The resync flag goes up before the first read below, and is cleared on every exit path. */
     this.#setResyncing(true);
-    // B-085 — reconcile the bridge to the browser-local library: deliver every
-    // retained template FIRST, sourced from the persistent store.
-    //
-    // R-028 part B — THE RECONCILIATION POLICY, and it is enforced on the
-    // BRIDGE, not here. Every frame below is marked `redelivery: true`, which
-    // means "restore this if you lost it, but do not resurrect it if you
-    // deliberately dropped it": the bridge keeps a removed-id set beside its
-    // persisted registry and ignores a re-delivery of anything in it, and it
-    // keeps its OWN copy of an id it already holds rather than letting an older
-    // local one overwrite it. An operator's real import carries no flag and
-    // always wins, clearing the tombstone.
-    //
-    // Why bridge-side: the bridge is already the catalogue's authority and the
-    // only party that persists it. A browser cannot know a removal it was
-    // offline for, so client-side filtering would need every browser to learn
-    // every removal. Deciding it where the removal HAPPENED needs no
-    // replication at all.
-    //
-    // Why not a pre-flight `templates.list` here: the frames below are written
-    // before this method yields, so single-socket FIFO plus the bridge's
-    // synchronous registration guarantee an operator load issued right after
-    // connect resolves against a populated registry. Awaiting a round-trip
-    // first would open exactly that window.
     /*
-      🔴 `CHANNEL-TEMPLATES-01` — each record goes back to the channel it was imported on, and to
-      no other; a record written before the per-channel lists names none, which the bridge reads
-      as "restore it if no channel lists it" and never as a replacement. A record for a channel
-      this sign-in does not hold is not sent: the bridge would refuse it, and one banner per such
-      template is noise about somebody else's channel.
+      🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **NOTHING IS DELIVERED.** This used to re-deliver every
+      template in this console's library and then its retained stack (`B-085`, `B-092`), because
+      the bridge held the stack only in memory. With one bridge serving several consoles, each
+      console's copy was a claim on the truth and a stale one could win. The bridge keeps both
+      now and restores its stack itself at start; this console only READS.
+
+      B-108 — the report of that restore is standing bridge state: read here on every connect (a
+      console that connects after the start still hears what did not come back), pushed on change.
+      A bridge too old to answer leaves the last report in place.
     */
-    const permitted = gate.kind === 'signed-in' ? new Set(gate.permittedChannels) : null;
-    const deliverable = this.#library
-      .entries()
-      .filter((e) => e.channel === undefined || permitted === null || permitted.has(e.channel));
-    const redeliveries = deliverable.map(async (req) => {
-      try {
-        await this.#invoke(TemplatesImportChannel, {
-          template: req.template,
-          html: req.html,
-          redelivery: true,
-          ...(req.channel !== undefined && { channel: req.channel }),
-        });
-        // A3 — delivered: whatever this console said about its failure is no longer true.
-        this.#resyncSucceeded(`template:${req.template.templateId}`);
-      } catch (err) {
-        // A fresh drop mid-resync re-triggers the whole resync on the next
-        // reconnect — stay quiet; only a real per-template rejection surfaces.
-        if (err instanceof BridgeDisconnectedError) return;
-        /*
-          🔴 `DELTA A` §A3 — **NOTHING IS APPENDED AFTER THE BRIDGE'S SENTENCE.**
-
-          It used to read `…: <sentence>. Re-import it manually.`, and every refusal sentence
-          in this tree already ends in a full stop — so the operator was shown
-          “… then try again.. Re-import it manually.” A refusal is ONE string under `R-017`;
-          joining prose onto its end is editing it at a call site. Our clause goes FIRST and
-          the bridge's sentence is last, intact, with nothing after it.
-        */
-        this.#resyncFailed(
-          `template:${req.template.templateId}`,
-          `Re-delivery of template “${req.template.templateId}” failed on reconnect — ` +
-            `re-import it manually. ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    });
-    await Promise.all(redeliveries);
-
-    // B-092 — then re-deliver the retained STACK intent, so a bridge that
-    // restarted (and booted with an empty stack) is rebuilt BEFORE the re-pull
-    // below reads it. Order is the whole point: templates → stack → snapshot.
-    // Without this step the re-pull returns `[]` and blanks every row, which is
-    // the bug. The bridge decides adopt-vs-re-ADD against real OSC occupancy,
-    // so this can never clear a live layer.
-    //
-    // `#resyncing` suppresses retention mirroring across the whole window — it was
-    // raised at the top of this method (see the note there for the race that
-    // requires it): a failed restore must leave the retention intact for the next
-    // connect rather than let an empty snapshot overwrite it.
-    let restoreOk = true;
     try {
-      const retained = this.#stackRetention.items();
-      if (retained.length > 0) {
-        const result = await this.#invoke(StackRestoreChannel, { items: [...retained] });
-        /*
-         * B-108 — CONSUME the report. This line is the bug: `#resync` used to
-         * `await` this call and DISCARD its return value, so rows the bridge could
-         * not re-seat simply disappeared from the operator's stack with nothing
-         * said. Silently not restoring something is the same class of lie as
-         * falsely restoring it.
-         *
-         * The BENIGN reason is filtered here rather than at the surface, because it
-         * is a fact about the restore and not about presentation: an item the live
-         * bridge already holds is a page reload against a healthy bridge — the row
-         * is still there, backed by the bridge, and nothing was lost. Reporting it
-         * would be an alarm on the most ordinary event there is.
-         */
-        this.#emitRestoreSkips(result.skipped.filter((s) => s.reason !== 'already-held'));
-        /*
-          `single-clock-look-switch` — and the MIGRATIONS, on their own seam.
-
-          No benign filter here, and there is nothing to filter: a migration only ever
-          happens when the bridge could not honour the retained coordinate, which the
-          operator always needs to hear. Emitted unconditionally for the same reason the
-          skips are — an empty report is what clears a stale notice.
-        */
-        this.#emitRestoreMigrations(result.migrated);
-      }
-      /*
-        `DESKTOP-APPS-01-D` j — learn the strays BEFORE the retention is mirrored below, so a
-        remembered item on another channel is kept rather than mirrored away. A bridge too old to
-        answer leaves the set empty, which is exactly the old behaviour.
-      */
-      try {
-        const strays = await this.#invoke(ipcChannels.StationStraysChannel, undefined);
-        this.#strayIds = new Set(strays.map((s) => s.itemId));
-        this.#straySubs.emit(strays);
-      } catch (err) {
-        if (err instanceof BridgeDisconnectedError) throw err;
-      }
-      // A3 — the stack is back (or there was none to restore): a restore failure said earlier is
-      // no longer true.
-      this.#resyncSucceeded('restore');
+      this.#applyRestoreReport(await this.#invoke(StackRestoreReportChannel, undefined));
     } catch (err) {
-      restoreOk = false;
-      if (!(err instanceof BridgeDisconnectedError)) {
-        this.#resyncFailed(
-          'restore',
-          `Restoring the retained stack failed on reconnect: ` +
-            `${err instanceof Error ? err.message : String(err)}. ` +
-            `The stack is kept locally and will be retried on the next connect.`,
-        );
+      if (err instanceof BridgeDisconnectedError) {
+        this.#setResyncing(false);
+        return;
+      }
+    }
+    /*
+      `DESKTOP-APPS-01-D` j — the strays Station setup shows. A bridge too old to answer leaves the
+      set as it was.
+    */
+    try {
+      this.#straySubs.emit(await this.#invoke(ipcChannels.StationStraysChannel, undefined));
+    } catch (err) {
+      if (err instanceof BridgeDisconnectedError) {
+        this.#setResyncing(false);
+        return;
       }
     }
 
@@ -1213,14 +1043,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         this.#invoke(ConnectionsHealthChannel, undefined),
         this.#invoke(LockStateChannel, undefined),
       ]);
-      this.#lastStack = stack;
       this.#stackSubs.emit(stack);
       this.#healthSubs.emit(health);
       this.#lockSubs.emit(lock);
-      // Only a restore that actually succeeded may re-baseline the retention:
-      // after a failure this snapshot may be the empty one that erases it.
       this.#setResyncing(false);
-      if (restoreOk) this.#mirrorStack(stack);
+      this.#mirrorStack(stack);
     } catch {
       /* a fresh drop during resync will re-trigger reconnect */
       this.#setResyncing(false);
@@ -1228,64 +1055,38 @@ export class WebSocketRuntime implements RuntimeBridge {
   }
 
   /**
-   * `DELTA-MULTI-CHANNEL-01-A` A3 — say a resync failure, and REMEMBER having said it, by what
-   * failed: a refusal persists until dismissed or until its condition no longer holds
-   * (`refusalStore`), and only this side knows when that is.
+   * B-108 / `CENTRAL-BRIDGE-01` — the bridge's standing restore report, split onto the two seams
+   * the renderer reads. `null` (nothing to say, or both halves dismissed) empties both, and an
+   * empty report is what CLEARS a stale notice: a surface that can only ever be raised is a
+   * surface that eventually lies.
    */
-  #resyncFailed(key: string, message: string): void {
-    const said = this.#resyncFailures.get(key);
-    // A different sentence for the same failure replaces the one on screen.
-    if (said !== undefined && said !== message) this.#onResyncResolved(said);
-    this.#resyncFailures.set(key, message);
-    this.#onResyncError(message);
+  #applyRestoreReport(report: StackRestoreReport | null): void {
+    this.#emitRestoreSkips(report?.skipped ?? []);
+    this.#emitRestoreMigrations(report?.migrated ?? []);
   }
 
-  /** …and withdraw it once a later resync has done the thing it said failed. */
-  #resyncSucceeded(key: string): void {
-    const said = this.#resyncFailures.get(key);
-    if (said === undefined) return;
-    this.#resyncFailures.delete(key);
-    this.#onResyncResolved(said);
-  }
-
-  /**
-   * B-108 — publish the rows a restore did NOT bring back, so the operator can see
-   * what is missing and why.
-   *
-   * Emitted even when EMPTY, and that is deliberate rather than an oversight: an
-   * empty report is what CLEARS a stale notice from a previous, worse reconnect. A
-   * surface that can only ever be raised is a surface that eventually lies.
-   */
+  /** B-108 — publish the rows the restore did NOT bring back, so the operator sees which and why. */
   #emitRestoreSkips(skips: readonly RestoreSkip[]): void {
     this.#lastRestoreSkips = skips;
     this.#restoreSkipSubs.emit(skips);
   }
 
-  /** The migrations half of the same report — see `#emitRestoreSkips` for the empty rule. */
+  /** The migrations half of the same report. */
   #emitRestoreMigrations(migrations: readonly RestoreMigration[]): void {
     this.#lastRestoreMigrations = migrations;
     this.#restoreMigrationSubs.emit(migrations);
   }
 
   /**
-   * B-092 — persist the stack INTENT behind a published snapshot (fire and
-   * forget: retention must never delay or fail a UI update). Suppressed while
-   * `#resyncing`, see that field.
+   * B-092 — keep the DISPLAY copy of the stack in step with a published snapshot (fire and forget:
+   * it must never delay or fail a UI update). Suppressed while `#resyncing`, see that field.
+   * (`DESKTOP-APPS-01-D` j kept the strays in it so a re-delivery could not forget one; the bridge
+   * persists its strays itself now, and a stray is on no stack to display — `CENTRAL-BRIDGE-01`.)
    */
   #mirrorStack(snapshot: readonly StackItemState[]): void {
     if (this.#resyncing) return;
-    /*
-      🔴 `DESKTOP-APPS-01-D` j — the strays the bridge still lists are KEPT. They are on air on a
-      channel this station does not declare, so they are on no stack and a snapshot never carries
-      them; mirrored away, the next restart would forget a graphic that is still on somebody
-      else's output. Kept only while the bridge lists them: taken off air, or found empty, they go.
-    */
-    const onStack = new Set(snapshot.map((i) => i.itemId));
-    const kept = this.#stackRetention
-      .items()
-      .filter((i) => this.#strayIds.has(i.itemId) && !onStack.has(i.itemId));
-    void this.#stackRetention.mirror(snapshot, kept).catch(() => {
-      /* retention is best-effort; a write failure must never break playout */
+    void this.#stackRetention.mirror(snapshot).catch(() => {
+      /* the display copy is best-effort; a write failure must never break playout */
     });
   }
 
@@ -1329,9 +1130,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       case StackStateChangedChannel.name: {
         const p = StackStateChangedChannel.payload.safeParse(payload);
         if (p.success) {
-          this.#lastStack = p.data;
           this.#stackSubs.emit(p.data);
-          this.#mirrorStack(p.data); // B-092 — keep the browser-local intent current
+          this.#mirrorStack(p.data); // B-092 — keep the display copy current
         }
         break;
       }
@@ -1378,6 +1178,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       case EmptiedAirNoticeChangedChannel.name: {
         const p = EmptiedAirNoticeChangedChannel.payload.safeParse(payload);
         if (p.success) this.#emptiedAirSubs.emit(p.data);
+        break;
+      }
+      // `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's restore report, raised at its start or dismissed.
+      case StackRestoreReportChangedChannel.name: {
+        const p = StackRestoreReportChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#applyRestoreReport(p.data);
         break;
       }
       case PgmReturnStatusChangedChannel.name: {
@@ -1448,14 +1254,10 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#channelSettingsSubs.emit(p.data);
         break;
       }
-      // `DESKTOP-APPS-01-D` j — the strays moved: publish, and keep the retention in step.
+      // `DESKTOP-APPS-01-D` j — the strays moved.
       case ipcChannels.StationStraysChangedChannel.name: {
         const p = ipcChannels.StationStraysChangedChannel.payload.safeParse(payload);
-        if (p.success) {
-          this.#strayIds = new Set(p.data.map((s) => s.itemId));
-          this.#straySubs.emit(p.data);
-          this.#mirrorStack(this.#lastStack);
-        }
+        if (p.success) this.#straySubs.emit(p.data);
         break;
       }
       // `R-062` gap 2 — this console's discovery answer, recomputed by the bridge for its principal.
@@ -1499,9 +1301,8 @@ export class WebSocketRuntime implements RuntimeBridge {
       that know nothing about a handshake, and the owner's stuck layer list was one of them.
 
       ⚠ The validate-and-send below is unchanged and still SYNCHRONOUS once this resolves, so
-      the ordering `#resync` depends on ("all re-delivery frames are written before yielding")
-      still holds: every redelivery awaits the SAME promise and their continuations run in
-      creation order.
+      frames written in one tick keep their order: every caller awaits the SAME promise and the
+      continuations run in creation order.
 
       ⚠ The liveness check is re-done AFTER the wait. The socket can drop while a handshake is
       in flight, and a frame written to a closed socket is a request that will never be
@@ -1733,20 +1534,18 @@ export class WebSocketRuntime implements RuntimeBridge {
       // library already works this way (B-085); the stack now does too.
       //
       // DISPLAY ONLY: this sends nothing, commands nothing, and makes no
-      // restore-vs-reset decision. The occupancy-aware restore still happens on
-      // the bridge, on reconnect; the re-pull then replaces this with
-      // authoritative truth.
+      // restore-vs-reset decision — the bridge keeps and restores the stack
+      // (`CENTRAL-BRIDGE-01`); the re-pull then replaces this with its truth.
       if (this.#status !== 'live') return this.#retainedProjection();
       const stack = await this.#invoke(StackSnapshotChannel, undefined);
-      this.#lastStack = stack; // B-085 — keep the offline remove-reference check current
-      this.#mirrorStack(stack); // B-092 — …and the browser-local stack intent
+      this.#mirrorStack(stack); // B-092 — keep the display copy current
       return stack;
     },
     onStateChanged: (handler: (snapshot: readonly StackItemState[]) => void) =>
       this.#stackSubs.add(handler),
     // B-108 — replays the latest report on subscribe. The panel mounts after boot, so
     // a subscribe-only stream would miss precisely the report worth seeing: the one
-    // from the reconnect that happened while the UI was coming up.
+    // the resync read while the UI was coming up.
     onRestoreSkips: (handler: (skips: readonly RestoreSkip[]) => void) => {
       const unsubscribe = this.#restoreSkipSubs.add(handler);
       handler(this.#lastRestoreSkips);
@@ -1757,6 +1556,9 @@ export class WebSocketRuntime implements RuntimeBridge {
       handler(this.#lastRestoreMigrations);
       return unsubscribe;
     },
+    // `CENTRAL-BRIDGE-01` — dismissed on the BRIDGE, so every console stops showing it at once.
+    dismissRestoreReport: (req: ChannelRequest<typeof StackRestoreReportDismissChannel>) =>
+      this.#invoke(StackRestoreReportDismissChannel, req),
   };
 
   /**
@@ -1792,7 +1594,9 @@ export class WebSocketRuntime implements RuntimeBridge {
    * a status here without checking it survives.
    */
   #retainedProjection(): StackItemState[] {
-    const projected = this.#stackRetention.items().map(
+    // (`CENTRAL-BRIDGE-01` — no longer the basis of an offline removal check: a removal needs the
+    // bridge, which holds the true stack.)
+    return this.#stackRetention.items().map(
       (i): StackItemState => ({
         itemId: i.itemId,
         templateId: i.templateId,
@@ -1803,31 +1607,6 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(i.slot !== undefined && { slot: i.slot }),
         ...(i.position !== undefined && { position: i.position }),
       }),
-    );
-    // B-085 — this IS the stack the SPA currently knows about, so it is also the
-    // right basis for the OFFLINE refuse-while-referenced check. Without it a
-    // cold boot against a dead bridge counts ZERO references and would let the
-    // operator remove a template that the retained (and now visible) rows use.
-    this.#lastStack = projected;
-    return projected;
-  }
-
-  /** B-085 — how many current stack items reference `templateId` (offline R-005 check). */
-  /**
-   * `B-212` — WHERE each item still using a template is, from the last-known stack:
-   * the item id and the layer it held (absent when it held none). The offline refusal
-   * names these; the bridge's own answer names them the same way while live.
-   */
-  #references(templateId: string, channel?: number): TemplateReference[] {
-    return (
-      this.#lastStack
-        .filter((i) => i.templateId === templateId)
-        // `CHANNEL-TEMPLATES-01` — a removal from one channel is refused by that channel's rows only.
-        .filter((i) => channel === undefined || i.slot?.channel === channel)
-        .map((i) => ({
-          itemId: i.itemId,
-          ...(i.slot !== undefined && { slot: { channel: i.slot.channel, layer: i.slot.layer } }),
-        }))
     );
   }
 
@@ -1979,18 +1758,16 @@ export class WebSocketRuntime implements RuntimeBridge {
   // R-028 (o1) — the BRIDGE owns the template catalogue: one bridge, many
   // browsers, one library. While the link is LIVE, reads are served from the
   // bridge so every browser sees the same list (including templates other
-  // browsers imported); the browser-local `#library` (B-085) remains the
-  // OFFLINE fallback and the reconnect re-delivery source — a read that cannot
-  // reach the bridge answers from the local retained copy rather than
-  // rejecting, the same display-only degradation the stack snapshot uses.
+  // browsers imported); the browser-local `#library` (B-085) is the OFFLINE
+  // display copy — a read that cannot reach the bridge answers from it rather
+  // than rejecting, the same display-only degradation the stack snapshot uses.
   readonly templates = {
     get: async (req: ChannelRequest<typeof TemplatesGetChannel>) => {
       if (this.#status === 'live') {
         try {
-          const fromBridge = await this.#invoke(TemplatesGetChannel, req);
-          // A local-only template (imported offline, delivery still pending)
-          // must keep resolving — fall through to the local copy on null.
-          if (fromBridge !== null) return fromBridge;
+          // `CENTRAL-BRIDGE-01` — the bridge's answer stands, `null` included: there is no
+          // local-only template any more (an import needs the bridge).
+          return await this.#invoke(TemplatesGetChannel, req);
         } catch {
           /* mid-flight drop — answer from the retained copy below */
         }
@@ -2029,38 +1806,32 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
       return pvwPageSource(answer, this.#library.html(templateId, channel));
     },
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **AN IMPORT AND A REMOVAL ARE THE BRIDGE'S, OR THEY DO NOT
+      HAPPEN.** Both used to land in this console's own library first, "the source of truth", so an
+      import worked offline and was re-delivered on the next connect — and with several consoles on
+      one bridge, a copy that lands later is a copy that can overwrite. Now the bridge decides; this
+      console's copy follows what it accepted, for display. Offline, nothing is changed and the
+      operator is told so (`R-006`: an operator who believes a change is queued will not redo it).
+    */
     import: async (req: ChannelRequest<typeof TemplatesImportChannel>) => {
-      // Register LOCALLY first (the source of truth) — this is what makes import
-      // succeed offline. Then, when live, deliver to the bridge so it can serve
-      // the HTML to CasparCG. A non-disconnect delivery failure is swallowed: the
-      // template is retained in `#library` and re-delivered by the next `#resync`.
-      const res = await this.#library.import(req.template, req.html, req.channel);
-      if (this.#status === 'live') {
-        try {
-          await this.#invoke(TemplatesImportChannel, req);
-        } catch {
-          /* retained locally; reconcile heals it on the next connect */
-        }
-      }
+      if (this.#status !== 'live') throw new Error(TEMPLATE_IMPORT_NEEDS_BRIDGE);
+      const res = await this.#invoke(TemplatesImportChannel, req);
+      await this.#library.import(req.template, req.html, req.channel).catch(() => {
+        /* the display copy is best-effort; the bridge holds the template */
+      });
       return res;
     },
     remove: async (req: ChannelRequest<typeof TemplatesRemoveChannel>) => {
-      // Live: the bridge is authoritative for refuse-while-referenced (it holds the
-      // true stack). On a confirmed removal, drop it from the local store too.
-      if (this.#status === 'live') {
-        const res = await this.#invoke(TemplatesRemoveChannel, req);
-        if (res.ok) await this.#library.delete(req.templateId, req.channel);
-        return res;
+      // The bridge is authoritative for refuse-while-referenced (it holds the true stack).
+      if (this.#status !== 'live') throw new Error(TEMPLATE_REMOVE_NEEDS_BRIDGE);
+      const res = await this.#invoke(TemplatesRemoveChannel, req);
+      if (res.ok) {
+        await this.#library.delete(req.templateId, req.channel).catch(() => {
+          /* the display copy is best-effort */
+        });
       }
-      // Disconnected: the removal is local. Enforce R-005 against the last-known
-      // stack (exact while disconnected — the bridge cannot mutate it), on the
-      // channel the removal names.
-      return this.#library.remove(
-        req.templateId,
-        this.#references(req.templateId, req.channel),
-        null,
-        req.channel,
-      );
+      return res;
     },
     // R-028 (o1) — the bridge pushes the full catalogue on every change, so
     // operator B's Library re-lists the moment operator A imports.

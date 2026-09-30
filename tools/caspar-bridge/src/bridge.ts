@@ -94,7 +94,9 @@ import {
   StackLoadChannel,
   StackNextChannel,
   BridgeCapabilitiesChannel,
-  StackRestoreChannel,
+  StackRestoreReportChangedChannel,
+  StackRestoreReportChannel,
+  StackRestoreReportDismissChannel,
   StackStopAllChannel,
   StackStopChannel,
   StackOutChannel,
@@ -137,6 +139,7 @@ import {
   TemplatesImportChannel,
   TemplatesListChannel,
   TemplatesRemoveChannel,
+  TEMPLATE_REDELIVERY_REFUSAL,
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChangedChannel,
@@ -168,8 +171,8 @@ import {
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
-import type { RetainedStackItem } from '@cg/shared-schema';
-import { loadPersistedStack, retainedFromStack, savePersistedStack } from './stack-store.js';
+import { retainedFromStackItem, type RetainedStackItem } from '@cg/shared-schema';
+import { loadPersistedStack, savePersistedStack } from './stack-store.js';
 import { currentAuthSession, runAsActor } from './actor-context.js';
 import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
 import { startBankBringIn } from './bank-bring-in.js';
@@ -667,7 +670,10 @@ async function restoreOwnStack(
       state: 'on-air',
       slot: { channel: stray.casparChannel, layer: stray.layer, server: 'primary' },
     }));
-    savePersistedStack(stackPath, [...runtime.stackSnapshot().map(retainedFromStack), ...strays]);
+    savePersistedStack(stackPath, [
+      ...runtime.stackSnapshot().map(retainedFromStackItem),
+      ...strays,
+    ]);
   };
   let timer: NodeJS.Timeout | null = null;
   /*
@@ -743,24 +749,14 @@ type LockPolicy =
    *  which is strictly worse than the bug being fixed. */
   | 'unlock'
   /**
-   * The client's own reconnect machinery, not a press.
+   * An operator intent. REFUSED while locked.
    *
-   * `WebSocketRuntime.#resync` re-delivers the retained stack on every (re)connect. Refusing
-   * it would mean a browser that reloads during a lock comes back with an empty stack and an
-   * unfixable error — a state-sync failure caused by a safety gate, which is not safety. It
-   * is unreachable from any operator control (`StackRestoreChannel`'s only call site is
-   * `#resync`), so exempting it grants the operator nothing.
+   * ⚠ `CENTRAL-BRIDGE-01` (`B-294`) retired the two classes that sat beside this one — `resync`
+   * (`stack.restore`) and `operator-unless-redelivery` (`templates.import`'s replay flag). Both
+   * existed for a console's reconnect machinery, and a console re-delivers nothing now: the bridge
+   * keeps the stack and the library itself, and a replay frame is refused before any gate.
    */
-  | 'resync'
-  /** An operator intent. REFUSED while locked. */
-  | 'operator'
-  /**
-   * `templates.import` alone: an operator's real import is an intent, and the SAME channel
-   * carries `#resync`'s template re-deliveries, which are marked `redelivery: true`. One
-   * channel, two meanings, told apart by the flag the wire already carries — rather than
-   * exempting the channel outright and letting a locked console accept a catalogue change.
-   */
-  | 'operator-unless-redelivery';
+  | 'operator';
 
 /**
  * One request route: a channel, its handler, and the two policy axes that decide whether a
@@ -793,36 +789,14 @@ interface Route {
  * sampling — "the lock refuses everything" is a claim about each channel, and no sample
  * can make it.
  */
-export function refusedWhileLocked(route: Route, req: unknown): boolean {
+export function refusedWhileLocked(route: Route): boolean {
   switch (route.lock) {
     case 'read':
     case 'unlock':
-    case 'resync':
       return false;
     case 'operator':
       return true;
-    case 'operator-unless-redelivery':
-      return (req as { redelivery?: boolean } | null)?.redelivery !== true;
   }
-}
-
-/**
- * 🔴 `B-258` — **IS THIS FRAME THE CONSOLE'S RECONNECT MACHINERY, rather than a press?**
- *
- * The lock exempted exactly these two frames with the reason _"the client's own reconnect
- * machinery, not a press"_, and the classification lives in `LockPolicy` — so this reads it
- * rather than keeping a second list (golden rule 6). The permission gate is right to REFUSE
- * them to a principal without the class; what it must not do is RECORD that refusal as
- * something the principal pressed. A viewer's reconnect wrote `refused · stack.restore` under
- * her name on every connect: a row for an act nobody performed, which is the record's worst
- * failure (`B-141`).
- */
-export function isReconnectMachinery(route: Route, req: unknown): boolean {
-  if (route.lock === 'resync') return true;
-  return (
-    route.lock === 'operator-unless-redelivery' &&
-    (req as { redelivery?: boolean } | null)?.redelivery === true
-  );
 }
 
 /**
@@ -911,13 +885,7 @@ export function lockReaches(
  *     ({@link CasparRuntime.liveLedgerChannels}). It is not scoped by this — it silences the
  *     whole ledger or nothing (A16) — this only decides whether the lock lets the press through.
  *
- * ── `B-260` (b) — A RE-DELIVERY MAY NOT OVERWRITE UNDER A LOCK ─────────────
- *
- * The re-delivery exemption's reason is "not a press", and on the lock's own axis that reason
- * was false: a re-delivery of a held id REPLACES its HTML, so a locked console could change
- * what the next take airs. Refused when it would `replace` a held copy and the lock reaches
- * this principal; a re-delivery that REGISTERS a missing id, or changes nothing, still passes —
- * the reconnect keeps working under a lock, and nothing held is overwritten.
+ * (`B-260` (b)'s re-delivery branch is gone with the re-delivery: `CENTRAL-BRIDGE-01`, `B-294`.)
  */
 export function lockRefuses(
   route: Route,
@@ -927,26 +895,7 @@ export function lockRefuses(
   runtime: CasparRuntime,
 ): boolean {
   if (!lock.engaged) return false;
-  const reaches = (): boolean => lockReaches(lock, principal, runtime);
-
-  if (!refusedWhileLocked(route, req)) {
-    if (!isReconnectMachinery(route, req) || route.lock !== 'operator-unless-redelivery') {
-      return false;
-    }
-    const r = req as { template?: TemplateInfo; html?: string; channel?: number } | null;
-    if (r?.template === undefined || r.html === undefined) return false;
-    /*
-      `CHANNEL-TEMPLATES-01` — "would it overwrite" is asked of the channel it names, and a
-      covered-set lock judges that channel as it judges every other channel-bearing intent: a
-      re-delivery repairing a channel the lock does not cover (or covers but this principal does
-      not hold) is not stopped by it.
-    */
-    if (runtime.templateRedeliveryChange(r.template, r.html, r.channel) !== 'replace') return false;
-    if (lock.channels !== undefined && r.channel !== undefined) {
-      return coveredChannelsHeld(lock.channels, principal, runtime).includes(r.channel);
-    }
-    return reaches();
-  }
+  if (!refusedWhileLocked(route)) return false;
 
   if (lock.channels === undefined) return true;
   const held = coveredChannelsHeld(lock.channels, principal, runtime);
@@ -1069,18 +1018,9 @@ export function refusedByAuth(route: Route, state: AuthGateState): boolean {
   if (openToUnauthenticated(route.channel.name)) return false;
   if (state === 'absent') return true;
   /*
-    🔴 **ONLY `read` SURVIVES AN INVALID SESSION — `resync` DOES NOT, and that is a
-    deliberate divergence from `LockPolicy`, not an oversight.**
-
-    The lock exempts `resync` because `StackRestoreChannel` is "unreachable from any operator
-    control", which is true and is an argument about WHO can trigger it. Auth asks a different
-    question: `stack.restore` is not a read. It seeds the reconciler, publishes a new stack to
-    every console and parks items that can reach `CG ADD` on the wire. A principal the bridge
-    has stopped accepting must not put anything on air, however it got there — so the carve-out
-    that is right for a PIN is wrong for an expired token.
-
-    Nobody is stranded: a console whose token lapsed is refused its restore, shows its sign-in,
-    signs in, and restores on the next connect.
+    🔴 **ONLY `read` SURVIVES AN INVALID SESSION.** `unlock` does not, for the reason above: the
+    lock's way out is a PIN, an expired session's is signing in. (The `resync` class this used to
+    refuse as well — `stack.restore` — is gone: `CENTRAL-BRIDGE-01`, `B-294`.)
   */
   return route.lock !== 'read';
 }
@@ -1285,9 +1225,9 @@ export function stationChannelsFor(
  * ── THREE WAYS A REQUEST BECOMES A CHANNEL, AND THEY ARE NOT INTERCHANGEABLE ─
  *
  *   (a) **the request SAYS so** — `layers.clear`, `playoutLayers.clear`, `fixedLayers.load`,
- *       `fixedLayers.clear-layer`, `fixedLayers.set-config`, `channelSettings.set`, and
- *       `stack.restore` (one per item, so N of them); and, inside a list, the channels
- *       `fixedLayers.set-banks` and `sources.set-assignments` CHANGE (not every one they name);
+ *       `fixedLayers.clear-layer`, `fixedLayers.set-config` and `channelSettings.set`; and,
+ *       inside a list, the channels `fixedLayers.set-banks` and `sources.set-assignments` CHANGE
+ *       (not every one they name);
  *   (b) **an `itemId` resolves through the runtime's ledgers** — every per-item verb, via
  *       {@link CasparRuntime.channelsForItem}, which unions `#slots` and `#liveLayers`;
  *   (c) **the verb's scope is the whole stack** — the bulk verbs, which union every member's
@@ -1340,19 +1280,13 @@ export function channelsForRequest(
     JUDGED ON EVERY CHANNEL IT CHANGES.** The console names its channel (case (a) above), so a
     channel-2 operator imports, re-imports and removes on channel 2 needing nothing else. A request
     without one is the station-wide act it always was — every declared channel for an import, every
-    channel listing it for a removal, and for a re-delivery only the channels it would restore it
-    onto — so a principal who does not hold one of them is refused, never let through a door that
-    names nothing.
+    channel listing it for a removal — so a principal who does not hold one of them is refused,
+    never let through a door that names nothing.
   */
   if (name === TemplatesImportChannel.name || name === TemplatesRemoveChannel.name) {
     return runtime.templateActionFootprint(
       name === TemplatesImportChannel.name ? 'import' : 'remove',
-      (req ?? {}) as {
-        templateId?: string;
-        template?: TemplateInfo;
-        html?: string;
-        redelivery?: boolean;
-      },
+      (req ?? {}) as { templateId?: string; template?: TemplateInfo },
     );
   }
 
@@ -1382,16 +1316,6 @@ export function channelsForRequest(
     const assignments =
       (req as { assignments?: SourceAssignments['assignments'] } | null)?.assignments ?? [];
     return runtime.assignmentChangeFootprint({ assignments });
-  }
-
-  // (a′) `stack.restore` carries N items, each with its own optional slot.
-  if (name === StackRestoreChannel.name) {
-    const items = (req as { items?: readonly { slot?: { channel?: number } }[] } | null)?.items;
-    const channels = new Set<number>();
-    for (const item of items ?? []) {
-      if (typeof item.slot?.channel === 'number') channels.add(item.slot.channel);
-    }
-    return [...channels];
   }
 
   // (b) one item, resolved through the runtime's two ledgers.
@@ -1432,7 +1356,7 @@ export function channelsForRequest(
 /**
  * The channel a request NAMES — case (a) of {@link channelsForRequest}, spelled once so the
  * permission gate and the station fence read the coordinate the same way. `undefined` when the
- * request carries no top-level `channel` (a restore's per-item slots are not this: see below).
+ * request carries no top-level `channel`.
  */
 function explicitChannel(req: unknown): number | undefined {
   const explicit = (req as { channel?: unknown } | null)?.channel;
@@ -1487,9 +1411,10 @@ export const CHANNEL_DECLARING_ROUTES: ReadonlySet<string> = new Set([
  *   - an `itemId`'s channel — the bridge's own ledger put that row there, through a door this
  *     fence already guards, and refusing an Out or a Clear on it would strand exactly the graphic
  *     an operator is trying to take off air;
- *   - `stack.restore`'s per-item slots — fenced INSIDE the runtime as a `not-declared` SKIP, so
- *     one foreign row does not cost a console the rest of its stack;
  *   - PANIC — A16: it stays unscoped, and this does not scope it.
+ *
+ * (A restored row on a channel the station does not declare is fenced INSIDE the runtime's
+ * `restore()` as a `not-declared` SKIP; no socket reaches `restore()` since `CENTRAL-BRIDGE-01`.)
  *
  * ⚠ **AUTH OFF IS NOT EXEMPT.** This is a fact about the station, not about a principal. It is the
  * one refusal this change adds to an auth-OFF bridge, and it only ever meets a stale or crafted
@@ -2556,6 +2481,22 @@ async function handleMessage(
   }
 
   /*
+    🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **A RE-DELIVERY IS REFUSED BEFORE EVERY GATE, AND WRITES NO
+    ROW.** The bridge keeps the library for every console; a console's replay of its own copy is how
+    a removed template came back and an older version replaced a newer one. Only a console older
+    than this change sends one — the version check turns such a console away at connect — so this is
+    the fence behind that fence. Ahead of the lock and the permission gate on purpose: it is no
+    press, so it must not be recorded as one (`B-258`), and no sign-in or PIN would make it right.
+  */
+  if (
+    route.channel.name === TemplatesImportChannel.name &&
+    (parsedReq.data as { redelivery?: boolean }).redelivery === true
+  ) {
+    send(socket, errorResponse(frame.id, TEMPLATE_REDELIVERY_REFUSAL));
+    return;
+  }
+
+  /*
     🔴 `B-229` — THE LOCK GATE, AT THE ONE CHOKEPOINT EVERY REQUEST PASSES.
 
     Here and not inside each handler, for the reason `P-013` put the gate lock at the
@@ -2691,11 +2632,12 @@ async function handleMessage(
     */
     const principal = session?.token?.principal;
     /*
-      🔴 `B-258` — the console's reconnect machinery is REFUSED, and NOT RECORDED as a press.
-      The refusal still goes back on the wire, so the console hears it; what does not happen is
-      a row naming a person for an act they never performed.
+      🔴 `B-258` — a row never names a person for an act they did not perform. It used to exempt
+      the console's reconnect machinery here; `CENTRAL-BRIDGE-01` (`B-294`) removed that machinery
+      (`stack.restore` is gone, and a re-delivery is refused before any gate, above), so no
+      reconnect frame reaches this line to be exempted.
     */
-    if (principal !== undefined && !isReconnectMachinery(route, parsedReq.data)) {
+    if (principal !== undefined) {
       runtime.recordAuthzRefusal({
         actor: principal.name,
         actorSub: principal.sub,
@@ -3025,6 +2967,8 @@ export function wirePublishes(
     backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
     // B-225 — air was emptied under us (or the notice was acted on / dismissed).
     backing.emptiedAirChanged.subscribe((n) => push(EmptiedAirNoticeChangedChannel, n)),
+    // `CENTRAL-BRIDGE-01` (`B-294`) — what the start's restore did not bring back (or a dismissal).
+    backing.restoreReportChanged.subscribe((r) => push(StackRestoreReportChangedChannel, r)),
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
     // R-021 stage 2a — fixed-bank config + per-slot state.
@@ -3525,10 +3469,16 @@ export function buildRoutes(
     route(StackSnapshotChannel, 'read', 'read', (r?: { channel: number }) =>
       b.stackSnapshot(r?.channel),
     ),
-    // B-092 — the browser re-delivers its RETAINED stack intent on every
-    // (re)connect, so the stack survives a restart of this process. Seeds state
-    // and publishes; sends nothing to CasparCG until occupancy is knowable.
-    route(StackRestoreChannel, 'resync', 'operator', (r: { items: never }) => b.restore(r.items)),
+    // `CENTRAL-BRIDGE-01` (`B-294`) — there is no `stack.restore`: the bridge restores its own
+    // stack at start. What survives is the restore's REPORT, standing state like `air.emptied`.
+    route(StackRestoreReportChannel, 'read', 'read', () => b.restoreReport()),
+    route(
+      StackRestoreReportDismissChannel,
+      'operator',
+      'operator',
+      (r: { part: 'skipped' | 'migrated'; channel?: number }) =>
+        b.dismissRestoreReport(r.part, r.channel),
+    ),
 
     route(ConnectionsConfigChannel, 'read', 'read', () => b.config()),
     // R-010 — runtime reconfiguration; persisted only after a successful apply.
@@ -3684,13 +3634,13 @@ export function buildRoutes(
       b.templatePage(r.templateId, r.channel),
     ),
     // B-038 Phase 2 — retain the browser-produced self-contained HTML alongside
-    // the TemplateInfo (held, not served yet).
+    // the TemplateInfo. A frame marked `redelivery` never gets here (refused before every gate).
     route(
       TemplatesImportChannel,
-      'operator-unless-redelivery',
       'operator',
-      (r: { template: never; html: string; redelivery?: boolean; channel?: number }) =>
-        b.templateImport(r.template, r.html, r.redelivery ?? false, r.channel),
+      'operator',
+      (r: { template: never; html: string; channel?: number }) =>
+        b.templateImport(r.template, r.html, r.channel),
     ),
     // R-005 — the bridge is authoritative for the refusal (refuse-while-referenced).
     route(

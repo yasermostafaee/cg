@@ -68,11 +68,13 @@ and the Library SHALL NEVER leave a silently unloadable stack row behind.
 Removal of an id that is not registered SHALL be refused with a distinct reason rather than
 silently reporting success.
 
-A removed template SHALL NOT be resurrected by reconnect-reconciliation. The client retains each
-delivered import payload and re-delivers the set on every reconnect to heal the bridge's in-memory
-registry; a confirmed removal SHALL prune that retained payload, so a subsequent reconnect does not
-re-register what the operator deleted. A **refused** removal SHALL leave the retained payload
-intact.
+A removed template SHALL NOT come back. ⚠ **Amended 2026-09-30 by `CENTRAL-BRIDGE-01` (`B-294`,
+change `central-bridge`), in place — its own delta would collide with this one's header at
+archive:** there is no reconnect-reconciliation any more. The bridge keeps the library for every
+console and persists it; a console re-delivers nothing, and the bridge refuses a frame that says it
+is a re-delivery. So a removal is removed where the library is — on the bridge — and stays removed
+across a reconnect and a bridge restart. A removal needs CG Bridge: with it unreachable the console
+SHALL refuse it with a sentence and change nothing; a **refused** removal removes nothing.
 
 The offline mock SHALL apply the same predicate against its own stack, so removal behaves
 identically with and without a live bridge.
@@ -100,12 +102,13 @@ identically with and without a live bridge.
 - **WHEN** a removal names a `templateId` that is not registered **THEN** it is refused with a
   distinct reason rather than reporting success
 
-#### Scenario: A removed template does not come back on reconnect
+#### Scenario: A removed template does not come back on reconnect or after a bridge restart
 
-- **WHEN** a template has been removed and the client subsequently reconnects to the bridge
-  **THEN** reconnect-reconciliation does NOT re-deliver it, and it stays absent from the library
+- **WHEN** a template has been removed and the console reconnects, or the bridge restarts on its
+  own files **THEN** it stays absent from the library — nothing re-delivers it (amended 2026-09-30,
+  `CENTRAL-BRIDGE-01`)
 
-#### Scenario: A refused removal keeps the template intact across a reconnect
+#### Scenario: A removal with CG Bridge unreachable is refused
 
-- **WHEN** a removal is refused and the client subsequently reconnects **THEN** the template is
-  still re-delivered and remains loadable — a refusal removes nothing
+- **WHEN** the operator removes a template while CG Bridge cannot be reached **THEN** the console
+  refuses it with a sentence saying nothing was changed, and the template stays in the library

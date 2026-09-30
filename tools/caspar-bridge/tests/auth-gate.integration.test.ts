@@ -397,33 +397,19 @@ describe('C-037 §1 — THE CENSUS: every route, not a sample', () => {
     expect(reachable).not.toContain('stack.clear-all');
     expect(reachable).not.toContain('lock.release');
     /*
-      🔴 **`stack.restore` IS REFUSED, and this assertion used to say the opposite.**
-
-      The first spelling let `resync` through for the same reason the LOCK does, and the lock's
-      justification does not transfer. The lock exempts it because it is "unreachable from any
-      operator control" — an argument about WHO can trigger it. Auth asks whether this
-      principal may change anything, and `stack.restore` is not a read: it seeds the
-      reconciler, publishes a new stack to every console, and parks items that reach `CG ADD`
-      on the wire. A principal the bridge has stopped accepting must not put anything on air,
-      whichever door it came through.
-
-      Nobody is stranded — the console is refused its restore, shows its sign-in, and restores
-      once it has signed in again.
-    */
-    expect(reachable, 'an invalid principal can still drive a restore onto the wire').not.toContain(
-      'stack.restore',
-    );
-    /*
-      …and the CONTROL for that negative: `stack.restore` IS reachable while merely LOCKED, so
-      the assertion above is measuring the auth gate rather than a route that is refused to
-      everybody.
+      🔴 **`lock.release` is refused to an invalid session (above) and REACHABLE while merely
+      LOCKED — the CONTROL for that negative**, so the assertion is measuring the auth gate
+      rather than a route refused to everybody. The lock's way out is a PIN; an expired
+      session's is signing in. (This pair used to be `stack.restore`'s, the `resync` class —
+      gone with `CENTRAL-BRIDGE-01`, `B-294`: the bridge restores its own stack at start.)
     */
     const whileLocked = [...routes.entries()]
-      .filter(([, r]) => !refusedWhileLocked(r, {}))
+      .filter(([, r]) => !refusedWhileLocked(r))
       .map(([name]) => name);
     expect(whileLocked, 'the control is dead — the route is refused everywhere').toContain(
-      'stack.restore',
+      'lock.release',
     );
+    expect(routes.has('stack.restore'), 'the retired restore door is routed again').toBe(false);
   });
 
   it('auth OFF refuses NOTHING — the byte-identity claim, over the whole table', () => {

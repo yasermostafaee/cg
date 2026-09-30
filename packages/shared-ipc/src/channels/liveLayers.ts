@@ -78,9 +78,9 @@ export const LiveLayerStateSchema = z.object({
    * face on air with no way to touch it, which is the defect `B-145` describes.
    *
    * ⚠ It may name an item the stack no longer carries. That is not a bug in this
-   * payload: after a bridge restart the ledger is adopted from disk while the
-   * browser re-delivers its own stack intent, and the two can legitimately
-   * disagree. The consumer resolves it — see `liveLayerRows`.
+   * payload: after a bridge restart the ledger and the stack are restored from two
+   * files (`CENTRAL-BRIDGE-01`), and the two can legitimately disagree. The
+   * consumer resolves it — see `liveLayerRows`.
    */
   itemId: IdSchema,
   /** The SYMBOLIC plate id from the scene's declaration, e.g. `guest-1`. Never a device. */

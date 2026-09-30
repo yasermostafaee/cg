@@ -245,8 +245,10 @@ describe('C-038 — the census: every route, classified', () => {
       */
       'sources.media-search',
       'sources.refresh',
+      // `CENTRAL-BRIDGE-01` (`B-294`) — the restore's standing report, read by every console.
+      'stack.restore-report',
       'stack.snapshot',
-      // `DESKTOP-APPS-01-D` j — the strays, read by every console so its retention keeps them.
+      // `DESKTOP-APPS-01-D` j — the strays, read by every console (Station setup shows them).
       'station.strays',
       'templates.get',
       'templates.list',

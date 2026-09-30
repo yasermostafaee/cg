@@ -47,7 +47,7 @@ it('🔴 the page on CH 1 is the served page, byte for byte — over the socket 
     fs.rmSync(d, { recursive: true, force: true }),
   );
   const handle = await station(path.join(root, 'templates'));
-  expect(handle.runtime.templateImport(NEWS, NEWS_HTML, false, 1)).toMatchObject({
+  expect(handle.runtime.templateImport(NEWS, NEWS_HTML, 1)).toMatchObject({
     registered: true,
   });
 
@@ -74,7 +74,7 @@ it('CONTROL — with its file gone from the store, a restarted bridge has no pag
   );
   const templatesDir = path.join(root, 'templates');
   const first = await station(templatesDir, false);
-  expect(first.runtime.templateImport(NEWS, NEWS_HTML, false, 1)).toMatchObject({
+  expect(first.runtime.templateImport(NEWS, NEWS_HTML, 1)).toMatchObject({
     registered: true,
   });
   expect(first.runtime.templatePage('news', 1).ok).toBe(true);

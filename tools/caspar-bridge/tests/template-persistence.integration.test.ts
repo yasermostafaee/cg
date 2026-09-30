@@ -341,50 +341,29 @@ it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range 
   ).rejects.toThrow(/70–79.*75–84|75–84.*70–79/s);
 });
 
-it('R-028 part B — a RE-DELIVERY never resurrects a REMOVED template (but may still repair)', async () => {
+it('🔴 CENTRAL-BRIDGE-01 (B-294) — a REMOVAL outlives a bridge restart with no tombstone: the bridge’s registry is the only copy', async () => {
+  /*
+    R-028 part B kept a process-lifetime tombstone so a console's reconnect RE-DELIVERY could not
+    resurrect a removed template — and after a bridge restart the tombstone was gone and any
+    console's old copy brought it back (`B-294`). A console re-delivers nothing now, so the
+    persisted registry is the whole truth: removed there, it is removed for good.
+  */
   const dir = templatesDir();
-  const r = await bootRuntime(dir);
-  r.templateImport(info('tpl-a', 'first name'), HTML);
+  const first = await bootRuntime(dir);
+  first.templateImport(info('tpl-a', 'first name'), HTML);
+  first.templateImport(info('tpl-b', 'kept'), HTML);
+  expect(first.templateRemove('tpl-a').ok).toBe(true);
 
-  // The operator removes it. Any browser still holding a local copy will
-  // re-deliver on its next reconnect — a page reload is enough.
-  expect(r.templateRemove('tpl-a').ok).toBe(true);
-  expect(r.templateList()).toHaveLength(0);
+  await first.stop();
+  runtime = null;
+  const second = await bootRuntime(dir);
+  // Still gone after the restart — CONTROL: the template that was not removed came back.
+  expect(second.templateList().map((t) => t.templateId)).toEqual(['tpl-b']);
 
-  const resurrect = r.templateImport(info('tpl-a', 'first name'), HTML, true);
-  expect(resurrect).toEqual({ registered: false, templateId: 'tpl-a', skipped: true });
-  expect(r.templateList()).toHaveLength(0); // still gone — the removal stands
-
-  // A re-delivery of an id the bridge ALREADY holds is NOT skipped — B-085's
-  // local-wins stands. An adversarial review caught the first draft keeping the
-  // bridge's copy: nothing here can tell which copy is newer, so preferring the
-  // bridge's would silently discard a template a browser had CORRECTED while
-  // offline, and the stale HTML would keep going to air with no signal that the
-  // fix never landed. The tombstone above is the narrower fix part A actually
-  // asked for — stop RESURRECTION, not stop repair.
-  //
-  // `CHANNEL-TEMPLATES-01` — the repair lands on the ONE channel the re-delivery names. One
-  // that names no channel cannot say whose version it repairs, and repairs none.
-  r.templateImport(info('tpl-b', 'bridge copy'), HTML);
-  const unnamed = r.templateImport(info('tpl-b', 'a copy naming no channel'), HTML, true);
-  expect(unnamed).toEqual({ registered: true, templateId: 'tpl-b', skipped: true });
-  expect(r.templateGet('tpl-b', 1)?.name).toBe('bridge copy');
-  const corrected = r.templateImport(info('tpl-b', 'corrected browser copy'), HTML, true, 1);
-  expect(corrected.skipped).toBeUndefined();
-  expect(r.templateGet('tpl-b', 1)?.name).toBe('corrected browser copy');
-
-  // An OPERATOR import (no flag) always wins and revives a removed template.
-  const reimport = r.templateImport(info('tpl-a', 'deliberately re-imported'), HTML);
-  expect(reimport.skipped).toBeUndefined();
-  expect(r.templateGet('tpl-a')?.name).toBe('deliberately re-imported');
-});
-
-it('R-028 part B — re-delivery still REPAIRS a registry that genuinely lost a template', async () => {
-  const dir = templatesDir();
-  const r = await bootRuntime(dir);
-  // Nothing removed, nothing held: this is the case re-delivery exists for (an
-  // offline import, or a registry predating persistence). It must still land.
-  const delivered = r.templateImport(info('tpl-new'), HTML, true);
-  expect(delivered).toEqual({ registered: true, templateId: 'tpl-new' });
-  expect(r.templateGet('tpl-new')).not.toBeNull();
+  // An operator's import is the one way back, and it is recorded like any import.
+  expect(second.templateImport(info('tpl-a', 'deliberately re-imported'), HTML)).toEqual({
+    registered: true,
+    templateId: 'tpl-a',
+  });
+  expect(second.templateGet('tpl-a')?.name).toBe('deliberately re-imported');
 });

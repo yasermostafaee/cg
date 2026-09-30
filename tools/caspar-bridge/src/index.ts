@@ -36,8 +36,9 @@ export { playoutHostOf } from './bridge.js';
 // `DESKTOP-APPS-01-B` B1.4 — every bridge request to the Playout: server-side, no Origin, no proxy.
 export { playoutFetch } from './playout-http.js';
 export type { AuthGateState, BridgeHandle, BridgeOptions, StackProvenance } from './bridge.js';
-// `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack store.
-export { loadPersistedStack, retainedFromStack, savePersistedStack } from './stack-store.js';
+// `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack store (its record is
+// `@cg/shared-schema`'s `retainedFromStackItem`, shared with the console's display copy).
+export { loadPersistedStack, savePersistedStack } from './stack-store.js';
 export type { PersistedStack } from './stack-store.js';
 // `C-037` — the Playout link: its config precedence (CLI > file > default), the boot failure
 // that names a missing key, and the verifier. The CLI resolves the default file path through

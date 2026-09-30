@@ -10,10 +10,11 @@
  * WHY THE KEY IS DURABLE NOW. R-018's design.md justified skipping persistence
  * with "item ids are minted per load, so after a tab reload there is no durable
  * identity to re-attach to". That was true when it was written and is not any
- * more: B-092 added `StackRetentionStore`, which persists each item's `itemId`
- * and re-delivers it on connect, so `itemId + fieldPath` survives a reload and
- * names the same field afterwards. The stale rationale is corrected in that
- * design doc rather than left to mislead the next reader.
+ * more: B-092 made each item's `itemId` survive a restart, and since
+ * `CENTRAL-BRIDGE-01` the bridge keeps it in its own stack file, so
+ * `itemId + fieldPath` survives a reload and names the same field afterwards. The
+ * stale rationale is corrected in that design doc rather than left to mislead the
+ * next reader.
  *
  * WHAT IS DELIBERATELY NOT PERSISTED: the last read ERROR. An error describes
  * one read attempt against one moment's filesystem; restoring it would present

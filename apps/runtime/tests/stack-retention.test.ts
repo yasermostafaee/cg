@@ -1,4 +1,7 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, expect, it } from 'vitest';
 import { WebSocket as WsWebSocket } from 'ws';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import type { LayerPolicy } from '@cg/caspar-client';
@@ -8,17 +11,18 @@ import {
   serializeWsFrame,
   type ConnectionConfig,
   type RestoreSkip,
+  type StackRestoreReport,
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import {
   RetainedStackItemSchema,
   StackItemStateSchema,
-  type RetainedAirState,
   type StackItemState,
 } from '@cg/shared-schema';
 import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import {
   BridgeDisconnectedError,
+  TEMPLATE_REMOVE_NEEDS_BRIDGE,
   WebSocketRuntime,
   type WebSocketLike,
 } from '../src/platform/WebSocketRuntime.js';
@@ -27,15 +31,15 @@ import { StackRetentionStore } from '../src/platform/stack/StackRetentionStore.j
 /**
  * B-092 — the stack survives a restart of the BRIDGE process.
  *
- * The stack used to live ONLY in the bridge's in-memory Reconciler: kill the
- * bridge and every row vanished, because the restarted process boots empty and
- * `#resync` re-pulls that empty snapshot over the operator's stack. The browser
- * now retains the stack INTENT and re-delivers it on every (re)connect, BEFORE
- * the re-pull — the same shape B-085 gave the template library.
+ * The stack used to live ONLY in the bridge's in-memory Reconciler: kill the bridge and every
+ * row vanished. B-092's answer was that the BROWSER retained the stack intent and re-delivered
+ * it on every (re)connect. 🔴 `CENTRAL-BRIDGE-01` (`B-294`) moved that job to the bridge — it
+ * persists its stack and restores it at start — because with several consoles on one bridge a
+ * re-delivered copy is a claim on the truth, and a stale one could win. What this console keeps
+ * is a DISPLAY copy: the offline view below, never sent.
  *
- * (The broadcast-safety half — that restoring never CLEARs a live layer — is
- * asserted against real AMCP bytes in the bridge's
- * `stack-survives-bridge-restart.integration.test.ts`.)
+ * (The broadcast-safety half — that restoring never CLEARs a live layer — is asserted against
+ * real AMCP bytes in the bridge's `stack-survives-bridge-restart` and `own-stack` tests.)
  */
 
 const wsFactory = (url: string): WebSocketLike => new WsWebSocket(url) as unknown as WebSocketLike;
@@ -97,19 +101,33 @@ const RETENTION_POLICY: LayerPolicy = { 'lower-third': [110, 119] };
 
 let handle: BridgeHandle | null = null;
 let runtime: WebSocketRuntime | null = null;
+let dir: string | null = null;
 
 afterEach(async () => {
   runtime?.dispose();
   runtime = null;
   await handle?.close();
   handle = null;
+  if (dir !== null) fs.rmSync(dir, { recursive: true, force: true });
+  dir = null;
 });
 
-it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', async () => {
+/** A station's two persistent paths, in a scratch dir (never the dev host's real records). */
+function stationPaths(): { stackPath: string; templatesDir: string } {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-stack-retention-'));
+  return {
+    stackPath: path.join(dir, 'bridge-stack.json'),
+    templatesDir: path.join(dir, 'templates'),
+  };
+}
+
+it('🔴 CENTRAL-BRIDGE-01 — the stack survives a REAL bridge restart from the BRIDGE’s own file, and the console’s rows follow it', async () => {
+  const paths = stationPaths();
   handle = await createBridge({
     port: 0,
     connection: ephemeralConnection(),
     layerPolicy: RETENTION_POLICY,
+    ...paths,
   });
   const port = handle.port;
   const retention = new StackRetentionStore(new MemoryWorkspace());
@@ -125,8 +143,6 @@ it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', as
   await runtime.stack.load({ itemId: 'item1', templateId: 'lower-third', fields: { h: 'یک' } });
   await runtime.stack.load({ itemId: 'item2', templateId: 'lower-third', fields: { h: 'دو' } });
   expect((await runtime.stack.snapshot()).map((i) => i.itemId)).toEqual(['item1', 'item2']);
-  // The intent is now the BROWSER's, not just the bridge's.
-  expect(retention.items().map((i) => i.itemId)).toEqual(['item1', 'item2']);
 
   // The last stack pushed to subscribers — what the UI would be rendering.
   let lastPushed: readonly StackItemState[] = [];
@@ -139,63 +155,52 @@ it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', as
   handle = null;
   await awaitStatus(runtime, 'disconnected');
 
-  // ── a fresh bridge starts on the same port, with an EMPTY stack ──
+  // ── a fresh bridge starts on the same port and the same files: the stack is ITS, at once ──
   handle = await createBridge({
     port,
     connection: ephemeralConnection(),
     layerPolicy: RETENTION_POLICY,
+    ...paths,
   });
-  expect(handle.runtime.stackSnapshot()).toEqual([]);
-
-  await awaitStatus(runtime, 'live');
   const h = handle;
-  // The retained intent is restored INTO the fresh bridge…
-  await waitFor(() => h.runtime.stackSnapshot().length === 2);
   expect(h.runtime.stackSnapshot().map((i) => i.itemId)).toEqual(['item1', 'item2']);
-  // …with the operator's fields and layers intact.
+  // …with the operator's fields and layers intact, before any console has spoken.
   expect(h.runtime.stackSnapshot()[0]?.fields).toEqual({ h: 'یک' });
   expect(h.runtime.stackSnapshot().map((i) => i.slot?.layer)).toEqual([110, 111]);
 
-  // …and the SPA never adopts an empty stack: the rows do NOT disappear.
+  // The console reconnects and SHOWS it — the rows do not disappear.
+  await awaitStatus(runtime, 'live');
   await waitFor(() => lastPushed.length === 2);
   expect(lastPushed.map((i) => i.itemId)).toEqual(['item1', 'item2']);
   expect((await runtime.stack.snapshot()).map((i) => i.itemId)).toEqual(['item1', 'item2']);
 }, 20_000);
 
-it('a removal is a removal: it prunes the retention and does NOT walk back in on reconnect', async () => {
+it('a removal is a removal: after a bridge restart the row is gone from the BRIDGE’s file — control: the kept row is back', async () => {
+  const paths = stationPaths();
   handle = await createBridge({
     port: 0,
     connection: ephemeralConnection(),
     layerPolicy: RETENTION_POLICY,
+    ...paths,
   });
   const port = handle.port;
-  const retention = new StackRetentionStore(new MemoryWorkspace());
-  await retention.hydrate();
-  runtime = new WebSocketRuntime(handle.url, {
-    createWebSocket: wsFactory,
-    stackRetention: retention,
-  });
+  runtime = new WebSocketRuntime(handle.url, { createWebSocket: wsFactory });
   await runtime.whenReady();
 
   await runtime.templates.import({ template: TEMPLATE, html: '<html>v1</html>' });
   await runtime.stack.load({ itemId: 'keep', templateId: 'lower-third', fields: {} });
   await runtime.stack.load({ itemId: 'gone', templateId: 'lower-third', fields: {} });
   await runtime.stack.remove({ itemId: 'gone' });
-  await waitFor(() => retention.items().length === 1);
 
   await handle.close();
   handle = null;
-  await awaitStatus(runtime, 'disconnected');
   handle = await createBridge({
     port,
     connection: ephemeralConnection(),
     layerPolicy: RETENTION_POLICY,
+    ...paths,
   });
-  await awaitStatus(runtime, 'live');
-
-  const h = handle;
-  await waitFor(() => h.runtime.stackSnapshot().length === 1);
-  expect(h.runtime.stackSnapshot().map((i) => i.itemId)).toEqual(['keep']);
+  expect(handle.runtime.stackSnapshot().map((i) => i.itemId)).toEqual(['keep']);
 }, 20_000);
 
 // ── deterministic ordering + failure isolation (scripted fake WebSocket) ──
@@ -273,46 +278,25 @@ const ON_AIR_ITEM: StackItemState = {
   slot: { channel: 1, layer: 10, server: 'primary' },
 };
 
-/** How a faithful bridge seeds each retained state (mirrors `seedStatusFor`). */
-const SEEDED: Record<RetainedAirState, StackItemState['status']> = {
-  'on-air': 'on-air',
-  loaded: 'loaded',
-  cleared: 'idle',
-  error: 'error',
-};
-
+/**
+ * A faithful fake bridge: it holds ITS OWN stack (it keeps and restores it itself) and its own
+ * restore report, and answers the reads a resync makes. It never needs anything from a console.
+ */
 function respondLikeBridge(
   sock: FakeSocket,
-  restoreFails: boolean,
-  skips: RestoreSkip[] = [],
+  bridgeStack: readonly StackItemState[] = [],
+  report: StackRestoreReport | null = null,
 ): void {
-  // A faithful fake: a bridge that ACCEPTS a restore then reports those items in
-  // its snapshot. Anything else is a bridge contradicting itself, and testing
-  // against that would assert on a state no real bridge can produce.
-  let restored: StackItemState[] = [];
-  sock.respond = (channel, payload) => {
+  sock.respond = (channel) => {
     switch (channel) {
       case 'templates.import':
         return { registered: true, templateId: 'lower-third' };
-      case 'stack.restore': {
-        if (restoreFails) throw new Error('restore rejected');
-        const req = payload as {
-          items: { itemId: string; templateId: string; state: RetainedAirState }[];
-        };
-        restored = req.items.map((i) => ({
-          itemId: i.itemId,
-          templateId: i.templateId,
-          fields: {},
-          // A faithful bridge seeds the state it was GIVEN — it never promotes one.
-          status: SEEDED[i.state],
-          pending: false,
-        }));
-        return { restored: restored.length, skipped: skips };
-      }
-      // After a FAILED restore this is the EMPTY snapshot of a freshly-booted
-      // bridge — the exact one that must never be allowed to erase the retention.
+      case 'stack.restore-report':
+        return report;
+      case 'station.strays':
+        return [];
       case 'stack.snapshot':
-        return restored;
+        return bridgeStack;
       case 'connections.health':
         return HEALTH;
       case 'lock.state':
@@ -324,29 +308,26 @@ function respondLikeBridge(
 }
 
 async function reconnectWith(
-  restoreFails: boolean,
-  skips: RestoreSkip[] = [],
+  bridgeStack: readonly StackItemState[],
+  report: StackRestoreReport | null = null,
 ): Promise<{
   retention: StackRetentionStore;
   resyncSock: FakeSocket | undefined;
-  onResyncError: ReturnType<typeof vi.fn>;
   reportedSkips: RestoreSkip[][];
 }> {
   const sockets: FakeSocket[] = [];
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
   await retention.mirror([ON_AIR_ITEM]);
-  const onResyncError = vi.fn();
 
   runtime = new WebSocketRuntime('ws://fake', {
     createWebSocket: () => {
       const s = new FakeSocket();
-      respondLikeBridge(s, restoreFails, skips);
+      respondLikeBridge(s, bridgeStack, report);
       sockets.push(s);
       return s;
     },
     stackRetention: retention,
-    onResyncError,
   });
 
   const reportedSkips: RestoreSkip[][] = [];
@@ -364,41 +345,30 @@ async function reconnectWith(
   await waitFor(
     () => (resyncSock?.sent.filter((f) => f.channel === 'stack.snapshot').length ?? 0) >= 1,
   );
-  return { retention, resyncSock, onResyncError, reportedSkips };
+  // The display copy is mirrored once the resync has finished with the re-pulled snapshot.
+  await waitFor(() => runtime?.link.resyncing() === false);
+  return { retention, resyncSock, reportedSkips };
 }
 
-it('resync delivers the retained stack AFTER the templates and BEFORE the snapshot re-pull', async () => {
-  const { resyncSock } = await reconnectWith(false);
+it('🔴 CENTRAL-BRIDGE-01 — a reconnect adopts the BRIDGE’s stack, and the display copy follows it: the console sends no restore', async () => {
+  const bridgeStack: StackItemState[] = [
+    { ...ON_AIR_ITEM, itemId: 'from-the-bridge', status: 'loaded' },
+  ];
+  const { retention, resyncSock } = await reconnectWith(bridgeStack);
   const channels = resyncSock?.sent.map((f) => f.channel) ?? [];
-
-  const restoreIdx = channels.indexOf('stack.restore');
-  const pullIdx = channels.indexOf('stack.snapshot');
-  expect(restoreIdx).toBeGreaterThanOrEqual(0);
-  // Templates first — a restored item must resolve against a populated registry.
-  expect(channels.indexOf('templates.import')).toBeLessThan(restoreIdx);
-  // …and the restore precedes the re-pull, which is what stops the SPA adopting
-  // the empty stack of a freshly-booted bridge.
-  expect(restoreIdx).toBeLessThan(pullIdx);
-
-  // The intent delivered is the retained INTENT — not reconciled state.
-  const payload = resyncSock?.sent[restoreIdx]?.payload as {
-    items: { itemId: string; state: RetainedAirState; slot?: { layer: number } }[];
-  };
-  expect(payload.items).toHaveLength(1);
-  expect(payload.items[0]).toMatchObject({ itemId: 'item1', state: 'on-air' });
-  expect(payload.items[0]?.slot?.layer).toBe(10);
-});
-
-it('a FAILED restore is surfaced and preserves the retention — the empty snapshot never erases it', async () => {
-  const { retention, onResyncError } = await reconnectWith(true);
-
-  // The operator is told, and the intent is kept for the next connect. Without
-  // this the bug would erase its own fix: the empty snapshot that follows a
-  // failed restore would be mirrored straight over the retained stack, and the
-  // store is PERSISTENT — the loss would outlive the page.
-  expect(onResyncError).toHaveBeenCalledTimes(1);
-  expect(String(onResyncError.mock.calls[0]?.[0])).toContain('retained stack');
-  expect(retention.items().map((i) => i.itemId)).toEqual(['item1']);
+  // It READ (control: the resync ran to its re-pull)…
+  expect(channels).toContain('stack.snapshot');
+  // …and delivered nothing — though this console held a retained on-air row.
+  expect(channels).not.toContain('stack.restore');
+  expect(channels).not.toContain('templates.import');
+  // The display copy is the bridge's stack now, not the one this console held.
+  await waitFor(
+    () =>
+      retention
+        .items()
+        .map((i) => i.itemId)
+        .join() === 'from-the-bridge',
+  );
 });
 
 // ── StackRetentionStore in isolation ──
@@ -511,9 +481,11 @@ async function coldBootOffline(): Promise<{
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
   const { slot: _slot, ...noSlot } = ON_AIR_ITEM;
-  await retention.mirror([ON_AIR_ITEM, { ...noSlot, itemId: 'item2', status: 'loaded' }]);
+  const rows: StackItemState[] = [ON_AIR_ITEM, { ...noSlot, itemId: 'item2', status: 'loaded' }];
+  await retention.mirror(rows);
   const sock = new FakeSocket();
-  respondLikeBridge(sock, false);
+  // The bridge, when it returns, holds the same two rows — its own stack, from its own file.
+  respondLikeBridge(sock, rows);
   // NEVER opened → the runtime sits in `disconnected`, exactly like a page
   // loaded while the bridge process is dead.
   const rt = new WebSocketRuntime('ws://fake', {
@@ -567,30 +539,27 @@ it('the offline view is replaced by authoritative truth once the bridge returns'
 
   sock.open();
   await rt.whenReady();
-  await waitFor(() => sock.sent.some((f) => f.channel === 'stack.restore'));
+  await waitFor(() => sock.sent.some((f) => f.channel === 'station.strays'));
 
   // The bridge is authoritative now, so its statuses win over the local
-  // projection: the restored row reads the real `on-air`, not the offline
+  // projection: the row reads the bridge's real `on-air`, not the offline
   // `unverified` placeholder.
   const live = await rt.stack.snapshot();
   expect(live.map((i) => i.itemId)).toEqual(['item1', 'item2']);
   expect(live[0]?.status).toBe('on-air');
-  // And the retention still holds both items — the projection round-trips, so
+  // And the display copy holds both items — the projection round-trips, so
   // being displayed offline corrupted nothing.
   expect(retention.items().map((i) => i.itemId)).toEqual(['item1', 'item2']);
   expect(retention.items()[0]?.state).toBe('on-air');
 });
 
-it('offline template-remove counts the RETAINED rows as references (R-005 stays enforced)', async () => {
-  const { rt } = await coldBootOffline();
-  // The retained rows are visible and use 'lower-third'; removing it offline
-  // must be refused, exactly as it would be against a live bridge holding them.
-  await rt.templates.import({ template: TEMPLATE, html: '<html>v1</html>' });
+it('🔴 CENTRAL-BRIDGE-01 — an offline template removal is REFUSED: R-005 is decided by the bridge, which holds the true stack', async () => {
+  const { rt, sock } = await coldBootOffline();
   await rt.stack.snapshot(); // the operator is looking at the rows
-  expect(await rt.templates.remove({ templateId: 'lower-third' })).toMatchObject({
-    ok: false,
-    reason: 'in-use',
-  });
+  await expect(rt.templates.remove({ templateId: 'lower-third' })).rejects.toThrow(
+    TEMPLATE_REMOVE_NEEDS_BRIDGE,
+  );
+  expect(sock.sent).toHaveLength(0);
 });
 
 // ── B-107: the offline projection may never IMPROVE a status ──────────────────
@@ -613,7 +582,7 @@ async function offlineWith(items: readonly StackItemState[]): Promise<WebSocketR
   await retention.hydrate();
   await retention.mirror(items);
   const sock = new FakeSocket();
-  respondLikeBridge(sock, false);
+  respondLikeBridge(sock);
   // NEVER opened → `disconnected`, exactly like a page loaded with the bridge dead.
   const rt = new WebSocketRuntime('ws://fake', {
     createWebSocket: () => sock,
@@ -687,7 +656,7 @@ it('B-107: the projection ROUND-TRIPS, so displaying offline can never corrupt t
   const before = retention.items().map((i) => i.state);
 
   const sock = new FakeSocket();
-  respondLikeBridge(sock, false);
+  respondLikeBridge(sock);
   const rt = new WebSocketRuntime('ws://fake', {
     createWebSocket: () => sock,
     stackRetention: retention,
@@ -701,41 +670,34 @@ it('B-107: the projection ROUND-TRIPS, so displaying offline can never corrupt t
 
 // ── B-108: what a restore could not bring back is REPORTED ────────────────────
 
-it('B-108: rows the restore could not re-seat are reported, with their reason', async () => {
-  const { reportedSkips } = await reconnectWith(false, [
+it('B-108: rows the BRIDGE’s restore could not re-seat are reported on this console, with their reason', async () => {
+  const skipped: RestoreSkip[] = [
     { itemId: 'gone-template', reason: 'unknown-template' },
     { itemId: 'no-room', reason: 'no-layer' },
-  ]);
-
-  // `#resync` used to await the restore and DISCARD its result, so these rows
-  // vanished from the operator's stack with nothing said.
-  const latest = reportedSkips.at(-1);
-  expect(latest).toEqual([
-    { itemId: 'gone-template', reason: 'unknown-template' },
-    { itemId: 'no-room', reason: 'no-layer' },
-  ]);
+  ];
+  const { reportedSkips } = await reconnectWith([], {
+    at: new Date().toISOString(),
+    skipped,
+    migrated: [],
+  });
+  // The report is the bridge's standing state, read on connect — a console that connects after
+  // the restart still hears which rows did not come back, and why.
+  expect(reportedSkips.at(-1)).toEqual(skipped);
 });
 
-it('B-108: the BENIGN skip raises no alarm — a page reload against a live bridge loses nothing', async () => {
-  const { reportedSkips } = await reconnectWith(false, [
-    { itemId: 'item1', reason: 'already-held' },
-  ]);
-  // Filtered in `#resync`, so no subscriber can raise a false alarm by forgetting to.
+it('B-108: a bridge with nothing to report CLEARS the notice — an empty report is an answer', async () => {
+  const { reportedSkips } = await reconnectWith([], null);
+  // (The BENIGN skip — an item the live bridge already holds — is filtered on the bridge, in
+  // `CasparRuntime.#setRestoreReport`; a console cannot raise that false alarm at all.)
   expect(reportedSkips.at(-1)).toEqual([]);
-});
-
-it('B-108: a mixed report keeps the losses and drops the benign one', async () => {
-  const { reportedSkips } = await reconnectWith(false, [
-    { itemId: 'item1', reason: 'already-held' },
-    { itemId: 'no-room', reason: 'no-layer' },
-  ]);
-  expect(reportedSkips.at(-1)).toEqual([{ itemId: 'no-room', reason: 'no-layer' }]);
 });
 
 /**
  * 🔴 **THE COPY LIST IS HAND-MAINTAINED, AND NOTHING ASSERTED IT WAS COMPLETE (session BM).**
  *
- * `toRetained` reduces a published row to intent by naming each carried field explicitly.
+ * `retainedFromStackItem` (`@cg/shared-schema`, one copy for the bridge's stack file and this
+ * display copy — `CENTRAL-BRIDGE-01`) reduces a published row to intent by naming each carried field
+ * explicitly.
  * That is the right shape — most of `StackItemState` is RECONCILED state which must not
  * travel — but it means every new OPEN-AXIS field has to be added by hand, and forgetting is
  * silent: the row restores, looks normal, and is missing one thing.
@@ -749,7 +711,7 @@ it('B-108: a mixed report keeps the losses and drops the benign one', async () =
  * and the published schema also has must survive the round trip.** A sixth field added later
  * fails here on the day it is added, which is the only moment the omission is cheap.
  */
-it('🔴 every OPEN-AXIS field a published row carries survives toRetained — derived, not listed', async () => {
+it('🔴 every OPEN-AXIS field a published row carries survives retainedFromStackItem — derived, not listed', async () => {
   const store = new StackRetentionStore(new MemoryWorkspace());
 
   /*
@@ -788,7 +750,7 @@ it('🔴 every OPEN-AXIS field a published row carries survives toRetained — d
     not, and that is where a new field slipped past.**
 
     `dropped` below only ever looks at fields `populated` actually sets. So a seventh field
-    added to both schemas and forgotten in `toRetained` produced NO failure here — it was
+    added to both schemas and forgotten in `retainedFromStackItem` produced NO failure here — it was
     `undefined` on the row, therefore never a candidate for having been dropped. The guard
     read as complete and would have passed on the exact omission it exists to catch, which
     is the `mock-bridge-parity` shape again: a check that answers a narrower question than

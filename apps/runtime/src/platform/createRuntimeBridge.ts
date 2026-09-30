@@ -14,17 +14,6 @@ const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'bro
 /** Boot probe budget — reachable within this window → use the bridge (C-001). */
 const PROBE_TIMEOUT_MS = 1500;
 
-export interface CreateRuntimeBridgeOptions {
-  /**
-   * Reconnect-reconciliation — surface for a failed template re-delivery
-   * during the post-reconnect resync (the renderer passes its command-error
-   * reporter). Only used by the live `WebSocketRuntime` backend.
-   */
-  onResyncError?: (message: string) => void;
-  /** `DELTA-MULTI-CHANNEL-01-A` A3 — a message `onResyncError` raised is no longer true. */
-  onResyncResolved?: (message: string) => void;
-}
-
 /**
  * Build the browser `RuntimeBridge`, deciding the backend **once** at boot (C-001 Phase 1).
  *
@@ -45,32 +34,20 @@ export interface CreateRuntimeBridgeOptions {
  * The backend is fixed for the session either way — a live link that later drops surfaces
  * as `disconnected`, never a silent fall-back to a simulation.
  */
-export async function createRuntimeBridge(
-  options: CreateRuntimeBridgeOptions = {},
-): Promise<RuntimeBridge> {
+export async function createRuntimeBridge(): Promise<RuntimeBridge> {
   // The ONLY door to the mock. Never inferred from a failed probe.
   if (isTestMode()) return createMockBridge();
 
   const url = resolveBridgeUrl();
-  // B-085 — the browser-local template library (source of truth). Hydrated from
-  // persistent storage BEFORE the runtime is returned, so the renderer's first
-  // `templates.list()` sees the operator's library even with the bridge down.
+  // B-085 / B-092 — this console's DISPLAY copies of the library and the stack, hydrated BEFORE
+  // the runtime is returned so the first `templates.list()` and `stack.snapshot()` have something
+  // to show with CG Bridge unreachable. `CENTRAL-BRIDGE-01` (`B-294`): never sent — the bridge
+  // keeps both for every console.
   const workspace = await initRuntimeWorkspace();
   const library = new LibraryStore(workspace);
-  // B-092 — the browser-local stack INTENT, so the stack survives a restart of
-  // the bridge process. Hydrated BEFORE the first connect: the retention is
-  // re-delivered during `#resync`, and an unhydrated store would re-deliver
-  // nothing and let the empty snapshot stand.
   const stackRetention = new StackRetentionStore(workspace);
   await Promise.all([library.hydrate(), stackRetention.hydrate()]);
-  const ws = new WebSocketRuntime(url, {
-    library,
-    stackRetention,
-    ...(options.onResyncError !== undefined ? { onResyncError: options.onResyncError } : {}),
-    ...(options.onResyncResolved !== undefined
-      ? { onResyncResolved: options.onResyncResolved }
-      : {}),
-  });
+  const ws = new WebSocketRuntime(url, { library, stackRetention });
   try {
     await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);
   } catch {
@@ -178,8 +155,8 @@ export function createMockBridge(): RuntimeBridge {
       status: () => OFFLINE,
       // Constant mode — never changes, so nothing to emit; the unsubscribe is a noop.
       onStatusChanged: () => () => undefined,
-      // §4 — the offline mock never resyncs: there is no socket and no re-delivery, so its
-      // stack is ALWAYS the settled answer. Constant `false` is the honest value here, not a
+      // §4 — the offline mock never resyncs: there is no socket, so its stack is ALWAYS the
+      // settled answer. Constant `false` is the honest value here, not a
       // stub — a mock that reported a delivery in flight would suppress an alarm test mode
       // is genuinely entitled to raise.
       resyncing: () => false,
@@ -286,6 +263,9 @@ export function createMockBridge(): RuntimeBridge {
         handler([]);
         return () => undefined;
       },
+      // `CENTRAL-BRIDGE-01` — nothing to dismiss, so a dismissal did nothing: `ok: false`, as the
+      // bridge answers a dismissal of an empty half.
+      dismissRestoreReport: () => Promise.resolve({ ok: false }),
     },
 
     /*
@@ -416,8 +396,7 @@ export function createMockBridge(): RuntimeBridge {
       // B-038 Phase 2 — offline accepts and IGNORES `req.html`: the mock has no
       // HTTP server and no CasparCG, so there is nothing to serve. Only the live
       // bridge retains the HTML; offline stays "OFFLINE (mock) — nothing renders".
-      import: (req) =>
-        Promise.resolve(mock.templateImport(req.template, req.redelivery ?? false, req.channel)),
+      import: (req) => Promise.resolve(mock.templateImport(req.template, req.channel)),
       // R-005 — the mock applies the same refuse-while-referenced predicate as the bridge.
       remove: (req) => Promise.resolve(mock.templateRemove(req.templateId, req.channel)),
       // R-028 (o1) — the catalogue push, mirrored by the mock's own emitter.

@@ -11,6 +11,7 @@ import {
   authzChannelRefusal,
   channelNotDeclaredRefusal,
   LOCK_ENGAGED_REFUSAL,
+  TEMPLATE_REDELIVERY_REFUSAL,
   type ConnectionConfig,
   type LockState,
   type SourceAssignments,
@@ -412,18 +413,20 @@ describe('B-259 — a locked console does not change hands by token', () => {
   });
 });
 
-describe('B-258 — reconnect machinery is refused, not recorded as a press', () => {
-  it('a viewer’s restore writes no refused row; a viewer’s real press does', async () => {
+describe('B-258 → CENTRAL-BRIDGE-01 — the retired reconnect frames are refused before every gate, and recorded as nobody’s press', () => {
+  it('a viewer’s `stack.restore` finds no route and a re-delivery its own sentence — neither writes a row; a viewer’s real press does', async () => {
     await station();
     const v = await signedIn({ user: 'viewer' });
+    // `stack.restore` is gone: the bridge restores its own stack at start (`B-294`).
     const restore = await v.ask('r', 'stack.restore', { items: [] });
-    expectRefusedWith(restore.error, AUTHZ_ROLE_REFUSAL, 'a viewer restored');
+    expect(restore.error).toBe('unknown channel: stack.restore');
+    // A re-delivery is refused with ITS reason — not the role's, which it would reach later.
     const redeliver = await v.ask('d', 'templates.import', {
       template: TEMPLATE,
       html: HTML,
       redelivery: true,
     });
-    expectRefusedWith(redeliver.error, AUTHZ_ROLE_REFUSAL, 'a viewer re-delivered');
+    expectRefusedWith(redeliver.error, TEMPLATE_REDELIVERY_REFUSAL, 'a viewer re-delivered');
 
     // Positive control — the SAME viewer's real press writes its refused row, so the recorder
     // is live and the absence above is a measurement.
@@ -436,43 +439,51 @@ describe('B-258 — reconnect machinery is refused, not recorded as a press', ()
   });
 });
 
-describe('B-260 — every template mutation writes a row; a lock refuses an overwrite', () => {
+describe('B-260 → CENTRAL-BRIDGE-01 — a template mutation writes a row; a re-delivery mutates nothing', () => {
   async function auditRows(client: Client): Promise<AuditEntry[]> {
     return (await client.ask(`a-${String(Math.random())}`, 'audit.recent', { limit: 100 }))
       .payload as AuditEntry[];
   }
   const other: TemplateInfo = { templateId: 'other', templateType: 'other', fields: [] };
 
-  it('(a) a re-delivery that changes the catalogue writes a row; one that changes nothing does not', async () => {
+  it('🔴 a re-delivery is refused on an UNLOCKED console too — it registers nothing, replaces nothing and writes no row; the import and the removal around it each write theirs', async () => {
     handle = await createBridge({ port: 0, connection: deadConnection() });
     const c = await openClient(handle);
-    // `CHANNEL-TEMPLATES-01` — a console re-delivers each record to the channel it was imported on.
-    const redeliver = (id: string, html: string) =>
+    expect((await c.ask('i', 'templates.import', { template: other, html: 'v1' })).error).toBe(
+      undefined,
+    );
+    const redeliver = (id: string, html: string, channel?: number) =>
       c.ask(`r-${id}-${String(Math.random())}`, 'templates.import', {
         template: { ...other, templateId: id },
         html,
         redelivery: true,
-        channel: 1,
+        ...(channel !== undefined && { channel }),
       });
 
-    expect((await redeliver('other', 'v1')).error).toBe(undefined); // registers
-    expect((await redeliver('other', 'v1')).error).toBe(undefined); // identical
-    expect((await redeliver('other', 'v2')).error).toBe(undefined); // replaces
-    expect(handle.runtime.templateHtml('other')).toBe('v2');
+    // It would have REPLACED a held copy (the local-wins repair) — refused, nothing moved.
+    expectRefusedWith(
+      (await redeliver('other', 'v2', 1)).error,
+      TEMPLATE_REDELIVERY_REFUSAL,
+      'a replace',
+    );
+    expect(handle.runtime.templateHtml('other')).toBe('v1');
+    // It would have REGISTERED a missing one — refused, nothing added.
+    expectRefusedWith(
+      (await redeliver('fresh', 'f1')).error,
+      TEMPLATE_REDELIVERY_REFUSAL,
+      'a register',
+    );
+    expect(handle.runtime.templateGet('fresh')).toBeNull();
+
     const removed = await c.ask('rm', 'templates.remove', { templateId: 'other' });
     expect((removed.payload as { ok: boolean }).ok).toBe(true);
 
+    // The import and the removal are the positive control that the recorder was live throughout.
     const actions = (await auditRows(c)).map((r) => `${r.action}:${r.outcome}`).reverse();
-    // Register + replace = two rows; the identical re-delivery between them wrote none. The two
-    // rows on either side of it are the positive control that the recorder was live throughout.
-    expect(actions).toEqual([
-      'template-redeliver:ok',
-      'template-redeliver:ok',
-      'template-remove:ok',
-    ]);
+    expect(actions).toEqual(['import:ok', 'template-remove:ok']);
   });
 
-  it('(b) under a lock a re-delivery may not OVERWRITE; registering and no-change still pass', async () => {
+  it('under a lock the re-delivery is refused for what it IS, before the lock is asked — and an operator import is refused by the lock', async () => {
     handle = await createBridge({ port: 0, connection: deadConnection() });
     const c = await openClient(handle);
     expect((await c.ask('i', 'templates.import', { template: other, html: 'v1' })).error).toBe(
@@ -480,48 +491,16 @@ describe('B-260 — every template mutation writes a row; a lock refuses an over
     );
     expect((await c.ask('l', 'lock.engage', { pin: '4711' })).payload).toEqual({ ok: true });
 
-    const overwrite = await c.ask('o', 'templates.import', {
+    const replay = await c.ask('o', 'templates.import', {
       template: other,
       html: 'v2-under-lock',
       redelivery: true,
       channel: 1,
     });
-    expectRefusedWith(
-      overwrite.error,
-      LOCK_ENGAGED_REFUSAL,
-      'a locked console overwrote a template',
-    );
+    expectRefusedWith(replay.error, TEMPLATE_REDELIVERY_REFUSAL, 'a replay under the lock');
+    // CONTROL — the lock is live: the operator's own import is refused by it.
+    const press = await c.ask('p', 'templates.import', { template: other, html: 'v3', channel: 1 });
+    expectRefusedWith(press.error, LOCK_ENGAGED_REFUSAL, 'an import under the lock');
     expect(handle.runtime.templateHtml('other'), 'the held HTML moved').toBe('v1');
-
-    // Positive controls — the SAME frame shape still passes when it overwrites nothing, so the
-    // refusal is about the overwrite and not about the flag.
-    const same = await c.ask('s', 'templates.import', {
-      template: other,
-      html: 'v1',
-      redelivery: true,
-      channel: 1,
-    });
-    expect(same.error, 'an identical re-delivery was refused under the lock').toBe(undefined);
-    const fresh = await c.ask('f', 'templates.import', {
-      template: { ...other, templateId: 'fresh' },
-      html: 'f1',
-      redelivery: true,
-      channel: 1,
-    });
-    expect(fresh.error, 'a re-delivery restoring a missing template was refused').toBe(undefined);
-    expect(handle.runtime.templateHtml('fresh')).toBe('f1');
-
-    /*
-      `CHANNEL-TEMPLATES-01` — a re-delivery that names NO channel cannot say whose version it
-      repairs, so it never replaces one: it passes the lock because it overwrites nothing, and the
-      held HTML stays exactly where it was.
-    */
-    const unnamed = await c.ask('u', 'templates.import', {
-      template: other,
-      html: 'v3-no-channel',
-      redelivery: true,
-    });
-    expect(unnamed.error, 'a channel-less re-delivery was refused').toBe(undefined);
-    expect(handle.runtime.templateHtml('other'), 'a channel-less re-delivery replaced').toBe('v1');
   });
 });

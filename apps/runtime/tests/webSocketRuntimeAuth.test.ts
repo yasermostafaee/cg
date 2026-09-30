@@ -379,14 +379,7 @@ let storage: Storage;
 const runtimes: WebSocketRuntime[] = [];
 
 function start(bridge: FakeBridge): WebSocketRuntime {
-  const runtime = new WebSocketRuntime('ws://fake-bridge', {
-    createWebSocket: bridge.connect,
-    // The resync's re-pull is answered `unknown channel:` by design (see `FakeBridge`); the
-    // default handler would print that to the console on every test in this file.
-    onResyncError: () => {
-      /* not under test here */
-    },
-  });
+  const runtime = new WebSocketRuntime('ws://fake-bridge', { createWebSocket: bridge.connect });
   runtimes.push(runtime);
   return runtime;
 }
@@ -1034,22 +1027,19 @@ describe('R-066 — a token the bridge refuses leaves the console signed out, no
 
 // ── `DELTA-MULTI-CHANNEL-01-A` A3 — an automatic action is never refused as "not signed in" ─────
 
-describe('`DELTA-MULTI-CHANNEL-01-A` A3 — the reconnect re-delivery waits for the sign-in', () => {
+describe('`DELTA-MULTI-CHANNEL-01-A` A3 → CENTRAL-BRIDGE-01 — the connect-time resync waits for the sign-in, and delivers nothing', () => {
   /**
    * 🔴 **THE NOTICE THE OWNER SAW WHILE SIGNED IN.** On `pnpm dev:station --fake` the console read
    * `SIGNED IN AS زهرا موسوی` and, at the same time, _"Re-delivery of template
    * “starter-persian-lower-third” failed on reconnect — re-import it manually. This console is not
-   * signed in, so that command was refused…"_.
-   *
-   * `DELTA A` holds every frame behind the `auth` answer — when the console HOLDS a token. A console
-   * holding none (first-run, or a token another Playout issued) has no handshake to wait for, so
-   * `#resync` read the auth state in the same tick the socket opened: `bridge.capabilities` had not
-   * answered, the state was UNKNOWN rather than SIGNED OUT, the guard let it through, and the
-   * re-delivery reached a gate with nobody on the socket. The sign-in's own resync then delivered
-   * it — and the refusal it had raised stood on, contradicting the pill beside it.
+   * signed in, so that command was refused…"_: the resync read the auth state before
+   * `bridge.capabilities` had answered and reached a gate with nobody on the socket.
    *
    * ADR 0010 rule 4 gives a never-authenticated socket the capabilities door and `auth.*`, nothing
-   * else, so an automatic re-delivery cannot "run under" anyone before a sign-in: it WAITS for it.
+   * else, so the resync WAITS for a sign-in. `CENTRAL-BRIDGE-01` (`B-294`) then removed what the
+   * resync delivered — a console re-delivers nothing now, the bridge keeps the library and the
+   * stack — so what waits is its READS (the restore report and the strays), and the failure the
+   * owner saw cannot be raised at all. The console below HOLDS a library, to prove it is not sent.
    */
   const TEMPLATE: ipc.TemplateInfo = {
     templateId: 'starter-persian-lower-third',
@@ -1063,57 +1053,43 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A3 — the reconnect re-delivery waits for 
     return library;
   }
 
-  function startWith(
-    bridge: FakeBridge,
-    library: LibraryStore,
-    raised: string[],
-    withdrawn: string[] = [],
-  ): WebSocketRuntime {
+  function startWith(bridge: FakeBridge, library: LibraryStore): WebSocketRuntime {
     const runtime = new WebSocketRuntime('ws://fake-bridge', {
       createWebSocket: bridge.connect,
       library,
-      onResyncError: (message) => raised.push(message),
-      onResyncResolved: (message) => withdrawn.push(message),
     });
     runtimes.push(runtime);
     return runtime;
   }
 
-  it('🔴 with no token held, NOTHING but the capabilities question is written until the bridge has answered it — and nothing is re-delivered while signed out', async () => {
+  it('🔴 with no token held, NOTHING but the capabilities question is written until the bridge has answered it — and a signed-out console’s resync asks nothing', async () => {
     const bridge = new FakeBridge();
     // The bridge answers `bridge.capabilities` LATE — the window the owner's console fell into.
     bridge.capabilities = null;
-    const raised: string[] = [];
-    const runtime = startWith(bridge, await withLibrary(), raised);
+    const runtime = startWith(bridge, await withLibrary());
     bridge.socket().open();
     await settle();
 
-    expect(
-      wireOf(bridge),
-      'the re-delivery went out before the bridge said it authenticates',
-    ).toEqual([ipc.BridgeCapabilitiesChannel.name]);
+    expect(wireOf(bridge), 'the resync went out before the bridge said it authenticates').toEqual([
+      ipc.BridgeCapabilitiesChannel.name,
+    ]);
 
     bridge.answerLate(ipc.BridgeCapabilitiesChannel.name, playoutCapabilities());
     await settle();
     expect(runtime.auth.state()).toEqual({ kind: 'signed-out' });
-    expect(wireOf(bridge), 'a signed-out console re-delivered anyway').not.toContain(
-      ipc.TemplatesImportChannel.name,
+    expect(wireOf(bridge), 'a signed-out console ran its resync anyway').not.toContain(
+      ipc.StackRestoreReportChannel.name,
     );
-    expect(raised, 'a refusal was raised for a delivery nobody asked for').toEqual([]);
+    expect(wireOf(bridge)).not.toContain(ipc.TemplatesImportChannel.name);
   });
 
-  it('…and the sign-in delivers it, with no refusal raised at any point', async () => {
+  it('…and the sign-in runs the resync: it READS the report — and delivers no template though this console holds one', async () => {
     const bridge = new FakeBridge();
     bridge.capabilities = playoutCapabilities();
-    bridge.succeed.set(ipc.TemplatesImportChannel.name, {
-      registered: true,
-      templateId: TEMPLATE.templateId,
-    });
-    const raised: string[] = [];
-    const runtime = startWith(bridge, await withLibrary(), raised);
+    const runtime = startWith(bridge, await withLibrary());
     bridge.socket().open();
     await settle();
-    expect(wireOf(bridge)).not.toContain(ipc.TemplatesImportChannel.name);
+    expect(wireOf(bridge)).not.toContain(ipc.StackRestoreReportChannel.name);
 
     const principal = principalNamed('زهرا موسوی');
     bridge.authAnswer = { kind: 'accept', principal };
@@ -1125,8 +1101,10 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A3 — the reconnect re-delivery waits for 
     await runtime.auth.signIn('cg-admin', 'test-only-not-a-secret');
     await settle();
 
-    expect(wireOf(bridge)).toContain(ipc.TemplatesImportChannel.name);
-    expect(raised).toEqual([]);
+    // CONTROL — the resync ran under the new principal…
+    expect(wireOf(bridge)).toContain(ipc.StackRestoreReportChannel.name);
+    // …and sent nothing of this console's own.
+    expect(wireOf(bridge)).not.toContain(ipc.TemplatesImportChannel.name);
   });
 
   it('CONTROL — a real command from a signed-out console is still sent, and still refused with the bridge’s sentence', async () => {
@@ -1136,7 +1114,7 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A3 — the reconnect re-delivery waits for 
       channel: ipc.StackTakeChannel.name,
       message: ipc.AUTH_REQUIRED_REFUSAL,
     };
-    const runtime = startWith(bridge, await withLibrary(), []);
+    const runtime = startWith(bridge, await withLibrary());
     bridge.socket().open();
     await settle();
 
@@ -1148,36 +1126,5 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A3 — the reconnect re-delivery waits for 
     await settle();
     expect(await outcome).toBe(ipc.AUTH_REQUIRED_REFUSAL);
     expect(wireOf(bridge)).toContain(ipc.StackTakeChannel.name);
-  });
-
-  it('a re-delivery refusal a later re-delivery answers is WITHDRAWN — a notice that is no longer true clears itself', async () => {
-    const bridge = new FakeBridge();
-    // Auth OFF: the re-delivery goes out on connect, and the bridge refuses it this time.
-    bridge.capabilities = { channels: ipc.runtimeRequestChannelNames(ipc) };
-    bridge.refuseChannel = {
-      channel: ipc.TemplatesImportChannel.name,
-      message: 'The bridge could not store that template.',
-    };
-    const raised: string[] = [];
-    const withdrawn: string[] = [];
-    startWith(bridge, await withLibrary(), raised, withdrawn);
-    bridge.socket().open();
-    await settle();
-    expect(raised).toHaveLength(1);
-    expect(raised[0]).toContain('starter-persian-lower-third');
-    expect(withdrawn, 'withdrawn before anything answered it').toEqual([]);
-
-    // The link drops and comes back; this time the bridge takes the template.
-    bridge.refuseChannel = null;
-    bridge.succeed.set(ipc.TemplatesImportChannel.name, {
-      registered: true,
-      templateId: TEMPLATE.templateId,
-    });
-    bridge.socket().drop();
-    await vi.advanceTimersByTimeAsync(RECONNECT_DELAY_MS);
-    bridge.socket().open();
-    await settle();
-
-    expect(withdrawn).toEqual(raised);
   });
 });

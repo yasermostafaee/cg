@@ -64,8 +64,26 @@
       a bridge with two rows on air stops, the core loses one page, a second bridge on the same file restores
       both, reads `INFO 1`, names the emptied row, keeps the playing one ON AIR, sends nothing to either;
       an unusable file is said and kept. Bridge suite 1483/1483.
-- [ ] 3.2 The console re-delivers nothing: `StackRetentionStore`, the template re-delivery and `stack.restore`
-      removed; the living requirements that described them superseded.
+- [x] 3.2 The console re-delivers nothing: its template re-delivery and its stack restore removed from
+      `#resync` (which now only READS: the restore report, the strays, the snapshots); `stack.restore` gone
+      from the IPC contract and the route table; a `redelivery` import refused before every gate
+      (`TEMPLATE_REDELIVERY_REFUSAL`, no row), with the bridge's redelivery machinery removed (two lock
+      classes, `isReconnectMachinery`, the tombstones, `templateRedeliveryChange`). An import and a removal
+      need the bridge — offline refused (`TEMPLATE_IMPORT_NEEDS_BRIDGE` / `…REMOVE…`). **Changed from the
+      first plan:** `StackRetentionStore` and `LibraryStore` STAY, as display copies never sent (two living
+      requirements need the offline view — design D5 "As built"). The restore's report is bridge state
+      (`stack.restore-report`, its push, a dismissal per channel). The row → record field list is one
+      function in `@cg/shared-schema` (`retainedFromStackItem`) for both sides. Tests: runtime
+      `reconnect-delivers-nothing` (replaces `reconnect-redelivery`), `stack-retention`,
+      `local-library.offline`, `webSocketRuntimeAuth`, `LibraryStore`, `mock-bridge-parity`; bridge
+      `lock-scope`, `lock-refuses-intents`, `auth-gate`, `station-channel-fence`, `template-persistence`,
+      `audit-append-sites`, `own-stack` (report: two consoles, the push, the scoped dismissal, the benign
+      filter); e2e `retention-honesty` (bridges on their own files; 5/5 locally on Windows — a signal, not
+      a discharge). Spec: `runtime-caspar-bridge` 1 ADDED, 5 MODIFIED, 1 REMOVED; `runtime-template-library`
+      1 ADDED, 1 MODIFIED, 3 REMOVED; `operator-surface`'s pending removal requirement amended in place.
+      ⚠ Naming debt: the living "The browser retains stack intent and restores it on reconnect" (amended in
+      the pending `runtime-retention-state`) keeps a name that no longer describes it; rename it when that
+      change archives — a RENAMED here would collide with its MODIFIED.
 - [ ] 3.3 Every new template version served at `<id>~<versionId>`; the page sent `Cache-Control: no-store`.
 
 ## 4. The console ↔ bridge connection (`R-068`, `B-262`)

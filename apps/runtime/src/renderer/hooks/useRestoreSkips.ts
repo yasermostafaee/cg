@@ -2,27 +2,22 @@ import { useEffect, useState } from 'react';
 import type { RestoreMigration, RestoreSkip } from '@cg/shared-ipc';
 
 /**
- * B-108 — the rows the last restore could NOT bring back.
+ * B-108 — the rows the bridge's restore could NOT bring back.
  *
- * On every (re)connect the browser re-delivers its retained stack intent and the
- * bridge re-seats what it can. Anything it CANNOT re-seat is skipped, and the row
- * simply disappears from the operator's stack — rows they were looking at a moment
- * ago, gone with nothing said. That silently desynchronises their model of the stack
- * from reality, which is the same broadcast-safety hazard as a lie about on-air
- * state, one step removed. The count and its meaning already existed; `#resync`
- * awaited the restore and DISCARDED the result. This is the missing consumer.
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`): CG Bridge keeps its stack and restores it itself at start.
+ * Anything it CANNOT re-seat is skipped, and the row simply disappears from the operator's
+ * stack — rows they were looking at before the restart, gone with nothing said. That silently
+ * desynchronises their model of the stack from reality, which is the same broadcast-safety
+ * hazard as a lie about on-air state, one step removed.
  *
- * NOT `useBridgeSnapshot`. That hook is for state the BRIDGE owns and re-pulls when
- * the link becomes usable; this is the outcome of a call THIS browser made, with no
- * endpoint to pull it from and nothing to re-pull it from after a reconnect (the
- * next reconnect produces its own report). So it is a plain subscription, and the
- * bridge implementation replays the latest value on subscribe — the panel mounts
- * after boot, and the report worth seeing is precisely the one from the reconnect
- * that happened while the UI was still coming up.
+ * The report is standing BRIDGE state (`stack.restore-report`): the platform layer pulls it on
+ * every connect and follows its push, and replays the latest value on subscribe — the panel
+ * mounts after boot, and the report worth seeing is precisely the one read while the UI was
+ * still coming up. A dismissal goes to the bridge (`stack.dismissRestoreReport`), so every
+ * console stops showing it.
  *
- * The BENIGN skip (an item the live bridge already holds — a page reload against a
- * healthy bridge, which loses no row) is filtered out before it ever reaches here,
- * so this hook and its consumers cannot raise a false alarm by forgetting to.
+ * The BENIGN skip (an item the live bridge already holds) is filtered out on the bridge, so
+ * this hook and its consumers cannot raise a false alarm by forgetting to.
  */
 export function useRestoreSkips(): readonly RestoreSkip[] {
   const [skips, setSkips] = useState<readonly RestoreSkip[]>([]);
@@ -80,9 +75,9 @@ export function restoreSkipReason(skip: RestoreSkip): string {
     case 'fixed-slot-taken':
       return 'its operator row was already taken by another item — load it onto a row again';
     /*
-     * Unreachable by contract: `WebSocketRuntime.#resync` filters the benign skip out
-     * before publishing, because a page reload against a live bridge loses no row and
-     * an alarm for it would be a false one. Handled rather than thrown on, so a future
+     * Unreachable by contract: the bridge filters the benign skip out of its report
+     * (`CasparRuntime.#setRestoreReport`), because an item the live bridge holds is no
+     * lost row and an alarm for it would be a false one. Handled rather than thrown on, so a future
      * caller that forgets the filter degrades to a true-but-unhelpful sentence instead
      * of crashing the panel — and the switch stays exhaustive, so a NEW reason still
      * fails to compile until someone writes its wording.

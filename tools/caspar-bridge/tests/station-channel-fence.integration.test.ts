@@ -57,7 +57,9 @@ import { startFakePlayout } from './support/fake-playout.js';
  * declaration), `channelSettings.set` (already refused for an undeclared channel by its store's
  * `unknown-channel`), `sources.set-config` (a `route` source's channel is read FROM, never written
  * to) and `stack.restore` (fenced per item inside the runtime, as a SKIP — refusing the whole
- * frame would lose the rest of a console's stack for one foreign row).
+ * frame would lose the rest of a console's stack for one foreign row). ⚠ `CENTRAL-BRIDGE-01`
+ * (`B-294`): `stack.restore` is no longer a door at all — the bridge restores its own stack at
+ * start; the per-item SKIP inside `restore()` still stands and is still measured below.
  *
  * ── WHY EACH CASE CARRIES ITS OWN POSITIVE CONTROL ──────────────────────────
  *
@@ -654,8 +656,9 @@ describe('the census: every route that names a channel, classified', () => {
       */
       'stack.clear-all': ['req.channel'],
       'stack.remove-all': ['req.channel'],
-      // Fenced per item inside the runtime, as a `not-declared` SKIP.
-      'stack.restore': ['req.items[].slot.channel'],
+      // (`stack.restore` is gone — `CENTRAL-BRIDGE-01`: the bridge restores its own stack at start.)
+      // `CENTRAL-BRIDGE-01` — dismissing the restore report for the channel on screen names it.
+      'stack.dismiss-restore-report': ['req.channel'],
       // `MULTI-CHANNEL-01` §2 C — PANIC for one channel names it, so the fence judges it.
       'stack.silence-channel-live-plates': ['req.channel'],
       'stack.snapshot': ['req.channel'],
@@ -698,6 +701,8 @@ describe('the census: every route that names a channel, classified', () => {
       'playoutLayers.clear',
       // `MULTI-CHANNEL-01` §2 B — the housekeeping verbs, when they name a channel.
       'stack.clear-all',
+      // `CENTRAL-BRIDGE-01` — a restore-report dismissal for the channel on screen.
+      'stack.dismiss-restore-report',
       'stack.remove-all',
       // `MULTI-CHANNEL-01` §2 C — PANIC for one channel.
       'stack.silence-channel-live-plates',
@@ -774,7 +779,7 @@ describe('the census: every route that names a channel, classified', () => {
       ['stack.out', { itemId: 'x' }],
       ['stack.clear-all', undefined],
       ['stack.silence-all-live-plates', undefined],
-      ['stack.restore', { items: [{ slot: { channel: 1, layer: 72 } }] }],
+      ['stack.dismiss-restore-report', { part: 'skipped' }],
     ] as const) {
       const route = table.get(name);
       if (route === undefined) throw new Error(`${name} is not routed`);

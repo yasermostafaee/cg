@@ -89,19 +89,19 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A3 — a refusal that is no longer true tak
   });
 
   it('WITHDRAWN when its condition no longer holds — and only that sentence: another refusal stays', () => {
-    raiseRefusal('Re-delivery of template “x” failed on reconnect.');
-    withdrawRefusal('Re-delivery of template “x” failed on reconnect.');
+    raiseRefusal('A station-wide fact the console said by itself.');
+    withdrawRefusal('A station-wide fact the console said by itself.');
     expect(getRefusal()).toBeNull();
 
     // CONTROL — a withdrawal about one thing leaves a refusal about another standing.
     raiseRefusal('Take it off air first.');
-    withdrawRefusal('Re-delivery of template “x” failed on reconnect.');
+    withdrawRefusal('A station-wide fact the console said by itself.');
     expect(getRefusal()?.message).toBe('Take it off air first.');
   });
 
   it('a STATION refusal stands in every channel’s view — control: an ordinary one is the channel on screen’s', () => {
     setMessageScope(2);
-    raiseRefusal('Re-delivery of template “x” failed on reconnect.', { station: true });
+    raiseRefusal('A station-wide fact the console said by itself.', { station: true });
     expect(getRefusal()?.channel).toBeNull();
     raiseRefusal('Take it off air first.');
     expect(getRefusal()?.channel).toBe(2);

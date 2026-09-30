@@ -135,7 +135,7 @@ async function station(): Promise<Station> {
 /** Put `news` on air on CH 1's layer 99 (channel 1's own version), and answer its served URL. */
 async function newsOnAirOnChannelOne(s: Station): Promise<string> {
   const rt = s.handle.runtime;
-  expect(rt.templateImport(NEWS, NEWS_V1, false, 1).registered).toBe(true);
+  expect(rt.templateImport(NEWS, NEWS_V1, 1).registered).toBe(true);
   expect(await rt.loadFixed({ channel: 1, layer: 99 }, 'row-ch1', 'news', {})).toEqual({
     accepted: true,
   });
@@ -226,12 +226,12 @@ describe('CHANNEL-TEMPLATES-01 — one stored version, per-channel lists', () =>
   it('the same package on CH 1 and CH 2 is ONE stored file; a re-import on CH 2 gives CH 2 the new version, CH 1 keeps the old, and both are served', async () => {
     const s = await station();
     const rt = s.handle.runtime;
-    rt.templateImport(NEWS, NEWS_V1, false, 1);
-    rt.templateImport(NEWS, NEWS_V1, false, 2);
+    rt.templateImport(NEWS, NEWS_V1, 1);
+    rt.templateImport(NEWS, NEWS_V1, 2);
     const newsRecords = (): string[] => records(s.templatesDir).filter((f) => f.startsWith('news'));
     expect(newsRecords()).toEqual([registryRecordFileName('news')]);
 
-    rt.templateImport(NEWS, NEWS_V2, false, 2);
+    rt.templateImport(NEWS, NEWS_V2, 2);
     expect(newsRecords()).toHaveLength(2);
     expect(rt.templateHtml('news', 1)).toBe(NEWS_V1);
     expect(rt.templateHtml('news', 2)).toBe(NEWS_V2);
@@ -247,8 +247,8 @@ describe('CHANNEL-TEMPLATES-01 — one stored version, per-channel lists', () =>
   it('removing from CH 2 while CH 1 lists it leaves the file; removing it from the last channel, with no row holding it, deletes it — control: a row on CH 2 holding it refuses the removal on CH 2', async () => {
     const s = await station();
     const rt = s.handle.runtime;
-    rt.templateImport(NEWS, NEWS_V1, false, 1);
-    rt.templateImport(NEWS, NEWS_V1, false, 2);
+    rt.templateImport(NEWS, NEWS_V1, 1);
+    rt.templateImport(NEWS, NEWS_V1, 2);
     const file = path.join(s.templatesDir, registryRecordFileName('news'));
 
     // CONTROL first: a row on CH 2 holds it, so CH 2 refuses — and CH 1's row-less list is irrelevant.
@@ -276,7 +276,7 @@ describe('CHANNEL-TEMPLATES-01 — one stored version, per-channel lists', () =>
     const s = await station();
     const rt = s.handle.runtime;
     const onAirUrl = await newsOnAirOnChannelOne(s);
-    rt.templateImport(NEWS, NEWS_V2, false, 1);
+    rt.templateImport(NEWS, NEWS_V2, 1);
     // CH 1 lists v2 now; its row still holds the page it took, at the path it was served from.
     expect(rt.templateHtml('news', 1)).toBe(NEWS_V2);
     expect(await get(onAirUrl)).toEqual({ status: 200, body: NEWS_V1 });

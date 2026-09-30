@@ -5,8 +5,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
+import type { ConnectionConfig, FixedLayerBank, StackRestoreReport } from '@cg/shared-ipc';
+import type { RetainedStackItem } from '@cg/shared-schema';
 import { createBridge, type BridgeHandle } from '../src/index.js';
+import { openClient, type Client } from './support/auth-harness.js';
 import { HEALTH_MS } from './support/harness.js';
 
 /**
@@ -27,9 +29,11 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>row<
 
 let mock: MockHandle | null = null;
 const bridges: BridgeHandle[] = [];
+const clients: Client[] = [];
 let dir: string | null = null;
 
 afterEach(async () => {
+  for (const c of clients.splice(0)) c.ws.close();
   for (const b of bridges.splice(0)) await b.close();
   await mock?.stop();
   mock = null;
@@ -167,6 +171,120 @@ it('🔴 the stack is kept by the bridge, restored at start, and checked with IN
   expect(writes).toEqual([]);
   expect(m.layerState({ channel: 1, layer: 99 })?.onStage).toBe(false);
   expect(m.layerState({ channel: 1, layer: 98 })?.onAir).toBe(true);
+});
+
+it('🔴 B-108 at the bridge — a row the start’s restore could not bring back is in the STANDING report, for every console; one console’s dismissal clears it for all', async () => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-own-stack-report-'));
+  const stackPath = path.join(dir, 'bridge-stack.json');
+  // A stack whose one row names a template the bridge no longer holds.
+  fs.writeFileSync(
+    stackPath,
+    JSON.stringify({
+      version: 1,
+      items: [
+        {
+          itemId: 'row-gone',
+          templateId: 'tpl-missing',
+          fields: {},
+          state: 'loaded',
+          slot: { channel: 1, layer: 99, server: 'primary' },
+        },
+      ],
+    }),
+    'utf8',
+  );
+  mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+  const b = await bridgeOn(mock, await freeUdpPort(), stackPath);
+  expect(b.stack).toMatchObject({ source: 'file', restored: 0 });
+
+  const a = await openClient(b);
+  const c = await openClient(b);
+  clients.push(a, c);
+  for (const console_ of [a, c]) {
+    const report = (await console_.ask(`r-${String(Math.random())}`, 'stack.restore-report'))
+      .payload as StackRestoreReport | null;
+    expect(report?.skipped).toEqual([
+      {
+        itemId: 'row-gone',
+        reason: 'unknown-template',
+        templateId: 'tpl-missing',
+        slot: { channel: 1, layer: 99, server: 'primary' },
+      },
+    ]);
+  }
+
+  expect((await a.ask('d', 'stack.dismiss-restore-report', { part: 'skipped' })).payload).toEqual({
+    ok: true,
+  });
+  // The OTHER console is told, with no request of its own…
+  await waitFor(
+    () =>
+      c
+        .publishes()
+        .some((f) => f.type === 'publish' && f.channel === 'stack.restore-report-changed'),
+    'the push to the other console',
+  );
+  const pushed = c
+    .publishes()
+    .filter((f) => f.type === 'publish' && f.channel === 'stack.restore-report-changed')
+    .at(-1);
+  expect(pushed?.type === 'publish' ? pushed.payload : 'no push').toBeNull();
+  // …and a dismissal of nothing is not a success (CONTROL: the first one did something).
+  expect((await c.ask('d2', 'stack.dismiss-restore-report', { part: 'skipped' })).payload).toEqual({
+    ok: false,
+  });
+});
+
+it('the report never carries the BENIGN skip, and a dismissal NAMING a channel leaves the other channels’ rows', async () => {
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-own-stack-scope-'));
+  const stackPath = path.join(dir, 'bridge-stack.json');
+  const row = (itemId: string, channel: number): RetainedStackItem => ({
+    itemId,
+    templateId: 'tpl-missing',
+    fields: {},
+    state: 'loaded',
+    slot: { channel, layer: 99, server: 'primary' },
+  });
+  // Two rows that cannot come back: one on channel 1 (its template is gone), one on channel 2
+  // (not declared here).
+  fs.writeFileSync(
+    stackPath,
+    JSON.stringify({ version: 1, items: [row('on-1', 1), row('on-2', 2)] }),
+    'utf8',
+  );
+  mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+  const b = await bridgeOn(mock, await freeUdpPort(), stackPath);
+  const skippedIds = (): string[] =>
+    (b.runtime.restoreReport()?.skipped ?? []).map((s) => s.itemId).sort();
+  expect(skippedIds()).toEqual(['on-1', 'on-2']);
+
+  // A dismissal NAMING channel 1 leaves channel 2's row — its operator has not read it yet.
+  expect(b.runtime.dismissRestoreReport('skipped', 1)).toEqual({ ok: true });
+  expect(skippedIds(), 'channel 1’s dismissal cleared channel 2’s row').toEqual(['on-2']);
+  expect(b.runtime.dismissRestoreReport('skipped', 1), 'nothing left on channel 1').toEqual({
+    ok: false,
+  });
+  // A dismissal naming none takes the rest.
+  expect(b.runtime.dismissRestoreReport('skipped')).toEqual({ ok: true });
+  expect(b.runtime.restoreReport()).toBeNull();
+
+  // The benign skip — a row the live bridge already holds — never joins the report; CONTROL: a
+  // real skip in the same restore does.
+  b.runtime.templateImport(TEMPLATE, HTML);
+  const held = {
+    itemId: 'held',
+    templateId: TEMPLATE.templateId,
+    fields: {},
+    state: 'loaded' as const,
+    slot: { channel: 1, layer: 98, server: 'primary' as const },
+  };
+  expect((await b.runtime.restore([held])).restored).toBe(1);
+  const again = await b.runtime.restore([held, row('on-3', 1)]);
+  expect(again.skipped.map((s) => [s.itemId, s.reason])).toEqual([
+    ['held', 'already-held'],
+    ['on-3', 'unknown-template'],
+  ]);
+  expect(skippedIds()).toEqual(['on-3']);
 });
 
 it('an unusable stack file is said and started empty — the file is left for the next change to replace', async () => {

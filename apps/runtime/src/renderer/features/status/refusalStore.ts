@@ -91,9 +91,10 @@ export function raiseRefusal(
   const code = opts.code ?? null;
   /*
     `MULTI-CHANNEL-01` §2 L — the same sentence on ANOTHER channel is another refusal.
-    `DELTA-MULTI-CHANNEL-01-A` A3 — unless it is about the STATION (a template re-delivery, the
-    retained stack): the console raised it on its own at (re)connect, not for the channel that
-    happened to be on screen, so it stands in every view (`channel: null`).
+    `DELTA-MULTI-CHANNEL-01-A` A3 — unless it is about the STATION: raised about the station
+    rather than for the channel that happened to be on screen, so it stands in every view
+    (`channel: null`). (Its first users, the reconnect re-delivery failures, are gone with the
+    re-delivery — `CENTRAL-BRIDGE-01`.)
   */
   const channel = opts.station === true ? null : readMessageScope();
   current =

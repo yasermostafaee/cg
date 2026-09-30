@@ -73,12 +73,12 @@ export const AuditEntrySchema = z.object({
     /*
       🔴 `B-260` (a) — **EVERY TEMPLATE MUTATION WRITES A ROW, no exceptions.**
 
-      `template-redeliver` is a console's reconnect re-delivery that CHANGED the catalogue —
-      registered an id the bridge did not hold, or replaced a held one's HTML. It is its own
-      action rather than an `import`, because it is not an operator import (`B-141`): it is
-      the console's machinery, and a reader must be able to tell the two apart. A re-delivery
-      that changes nothing is not a mutation and writes nothing, so a reconnect still does not
-      bury the log.
+      `template-redeliver` WAS a console's reconnect re-delivery that CHANGED the catalogue —
+      registered an id the bridge did not hold, or replaced a held one's HTML. ⚠ **RETIRED by
+      `CENTRAL-BRIDGE-01` (`B-294`): nothing writes it any more.** A console re-delivers
+      nothing, and the bridge refuses a frame that says it is a re-delivery before any gate. It
+      stays in this enum so a log written before still parses — deleting it would make every
+      older row unreadable, which is a record lost rather than a record tidied.
 
       `template-remove` is a removal from the catalogue. It wrote no row at all before this,
       which made the one mutation that can poison every row referencing a template invisible

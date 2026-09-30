@@ -66,6 +66,7 @@ import type {
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
   StackSwapLiveSourceChannel,
+  StackRestoreReportDismissChannel,
   StackSnapshotChannel,
   StackStopAllChannel,
   StackTakeChannel,
@@ -232,8 +233,9 @@ export interface RuntimeBridge {
     status(): BridgeLinkStatus;
     onStatusChanged(handler: (status: BridgeLinkStatus) => void): Unsubscribe;
     /**
-     * 🔴 **Is a STACK DELIVERY in flight?** — `true` from the moment a (re)connect starts
-     * its resync until the stack has been re-delivered and re-pulled.
+     * 🔴 **Is the connect-time RESYNC in flight?** — `true` from the moment a (re)connect
+     * starts its resync until the stack has been re-pulled. (It delivered the stack too, until
+     * `CENTRAL-BRIDGE-01`: a console delivers nothing now.)
      *
      * It exists on this contract for ONE consumer and one question: whether an EMPTY stack
      * is the answer or a not-yet. `useBridgeSnapshot`’s `ready` cannot answer it — it
@@ -242,10 +244,8 @@ export interface RuntimeBridge {
      * adopted live-layer ledger. Read without this, every seated layer would look STRANDED
      * with a control armed to cut it.
      *
-     * ⚠ **It closes the SELF race, not the multi-browser one.** One bridge serves many
-     * browsers; this browser cannot know that ANOTHER console is about to restore the rows
-     * that would explain a layer. That residual is genuinely undecidable from here and
-     * would need a bridge-side “every client has re-delivered” fact, which does not exist.
+     * ✅ The multi-browser residual it used to leave open is closed: no console restores rows
+     * any more — the bridge restores its own stack before any console connects.
      */
     resyncing(): boolean;
     onResyncingChanged(handler: (value: boolean) => void): Unsubscribe;
@@ -426,24 +426,22 @@ export interface RuntimeBridge {
     ): Promise<ChannelResponse<typeof StackStopAllChannel>>;
     /**
      * The WHOLE stack, always: the console filters per channel itself (`onChannel`), and this
-     * read also feeds the browser-local retention (`B-092`), which a per-channel pull would
-     * silently narrow to one channel's rows. The contract's optional channel is not used here.
+     * read also feeds the display copy (`B-092`), which a per-channel pull would silently narrow
+     * to one channel's rows. The contract's optional channel is not used here.
      */
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
     /**
-     * B-108 — the rows the last restore could NOT bring back, with the reason.
+     * B-108 — the rows the bridge's restore could NOT bring back, with the reason.
      *
-     * A bridge restart re-delivers the browser's retained stack intent, and the
-     * bridge declines what it cannot re-seat. Those rows were on the operator's
-     * screen a moment ago and are now GONE — which desynchronises their model of the
-     * stack from reality, silently. The information was always computed and always
-     * discarded; this is the seam that carries it to a surface.
+     * 🔴 `CENTRAL-BRIDGE-01` (`B-294`): the bridge keeps its stack and restores it itself at
+     * start; what it declines to re-seat was on the operator's screen before the restart and is
+     * now GONE — which desynchronises their model of the stack from reality, silently, unless it
+     * is said. The report is standing BRIDGE state (`stack.restore-report`), so every console
+     * shows it, and one console's dismissal ({@link dismissRestoreReport}) clears it for all.
      *
-     * The BENIGN skip (an item the live bridge already holds — a page reload against
-     * a healthy bridge, which loses no row) is filtered out BEFORE it reaches here,
-     * so a subscriber never has to know the difference and can never raise a false
-     * alarm by forgetting to.
+     * The BENIGN skip (an item the live bridge already holds) is filtered out on the bridge, so
+     * a subscriber can never raise a false alarm by forgetting to.
      *
      * The handler is called IMMEDIATELY with the latest report on subscribe: the
      * panel mounts after boot, and a report it missed is exactly the one worth
@@ -461,6 +459,13 @@ export interface RuntimeBridge {
      * notice.
      */
     onRestoreMigrations(handler: (migrations: readonly RestoreMigration[]) => void): Unsubscribe;
+    /**
+     * `CENTRAL-BRIDGE-01` — dismiss one half of the restore report ON THE BRIDGE, so every console
+     * stops showing it at once (`air.dismiss-emptied`'s reason). Changes nothing on air.
+     */
+    dismissRestoreReport(
+      req: ChannelRequest<typeof StackRestoreReportDismissChannel>,
+    ): Promise<ChannelResponse<typeof StackRestoreReportDismissChannel>>;
   };
 
   connections: {

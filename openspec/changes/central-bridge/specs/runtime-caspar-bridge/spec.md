@@ -95,6 +95,30 @@ connection. An occupied layer in 50–99 that no entry holds SHALL be listed on 
   restored row's layer
 - **THEN** the row is adopted ON AIR from `INFO`, and nothing is sent
 
+### Requirement: The restore's report SHALL be standing bridge state, for every console
+
+The bridge SHALL hold the report of its restore — every row it could not bring back, with its reason
+and its naming (`B-108`, `B-233`), and every row it brought back on a different row — as standing
+state: answered by `stack.restore-report` (`null` when there is nothing to say), pushed on
+`stack.restore-report-changed`, and dismissed for every console by `stack.dismiss-restore-report`,
+one half (`skipped` or `migrated`) at a time. The benign skip (a row the live bridge already holds)
+SHALL NOT enter it. A dismissal naming a `channel` SHALL remove only that channel's rows (a skip by
+its retained slot, a migration by the row it came from; a row naming no channel goes with any
+dismissal), and a dismissal that removes nothing SHALL answer `ok: false`. A console SHALL read the
+report on every connect, so a console that connects after the bridge's start still sees it.
+
+#### Scenario: Two consoles see one report, and one dismissal clears it for both
+
+- **GIVEN** the bridge started with a row whose template it no longer holds
+- **WHEN** two consoles connect **THEN** both read the row in the report, with its reason
+- **AND WHEN** one dismisses it **THEN** the other is pushed an empty report, and a second dismissal
+  answers `ok: false`
+
+#### Scenario: A dismissal for one channel leaves another channel's rows
+
+- **WHEN** the report holds a row on channel 1 and one on channel 2, and a dismissal names channel 1
+  **THEN** only channel 2's row remains
+
 ## MODIFIED Requirements
 
 ### Requirement: A restore refuses to decide rather than act on absent evidence
@@ -172,6 +196,63 @@ The bridge SHALL send `MIXER <ch>-<layer> CLEAR` after its own `CLEAR` of a laye
 - **THEN** `MIXER <ch>-<layer> CLEAR` follows the `CLEAR` on the wire
 - **AND WHEN** it clears an orphan outside the declared bank, or a `CLEAR` is refused **THEN** no mixer reset is sent
 
+### Requirement: Live connection is never silently downgraded
+
+A connection chosen as live SHALL NOT be silently replaced by the mock. A
+mid-session loss of the bridge SHALL surface as a visible disconnected state with
+rejected commands, never as on-air or mock activity. On reconnect the renderer
+SHALL read the bridge's standing state (its restore report, its strays) and
+re-pull the full snapshot (stack / health / lock), and SHALL deliver NOTHING of
+its own — no template, no stack (`CENTRAL-BRIDGE-01`, `B-294`: the bridge keeps
+both, and restores its stack itself at start).
+
+#### Scenario: Bridge drops mid-session
+
+- **WHEN** the WebSocket to a previously-connected bridge drops **THEN**
+  `WebSocketRuntime` enters a visible DISCONNECTED/reconnecting state and
+  take / update / out are rejected with a clear error (NOT shown as on-air, NOT
+  routed to a mock)
+- **AND** on reconnect the renderer reads the bridge's restore report and strays,
+  then re-pulls a full snapshot (stack / health / lock) to resync
+
+#### Scenario: Command issued while disconnected
+
+- **WHEN** the operator issues take / update / out while the bridge is down
+  (disconnected/reconnecting) **THEN** the command is rejected with a visible
+  error and is never shown optimistically as on-air
+
+#### Scenario: A reconnect delivers nothing
+
+- **WHEN** the link reconnects to a console holding templates and a stack in its
+  display copies **THEN** it sends no `templates.import` and no stack restore —
+  control: the resync ran to its snapshot re-pull
+
+### Requirement: Every template mutation is recorded, and a lock refuses an overwrite
+
+The bridge SHALL write an audit row for every change to its template catalogue: `import` for an operator's import and `template-remove` for every removal outcome. A `templates.import` marked `redelivery` SHALL be refused before the lock, auth and permission gates with its own sentence, SHALL change nothing, and SHALL write no row (`CENTRAL-BRIDGE-01`, `B-294`: a console re-delivers nothing; `template-redeliver` has no writer and stays in the audit schema only so older logs parse). While the lock reaches the requesting console, an import SHALL be refused with the lock sentence and SHALL leave the held copy unchanged.
+
+#### Scenario: A re-delivery changes nothing and writes no row
+
+- **WHEN** a frame marked `redelivery` would register a missing template, and another would replace a held one
+- **THEN** both are refused with the re-delivery sentence, the catalogue is unchanged, and no row is written
+- **AND** the operator's import and removal around them each write their row
+
+#### Scenario: A locked console cannot overwrite a template
+
+- **GIVEN** the lock is engaged
+- **WHEN** an operator's import would replace a held template's HTML
+- **THEN** it is refused with the lock sentence and the held HTML is unchanged
+- **AND** a frame marked `redelivery` is refused with its own sentence, not the lock's
+
+### Requirement: Reconnect machinery is refused but not recorded as a press
+
+The bridge SHALL route no `stack.restore` (`CENTRAL-BRIDGE-01`: it restores its own stack at start), and SHALL refuse a `templates.import` marked `redelivery` before the lock, auth and permission gates with its own sentence, writing no `refused` audit row for either. A refused press SHALL still write its `refused` row.
+
+#### Scenario: A viewer's retired reconnect frames leave no refused row
+
+- **WHEN** a signed-in viewer's console sends `stack.restore` and a re-delivery, then presses TAKE
+- **THEN** the first finds no route, the second is refused with the re-delivery sentence, the TAKE is refused for the role, and the only `refused` row is the TAKE's
+
 ### Requirement: Single-server operation is declared, quiet, and memory-bounded
 
 The connection config SHALL support declaring a single server: `servers.B` is
@@ -211,3 +292,151 @@ full-history cold-backup rebuild is explicitly the province of a persistent
   configuration, including a healthy two-server pair) **THEN** the journal
   holds at most the cap and heap growth over a sustained soak stays under the
   leak budget
+
+### Requirement: On-air verbs are refused while the server is not connected
+
+The bridge SHALL refuse the playout verbs that must reach the wire — `take`, `update`,
+`out` — while **no declared server is reachable**, returning the machine-readable refusal
+`{ accepted: false, errorCode: 'disconnected' }` rather than attempting the send.
+
+The predicate SHALL be "**no declared session is REACHABLE**", NOT "no declared session is
+`healthy`" and NOT "the current primary is not healthy". A session is REACHABLE when its AMCP
+command axis is believed up — `healthy`, OR `degraded` (OSC-silent past the threshold but the
+AMCP socket still open). The predicate SHALL reuse the caspar-client's own liveness notion
+(`isLiveState`: `healthy` OR `degraded`) rather than re-deriving the state list in the bridge —
+a second local copy is exactly how the predicate came to test `!== 'healthy'` and call a working
+AMCP link dead.
+
+Two distinctions are load-bearing:
+
+- **OSC silence is not unreachability (B-100).** OSC is the CONFIRMATION channel; AMCP is the
+  COMMAND channel. A command reaches CasparCG over AMCP whether or not OSC is flowing. Refusing
+  every verb because confirmation is unavailable would turn a monitoring fault into a total
+  playout outage — B-094's wrong-OSC-port install would go off air entirely though its AMCP link
+  is perfect. Honesty under silence is preserved by the surfaces that already exist — an on-air
+  row demotes to `unverified` ("WAS ON AIR", muted) the moment the primary leaves `healthy`
+  (B-086), and the health surface renders `⚠ NO OSC` (B-094) — NOT by refusing the command. The
+  operator is WARNED, not BLOCKED.
+- **A dead primary with a live backup is reachable (B-056).** In a mirror pair whose PRIMARY's
+  AMCP link is dead while the BACKUP is healthy (auto-failover off — the human-in-the-loop
+  scenario), every send still lands backup-only on a real, rendering CasparCG: a graphic
+  genuinely IS on air there. Refusing in that window would break the redundancy contract AND lie
+  in the opposite direction (denying air that exists). The gate closes only when the command can
+  reach NO server at all.
+
+This requirement's own verb list (`take`, `update`, `out`) is NOT the predicate's full reach. The
+SAME predicate SHALL govern every site that asks "can a command reach a server?" — five in all:
+these three, the graceful stop (whose own requirement already scopes its refusal to "no declared
+server is reachable, exactly as the other on-air-affecting commands are", and which therefore
+inherits the corrected meaning without restating it), and the load path below. A `degraded` server
+SHALL accept the graceful stop for the same reason it accepts a take: being unable to take a
+graphic OFF air through a working command link is the more dangerous failure, because the graphic
+stays on air.
+
+The SAME reachability predicate SHALL gate the load path's adopt-CLEAR / pre-roll-ADD pairing. A
+load SHALL evaluate reachability ONCE and issue the destructive adopt-`CLEAR` only on a path where
+the constructive pre-roll `CG ADD` will also be attempted — so a reachable server (`healthy` OR
+`degraded`) is NEVER left cleared-and-empty (a BLACK layer on air), and with no server reachable
+neither is sent (the load still rests the item at `loaded`, B-082). Evaluating the predicate twice
+with an await between the CLEAR and the ADD is forbidden: a session slipping state in that gap is
+what reopens the CLEAR-then-nothing window.
+
+The refusal SHALL happen **before any intent is applied to the Reconciler**. This is the
+load-bearing detail: an intent applied optimistically and only then failed is what produces a
+transient — and, joined with stale OSC, a persistent — false ON AIR. A command that cannot reach
+CasparCG SHALL leave the item's status exactly as it was.
+
+The refusal SHALL NOT be a deferral. A command issued while no server is reachable SHALL NOT be
+queued for later delivery: the operator's intent would be stranded (nothing re-sends it: since
+`CENTRAL-BRIDGE-01` a console delivers nothing on reconnect, and the bridge restores only its
+own stack, sending nothing by itself), which recreates the same false belief one step
+later. Refuse, and say so.
+
+This mirrors the existing on-air block (a counted, reasoned `{ ok, reason }` refusal that the UI
+surfaces verbatim). It introduces no AMCP verb and sends nothing to the wire.
+
+#### Scenario: PLAY while no server is reachable is refused, not optimistically shown
+
+- **WHEN** the operator takes an item while no declared server is reachable **THEN** the
+  bridge refuses with `errorCode: 'disconnected'`, no `take` intent is recorded, the item's
+  status is unchanged, and the item is never shown as playing or on air
+
+#### Scenario: Update and out are refused the same way
+
+- **WHEN** the operator updates or outs an item while no declared server is reachable
+  **THEN** each is refused with `errorCode: 'disconnected'` and no intent is applied
+
+#### Scenario: A degraded server (OSC-silent, AMCP up) is reachable — verbs are ACCEPTED
+
+- **WHEN** the only declared server is `degraded` (OSC silent past the threshold while its AMCP
+  socket still works) and the operator takes an item **THEN** the take is ACCEPTED and the
+  `CG PLAY` reaches the wire — refusing over a working command link would deny air that a real
+  CasparCG can render, and honesty is already carried by the `unverified` display and the
+  `⚠ NO OSC` health surface, not by refusal
+
+#### Scenario: A graceful stop on a degraded server is ACCEPTED — the operator can still get off air
+
+- **WHEN** an item is on air on a `degraded` server (OSC silent, AMCP socket working) and the
+  operator issues the graceful stop **THEN** it is ACCEPTED, the stop verb reaches the wire, and
+  the producer is left resident — refusing it would strand a live graphic on air with no way to
+  remove it through a link that carries the command perfectly well, which is a worse failure than
+  a refused take
+
+#### Scenario: A load onto a degraded server is never left black
+
+- **WHEN** an item is loaded onto a layer of a `degraded` server that holds a resident producer
+  **THEN** the adopt-`CLEAR` and the pre-roll `CG ADD` both reach the wire, paired in that order —
+  the layer ends holding a live producer, never the BLACK an unpaired CLEAR (CLEAR-then-nothing)
+  would leave on air
+
+#### Scenario: A dead primary with a healthy backup is NOT refused (B-056)
+
+- **WHEN** the primary's AMCP link is down but a declared backup is healthy **THEN** the
+  verbs are still accepted and land backup-only, exactly as the redundancy strategy
+  specifies — the command reaches a real, rendering server, so refusing it would deny air
+  that genuinely exists
+
+#### Scenario: A refused command is not deferred
+
+- **WHEN** a command is refused because no server is reachable **THEN** it is NOT
+  queued or replayed on reconnect — the operator is told it did not happen and must reissue
+  it deliberately
+
+#### Scenario: The gate lifts when a server is reachable again
+
+- **WHEN** a declared session reaches `healthy` (or is `degraded` — reachable) **THEN** the verbs
+  are accepted again and behave exactly as before, with no change to the producer-state rules that
+  choose them
+
+### Requirement: An installed station advertises its first-run phase and declares no channel until one is chosen
+
+The bridge SHALL, when started with `--first-run`, advertise `setup: target` on
+`bridge.capabilities` while no Playout is configured and `setup: channel` while no channel is
+declared, and SHALL start with no fixed bank rather than the built-in default when no bank file
+exists. Until that bank is written it SHALL declare NO channel (`DESKTOP-APPS-01-D` j): the
+station fence, the restore door and the permitted channels all answer none. Without `--first-run`
+it SHALL behave as before.
+
+#### Scenario: The phases
+
+- **WHEN** an installed station has no Playout **THEN** it advertises `target` **AND WHEN** it has a
+  Playout and no bank **THEN** it advertises `channel` **AND WHEN** a bank is declared **THEN** it
+  advertises nothing
+
+#### Scenario: A remembered item is not adopted before the channel is declared
+
+- **WHEN** a first-run bridge with no bank starts on a stack file holding an on-air item on
+  channel 1 (`CENTRAL-BRIDGE-01`: the bridge restores its own stack; a console re-delivers nothing)
+  **THEN** the restore skips it as `not-declared`, records it as a stray, and sends nothing to
+  channel 1
+
+## REMOVED Requirements
+
+### Requirement: The browser re-delivers retained templates on reconnect
+
+**Reason**: `CENTRAL-BRIDGE-01` (`B-294`) — a console re-delivers nothing. The bridge persists its
+template library and its stack and restores the stack itself at start, so a restarted bridge needs
+nothing from a console; with several consoles on one bridge, a re-delivered copy was a claim on the
+truth that a stale console could win. "A post-restart load needs no manual re-import" still holds,
+from the bridge's own store ("A console's template library is a display copy, and an import or a
+removal needs CG Bridge", `runtime-template-library`).

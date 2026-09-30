@@ -51,9 +51,9 @@ import type { PvwPage } from '../../../shared/pvwPage.js';
  * ── WHAT IS RENDERED, AND WHY IT IS THE SERVED PAGE ──────────────────────────
  *
  * Not a re-built scene — the RETAINED SELF-CONTAINED HTML, the byte-identical
- * page the bridge serves to CasparCG for this template (`LibraryStore` already
- * keeps it, persisted, because it is re-delivered to the bridge on every
- * reconnect). That page inlines `@cg/template-runtime`, the scene and every
+ * page the bridge serves to CasparCG for this template (the bridge answers it for
+ * PVW; `LibraryStore` keeps a display copy for when the bridge cannot be reached).
+ * That page inlines `@cg/template-runtime`, the scene and every
  * asset, so rehearsing it exercises the same renderer the Designer preview uses
  * AND the same boot the on-air producer runs.
  *

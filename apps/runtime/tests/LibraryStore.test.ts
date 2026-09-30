@@ -4,10 +4,14 @@ import type { TemplateInfo } from '@cg/shared-ipc';
 import { LibraryStore } from '../src/platform/library/LibraryStore.js';
 
 /**
- * B-085 — the browser-local template library is the source of truth. These pin the
- * pure persistence + index behavior off any socket: import/list/get, persistence
- * across a simulated reload (a second store over the SAME workspace), and the
- * R-005 refuse-while-referenced guard on the offline remove path.
+ * B-085 — this console's copy of the template library, pinned off any socket: record/list/get,
+ * persistence across a simulated reload (a second store over the SAME workspace), and the delete
+ * semantics per channel.
+ *
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`): it is a DISPLAY copy now. The library is CG Bridge's; this
+ * store is written only after the bridge accepted an import or a removal, and nothing sends it.
+ * Its offline guarded removal (R-005 against a last-known stack) is gone with the offline
+ * removal itself — the bridge decides a removal, where the true stack is.
  */
 
 const TEMPLATE: TemplateInfo = {
@@ -18,7 +22,7 @@ const TEMPLATE: TemplateInfo = {
 };
 
 describe('LibraryStore', () => {
-  it('registers a template locally and lists / gets it', async () => {
+  it('records a template and lists / gets it, with its page', async () => {
     const store = new LibraryStore(new MemoryWorkspace());
     const res = await store.import(TEMPLATE, '<html>v1</html>');
 
@@ -26,8 +30,8 @@ describe('LibraryStore', () => {
     expect(store.list()).toEqual([TEMPLATE]);
     expect(store.get('lower-third')).toEqual(TEMPLATE);
     expect(store.get('missing')).toBeNull();
-    // The delivery/reconcile set carries the HTML.
-    expect(store.entries()).toEqual([{ template: TEMPLATE, html: '<html>v1</html>' }]);
+    // The offline PVW page.
+    expect(store.html('lower-third')).toBe('<html>v1</html>');
   });
 
   it('a re-import replaces the prior entry (metadata + html)', async () => {
@@ -37,7 +41,7 @@ describe('LibraryStore', () => {
 
     expect(store.list()).toHaveLength(1);
     expect(store.get('lower-third')?.name).toBe('Renamed');
-    expect(store.entries()[0]?.html).toBe('<html>v2</html>');
+    expect(store.html('lower-third')).toBe('<html>v2</html>');
   });
 
   it('SURVIVES a reload: a fresh store over the same workspace re-hydrates the library', async () => {
@@ -57,9 +61,7 @@ describe('LibraryStore', () => {
         .sort(),
     ).toEqual(['lower-third', 'ticker']);
     expect(reloaded.get('lower-third')?.name).toBe('Lower Third');
-    expect(reloaded.entries().find((e) => e.template.templateId === 'lower-third')?.html).toBe(
-      '<html>persisted</html>',
-    );
+    expect(reloaded.html('lower-third')).toBe('<html>persisted</html>');
   });
 
   it('persists ids that are not filename-safe (percent-encoded on disk, round-tripped)', async () => {
@@ -71,40 +73,7 @@ describe('LibraryStore', () => {
     const reloaded = new LibraryStore(ws);
     await reloaded.hydrate();
     expect(reloaded.get(weird)?.templateId).toBe(weird);
-    expect(reloaded.entries()[0]?.html).toBe('<html>w</html>');
-  });
-
-  it('remove: unreferenced → ok and gone; referenced → in-use refusal; unknown → unknown-template', async () => {
-    const store = new LibraryStore(new MemoryWorkspace());
-    await store.import(TEMPLATE, '<html/>');
-
-    // Referenced by 2 stack items → refused, still present — and `B-212`: the refusal
-    // says WHERE, with the references riding beside the sentence.
-    const refused = await store.remove('lower-third', [
-      { itemId: 'a', slot: { channel: 1, layer: 60 } },
-      { itemId: 'b' },
-    ]);
-    expect(refused).toMatchObject({ ok: false, reason: 'in-use' });
-    /*
-      ⚠ `places`, not `rows`: this is the browser's DISCONNECTED library path, which has no
-      bank to resolve names against, so no reference can be shown to be one of the station's
-      rows. The noun follows what is actually known — `describeTemplateReferences` picks
-      `row` / `layer` / `place` from the references, and getting a weaker word here is the
-      instrument working, not a defect.
-    */
-    expect(refused.message).toContain('2 places still hold this template');
-    expect(refused.message).toContain('CasparCG layer 1-60');
-    expect(refused.message).toContain('not yet on a layer');
-    expect(refused.references).toHaveLength(2);
-    expect(store.has('lower-third')).toBe(true);
-
-    // Unknown id → distinct reason, never a silent success.
-    expect(await store.remove('nope', [])).toMatchObject({ ok: false, reason: 'unknown-template' });
-
-    // Unreferenced → removed, and it does not survive a reload.
-    expect(await store.remove('lower-third', [])).toEqual({ ok: true });
-    expect(store.has('lower-third')).toBe(false);
-    expect(store.list()).toEqual([]);
+    expect(reloaded.html(weird)).toBe('<html>w</html>');
   });
 
   it('delete drops the entry unconditionally and persistently', async () => {
@@ -133,8 +102,8 @@ describe('LibraryStore', () => {
 
 /**
  * 🔴 `CHANNEL-TEMPLATES-01` — THIS BROWSER'S COPY, PER CHANNEL. Each channel has its own list, so
- * an import records the channel it was made on and is re-delivered there only; a record written
- * before the lists answers for any channel that has none of its own.
+ * an import records the channel it was made on; a record written before the lists answers for any
+ * channel that has none of its own.
  */
 describe('LibraryStore — per channel', () => {
   const V2: TemplateInfo = { ...TEMPLATE, name: 'Lower Third v2' };
@@ -148,16 +117,6 @@ describe('LibraryStore — per channel', () => {
     expect(store.get('lower-third', 2)?.name).toBe('Lower Third v2');
     expect(store.html('lower-third', 1)).toBe('<html>v1</html>');
     expect(store.html('lower-third', 2)).toBe('<html>v2</html>');
-    // Re-delivery names each record's channel.
-    expect(
-      store
-        .entries()
-        .map((e) => [e.channel, e.html])
-        .sort(),
-    ).toEqual([
-      [1, '<html>v1</html>'],
-      [2, '<html>v2</html>'],
-    ]);
     // Control: a channel neither import named lists nothing.
     expect(store.list(3)).toEqual([]);
   });
@@ -179,8 +138,6 @@ describe('LibraryStore — per channel', () => {
 
     expect(store.html('lower-third', 1)).toBe('<html>old</html>');
     expect(store.html('lower-third', 2)).toBe('<html>v2</html>');
-    // The pre-channel record re-delivers naming no channel.
-    expect(store.entries().find((e) => e.channel === undefined)?.html).toBe('<html>old</html>');
   });
 
   it('a removal from CH 2 leaves CH 1’s own record as it was', async () => {
@@ -189,10 +146,9 @@ describe('LibraryStore — per channel', () => {
     await store.import(TEMPLATE, '<html>v1</html>', 1);
     await store.import(V2, '<html>v2</html>', 2);
 
-    expect(await store.remove('lower-third', [], null, 2)).toEqual({ ok: true });
+    await store.delete('lower-third', 2);
     expect(store.has('lower-third', 2)).toBe(false);
     expect(store.html('lower-third', 1)).toBe('<html>v1</html>');
-    expect(store.entries().map((e) => e.channel)).toEqual([1]);
     const reloaded = new LibraryStore(ws);
     await reloaded.hydrate();
     expect(reloaded.has('lower-third', 2)).toBe(false);
@@ -209,7 +165,7 @@ describe('LibraryStore — per channel', () => {
     const store = new LibraryStore(ws);
     await store.hydrate();
 
-    expect(await store.remove('lower-third', [], null, 2)).toEqual({ ok: true });
+    await store.delete('lower-third', 2);
     expect(store.has('lower-third', 2)).toBe(false);
     expect(store.list(2)).toEqual([]);
     expect(store.html('lower-third', 2)).toBeNull();
@@ -217,21 +173,17 @@ describe('LibraryStore — per channel', () => {
     expect(store.list(1)).toEqual([TEMPLATE]);
     expect(store.html('lower-third', 1)).toBe('<html>old</html>');
     expect(store.html('lower-third', 3)).toBe('<html>old</html>');
-    // It is no longer re-delivered: a channel-less restore after a bridge restart would put it
-    // back on CH 2 as well.
-    expect(store.entries()).toEqual([]);
 
     const reloaded = new LibraryStore(ws);
     await reloaded.hydrate();
     expect(reloaded.has('lower-third', 2)).toBe(false);
     expect(reloaded.html('lower-third', 1)).toBe('<html>old</html>');
-    expect(reloaded.entries()).toEqual([]);
 
     // CH 2 imports it again: its own record answers there; a second removal hides it again, and
     // CH 1 is still untouched.
     await reloaded.import(V2, '<html>v2</html>', 2);
     expect(reloaded.html('lower-third', 2)).toBe('<html>v2</html>');
-    expect(await reloaded.remove('lower-third', [], null, 2)).toEqual({ ok: true });
+    await reloaded.delete('lower-third', 2);
     expect(reloaded.has('lower-third', 2)).toBe(false);
     expect(reloaded.html('lower-third', 1)).toBe('<html>old</html>');
   });
@@ -245,29 +197,11 @@ describe('LibraryStore — per channel', () => {
     const store = new LibraryStore(ws);
     await store.hydrate();
 
-    expect(await store.remove('lower-third', [])).toEqual({ ok: true });
+    await store.delete('lower-third');
     expect(store.has('lower-third', 1)).toBe(false);
     const reloaded = new LibraryStore(ws);
     await reloaded.hydrate();
     expect(reloaded.has('lower-third', 1)).toBe(false);
     expect(reloaded.list()).toEqual([]);
-  });
-
-  it('the offline refusal counts the references it is handed — the caller passes that channel’s', async () => {
-    const store = new LibraryStore(new MemoryWorkspace());
-    await store.import(TEMPLATE, '<html>v1</html>', 2);
-    const refused = await store.remove(
-      'lower-third',
-      [{ itemId: 'i-2', slot: { channel: 2, layer: 90 } }],
-      null,
-      2,
-    );
-    expect(refused).toMatchObject({ ok: false, reason: 'in-use' });
-    expect(store.has('lower-third', 2)).toBe(true);
-    // A channel that does not list it is refused as not being there, naming the channel.
-    expect(await store.remove('lower-third', [], null, 1)).toMatchObject({
-      ok: false,
-      reason: 'unknown-template',
-    });
   });
 });

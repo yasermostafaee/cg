@@ -5,16 +5,21 @@ import { parseWsFrame, serializeWsFrame, type TemplateInfo } from '@cg/shared-ip
 import { LibraryStore } from '../src/platform/library/LibraryStore.js';
 import {
   BridgeDisconnectedError,
+  TEMPLATE_IMPORT_NEEDS_BRIDGE,
+  TEMPLATE_REMOVE_NEEDS_BRIDGE,
   WebSocketRuntime,
   type WebSocketLike,
 } from '../src/platform/WebSocketRuntime.js';
 
 /**
- * B-085 — the whole point: the template LIBRARY works with the SPA↔bridge WS DOWN.
- * These drive the live `WebSocketRuntime` with a scripted socket (never opened =
- * `disconnected`) and assert that `templates.*` are served locally and never
- * refused, while on-air commands STAY refused (frozen). Then they open the socket
- * and assert the offline-imported library is DELIVERED to the bridge on connect.
+ * B-085 — the template LIBRARY stays visible with the SPA↔bridge WS DOWN. These drive the live
+ * `WebSocketRuntime` with a scripted socket (never opened = `disconnected`) and assert that the
+ * reads are served from this console's display copy, while on-air commands STAY refused (frozen).
+ *
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) reversed the other half: an import or a removal used to land
+ * locally and be DELIVERED on the next connect. With one bridge serving several consoles that
+ * delivery was a stale copy's claim on the truth. Now both need the bridge; offline they are
+ * refused, and a connect delivers nothing.
  */
 
 const TEMPLATE: TemplateInfo = {
@@ -95,6 +100,10 @@ function respondLikeBridge(sock: FakeSocket, stack: StackItemState[] = []): void
         return { ok: true };
       case 'stack.snapshot':
         return stack;
+      case 'stack.restore-report':
+        return null;
+      case 'station.strays':
+        return [];
       case 'connections.health':
         return HEALTH;
       case 'lock.state':
@@ -111,22 +120,25 @@ afterEach(() => {
   runtime = null;
 });
 
-/** Build a runtime over a fresh scripted socket; returns both. */
+/** Build a runtime over a fresh scripted socket; returns it, the socket and the display copy. */
 function makeRuntime(stack: StackItemState[] = []): {
   runtime: WebSocketRuntime;
   getSock: () => FakeSocket;
+  library: LibraryStore;
 } {
   let sock: FakeSocket | undefined;
+  const library = new LibraryStore(new MemoryWorkspace());
   const rt = new WebSocketRuntime('ws://fake', {
     createWebSocket: () => {
       sock = new FakeSocket();
       respondLikeBridge(sock, stack);
       return sock;
     },
-    library: new LibraryStore(new MemoryWorkspace()),
+    library,
   });
   return {
     runtime: rt,
+    library,
     getSock: () => {
       if (sock === undefined) throw new Error('socket not created');
       return sock;
@@ -134,24 +146,38 @@ function makeRuntime(stack: StackItemState[] = []): {
   };
 }
 
-describe('B-085 — the template library works while the SPA↔bridge WS is down', () => {
-  it('imports, lists, gets and removes locally while DISCONNECTED — and NEVER round-trips the bridge', async () => {
-    const { runtime: rt, getSock } = makeRuntime();
+describe('B-085 → CENTRAL-BRIDGE-01 — while the link is down the library is a DISPLAY copy: it answers, and it changes nothing', () => {
+  it('lists and gets from the display copy while DISCONNECTED — and NEVER round-trips the bridge', async () => {
+    const { runtime: rt, getSock, library } = makeRuntime();
     runtime = rt;
+    // What an earlier session saw the bridge accept, kept for display.
+    await library.import(TEMPLATE, '<html>v1</html>');
     // Never opened → the link is `disconnected`.
     expect(rt.link.status()).toBe('disconnected');
 
-    // Import succeeds locally — no rejection, nothing sent to the (unopened) socket.
-    const res = await rt.templates.import({ template: TEMPLATE, html: '<html>v1</html>' });
-    expect(res).toEqual({ registered: true, templateId: 'lower-third' });
     expect(await rt.templates.list()).toEqual([TEMPLATE]);
     expect(await rt.templates.get({ templateId: 'lower-third' })).toEqual(TEMPLATE);
     expect(getSock().sent).toHaveLength(0); // no bridge round-trip at all
+  });
 
-    // Remove (unreferenced) also works offline.
-    expect(await rt.templates.remove({ templateId: 'lower-third' })).toEqual({ ok: true });
-    expect(await rt.templates.list()).toEqual([]);
-    expect(getSock().sent).toHaveLength(0);
+  it('🔴 an import or a removal while DISCONNECTED is refused with its sentence — the display copy does not move, and nothing is queued', async () => {
+    const { runtime: rt, getSock, library } = makeRuntime();
+    runtime = rt;
+    await library.import({ ...TEMPLATE, templateId: 'held' }, 'A');
+
+    await expect(rt.templates.import({ template: TEMPLATE, html: 'B' })).rejects.toThrow(
+      TEMPLATE_IMPORT_NEEDS_BRIDGE,
+    );
+    await expect(rt.templates.remove({ templateId: 'held' })).rejects.toThrow(
+      TEMPLATE_REMOVE_NEEDS_BRIDGE,
+    );
+    expect((await rt.templates.list()).map((t) => t.templateId)).toEqual(['held']);
+
+    // …and the first connect delivers NOTHING — CONTROL: the resync ran (it read the strays).
+    getSock().open();
+    await rt.whenReady();
+    await waitFor(() => getSock().sent.some((f) => f.channel === 'station.strays'));
+    expect(getSock().importedIds()).toEqual([]);
   });
 
   it('FROZEN: an on-air command is STILL refused while disconnected (R-006)', async () => {
@@ -160,56 +186,16 @@ describe('B-085 — the template library works while the SPA↔bridge WS is down
     await expect(rt.stack.take({ itemId: 'x' })).rejects.toBeInstanceOf(BridgeDisconnectedError);
   });
 
-  it('delivers the OFFLINE-imported library to the bridge on the FIRST connect (reconcile)', async () => {
-    const { runtime: rt, getSock } = makeRuntime();
+  it('live, a removal is the BRIDGE’s answer (R-005 is decided where the stack is), and the display copy follows it', async () => {
+    const { runtime: rt, getSock, library } = makeRuntime();
     runtime = rt;
-
-    // Import two templates entirely offline.
-    await rt.templates.import({ template: TEMPLATE, html: 'A' });
-    await rt.templates.import({ template: { ...TEMPLATE, templateId: 'ticker' }, html: 'B' });
-
-    // The bridge comes up for the first time → both are delivered without operator action.
-    getSock().open();
-    await rt.whenReady();
-    await waitFor(() => getSock().importedIds().length >= 2);
-    expect(getSock().importedIds()).toEqual(['lower-third', 'ticker']);
-  });
-
-  it('conflict policy local-wins: a template REMOVED offline is not resurrected on connect', async () => {
-    const { runtime: rt, getSock } = makeRuntime();
-    runtime = rt;
-
-    await rt.templates.import({ template: { ...TEMPLATE, templateId: 't-keep' }, html: 'A' });
-    await rt.templates.import({ template: { ...TEMPLATE, templateId: 't-gone' }, html: 'B' });
-    // Removed offline (unreferenced — the stack is empty and cannot change while down).
-    expect(await rt.templates.remove({ templateId: 't-gone' })).toEqual({ ok: true });
-
-    getSock().open();
-    await rt.whenReady();
-    await waitFor(() => getSock().importedIds().length >= 1);
-    // Only the surviving template is delivered — the removed one does NOT walk back in.
-    expect(getSock().importedIds()).toEqual(['t-keep']);
-  });
-
-  it('offline remove is refused while a last-known stack item references the template (R-005)', async () => {
-    const referencing: StackItemState[] = [
-      { itemId: 'i1', templateId: 'ref', fields: {}, status: 'on-air', pending: false },
-    ];
-    const { runtime: rt, getSock } = makeRuntime(referencing);
-    runtime = rt;
-
-    // Go live, register the referenced template, and observe the stack (populates #lastStack).
     getSock().open();
     await rt.whenReady();
     await rt.templates.import({ template: { ...TEMPLATE, templateId: 'ref' }, html: 'A' });
-    expect((await rt.stack.snapshot()).map((i) => i.templateId)).toContain('ref');
+    expect(library.list().map((t) => t.templateId)).toEqual(['ref']);
 
-    // Drop → disconnected. The stack cannot change while the bridge is unreachable, so the
-    // last-known snapshot is exact: removing 'ref' must be refused as in-use.
-    getSock().drop();
-    await waitFor(() => rt.link.status() === 'disconnected');
-    const res = await rt.templates.remove({ templateId: 'ref' });
-    expect(res).toMatchObject({ ok: false, reason: 'in-use' });
-    expect(await rt.templates.get({ templateId: 'ref' })).not.toBeNull();
+    expect(await rt.templates.remove({ templateId: 'ref' })).toEqual({ ok: true });
+    expect(getSock().sent.some((f) => f.channel === 'templates.remove')).toBe(true);
+    expect(library.list()).toEqual([]);
   });
 });

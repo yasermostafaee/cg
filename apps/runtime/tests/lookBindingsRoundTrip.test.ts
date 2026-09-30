@@ -26,7 +26,7 @@ import {
  *   - and nothing at all ran the two together.
  *
  * That seam has now produced three defects in three sessions — `createRuntimeBridge`'s mock
- * shim silently dropping Stage 1's `lookId`, `StackRetentionStore.toRetained` silently
+ * shim silently dropping Stage 1's `lookId`, `StackRetentionStore.toRetained` (now `@cg/shared-schema`'s `retainedFromStackItem`) silently
  * dropping the whole map, and this. **Each was invisible to both suites and obvious to the
  * first person who pressed the button.** So the test is written at the seam deliberately:
  * it stages through the real draft store, applies through the real `applyDraft`, crosses a

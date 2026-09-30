@@ -192,6 +192,9 @@ const BRIDGE_SURFACE: {
       // `single-clock-look-switch` — and its sibling, the rows a restore brought back on a
       // DIFFERENT row. Same reasoning: no restore, so an empty report is the true one.
       'onRestoreMigrations',
+      // `CENTRAL-BRIDGE-01` — the report is the bridge's, dismissed there for every console. The
+      // mock has nothing to dismiss and says so (`ok: false`), as the bridge does for an empty half.
+      'dismissRestoreReport',
     ],
     connections: [
       'config',

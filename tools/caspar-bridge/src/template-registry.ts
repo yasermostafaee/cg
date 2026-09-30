@@ -59,9 +59,6 @@ const PersistedTemplateSchema = z.object({
  * 🔴 `CHANNEL-TEMPLATES-01` — **THE LISTS AND THE HOLDS**, in one file beside the version records.
  * Its name does not match {@link RECORD_NAME}, so the record loader never reads it as a template
  * (`B-116`'s rule, unchanged).
- *
- * ⚠ R-028 part B's removal tombstones are NOT here: they are process-lifetime by decision
- * (`CasparRuntime`'s note on them), and a list is what they guard, per channel.
  */
 const INDEX_FILE = 'template-channels.json';
 

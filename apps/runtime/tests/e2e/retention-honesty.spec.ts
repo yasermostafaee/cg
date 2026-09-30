@@ -1,4 +1,7 @@
 import * as dgram from 'node:dgram';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedLayerBank } from '@cg/shared-ipc';
@@ -21,8 +24,9 @@ import { expect, test } from './fixtures/runtime.js';
  * behind it, and kill the bridge for real.
  *
  * That also means the browser's retention is its REAL OPFS-backed store rather than
- * an in-memory stand-in — which matters, because the defect is what that store
- * remembers.
+ * an in-memory stand-in. 🔴 `CENTRAL-BRIDGE-01` (`B-294`): that store is a DISPLAY copy
+ * now (the offline view); what brings the rows back across a restart is the BRIDGE's
+ * own file, which every bridge below is started on.
  *
  * ── WHAT IS ASSERTED WHERE ──────────────────────────────────────────────────
  *
@@ -43,8 +47,8 @@ const BANK: FixedLayerBank = {
 /**
  * How long a post-restart assertion waits.
  *
- * A bridge restart is not one event: the socket reconnects (up to the runtime's
- * reconnect delay), then `#resync` re-delivers templates → stack → re-pull, and the
+ * A bridge restart is not one event: the bridge restores its own stack at start, the
+ * socket reconnects (up to the runtime's reconnect delay), `#resync` re-pulls, and the
  * per-slot fixed-layer state — which is what puts the template NAME back on a row —
  * is republished on its own cadence, after the stack. Measured here: the STACK is
  * back within a second of the link, the ROW's binding a few seconds behind it.
@@ -81,6 +85,23 @@ function connection(amcpPort: number, oscPort: number): ConnectionConfig {
 let bridge: BridgeHandle | null = null;
 let mock: MockHandle | null = null;
 /**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — the station's two persistent paths, one scratch dir per test.
+ *
+ * The BRIDGE keeps the stack and the library now (a console re-delivers nothing), so a restarted
+ * bridge brings the rows back only because it starts on the same files — which is exactly what a
+ * CG Bridge service restart does. Every bridge in a test is given these, never the defaults.
+ */
+let station: { stackPath: string; templatesDir: string } | null = null;
+
+function stationPaths(): { stackPath: string; templatesDir: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-retention-'));
+  station = {
+    stackPath: path.join(dir, 'bridge-stack.json'),
+    templatesDir: path.join(dir, 'templates'),
+  };
+  return station;
+}
+/**
  * The OSC port this test's CasparCG emits to, kept so a RESTARTED bridge can bind
  * the SAME one.
  *
@@ -98,6 +119,10 @@ test.afterEach(async () => {
   bridge = null;
   await mock?.stop();
   mock = null;
+  if (station !== null) {
+    fs.rmSync(path.dirname(station.stackPath), { recursive: true, force: true });
+    station = null;
+  }
 });
 
 /*
@@ -140,6 +165,7 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
       port: 0,
       connection: connection(mock.amcpPort, oscPort),
       fixedLayers: BANK,
+      ...stationPaths(),
     });
     const url = bridge.url;
     await page.addInitScript(
@@ -283,18 +309,20 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
     // merely SAYS it is clear over a live producer is a different bug.
     expect(mock?.layerState({ channel: 1, layer: 70 })?.onAir).not.toBe(true);
 
-    // ── kill the bridge, start a fresh one on the same port ──
+    // ── kill the bridge, start a fresh one on the same port and the same files ──
     await killBridge(page);
     bridge = await createBridge({
       port,
       connection: connection(mock?.amcpPort ?? 0, oscPort),
       fixedLayers: BANK,
+      ...(station ?? {}),
     });
     await expect(page.getByRole('status', { name: 'Bridge link' })).not.toContainText(
       'DISCONNECTED',
     );
 
-    // The ROW comes back — B-092's property, which must not regress…
+    // The ROW comes back — B-092's property, which must not regress (from the bridge's own
+    // file since `CENTRAL-BRIDGE-01`: the console re-delivers nothing)…
     await expect
       .poll(async () => (await stack(page)).some((i) => i.itemId === 'item-70'), {
         timeout: RESTART_SETTLE_MS,
@@ -323,6 +351,7 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
       port,
       connection: connection(mock?.amcpPort ?? 0, oscPort),
       fixedLayers: BANK,
+      ...(station ?? {}),
     });
 
     await expect(page.getByRole('status', { name: 'Bridge link' })).not.toContainText(
@@ -361,12 +390,13 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
       connection: connection(mock?.amcpPort ?? 0, oscPort),
       fixedLayers: { ...BANK, count: 2 },
       reservedLayers: { ranges: [{ from: 72, to: 73 }] },
+      ...(station ?? {}),
     });
 
-    // Wait for the RECONNECT before looking for the notice. The report is produced by
-    // `#resync`, which only runs once the socket is back — asserting on the notice
-    // first would race the reconnect delay and fail for a reason that is not the
-    // subject of this spec.
+    // Wait for the RECONNECT before looking for the notice. The report is the bridge's own
+    // (`CENTRAL-BRIDGE-01`: it restored its stack at start), read by `#resync` once the socket is
+    // back — asserting on the notice first would race the reconnect delay and fail for a reason
+    // that is not the subject of this spec.
     await expect(page.getByRole('status', { name: 'Bridge link' })).not.toContainText(
       'DISCONNECTED',
     );
@@ -395,9 +425,10 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
   /**
    * THE NO-FALSE-ALARM CASE, and it is as load-bearing as the alarm itself.
    *
-   * A page reload against a HEALTHY bridge skips every retained item — the bridge
-   * already holds them — and loses nothing at all. A notice here would cry wolf on
-   * the most ordinary event there is, and an alarm nobody reads is worse than none.
+   * A page reload against a HEALTHY bridge loses nothing at all — and since
+   * `CENTRAL-BRIDGE-01` it restores nothing either: the console reads the bridge's
+   * report, which a clean start left empty. A notice here would cry wolf on the most
+   * ordinary event there is, and an alarm nobody reads is worse than none.
    */
   test('B-108: a plain page reload against a live bridge raises NO notice', async ({ page }) => {
     await boot(page);

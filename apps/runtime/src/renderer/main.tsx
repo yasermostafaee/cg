@@ -9,7 +9,6 @@ import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
-import { reportResyncError, withdrawCommandError } from './features/status/commandFeedback.js';
 import { startKeyboardLanguage } from './keyboardLanguage.js';
 import { applyThemeVars } from './theme.js';
 
@@ -80,13 +79,7 @@ function BootComplete({ children }: { children: ReactNode }): JSX.Element {
 
 async function boot(): Promise<void> {
   window.__CG_SPLASH__?.phase('PROBING BRIDGE');
-  // Reconnect-reconciliation — a failed template re-delivery during the post-reconnect resync
-  // stands as a refusal about the STATION, and withdraws itself once a later resync has done it
-  // (`DELTA-MULTI-CHANNEL-01-A` A3).
-  window.cg = await createRuntimeBridge({
-    onResyncError: reportResyncError,
-    onResyncResolved: withdrawCommandError,
-  });
+  window.cg = await createRuntimeBridge();
   // TEXT-DIGITS-01 — the one keyboard-language detector, with the shell's report when there is one.
   const keyboard = window.cg.keyboard;
   startKeyboardLanguage(document, keyboard.reportsLanguage() ? () => keyboard.language() : null);

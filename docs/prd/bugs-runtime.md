@@ -12981,6 +12981,16 @@ tombstones lived only as long as the bridge process, so after a bridge restart a
 brought a removed template back. **Fix:** CG Bridge persists the stack itself and restores it at start from
 its own file; a console re-delivers nothing — the bridge is the one store, the console a view of it.
 
+**Built (2026-09-30, closed in code; the Linux e2e is owed):** the bridge's `bridge-stack.json`, restored
+before its socket listens (`756a7f81`); the console's `#resync` only reads (the restore report, the strays,
+the snapshots); `stack.restore` is gone from the contract; a `templates.import` marked `redelivery` is
+refused before every gate with no audit row (the removal tombstones and two lock classes went with it); an
+import or a removal with CG Bridge unreachable is refused with a sentence. The console's two browser stores
+stay as DISPLAY copies, never sent — the offline view needs them. The restore's report (`B-108`) is
+standing bridge state (`stack.restore-report`, a push, a dismissal per channel). Spec: `central-bridge`
+(`runtime-caspar-bridge`, `runtime-template-library`), with `runtime-retention-state` and
+`operator-surface` amended in place.
+
 ## [~] B-295 — A failed OSC bind stopped the server's session before AMCP was ever dialled, and said nothing ⟨priority: high — on the Playout machine UDP 6250 is the engine's⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.1 · `openspec/changes/central-bridge/`
 
 **Found (§0.1):** `ServerSession.loop()` bound the OSC socket first and, on failure, emitted `error` and

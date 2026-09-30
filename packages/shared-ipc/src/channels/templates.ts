@@ -495,33 +495,39 @@ export const TemplatesImportChannel = defineChannel(
     template: TemplateInfoSchema,
     html: z.string(),
     /**
-     * R-028 part B — is this a reconnect RE-DELIVERY rather than an operator's
-     * import? A re-delivery means "restore this if you lost it", never
-     * "resurrect it if you dropped it on purpose": the bridge ignores one whose
-     * id it has deliberately REMOVED, and keeps its own copy of an id it
-     * already holds instead of letting an older browser copy overwrite it.
+     * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **RETIRED: a console re-delivers nothing, and the bridge
+     * REFUSES a frame that says it is one.** It was R-028 part B's flag for `#resync`'s replay of
+     * a browser's whole library on every connect. The bridge keeps the library now, for every
+     * console; a replay from one console's older copy is how a removed template came back after a
+     * bridge restart and a stale version could replace a newer one.
      *
-     * Absent/false = an operator import, which always wins and clears any
-     * tombstone. The flag is the browser's honest statement about which of the
-     * two it is; the bridge decides what that means.
+     * ⚠ **Kept in the schema so the frame is RECOGNISED, not stripped.** Deleted, an older console's
+     * `redelivery: true` would be dropped by the parser and the frame would arrive as an OPERATOR
+     * import — the one kind that always wins. Recognised, it is refused with a sentence.
      */
     redelivery: z.boolean().optional(),
     /**
      * `CHANNEL-TEMPLATES-01` — the channel to list it on (see {@link TemplateChannelSchema}'s
      * note). A RE-IMPORT is the same request: the channel's list moves to the new version and
-     * every other channel keeps the version it lists. A re-delivery with a channel restores or
-     * repairs that channel's entry only; one without restores a template no channel lists and
-     * never replaces a version a channel holds.
+     * every other channel keeps the version it lists.
      */
     channel: TemplateChannelSchema.optional(),
   }),
   z.object({
     registered: z.boolean(),
     templateId: IdSchema,
-    /** True when a re-delivery was deliberately ignored (removed, or already held). */
-    skipped: z.boolean().optional(),
   }),
 );
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — the sentence a `templates.import` marked `redelivery: true` is
+ * refused with. Only a console older than this change sends one, and the version check refuses such
+ * a console at connect; this is the fence behind that fence, so a replay can never arrive as an
+ * operator's import. Names the state, that nothing was done, and the remedy (`R-006`'s rule).
+ */
+export const TEMPLATE_REDELIVERY_REFUSAL =
+  'CG Bridge keeps the template library for every console, so a copy sent back by this console ' +
+  'was refused and nothing was changed. Update CG Control to match CG Bridge.';
 
 /**
  * R-005 — remove a template from the library. The bridge is AUTHORITATIVE: it decides

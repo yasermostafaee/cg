@@ -70,16 +70,16 @@ signed-in socket, unfiltered by channel.
 
 ### 0.5 Console features that assume the bridge is on the same machine
 
-| Feature                  | Today                                                                                   | In `0.10.0`                                                                                       |
-| ------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Open log folder          | `open_bridge_log` → Explorer on the local `bridge.log`                                  | **Download logs**: an admin console saves one zip from the bridge (`GET /logs.zip`, bearer)       |
-| `set_playout_address`    | a local CLI one-shot writes `bridge-playout.json`, then the local sidecar restarts      | gone: the console keeps its Playout address itself; the bridge's comes from its service config    |
-| Splash `STARTING BRIDGE` | the shell spawns the sidecar and polls `5174`                                           | the console is bundled; its splash says `CONNECTING`                                              |
-| Restart notice           | state on the bridge, pushed; depends on OSC within the resync drain                     | unchanged for the console; `OSC SUBSCRIBE` goes in the handshake so OSC is there in time          |
-| PVW page                 | `templates.page` over the socket (no co-location)                                       | unchanged; the browser's own copy is no longer a fallback (it no longer keeps one)                |
-| Template import          | the console renders the `.vcg` into a page and sends `templates.import` over the socket | unchanged transfer (it is an upload over the socket, 64 MB frames); the console keeps no copy     |
-| PROGRAM monitor          | `<img src="/pgm/<n>">` on the console's origin, loopback peers only                     | `http://<bridge>:5280/pgm/<n>?ticket=…` — a ticket issued over the verified socket                |
-| Connection check         | "UDP 6250 belongs to the engine here, so CG Control belongs on a separate machine"      | the bridge BELONGS on the Playout machine: the line and its ports move to the bridge's own checks |
+| Feature                  | Today                                                                                   | In `0.10.0`                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Open log folder          | `open_bridge_log` → Explorer on the local `bridge.log`                                  | **Download logs**: an admin console saves one zip from the bridge (`GET /logs.zip`, bearer)            |
+| `set_playout_address`    | a local CLI one-shot writes `bridge-playout.json`, then the local sidecar restarts      | gone: the console keeps its Playout address itself; the bridge's comes from its service config         |
+| Splash `STARTING BRIDGE` | the shell spawns the sidecar and polls `5174`                                           | the console is bundled; its splash says `CONNECTING`                                                   |
+| Restart notice           | state on the bridge, pushed; depends on OSC within the resync drain                     | unchanged for the console; `OSC SUBSCRIBE` goes in the handshake so OSC is there in time               |
+| PVW page                 | `templates.page` over the socket (no co-location)                                       | unchanged; the browser's display copy answers only when the bridge cannot be reached (D5, as built)    |
+| Template import          | the console renders the `.vcg` into a page and sends `templates.import` over the socket | unchanged transfer (an upload over the socket, 64 MB frames); refused offline; display copy after (D5) |
+| PROGRAM monitor          | `<img src="/pgm/<n>">` on the console's origin, loopback peers only                     | `http://<bridge>:5280/pgm/<n>?ticket=…` — a ticket issued over the verified socket                     |
+| Connection check         | "UDP 6250 belongs to the engine here, so CG Control belongs on a separate machine"      | the bridge BELONGS on the Playout machine: the line and its ports move to the bridge's own checks      |
 
 ### 0.6 A Windows service for `cg-bridge.exe`
 
@@ -175,16 +175,32 @@ coverage test asserts every publish channel and every read route is classified, 
 
 The bridge persists its stack (`bridge-stack.json`, the `RetainedStackItem` shape the console used to
 keep, written atomically on every stack change) and restores it at start through the same `restore()` it
-ran for a console. The console's `StackRetentionStore`, its re-delivery of templates and `stack.restore`
-are removed; `stack.restore` leaves the IPC contract. The console keeps no template copies (PVW asks the
-bridge; nothing falls back to a browser copy). Template versions: every new version is served at
-`<templateId>~<versionId>` for life, and the page carries `Cache-Control: no-store` (`B-293`).
+ran for a console, before its control socket listens. The console's re-delivery of templates and of its
+stack is removed, and so is `stack.restore` from the IPC contract; a `templates.import` marked
+`redelivery` is refused before every gate with its own sentence and no audit row (only a console older
+than this change sends one — the version check turns it away first). The redelivery machinery on the
+bridge goes with it: the `resync` and `operator-unless-redelivery` lock classes, the removal tombstones,
+`templateRedeliveryChange`.
+
+**As built (3.2), and where it differs from the first draft of this decision:** the console KEEPS its two
+browser stores, as DISPLAY copies only — never sent. Two living requirements need them ("The stack is
+visible while the bridge is unreachable", and the Library's offline view), and PVW falls back to the
+browser's page only when the bridge cannot be reached (`B-288`). An import and a removal need the bridge;
+offline each is refused with a sentence, and the display copy follows what the bridge accepted. The
+restore's report (`B-108`) is standing bridge state — `stack.restore-report`, its push and a dismissal
+that clears it for every console, optionally for one channel — because no console makes the restore call
+any more. The field list that reduces a row to its retained record lives once, in `@cg/shared-schema`
+(`retainedFromStackItem`): the bridge's file and the console's display copy both use it.
+
+Template versions: every new version is served at `<templateId>~<versionId>` for life, and the page
+carries `Cache-Control: no-store` (`B-293`).
 
 ### D6 — the start check (rule 3 and the prompt's §A)
 
-At the first healthy connection after the bridge starts, one `INFO <ch>` per declared channel (`B-292`'s
-reader; the answer is the whole channel) decides every restored row and every ledger entry, instead of the
-OSC tap alone: a layer holding our producer → adopted; an on-air row or ledger seat whose layer is empty →
+At the first connection after the bridge starts, one `INFO <ch>` per declared channel (`B-292`'s reader;
+the answer is the whole channel), read INSIDE that connection's handshake (`ServerSession` `onHandshake`,
+before `healthy`, so no take can overtake it — a first spelling read after `healthy` and reset a take made
+in between), decides every restored row and every ledger entry, instead of the OSC tap alone: a layer holding our producer → adopted; an on-air row or ledger seat whose layer is empty →
 off air, with the restart notice (`EmptiedAirNotice`, cause "the bridge restarted and the layer is
 empty"), **nothing sent**; a `loaded` row whose layer is empty → stays `loaded`, not resident, so the next
 take re-ADDs (no automatic `CG ADD`); an occupied layer in 50–99 no entry holds → the leftover strip. A

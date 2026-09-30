@@ -11,7 +11,7 @@ import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
  * has to be added here BY HAND — and forgetting is silent. It has now happened three times in
  * three sessions, in three different hand-written copy lists:
  *
- *   1. `StackRetentionStore.toRetained` dropped the whole per-look map;
+ *   1. `StackRetentionStore.toRetained` (now `@cg/shared-schema`'s `retainedFromStackItem`) dropped the whole per-look map;
  *   2. this shim dropped Stage 1's `lookId`, so the mock could never express a per-look
  *      binding at all;
  *   3. and `stack.update`'s `lookBindings` would have gone the same way.

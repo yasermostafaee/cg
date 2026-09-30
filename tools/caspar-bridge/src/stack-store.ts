@@ -1,11 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {
-  RetainedStackItemSchema,
-  retainedStateFor,
-  type RetainedStackItem,
-  type StackItemState,
-} from '@cg/shared-schema';
+import { RetainedStackItemSchema, type RetainedStackItem } from '@cg/shared-schema';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **THE STACK, KEPT BY THE BRIDGE ITSELF.**
@@ -97,38 +92,6 @@ export function savePersistedStack(file: string, items: readonly RetainedStackIt
         'but a restart will not bring it back',
     );
   }
-}
-
-/**
- * Reduce reconciled state back to INTENT: what the operator asked for, plus the STATE that
- * justified it. Moved here from the console's retention store, which no longer exists — the one
- * projection, still built on `@cg/shared-schema`'s `retainedStateFor` (golden rule 6: one
- * status → state site).
- *
- * ⭐ `B-107` / `B-109` — a row is never reduced to one bit: a FAILED row, a CLEARed row and a
- * pre-rolled one are three states, and each carries its own. Every per-row intent the operator set
- * (position, the source overrides, the frozen assignment, the plate volumes, the timing, the active
- * look) travels with it, because each one lost silently reverts something on air.
- */
-export function retainedFromStack(item: StackItemState): RetainedStackItem {
-  const state = retainedStateFor(item.status);
-  return {
-    itemId: item.itemId,
-    templateId: item.templateId,
-    fields: item.fields,
-    state,
-    // Only an `error` state carries a code, and only its own (B-093's `osc-unverifiable` rides an
-    // `unverified` row and must not travel as if it were a failure this row suffered).
-    ...(state === 'error' && item.errorCode !== undefined && { errorCode: item.errorCode }),
-    ...(item.slot !== undefined && { slot: item.slot }),
-    ...(item.position !== undefined && { position: item.position }),
-    ...(item.sourceOverride !== undefined && { sourceOverride: item.sourceOverride }),
-    ...(item.lookSourceOverride !== undefined && { lookSourceOverride: item.lookSourceOverride }),
-    ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
-    ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
-    ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
-    ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
-  };
 }
 
 function warn(line: string): void {

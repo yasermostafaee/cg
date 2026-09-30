@@ -1565,7 +1565,14 @@ export function LayersPanel({
                   <Button
                     variant="ghost"
                     aria-label="Dismiss the restore notice"
-                    onClick={() => setDismissedSkips(skipsKey)}
+                    onClick={() => {
+                      setDismissedSkips(skipsKey);
+                      // `CENTRAL-BRIDGE-01` — on the bridge too, for this channel, so every console
+                      // on it stops showing it (the bulk verbs' scope: bare on one channel).
+                      void window.cg.stack
+                        .dismissRestoreReport({ part: 'skipped', ...bulkScope })
+                        .catch(() => undefined);
+                    }}
                   >
                     <Icon icon={X} size={13} />
                   </Button>
@@ -1610,7 +1617,12 @@ export function LayersPanel({
                   <Button
                     variant="ghost"
                     aria-label="Dismiss the migrated-row notice"
-                    onClick={() => setDismissedMigrations(migrationsKey)}
+                    onClick={() => {
+                      setDismissedMigrations(migrationsKey);
+                      void window.cg.stack
+                        .dismissRestoreReport({ part: 'migrated', ...bulkScope })
+                        .catch(() => undefined);
+                    }}
                   >
                     <Icon icon={X} size={13} />
                   </Button>

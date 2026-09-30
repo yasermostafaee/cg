@@ -578,13 +578,13 @@ export const RetainedStackItemSchema = z.object({
    *   operator chose, while the row now publishes the default, so the picker asserts a
    *   look that is not on air. Before Stage E nothing displayed the look and the
    *   divergence was invisible; the picker is what turns it into a false readout.
-   * - the producer was gone and the row RE-ADDed — the page enters the default, and the
-   *   operator’s choice is silently undone on air.
+   * - the producer was gone — the next take enters the default, and the operator’s choice
+   *   is silently undone on air.
    *
    * That is the `B-107` / `B-109` class stated on `sourceOverride` above: retention
-   * dropping state it did not model. ⚠ It does NOT close the bridge-side gap (`#activeLooks`
-   * is still not persisted BY the bridge) — it closes it from the side that already has a
-   * durable store and already re-delivers.
+   * dropping state it did not model. (`CENTRAL-BRIDGE-01`: this record is the bridge's own
+   * stack file now, so the bridge persists the choice itself — `#activeLooks` is rebuilt from
+   * it at start.)
    */
   activeLookId: z.string().min(1).optional(),
   /**
@@ -592,11 +592,61 @@ export const RetainedStackItemSchema = z.object({
    * beside {@link sourceOverride} and for the identical reason.
    *
    * **WITHOUT THIS THE FIELDS WORK UNTIL THE FIRST RESTART AND THEN VANISH — the worst
-   * failure shape there is.** This schema is a strict `z.object` AND it is the `stack.restore`
-   * wire payload, so an UNDECLARED key is stripped silently: no error, no warning, no log.
+   * failure shape there is.** This schema is a strict `z.object` AND it is the record of the
+   * bridge's stack file (`bridge-stack.json`, `CENTRAL-BRIDGE-01`; it was the `stack.restore`
+   * wire payload), so an UNDECLARED key is stripped silently: no error, no warning, no log.
    * The operator sets two more passes, sees it take, the bridge blips, and the row comes back
    * looping forever with the console showing it as normal. `B-107` / `B-109` exactly.
    */
   timingOverride: StackItemTimingOverrideSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;
+
+/**
+ * Reduce a published row back to INTENT: what the operator asked for, plus the STATE that
+ * justified it — the record the bridge's stack file keeps and a console's display copy keeps.
+ *
+ * 🔴 `CENTRAL-BRIDGE-01` — **ONE copy, here, because there are two readers.** The bridge
+ * persists its stack with this and the console mirrors its display copy with it; a second,
+ * hand-kept field list is how one side comes to drop a field the other keeps.
+ *
+ * ⭐ **B-107 / B-109 — a row used to be reduced to `played: boolean`, and that was the bug.**
+ * One bit cannot tell a FAILED row from a deliberately CLEARed row from a genuinely pre-rolled
+ * one. The status → state map is {@link retainedStateFor} (golden rule 6: one site).
+ *
+ * Every OPEN-AXIS field travels, because each one lost silently reverts something on air (the
+ * console's `stack-retention` test derives the list from the schemas rather than listing it):
+ *
+ * - `position` and the source overrides — a dropped one shows the wrong PICTURE; a dropped
+ *   `sourceOverride` reverts a plate to the DEAD source the operator patched around, on air;
+ * - `lookSourceOverride` — the per-look composition, whose loss is invisible until somebody
+ *   SWITCHES, when the look reverts to the template assignment;
+ * - `frozenAssignment` — dropped, it THAWS every on-air row, and every assignment edited during
+ *   the show lands on air at the first reconcile (`B-155`);
+ * - `plateVolumes` — a dropped one shows the RIGHT picture in silence, with every console
+ *   reporting the row as normal;
+ * - `timingOverride` — the operator asks for two more passes and out; dropped, the row comes
+ *   back on its authored `infinite` and loops;
+ * - `activeLookId` — dropped, the picker asserts a look that is not on air.
+ */
+export function retainedFromStackItem(item: StackItemState): RetainedStackItem {
+  const state = retainedStateFor(item.status);
+  return {
+    itemId: item.itemId,
+    templateId: item.templateId,
+    fields: item.fields,
+    state,
+    // Only an `error` state carries a code, and only its own: an `errorCode` set for a different
+    // purpose (B-093's `osc-unverifiable` rides an `unverified` row) must not travel as if it
+    // were a failure this row suffered.
+    ...(state === 'error' && item.errorCode !== undefined && { errorCode: item.errorCode }),
+    ...(item.slot !== undefined && { slot: item.slot }),
+    ...(item.position !== undefined && { position: item.position }),
+    ...(item.sourceOverride !== undefined && { sourceOverride: item.sourceOverride }),
+    ...(item.lookSourceOverride !== undefined && { lookSourceOverride: item.lookSourceOverride }),
+    ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
+    ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
+    ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
+    ...(item.activeLookId !== undefined && { activeLookId: item.activeLookId }),
+  };
+}

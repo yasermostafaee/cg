@@ -158,6 +158,16 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     onChanged: () => () => undefined,
     takeOffAir: () => Promise.resolve({ ok: false }),
   };
+  /*
+    `CENTRAL-BRIDGE-01` — the restore-notice dismiss buttons dismiss on the BRIDGE too. Filled into
+    a `stack` a spec states itself (only the absent member), answering as a bridge with nothing left
+    to dismiss does.
+  */
+  const stack = cg['stack'] as Record<string, unknown> | undefined;
+  if (stack !== undefined) {
+    stack['dismissRestoreReport'] ??= (): Promise<{ ok: boolean }> =>
+      Promise.resolve({ ok: false });
+  }
   return stub;
 }
 

@@ -256,7 +256,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     expect(routes.size, 'the census is looking at the real table').toBeGreaterThan(50);
 
     const reachable = [...routes.entries()]
-      .filter(([, r]) => !refusedWhileLocked(r, {}))
+      .filter(([, r]) => !refusedWhileLocked(r))
       .map(([name]) => name)
       .sort();
 
@@ -331,8 +331,9 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         // `PLAYOUT-SOURCES-01` — the picker's reads: a media search and a D10 refresh change nothing.
         'sources.media-search',
         'sources.refresh',
-        // The client's own reconnect machinery, unreachable from any operator control.
-        'stack.restore',
+        // `CENTRAL-BRIDGE-01` (`B-294`) — the restore's REPORT, a read; `stack.restore` itself is
+        // gone (the bridge restores its own stack at start), and its dismissal is refused locked.
+        'stack.restore-report',
         'stack.snapshot',
         // `DESKTOP-APPS-01-D` j — a read; its one act, `station.take-off-air`, is refused locked.
         'station.strays',
@@ -344,10 +345,10 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     );
   });
 
-  it('`templates.import` splits on the redelivery flag, not on the channel', () => {
-    // The one channel carrying both an operator act and machinery. An operator's real import
-    // is a catalogue change and is refused; `#resync`'s re-deliveries are marked and pass, so
-    // a browser reloading against a locked bridge still reconciles its library.
+  it('`templates.import` is one operator act — no flag splits it any more (CENTRAL-BRIDGE-01)', () => {
+    // It carried both an operator act and `#resync`'s re-deliveries, told apart by a flag. A
+    // console re-delivers nothing now, and the flagged frame is refused before the lock is asked
+    // (`lock-scope`), so the route is plainly an intent and the lock refuses it.
     const runtime = new CasparRuntime(
       {
         servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
@@ -359,13 +360,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     );
     const route = buildRoutes(runtime).get('templates.import');
     if (route === undefined) throw new Error('templates.import is not routed');
-
-    expect(refusedWhileLocked(route, { redelivery: true }), 'a re-delivery was refused').toBe(
-      false,
-    );
-    expect(refusedWhileLocked(route, { redelivery: false }), 'an import was allowed').toBe(true);
-    // An operator import carries no flag at all — the default must be the REFUSING one.
-    expect(refusedWhileLocked(route, {}), 'an unflagged import was allowed').toBe(true);
+    expect(route.lock).toBe('operator');
+    expect(refusedWhileLocked(route), 'an import was allowed while locked').toBe(true);
   });
 
   it('re-engaging while locked is refused, so a second console cannot change the PIN', async () => {

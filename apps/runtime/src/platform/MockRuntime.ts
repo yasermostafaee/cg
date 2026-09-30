@@ -389,8 +389,6 @@ export class MockRuntime {
    * that starts with an empty list, as on the bridge.
    */
   #unlistedSeeds: TemplateInfo[] | null = [...seedTemplates(), ...seedLooksTemplate()];
-  /** R-028 part B parity — per channel: ids removed there, so a re-delivery cannot revive them. */
-  readonly #removedTemplates = new Map<number, Set<string>>();
   #config: ConnectionConfig = seedConfig();
   #health: ConnectionHealth = seedHealth('A');
   #lock: LockState = { engaged: false };
@@ -2176,32 +2174,14 @@ export class MockRuntime {
    *
    * 🔴 `CHANNEL-TEMPLATES-01` parity — ON `channel`, and no other: a re-import replaces that
    * channel's entry and every other channel keeps its own. With no channel, every declared
-   * channel. A re-delivery naming a channel restores or repairs that channel's entry (and is
-   * ignored where the template was removed); one naming none only restores a template no channel
-   * lists — the bridge's one rule.
+   * channel. (`CENTRAL-BRIDGE-01` retired the re-delivery the bridge used to model here.)
    */
   templateImport(
     template: TemplateInfo,
-    redelivery = false,
     channel?: number,
-  ): { registered: boolean; templateId: string; skipped?: boolean } {
+  ): { registered: boolean; templateId: string } {
     const templateId = template.templateId;
-    const removedOn = (c: number): boolean =>
-      this.#removedTemplates.get(c)?.has(templateId) === true;
-    let targets: number[];
-    if (redelivery) {
-      if (channel !== undefined) {
-        if (removedOn(channel)) return { registered: false, templateId, skipped: true };
-        targets = [channel];
-      } else {
-        if (this.#stationWideTemplates().has(templateId)) return { registered: true, templateId };
-        targets = this.#declaredTemplateChannels().filter((c) => !removedOn(c));
-        if (targets.length === 0) return { registered: false, templateId, skipped: true };
-      }
-    } else {
-      targets = channel !== undefined ? [channel] : this.#declaredTemplateChannels();
-      for (const c of targets) this.#removedTemplates.get(c)?.delete(templateId);
-    }
+    const targets = channel !== undefined ? [channel] : this.#declaredTemplateChannels();
     const lists = this.#lists();
     for (const c of targets) {
       let list = lists.get(c);
@@ -2269,15 +2249,7 @@ export class MockRuntime {
       };
     }
 
-    for (const c of targets) {
-      lists.get(c)?.delete(templateId);
-      let removed = this.#removedTemplates.get(c);
-      if (removed === undefined) {
-        removed = new Set();
-        this.#removedTemplates.set(c, removed);
-      }
-      removed.add(templateId);
-    }
+    for (const c of targets) lists.get(c)?.delete(templateId);
     // R-028 (o1) parity — the catalogue push every browser converges on.
     this.templatesChanged.emit(this.templateList());
     return { ok: true };
