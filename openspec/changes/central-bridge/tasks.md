@@ -34,16 +34,32 @@
 
 ## 2. The start check and a core restart (rules 2–3, `C-047`)
 
-- [ ] 2.1 A core restart (the mock drops every layer and every connection): reconnect, re-subscribe, the
-      restart notice with PUT BACK ON AIR; nothing re-sent without it.
-- [ ] 2.2 At start, `INFO <ch>` per declared channel decides every restored row and every ledger entry; an
+- [x] 2.1 A core restart (the mock drops every layer and every connection): reconnect, re-subscribe, the
+      restart notice with PUT BACK ON AIR; nothing re-sent without it (`emptied-air-notice.integration.test.ts`
+      §4: `restartCore()` under a running bridge — a second `OSC SUBSCRIBE` on the same port, the notice names
+      both rows, nothing reaches either layer over several sweeps; the press puts back one row through the
+      take, control: the other stays listed and untouched).
+- [x] 2.2 At start, `INFO <ch>` per declared channel decides every restored row and every ledger entry; an
       emptied entry → off air with the notice, nothing sent; an occupied layer in 50–99 no entry holds → the
-      strip; control: a layer still playing stays ON AIR. The automatic re-ADD on restore is gone.
+      strip; control: a layer still playing stays ON AIR. The automatic re-ADD on restore is gone. The reads
+      run inside the first connection's handshake (`ServerSession` `onHandshake`), before `healthy`, so no
+      take can overtake them (a first spelling read after `healthy` and reset a take made in between — caught
+      by two existing tests). `blind-occupancy-tap` (the start check sees what a deaf tap cannot; a silent
+      layer leaves ON AIR with the notice, nothing sent), `own-stack` (below), and the seven restore tests
+      that pinned the re-ADD rewritten to "nothing sent; the next take seats it" (`cleared-row-not-resurrected`,
+      `clear-resets-mixer`, `fixed-restore-branch`, `live-add-mute` SITE 2, `local-caspar-station`,
+      `restore-channel-fence`, `stack-survives-bridge-restart`). Living text amended in place in the pending
+      `runtime-retention-state` delta (dated), and MODIFIED here for the two requirements with no pending copy.
 
 ## 3. One store, on the bridge (`B-294`, `B-293`)
 
-- [ ] 3.1 `bridge-stack.json`: written atomically on every stack change, restored at start through
-      `restore()`.
+- [x] 3.1 `bridge-stack.json`: written atomically on every stack change, restored at start through
+      `restore()` (`stack-store.ts`; `createBridge({ stackPath })` restores before the control socket
+      listens, saves debounced on `stackChanged`/`straysChanged` and always at close; the CLI's
+      `--stack-path` defaults beside the persisted config, and the dev station names it). `own-stack` test:
+      a bridge with two rows on air stops, the core loses one page, a second bridge on the same file restores
+      both, reads `INFO 1`, names the emptied row, keeps the playing one ON AIR, sends nothing to either;
+      an unusable file is said and kept. Bridge suite 1483/1483.
 - [ ] 3.2 The console re-delivers nothing: `StackRetentionStore`, the template re-delivery and `stack.restore`
       removed; the living requirements that described them superseded.
 - [ ] 3.3 Every new template version served at `<id>~<versionId>`; the page sent `Cache-Control: no-store`.

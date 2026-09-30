@@ -118,6 +118,7 @@ export function stationPaths(stateDir, platform) {
     playoutInputs: p.join(runtime, 'bridge-playout-inputs.json'),
     boundMedia: p.join(runtime, 'bridge-bound-media.json'),
     liveLayers: p.join(runtime, 'bridge-live-layers.json'),
+    stack: p.join(runtime, 'bridge-stack.json'),
     audit: p.join(runtime, 'bridge-audit.ndjson'),
     playoutConfig: p.join(runtime, 'bridge-playout.json'),
     /** A one-page stub for the bridge's console listener, which needs an `index.html` to start. */
@@ -197,6 +198,9 @@ function pathFlags(paths) {
     paths.boundMedia,
     '--live-layers-path',
     paths.liveLayers,
+    // `CENTRAL-BRIDGE-01` (`B-294`) — the bridge keeps its own stack; no console re-delivers one.
+    '--stack-path',
+    paths.stack,
     '--audit-log-path',
     paths.audit,
     '--playout-config-path',

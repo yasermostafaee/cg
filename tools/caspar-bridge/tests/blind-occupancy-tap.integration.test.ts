@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { RetainedStackItem } from '@cg/shared-schema';
@@ -115,6 +115,21 @@ function refuseSubscribe(m: MockHandle): void {
   m.setHandler('OSC', () => ({ kind: 'err', code: 400, verb: 'OSC' }));
 }
 
+/**
+ * `CENTRAL-BRIDGE-01` (`C-047`) — AND BLIND TO `INFO` TOO. The first connection after a start is
+ * judged from the core's own `INFO <ch>` (the start check), which SEES a live page the OSC tap cannot.
+ * A restore that must still refuse to decide is one where the core answers neither — the channel
+ * form of `INFO` refused here, the handshake's bare `INFO` left alone.
+ */
+function blindToInfo(m: MockHandle): void {
+  const info = defaultHandlers().get('INFO');
+  m.setHandler('INFO', (req, ctx) =>
+    req.args.length > 0 || info === undefined
+      ? { kind: 'err', code: 403, verb: 'INFO' }
+      : info(req, ctx),
+  );
+}
+
 /** Leave a LIVE producer on the probe slot, as a dead bridge session would. */
 async function orphanLiveProducer(m: MockHandle, oscPort: number): Promise<void> {
   const r = new CasparRuntime(
@@ -146,6 +161,7 @@ it('THE REGRESSION: a BLIND tap over a LIVE layer sends NOTHING and says so hone
 
   await orphanLiveProducer(mock, oscPort);
   expect(mock.layerState(SLOT)?.onAir).toBe(true); // still live, orphaned
+  blindToInfo(mock); // …and the fresh bridge's start check gets no answer either.
   const beforeRestore = (await recvLines(mock, tracePath)).length;
 
   // The fresh bridge binds an OSC port the mock never sends to: AMCP is fine,
@@ -188,6 +204,44 @@ it('THE REGRESSION: a BLIND tap over a LIVE layer sends NOTHING and says so hone
   expect(r.stackSnapshot().find((i) => i.itemId === 'item1')?.errorCode).toBe('osc-unverifiable');
 }, 40_000);
 
+it('🔴 CENTRAL-BRIDGE-01 — the start check SEES what a blind tap cannot: the core’s INFO shows our page on the layer, so the row is adopted ON AIR, and nothing is sent', async () => {
+  tracePath = path.join(
+    os.tmpdir(),
+    `cg-blindtap-info-${String(process.pid)}-${String(Date.now())}.ndjson`,
+  );
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
+  refuseSubscribe(mock); // OSC never reaches the fresh bridge; INFO does.
+
+  await orphanLiveProducer(mock, oscPort);
+  const beforeRestore = (await recvLines(mock, tracePath)).length;
+
+  const deafPort = await freeUdpPort();
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, deafPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
+  runtime = r;
+  await r.startServing();
+  r.templateImport(TEMPLATE, HTML);
+  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [], migrated: [] });
+  r.start();
+  await r.whenServerHealthy(HEALTH_MS);
+
+  await waitFor(
+    () => status(r, 'item1') === 'on-air' || status(r, 'item1') === 'playing',
+    8000,
+    'the restored row reads ON AIR from the core’s own answer',
+  );
+  const lines = (await recvLines(mock, tracePath)).slice(beforeRestore);
+  expect(lines).toContain('INFO 1');
+  expect(lines.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(false);
+  expect(lines.some((l) => l.startsWith('CLEAR 1-10'))).toBe(false);
+  expect(mock.layerState(SLOT)?.onAir).toBe(true);
+  expect(r.emptiedAir()).toBeNull();
+}, 40_000);
+
 it('UNCHANGED: a HEARING tap over an occupied layer still adopts, sending nothing', async () => {
   tracePath = path.join(
     os.tmpdir(),
@@ -218,7 +272,7 @@ it('UNCHANGED: a HEARING tap over an occupied layer still adopts, sending nothin
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
 }, 40_000);
 
-it('UNCHANGED: a HEARING tap over a genuinely SILENT layer still re-ADDs as loaded', async () => {
+it('🔴 CENTRAL-BRIDGE-01 (C-047) — a genuinely SILENT layer: the row restored ON AIR leaves ON AIR with the restart notice, and NOTHING is sent', async () => {
   tracePath = path.join(
     os.tmpdir(),
     `cg-blindtap-silent-${String(process.pid)}-${String(Date.now())}.ndjson`,
@@ -249,13 +303,19 @@ it('UNCHANGED: a HEARING tap over a genuinely SILENT layer still re-ADDs as load
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
 
-  // Silence from a tap that IS hearing the server is real evidence of emptiness,
-  // so the item is safely re-ADDed and rests at LOADED.
-  await expect(mock.waitForCgAddResolution(SLOT, 10_000)).resolves.toBe('resolved');
-  await waitFor(() => status(r, 'item1') === 'loaded', 8000, 'restored item rests at LOADED');
+  // The core's own answer (the start check's INFO) says the layer is empty. It used to be re-ADDed
+  // as LOADED; the owner's standing decision is detect and say: the row leaves ON AIR, the restart
+  // notice names it, and PUT BACK ON AIR is the operator's.
+  await waitFor(() => r.emptiedAir() !== null, 8000, 'the restart notice');
+  expect(r.emptiedAir()?.rows.map((row) => row.itemId)).toEqual(['item1']);
+  expect(status(r, 'item1')).not.toBe('on-air');
+  expect(status(r, 'item1')).not.toBe('playing');
+  await delay(500); // every chance for a stray send to land
   const lines = (await recvLines(mock, tracePath)).slice(beforeRestore);
-  expect(lines.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(true);
+  expect(lines).toContain('INFO 1');
+  expect(lines.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(false);
   expect(lines.some((l) => l.startsWith('CLEAR 1-10'))).toBe(false);
+  expect(mock.layerState(SLOT)).toBeUndefined(); // nothing was put on the layer
 }, 40_000);
 
 it('a blind restore RECOVERS: once OSC starts arriving, the sweep decides the item', async () => {

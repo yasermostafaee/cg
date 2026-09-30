@@ -44,6 +44,7 @@ import {
   ConnectionsSetConfigChannel,
   ConnectionsTemplateServeChannel,
   DEFAULT_BRIDGE_HOST,
+  type RestoreSkip,
   DEFAULT_OSC_PORT,
   RESERVED_OSC_PORT,
   RESERVED_OSC_PORT_REASON,
@@ -167,6 +168,8 @@ import {
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
+import type { RetainedStackItem } from '@cg/shared-schema';
+import { loadPersistedStack, retainedFromStack, savePersistedStack } from './stack-store.js';
 import { currentAuthSession, runAsActor } from './actor-context.js';
 import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
 import { startBankBringIn } from './bank-bring-in.js';
@@ -274,6 +277,13 @@ export interface BridgeOptions {
    * `connections.set-config` apply is saved back. Omitted → no persistence.
    */
   persistPath?: string;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **WHERE THE BRIDGE KEEPS ITS OWN STACK** (`stack-store.ts`).
+   * When set, the stack is restored from it at start — before any console connects, through the same
+   * `restore()` a console's re-delivery used — and saved back on every change. Omitted: nothing
+   * persists (an embedder; most tests). No console re-delivers a stack any more.
+   */
+  stackPath?: string;
   /**
    * R-021 stage 1 — the fixed operator layer bank, explicit. Highest
    * precedence; see {@link resolveFixedBank} for the full order. The bank is
@@ -611,11 +621,89 @@ export interface BridgeHandle {
     readonly unverified: number;
     readonly dropped: number;
   };
+  /**
+   * `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack at start: where it is kept, what was read
+   * and what `restore()` made of it, for the boot line. `null` when no stack path was given.
+   */
+  readonly stack: StackProvenance | null;
   /** Force-close every client socket — used by tests to simulate a mid-session drop. */
   dropConnections(): void;
   /** Stop the WebSocket server, the CasparCG session, and close all clients. */
   close(): Promise<void>;
 }
+
+/** `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack at start, for the boot line. */
+export interface StackProvenance {
+  readonly path: string;
+  readonly source: 'absent' | 'file' | 'unusable';
+  /** Rows restored. */
+  readonly restored: number;
+  /** Rows the file held that `restore()` skipped, and why. */
+  readonly skipped: readonly { readonly itemId: string; readonly reason: string }[];
+  /** Rows the file held that were not usable at all. */
+  readonly unusable: number;
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (`B-294`) — **RESTORE THE BRIDGE'S OWN STACK, AND KEEP IT.** Reads
+ * `stackPath`, hands the rows to `restore()` (seeds them, sends nothing), then saves the stack on
+ * every change — debounced to one write per burst, and flushed at close. Strays (our items on a
+ * channel this station does not declare) are kept with the rows, so a restart remembers them too.
+ */
+async function restoreOwnStack(
+  runtime: CasparRuntime,
+  stackPath: string,
+): Promise<{ provenance: StackProvenance; flush: () => void }> {
+  const persisted = loadPersistedStack(stackPath);
+  const result =
+    persisted.items.length === 0
+      ? { restored: 0, skipped: [] as readonly RestoreSkip[] }
+      : await runtime.restore(persisted.items);
+  const save = (): void => {
+    const strays: RetainedStackItem[] = runtime.strays().map((stray) => ({
+      itemId: stray.itemId,
+      templateId: stray.templateId,
+      fields: {},
+      state: 'on-air',
+      slot: { channel: stray.casparChannel, layer: stray.layer, server: 'primary' },
+    }));
+    savePersistedStack(stackPath, [...runtime.stackSnapshot().map(retainedFromStack), ...strays]);
+  };
+  let timer: NodeJS.Timeout | null = null;
+  /*
+    At close, ALWAYS written — not only when a save is pending: a change whose publish is still
+    coalescing when the bridge stops has scheduled nothing yet (measured: a close right after two
+    takes left no file), and the stack at close is exactly what the next start must restore.
+  */
+  const flush = (): void => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    save();
+  };
+  const schedule = (): void => {
+    if (timer !== null) return;
+    timer = setTimeout(() => {
+      timer = null;
+      save();
+    }, STACK_SAVE_DEBOUNCE_MS);
+    timer.unref();
+  };
+  runtime.stackChanged.subscribe(schedule);
+  runtime.straysChanged.subscribe(schedule);
+  return {
+    provenance: {
+      path: stackPath,
+      source: persisted.source,
+      restored: result.restored,
+      skipped: result.skipped.map((s) => ({ itemId: s.itemId, reason: s.reason })),
+      unusable: persisted.dropped.length,
+    },
+    flush,
+  };
+}
+
+/** `CENTRAL-BRIDGE-01` — one stack write per burst of changes (a take publishes several). */
+const STACK_SAVE_DEBOUNCE_MS = 150;
 
 /**
  * 🔴 `B-229` — **IS THIS CHANNEL REACHABLE WHILE THE CONSOLE IS LOCKED?**
@@ -2117,6 +2205,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       ),
   });
 
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (`B-294`) — THE BRIDGE'S OWN STACK, restored BEFORE the control socket
+    listens, so no console can ever see this bridge without its stack, and saved on every change.
+    `restore()` seeds rows and sends nothing; the first connection's start check (`INFO`) decides each
+    row: adopted where our page still plays, off air with the restart notice where the layer is empty.
+  */
+  const stack =
+    options.stackPath === undefined ? null : await restoreOwnStack(runtime, options.stackPath);
+
   const wss = new WebSocketServer({
     host,
     port: requestedPort,
@@ -2371,11 +2468,14 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     },
     playoutSources,
     liveLayers: liveLayersProvenance,
+    stack: stack?.provenance ?? null,
     dropConnections() {
       for (const client of wss.clients) client.terminate();
     },
     async close() {
       for (const client of wss.clients) client.terminate();
+      // `CENTRAL-BRIDGE-01` — the stack's last change is on disk before anything stops.
+      stack?.flush();
       // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
       // process open; clearing it is what keeps a test suite from leaving one per bridge.
       playoutAuth?.dispose();

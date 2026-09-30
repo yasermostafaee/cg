@@ -45,6 +45,15 @@ export interface ServerSessionOptions {
    * always did. Default `false` — the command is never sent unless asked for.
    */
   oscSubscribe?: boolean;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`C-047`) — **READS THE OWNER WANTS BEFORE THIS CONNECTION IS DECLARED
+   * HEALTHY.** Called at the end of every handshake (after the subscribe) with a `read` that sends one
+   * line on THIS connection and resolves with its reply. Nothing but the handshake is on the
+   * connection yet, so what it learns cannot be overtaken by a command sent meanwhile — which is
+   * the whole reason it lives here rather than after `healthy`. A throw is swallowed: the reads are
+   * the owner's question, never a reason to fail the connection.
+   */
+  onHandshake?: (read: (line: string) => Promise<ParsedAmcpResponse>) => Promise<void>;
 
   /** Backoff config (Phase 5 §2: 250 → 500 → 1000 → 2000 → cap 4000). */
   initialBackoffMs?: number;
@@ -154,6 +163,9 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
   private readonly oscPort: number;
   private readonly oscBindHost: string;
   private readonly oscSubscribe: boolean;
+  private readonly onHandshake:
+    | ((read: (line: string) => Promise<ParsedAmcpResponse>) => Promise<void>)
+    | undefined;
   private readonly oscDegradedAfterMs: number;
   private readonly oscDownAfterMs: number;
   private readonly watcherIntervalMs: number;
@@ -191,6 +203,7 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     this.oscPort = opts.oscPort;
     this.oscBindHost = opts.oscBindHost ?? '0.0.0.0';
     this.oscSubscribe = opts.oscSubscribe ?? false;
+    this.onHandshake = opts.onHandshake;
     this.oscDegradedAfterMs = opts.oscDegradedAfterMs ?? 3000;
     this.oscDownAfterMs = opts.oscDownAfterMs ?? 10000;
     this.watcherIntervalMs = opts.watcherIntervalMs ?? 500;
@@ -374,6 +387,20 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
       throw new Error(`INFO handshake failed: code=${String(info.response.code)}`);
     }
     if (this.oscSubscribe) await this.subscribeOsc();
+    if (this.onHandshake !== undefined) {
+      const queue = this.currentQueue;
+      try {
+        await this.onHandshake(async (line) => {
+          const reply = await queue.enqueue(line, {
+            priority: 'urgent',
+            timeoutMs: this.infoTimeoutMs,
+          });
+          return reply.response;
+        });
+      } catch {
+        /* the owner's reads never fail the handshake */
+      }
+    }
   }
 
   /**

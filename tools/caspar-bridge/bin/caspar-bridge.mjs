@@ -172,6 +172,23 @@ const persistPath =
     ? args['persist-path']
     : path.join(stateHome, '.cg-runtime', 'bridge-connection.json');
 
+/*
+  🔴 `CENTRAL-BRIDGE-01` (`B-294`) — THE BRIDGE'S OWN STACK. Kept BESIDE the connection file unless
+  named: every caller that isolates its state already points `--persist-path` at a scratch folder,
+  so no test that predates this flag can write a stack into the owner's real `~/.cg-runtime`.
+  A valueless flag is a hard boot error, as every path flag's is.
+*/
+if (args['stack-path'] === true) {
+  console.error(
+    '[caspar-bridge] --stack-path needs a value (the JSON file the stack persists to).',
+  );
+  process.exit(1);
+}
+const stackPath =
+  typeof args['stack-path'] === 'string'
+    ? args['stack-path']
+    : path.join(path.dirname(persistPath), 'bridge-stack.json');
+
 // R-021 — mirrors --persist-path, EXCEPT for what an absent file means: here it
 // means the built-in default bank, not "no bank" (see the header).
 const fixedLayersPath =
@@ -549,6 +566,7 @@ const bridgeOptions = {
   port: bridgePort,
   connection,
   persistPath,
+  stackPath,
   fixedLayersPath,
   reservedLayers,
   reservedLayersPath,
@@ -663,6 +681,8 @@ function describeBoot(handle) {
     );
   }
   console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
+  // `CENTRAL-BRIDGE-01` (`B-294`) — the stack the bridge keeps itself; no console re-delivers one.
+  if (handle.stack !== null) console.error(`[caspar-bridge] stack: ${describeStack(handle.stack)}`);
   // C-031 — the one number every take depends on, said at boot like the rest.
   console.error(`[caspar-bridge] templates: ${describeTemplates(handle.templates)}`);
   // `FIELD-FIXES-01-A` — where every AMCP command and its reply is written.
@@ -968,6 +988,31 @@ function describeLiveLayers({ path: file, source, adopted, unverified, dropped }
   const notes = [`${unverified} unverified until the first occupancy reading`];
   if (dropped > 0) notes.push(`${dropped} DROPPED, contradicted by the server`);
   return `adopted ${adopted} item(s) from ${file} (${notes.join(', ')})`;
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` (`B-294`) — the bridge's own stack at start, in one line. The rows are decided
+ * at the first connection (adopted, or off air with the restart notice) — this line says what was
+ * read. ASCII only, as every sibling.
+ */
+function describeStack({ path: file, source, restored, skipped, unusable }) {
+  if (source === 'absent')
+    return `nothing to restore (no file at ${file}) - persisting from now on`;
+  if (source === 'unusable') {
+    return `UNUSABLE FILE at ${file} - started with an EMPTY stack; the file is kept and replaced at the next change`;
+  }
+  const notes = [];
+  if (skipped.length > 0) {
+    notes.push(
+      `${skipped.length} skipped (${skipped.map((s) => `${s.itemId}: ${s.reason}`).join('; ')})`,
+    );
+  }
+  if (unusable > 0) notes.push(`${unusable} unusable row(s) dropped`);
+  return (
+    `restored ${restored} row(s) from ${file}` +
+    (notes.length > 0 ? ` - ${notes.join(', ')}` : '') +
+    ' - each is decided at the first connection (INFO)'
+  );
 }
 
 function parseArgs(argv) {

@@ -374,10 +374,11 @@ it('🔴 LAYER-BANDS-16 — an errored row comes back ERRORED and with NO LAYER,
   expect(after.some((l) => /^CLEAR \d+-\d+/.test(l))).toBe(false);
 }, 40_000);
 
-it('FROZEN: a LOADED row IS still re-ADDed — the fix narrows the branch, it does not remove it', async () => {
-  // The control that proves the two tests above can fail. If the restore had simply
-  // stopped re-ADDing, they would pass and the feature would be broken; this is the
-  // same path, same silent layer, and it MUST still act.
+it('CONTROL: a LOADED row comes back LOADED over the silent layer, nothing sent — and its next take re-ADDs it onto that layer', async () => {
+  // The control that proves the tests above can fail. `CENTRAL-BRIDGE-01` (`C-047`): a restore
+  // sends nothing for ANY state now (it used to re-ADD a loaded row), so what tells a LOADED row
+  // from a CLEARed one is the STATE it comes back in — and the loaded one's take must still work,
+  // re-ADDing onto the same layer, or the feature would be broken while every test above passed.
   tracePath = path.join(
     os.tmpdir(),
     `cg-b109-control-${String(process.pid)}-${String(Date.now())}.ndjson`,
@@ -424,9 +425,13 @@ it('FROZEN: a LOADED row IS still re-ADDed — the fix narrows the branch, it do
   await r2.whenServerHealthy(HEALTH_MS);
   expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
 
-  // Identical silence, OPPOSITE action — because the retained STATE differs.
-  await expect(mock.waitForCgAddResolution(SLOT, 10_000)).resolves.toBe('resolved');
+  // Identical silence, a DIFFERENT row — because the retained STATE differs — and nothing sent.
   await waitFor(() => status(r2, 'item1') === 'loaded', 8000, 'restored item rests at LOADED');
+  await delay(400);
+  expect(mock.layerState(SLOT)).toBeUndefined();
+  // …and the operator's take re-ADDs it onto its own layer and plays it (B-039).
+  expect((await r2.take('item1')).accepted).toBe(true);
+  await expect(mock.waitForCgAddResolution(SLOT, 10_000)).resolves.toBe('resolved');
   expect(mock.layerState(SLOT)?.producer).toBe('html');
-  expect(mock.layerState(SLOT)?.onAir).toBe(false);
+  expect(mock.layerState(SLOT)?.onAir).toBe(true);
 }, 40_000);

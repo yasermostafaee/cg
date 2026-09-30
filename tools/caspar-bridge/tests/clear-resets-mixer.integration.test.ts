@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue, readBandVolumes } from '@cg/caspar-client';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
@@ -25,9 +24,11 @@ import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
  * ⚠ The test the prompt first specified — "a take on a loaded-then-cleared layer is audible" —
  * is VACUOUS for the reason above: it passes with or without the fix. It is not written.
  *
- * The residue here comes from the one production path that stops after `CG ADD` on a bank row:
- * a restore whose layer was found empty (`#decidePendingRestores` re-ADDs it, and the row comes
- * back `loaded`). The operator's LOAD sends nothing on the wire at all.
+ * The residue came from the one production path that stopped after `CG ADD` on a bank row: a
+ * restore whose layer was found empty was re-ADDed, muted, and came back `loaded`. `CENTRAL-BRIDGE-01`
+ * (`C-047`) removed that re-ADD — a restore sends nothing now — so the residue is STAGED with the
+ * mock's own hook on a row we took: a mute on our layer that the bridge has no record of, which is
+ * exactly the class our clear exists to wipe. The operator's LOAD sends nothing on the wire at all.
  */
 
 let mock: MockHandle | null = null;
@@ -162,20 +163,16 @@ async function foreignPlay(line: string): Promise<void> {
   await new CommandQueue(foreign).enqueue(line);
 }
 
-/** A restored LOADED row on a bank layer the server reports empty → re-ADDed, muted. */
+/**
+ * A row of ours ON AIR on a bank layer, and a MUTE on that layer the bridge has no record of — staged
+ * with the mock's hook, since no production path of ours leaves one any more (see the header).
+ */
 async function aMutedLoadedRow(r: CasparRuntime): Promise<void> {
-  const item: RetainedStackItem = {
-    itemId: 'item1',
-    templateId: 'lower-third',
-    fields: {},
-    state: 'loaded',
-    slot: { channel: 1, layer: ROW, server: 'primary' },
-  };
-  await r.restore([item]);
-  await waitFor(
-    async () => (await wire()).some((l) => l.startsWith(`CG 1-${String(ROW)} ADD`)),
-    'the restore re-ADD',
-  );
+  const slot = { channel: 1, layer: ROW };
+  expect((await r.loadFixed(slot, 'item1', 'lower-third', {})).accepted).toBe(true);
+  expect((await r.take('item1')).accepted).toBe(true);
+  await waitFor(async () => Promise.resolve(mock?.layerState(slot)?.onAir === true), 'the take');
+  mock?.setLayerVolume(slot, 0);
 }
 
 describe('B-253 — our clear takes the mixer residue with the producer', () => {

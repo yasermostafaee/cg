@@ -13,7 +13,9 @@ import {
   type OscOccupancyTap,
   type LayerPolicy,
   type LayerSlot,
+  type ParsedAmcpResponse,
   type ServerLabel,
+  type ServerSessionState,
 } from '@cg/caspar-client';
 import {
   isRestorable,
@@ -1660,6 +1662,13 @@ export class CasparRuntime {
    */
   readonly #oscStatus = new Map<ServerLabel, 'subscribed' | 'refused' | 'unbound'>();
   /**
+   * `CENTRAL-BRIDGE-01` (`C-047`) — has the first connection after start been judged from the core's
+   * own `INFO` (`#startCheck`)? Once per process: every later connection keeps the OSC sample.
+   */
+  #startChecked = false;
+  /** The start check's picture, read in the handshake and consumed at the healthy transition. */
+  #startSample: ReadonlyMap<string, string> | null = null;
+  /**
    * `FIELD-FIXES-01` B — why each row's last take was refused, published on the row
    * (`StackItemState.takeRefusal`) so every console shows the same one line there and none needs
    * a banner. Written by {@link #recordTakeRefusal}; retired by the row's next successful take,
@@ -2283,6 +2292,8 @@ export class CasparRuntime {
           the core's own default per-client subscription goes there and is left alone.
         */
         oscSubscribe: true,
+        // `CENTRAL-BRIDGE-01` (`C-047`) — the start check's `INFO` reads, before `healthy`.
+        onHandshake: (read) => this.#startCheckRead(name, read),
         resyncDurationMs: RESYNC_MS,
         // TEST-ONLY (B-100): empty in production, so ServerSession defaults hold.
         ...this.#sessionTuning,
@@ -2434,93 +2445,30 @@ export class CasparRuntime {
           // the same socket with OSC back), our full mixer state follows it: see
           // {@link #resendLiveMixerState}.
           void this.#mixerStateOnHealthy(from !== 'degraded');
+          /*
+            🔴 `CENTRAL-BRIDGE-01` (`C-047`) — THE START CHECK. The FIRST connection after this
+            bridge starts is judged from the core's own answer, one `INFO <ch>` per declared channel
+            (`B-292`'s reader), not from an OSC drain: the ledger and the restored stack are checked
+            against what CasparCG says is on its stage. Every later connection keeps the OSC sample
+            (a reconnect adds nothing to the wire). Asynchronous, so it runs after this handler.
+          */
+          const startSample = from !== 'degraded' ? this.#takeStartSample() : null;
+          if (startSample !== null) {
+            process.stderr.write(
+              `[caspar-bridge] start check: ${String(startSample.size)} occupied layer(s) on the ` +
+                `declared channel(s), from the core's own INFO\n`,
+            );
+            this.#reconcileAtHealthy(from, startSample, true);
+            return;
+          }
           // R-021 stage 4 — sampled ONCE, with the producer KIND, and the key set
           // derived from it. `reconcileOnReconnect` only asks "occupied?"; the
           // restore decision additionally asks "ours?" on a declared row.
-          const observedProducers = this.#observedProducers(session);
-          const occupiedKeys = new Set(observedProducers.keys());
-          // B-092 — decide the pending RESTORES here, against this same drained
-          // occupancy sample, and BEFORE `reconcileOnReconnect`. This is the
-          // only point where the answer exists: the tap resets on resync and
-          // refills during the RESYNCING drain, so at the SPA's reconnect (when
-          // the intent arrived) it was empty. Ordering is load-bearing twice
-          // over: `transitionTo` emits this BEFORE `emit('healthy')`, so we run
-          // before that handler clears `#loaded`; and every record mutation
-          // inside is SYNCHRONOUS (only the CG ADD is awaited), so the
-          // `reconcileOnReconnect` on the next line iterates a settled
-          // reconciler — a re-ADDed item already reads `played: false` and is
-          // correctly left alone by it.
-          const heard = session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
-          void this.#decidePendingRestores(observedProducers, heard);
-          // `B-227` — and the LEDGER is reconciled against the SAME sample, inside the same
-          // `heard` gate, immediately below. See `#reconcileLedgerOnReconnect` for why the
-          // two halves belong together and why nobody had joined them.
-          // The SAME blind-tap distinction applies here, and this path had the
-          // bug too: `reconcileOnReconnect` resets a `played` item to IDLE when
-          // its slot is not in `occupiedKeys`, treating silence as proof the
-          // producer is gone (B-053). From a tap that has never heard any OSC
-          // that is not proof of anything — it would report a genuinely LIVE
-          // graphic as idle, on a link that is UP. Skipping is the honest move:
-          // items keep their last known state (B-086's `unverified` demotion
-          // from the drop still stands) rather than being falsely reset, and the
-          // sweep reconciles for real once OSC arrives.
-          if (heard) {
-            // `B-227` — BOTH halves of one event, from the one sample. The ledger first: it
-            // is the structural fact (what the bridge OWNS), and the status reset below is
-            // the derived one (what the operator SEES). Neither sends anything.
-            const dropped = this.#reconcileLedgerOnReconnect(occupiedKeys);
-            /*
-              🔴 `B-225` — THE BEFORE-STATE, SAMPLED HERE BECAUSE IT DOES NOT SURVIVE THE
-              NEXT LINE. Which rows were ON AIR when the server stopped carrying them is the
-              question the notice turns on, and `reconcileOnReconnect` answers a different
-              one — it resets every `played` record whose layer is silent, and `played` is
-              NOT "on air": `out` leaves it TRUE (only `stop` retracts it), so an operator's
-              own CLEAR is inside the reset set and must be excluded HERE.
-            */
-            const wasOnAir = new Set(
-              this.#reconciler
-                .snapshot()
-                .filter((item) => isOnAirStatus(item) && item.status !== 'exiting')
-                .map((item) => item.itemId),
-            );
-            const reset = this.#reconciler.reconcileOnReconnect(occupiedKeys);
-            /*
-              🔴 `B-225` — AND THIS IS WHERE THE ANSWER EXISTS, SO THIS IS WHERE IT IS KEPT.
-
-              `reset` is every row this reconnect took from a played state to `idle` — air
-              this console had put up, which the server is no longer carrying. One publish
-              later it is unrecoverable: the browser retains `idle` as `cleared`, which
-              `item-state.ts` defines as *"KNOWN EMPTY … NOT restorable"* — correct by
-              `B-109` (a deliberately-emptied row must never be resurrected) and fatal to any
-              consumer downstream of it. Everything the notice and the one press need is in
-              hand right here and nowhere afterwards.
-
-              ⚠ It was already being computed and thrown away. Nothing new is measured, no
-              probe is added and nothing extra reaches the wire — `RESTART-NOTICE-01` §B.1's
-              constraint — the return value is simply no longer discarded.
-            */
-            this.#raiseEmptiedAir(
-              reset.filter((item) => wasOnAir.has(item.itemId)),
-              dropped,
-              from !== 'degraded',
-            );
-          } else {
-            // …and while blind, NO on-air claim is verifiable — not just the
-            // restored ones. Skipping the reconcile alone would leave a played
-            // item that is genuinely gone sitting on a confident red ON AIR
-            // (its ack floor), because `setLinkDown(false)` has just cleared the
-            // only demotion that was covering it. The link being UP is exactly
-            // what makes that insidious: a green health pill beside a red claim
-            // nothing can back. Mark every played item unverifiable instead —
-            // the same honest answer B-086 gives when the link drops, for the
-            // same reason: the verification channel is dead.
-            for (const item of this.#reconciler.snapshot()) {
-              if (item.status === 'on-air' || item.status === 'playing') {
-                this.#reconciler.setUnverifiable(item.itemId, true);
-                this.#markDirty(item.itemId);
-              }
-            }
-          }
+          this.#reconcileAtHealthy(
+            from,
+            this.#observedProducers(session),
+            session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+          );
         } else if (from === 'healthy') {
           this.#reconciler.setLinkDown(true);
         }
@@ -2538,6 +2486,139 @@ export class CasparRuntime {
       };
       this.healthChanged.emit(this.health());
     });
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (`C-047`) — **THE START CHECK'S READS, IN THE HANDSHAKE.** On the first
+   * connection after this bridge starts, and on the primary's: one `INFO <ch>` per declared channel
+   * (`B-292`'s reader; 2.5 answers the whole channel), sent on that connection BEFORE it is declared
+   * healthy — so no take can be sent meanwhile, and the picture cannot be overtaken by one (reading it
+   * after `healthy` was measured to reset a row taken during the await). The picture is kept for
+   * {@link #takeStartSample}; a read that fails, or a reply that is not a channel's info, keeps none,
+   * and the healthy transition falls back to the OSC sample. A partial picture never passes for a
+   * whole one.
+   */
+  async #startCheckRead(
+    label: ServerLabel,
+    read: (line: string) => Promise<ParsedAmcpResponse>,
+  ): Promise<void> {
+    if (this.#startChecked || this.#adapter.currentPrimary !== label) return;
+    this.#startChecked = true;
+    const byKey = new Map<string, string>();
+    for (const channel of this.#declaredChannels()) {
+      const response = await read(this.#builder.info(channel));
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      const producers = xml === null ? null : stageProducersOfInfo(xml);
+      if (producers === null) return;
+      for (const [layer, producer] of producers) {
+        byKey.set(adoptionKey({ channel, layer }), producer);
+      }
+    }
+    this.#startSample = byKey;
+  }
+
+  /** The start check's picture, once — `null` when there is none (any later connection). */
+  #takeStartSample(): ReadonlyMap<string, string> | null {
+    const sample = this.#startSample;
+    this.#startSample = null;
+    return sample;
+  }
+
+  /**
+   * THE RECONCILE AT A HEALTHY TRANSITION, from one occupancy sample — the tap's (every reconnect) or
+   * the core's own (`#startCheck`). Moved out of the state-change handler unchanged in its order and
+   * its gates, so the two samples take exactly one path.
+   */
+  #reconcileAtHealthy(
+    from: ServerSessionState,
+    observedProducers: ReadonlyMap<string, string>,
+    heard: boolean,
+  ): void {
+    const occupiedKeys = new Set(observedProducers.keys());
+    // B-092 — decide the pending RESTORES here, against this same drained
+    // occupancy sample, and BEFORE `reconcileOnReconnect`. This is the
+    // only point where the answer exists: the tap resets on resync and
+    // refills during the RESYNCING drain. Every record mutation inside is
+    // SYNCHRONOUS (nothing is sent), so the `reconcileOnReconnect` below
+    // iterates a settled reconciler. `CENTRAL-BRIDGE-01` — the rows it took
+    // off air (restored ON AIR over an empty layer) join this transition's notice.
+    const emptiedByRestore = this.#decidePendingRestores(observedProducers, heard);
+    // `B-227` — and the LEDGER is reconciled against the SAME sample, inside the same
+    // `heard` gate, immediately below. See `#reconcileLedgerOnReconnect` for why the
+    // two halves belong together and why nobody had joined them.
+    // The SAME blind-tap distinction applies here, and this path had the
+    // bug too: `reconcileOnReconnect` resets a `played` item to IDLE when
+    // its slot is not in `occupiedKeys`, treating silence as proof the
+    // producer is gone (B-053). From a tap that has never heard any OSC
+    // that is not proof of anything — it would report a genuinely LIVE
+    // graphic as idle, on a link that is UP. Skipping is the honest move:
+    // items keep their last known state (B-086's `unverified` demotion
+    // from the drop still stands) rather than being falsely reset, and the
+    // sweep reconciles for real once OSC arrives.
+    if (heard) {
+      // `B-227` — BOTH halves of one event, from the one sample. The ledger first: it
+      // is the structural fact (what the bridge OWNS), and the status reset below is
+      // the derived one (what the operator SEES). Neither sends anything.
+      const dropped = this.#reconcileLedgerOnReconnect(occupiedKeys);
+      /*
+              🔴 `B-225` — THE BEFORE-STATE, SAMPLED HERE BECAUSE IT DOES NOT SURVIVE THE
+              NEXT LINE. Which rows were ON AIR when the server stopped carrying them is the
+              question the notice turns on, and `reconcileOnReconnect` answers a different
+              one — it resets every `played` record whose layer is silent, and `played` is
+              NOT "on air": `out` leaves it TRUE (only `stop` retracts it), so an operator's
+              own CLEAR is inside the reset set and must be excluded HERE.
+            */
+      const wasOnAir = new Set(
+        this.#reconciler
+          .snapshot()
+          .filter((item) => isOnAirStatus(item) && item.status !== 'exiting')
+          .map((item) => item.itemId),
+      );
+      const reset = this.#reconciler.reconcileOnReconnect(occupiedKeys);
+      /*
+              🔴 `B-225` — AND THIS IS WHERE THE ANSWER EXISTS, SO THIS IS WHERE IT IS KEPT.
+
+              `reset` is every row this reconnect took from a played state to `idle` — air
+              this console had put up, which the server is no longer carrying. One publish
+              later it is unrecoverable: the browser retains `idle` as `cleared`, which
+              `item-state.ts` defines as *"KNOWN EMPTY … NOT restorable"* — correct by
+              `B-109` (a deliberately-emptied row must never be resurrected) and fatal to any
+              consumer downstream of it. Everything the notice and the one press need is in
+              hand right here and nowhere afterwards.
+
+              ⚠ It was already being computed and thrown away. Nothing new is measured, no
+              probe is added and nothing extra reaches the wire — `RESTART-NOTICE-01` §B.1's
+              constraint — the return value is simply no longer discarded.
+            */
+      // `CENTRAL-BRIDGE-01` — ONE notice for this transition: the restored rows the
+      // decision above found empty, then the live rows this reconcile reset.
+      this.#raiseEmptiedAir(
+        [...emptiedByRestore, ...reset.filter((item) => wasOnAir.has(item.itemId))],
+        dropped,
+        from !== 'degraded',
+      );
+    } else {
+      // …and while blind, NO on-air claim is verifiable — not just the
+      // restored ones. Skipping the reconcile alone would leave a played
+      // item that is genuinely gone sitting on a confident red ON AIR
+      // (its ack floor), because `setLinkDown(false)` has just cleared the
+      // only demotion that was covering it. The link being UP is exactly
+      // what makes that insidious: a green health pill beside a red claim
+      // nothing can back. Mark every played item unverifiable instead —
+      // the same honest answer B-086 gives when the link drops, for the
+      // same reason: the verification channel is dead.
+      for (const item of this.#reconciler.snapshot()) {
+        if (item.status === 'on-air' || item.status === 'playing') {
+          this.#reconciler.setUnverifiable(item.itemId, true);
+          this.#markDirty(item.itemId);
+        }
+      }
+    }
   }
 
   /** Wire the stack and connect the declared sessions. Idempotent. */
@@ -3554,9 +3635,14 @@ export class CasparRuntime {
     // and errored rows restores rows but licenses no wire action, and sampling
     // occupancy for it would be work done to reach a no-op.
     if (this.#pendingRestore.size > 0 && this.#adapter.primarySession.state === 'healthy') {
-      await this.#decidePendingRestores(
-        this.#observedProducers(this.#adapter.primarySession),
-        this.#adapter.primarySession.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+      // `CENTRAL-BRIDGE-01` — a row restored ON AIR over an empty layer is said, as at a reconnect.
+      this.#raiseEmptiedAir(
+        this.#decidePendingRestores(
+          this.#observedProducers(this.#adapter.primarySession),
+          this.#adapter.primarySession.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
+        ),
+        [],
+        false,
       );
     }
     return { restored, skipped, migrated };
@@ -4047,9 +4133,13 @@ export class CasparRuntime {
    *     touch NOTHING. Marking the layer adopted is what guarantees no later
    *     adoption issues the CLEAR that would flash it off air; resumed OSC
    *     re-derives `on-air` by itself from the record's play evidence.
-   *   SILENT → RE-ADD as loaded. The producer is gone (bridge AND CasparCG
-   *     restarted), so a fresh `CG ADD` puts the item back — still with NO
-   *     adopt-CLEAR in front of it.
+   *   SILENT → 🔴 `CENTRAL-BRIDGE-01` (`C-047`): NOTHING IS SENT. The producer is gone
+   *     (the bridge AND the core restarted). It used to be re-ADDed as `loaded`; the owner's
+   *     standing decision for our layers is DETECT AND SAY (`RESTART-NOTICE-01`), and "nothing
+   *     is re-sent by itself" is the start check's rule. A row restored ON AIR leaves ON AIR
+   *     here and is RETURNED, so the restart notice names it and PUT BACK ON AIR is the
+   *     operator's; a row restored `loaded` stays `loaded`, not resident, and its next take
+   *     re-ADDs it (B-039).
    *
    *   TAP NEVER HEARD ANY OSC → REFUSE TO DECIDE. Send nothing at all and
    *     publish the item as `unverified`. See below.
@@ -4069,14 +4159,17 @@ export class CasparRuntime {
    * ONLY from a tap that is actually hearing OSC. Otherwise it is evidence of
    * no evidence, and the honest move is to do nothing and say so.
    *
-   * Record mutations are synchronous; only the ADD is awaited. The caller at
-   * the healthy transition relies on that (see `#wireAdapter`).
+   * SYNCHRONOUS, all of it (nothing is sent). The caller at the healthy transition relies on
+   * that (see `#wireAdapter`): its reconcile reads a settled reconciler.
+   *
+   * Returns the rows restored ON AIR that this decision found EMPTY and took off air
+   * (`markLayersEmptied`) — for the caller's restart notice.
    */
-  async #decidePendingRestores(
+  #decidePendingRestores(
     observedProducers: ReadonlyMap<string, string>,
     tapHasReceivedOsc: boolean,
-  ): Promise<void> {
-    if (this.#pendingRestore.size === 0) return;
+  ): readonly StackItemState[] {
+    if (this.#pendingRestore.size === 0) return [];
 
     // BLIND TAP — refuse to decide. The items stay pending (so the periodic
     // sweep can decide them if OSC starts arriving), nothing is sent, and every
@@ -4098,7 +4191,7 @@ export class CasparRuntime {
 `,
         );
       }
-      return;
+      return [];
     }
 
     const pending = [...this.#pendingRestore];
@@ -4110,13 +4203,10 @@ export class CasparRuntime {
      * iteration would make "was this decided?" depend on map ordering.
      */
     const stillPending = new Map<string, (typeof pending)[number][1]>();
-
-    // The restore pass does not report per-item reasons anywhere (it is a bulk
-    // rebuild with no operator waiting on it), so it takes `#sendAdd`'s result
-    // whole and looks at neither half.
-    const adds: Promise<{ ok: boolean; errorCode?: string }>[] = [];
+    // `CENTRAL-BRIDGE-01` (`C-047`) — the layers of restored rows that turned out EMPTY.
+    const emptiedOnAir = new Set<string>();
     for (const [itemId, entry] of pending) {
-      const { slot, templateId, fields } = entry;
+      const { slot } = entry;
       // A remove landed between the restore and this decision — the item is
       // gone; its slot was already released by remove(). Nothing to do.
       if (this.#reconciler.get(itemId) === null) continue;
@@ -4160,8 +4250,9 @@ export class CasparRuntime {
          * and the row states both facts — the item waiting and what is observed.
          * It stays in `#pendingRestore`, which is what makes the second exit d1
          * names work by itself: when the foreign producer vacates, this same
-         * decision runs from the sweep, sees a silent layer, and re-ADDs through
-         * the ordinary path. No separate un-block mechanism exists to drift.
+         * decision runs from the sweep and sees a silent layer — and since
+         * `CENTRAL-BRIDGE-01` sends nothing there either: the row is free, and the
+         * operator's take seats it. No separate un-block mechanism exists to drift.
          *
          * "Not html" fails safe and video kinds are never enumerated — the same
          * discriminator `clearLayer` and the playout tab use, never a second list.
@@ -4201,8 +4292,8 @@ export class CasparRuntime {
           is the MAP — the bridge's own record, re-applied above — which is what the console reads
           and what `#sendAdd` gives a REBUILT page.
 
-          ⭐ The RE-ADD branch below keeps its carrier and is the opposite case: a rebuilt page
-          starts over by definition, so the ADD payload is the only thing that could tell it.
+          ⭐ A page REBUILT later (the operator's take re-ADDs it) starts over by definition, so
+          `#sendAdd`'s payload is the only thing that could tell it.
           ⚠ What that payload then DOES is `DELTA A3`'s finding, unfixed and filed: `CG ADD … 0
           <data>` reaches the page through `update()`, and the `CG PLAY` that follows resets
           `cyclesLeft` from the authored `repeat`, discarding it.
@@ -4210,23 +4301,25 @@ export class CasparRuntime {
         continue;
       }
 
-      // The layer is silent, so nothing is blocking this row any more — the
-      // marker goes BEFORE the re-ADD, so a publish triggered by it cannot carry
-      // a stale block.
+      // The layer is silent, so nothing is blocking this row any more — the marker goes
+      // first, so a publish triggered below cannot carry a stale block.
       this.#restoreBlocked.delete(itemId);
-      // Silent layer: no producer survived, so the honest state is `loaded`.
-      // Re-creating the record through the ordinary `load` intent is what makes
-      // it honest — it resets play evidence, so the item can no longer claim
-      // air, and `reconcileOnReconnect` (which runs right after us) correctly
-      // leaves it alone. The slot must be re-assigned: a fresh `load` record
-      // carries none.
-      const seq = this.#nextSeq();
-      this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
-      this.#reconciler.assignSlot(itemId, { ...slot, server: 'primary' });
-      adds.push(this.#sendAdd(itemId, slot, templateId, fields, seq));
+      /*
+        🔴 `CENTRAL-BRIDGE-01` (`C-047`) — THE LAYER IS EMPTY, AND NOTHING IS SENT FOR IT. It was
+        re-ADDed here as `loaded`; the owner's standing decision for our layers is detect and say,
+        and the start check's rule is "nothing is re-sent by itself". A row restored ON AIR is
+        collected and taken off air below — the restart notice names it, PUT BACK ON AIR is the
+        operator's. A row restored `loaded` keeps its state and is not resident (`#loaded` does not
+        hold it), so its next take re-ADDs it (B-039) — the same row the operator would see after
+        any core restart.
+      */
+      // `markLayersEmptied` resets only a record with play evidence, so a `loaded` row passes
+      // through it untouched and only a row restored ON AIR comes back in the list.
+      emptiedOnAir.add(adoptionKey(slot));
+      this.#markDirty(itemId);
     }
     for (const [itemId, entry] of stillPending) this.#pendingRestore.set(itemId, entry);
-    await Promise.all(adds);
+    return emptiedOnAir.size === 0 ? [] : this.#reconciler.markLayersEmptied(emptiedOnAir);
   }
 
   /**
@@ -11691,7 +11784,12 @@ export class CasparRuntime {
       this.#pendingRestore.size > 0 &&
       session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)
     ) {
-      void this.#decidePendingRestores(this.#observedProducers(session), true);
+      // `CENTRAL-BRIDGE-01` — a row restored ON AIR over an empty layer is said, as at a reconnect.
+      this.#raiseEmptiedAir(
+        this.#decidePendingRestores(this.#observedProducers(session), true),
+        [],
+        false,
+      );
     }
 
     // `DESKTOP-APPS-01-D` j — a stray whose layer is now empty (or not ours) is dropped.

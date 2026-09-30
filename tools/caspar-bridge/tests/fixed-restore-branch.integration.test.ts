@@ -210,17 +210,21 @@ it('a declared row restores ON ITS OWN LAYER — never re-allocated elsewhere', 
 
   expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
 
-  // The row it was retained on is the row it came back on. Asserted on the WIRE as
-  // well as on the binding: a hearing tap saw layer 72 silent, so the ordinary
-  // deferred decision re-ADDs — and it must be THIS layer's `CG ADD` and no other.
+  // The row it was retained on is the row it came back on. A hearing tap saw layer 72 silent:
+  // `CENTRAL-BRIDGE-01` (`C-047`) — NOTHING is sent for it any more (it used to be re-ADDed); the
+  // row restored ON AIR leaves ON AIR and the restart notice names it.
   expect(itemSlot(r, 'item1')).toEqual({ channel: 1, layer: 72 });
   expect(slotState(r, 72)?.binding?.itemId).toBe('item1');
-  expect(await cgAddTargets()).toEqual(['1-72']);
-  // The re-ADD is never preceded by an adopt-CLEAR (B-092's rule, and it holds on
-  // a declared row exactly as it does on a dynamic one).
+  expect(r.emptiedAir()?.rows.map((row) => row.itemId)).toEqual(['item1']);
+  expect(await cgAddTargets()).toEqual([]);
   expect(await clearLines()).toEqual([]);
   // …and no OTHER declared row was bound in passing.
   for (const layer of [70, 71, 73]) expect(slotState(r, layer)?.binding).toBeNull();
+  // The operator's take puts it back — on THIS layer's `CG ADD` and no other, with no adopt-CLEAR
+  // in front of it (B-092's rule holds on a declared row exactly as on a dynamic one).
+  expect((await r.take('item1')).accepted).toBe(true);
+  expect(await cgAddTargets()).toEqual(['1-72']);
+  expect(await clearLines()).toEqual([]);
 }, 40_000);
 
 // ── §d test 2 ────────────────────────────────────────────────────────────────
@@ -370,7 +374,7 @@ it('a declared row already bound by another restored item is SKIPPED, never re-h
 }, 40_000);
 
 // ── §d test 8 — the `restore-blocked` lifecycle ──────────────────────────────
-it('restore-blocked EXITS when the foreign producer vacates — the deferred re-ADD proceeds', async () => {
+it('restore-blocked EXITS when the foreign producer vacates — nothing is sent, and the take seats the row', async () => {
   const r = await boot();
   await stageProducer(r, 72, 'decklink');
   expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
@@ -380,22 +384,26 @@ it('restore-blocked EXITS when the foreign producer vacates — the deferred re-
   // sweep simply observes the layer as empty.
   mock?.emitOsc('/channel/1/stage/layer/72/foreground/producer', ['empty']);
 
-  // The ORDINARY deferred decision then proceeds — silent layer, so a re-ADD, on
-  // the SAME layer. There is deliberately no separate un-block mechanism that
-  // could drift from it: the item stayed in `#pendingRestore` the whole time.
-  await waitFor(
-    async () => (await cgAddTargets()).includes('1-72'),
-    'the deferred re-ADD lands on 1-72',
-    12_000,
-  );
+  // The ORDINARY deferred decision then proceeds on the silent layer — there is deliberately no
+  // separate un-block mechanism that could drift from it: the item stayed in `#pendingRestore` the
+  // whole time. `CENTRAL-BRIDGE-01` (`C-047`): it used to re-ADD there; now it sends NOTHING, the
+  // block is withdrawn and the row, restored ON AIR over an empty layer, is named by the notice.
   await waitFor(
     () => slotState(r, 72)?.binding?.restoreBlocked === undefined,
     'the block is withdrawn',
   );
-  // It exited WITHOUT an auto-clear and WITHOUT being re-homed — the two exits d1
-  // forbids.
+  await delay(600); // several sweep ticks: every chance for a send to fire
+  // It exited WITHOUT an auto-clear, WITHOUT a re-ADD and WITHOUT being re-homed.
   expect(await clearLines()).toEqual([]);
+  expect(await cgAddTargets()).toEqual([]);
   expect(itemSlot(r, 'item1')).toEqual({ channel: 1, layer: 72 });
+  // …and the operator's take seats it on its own layer.
+  expect((await r.take('item1')).accepted).toBe(true);
+  await waitFor(
+    async () => (await cgAddTargets()).includes('1-72'),
+    'the take re-ADDs onto the declared row',
+    12_000,
+  );
 }, 40_000);
 
 it('restore-blocked EXITS on the operator’s own Clear, then take — and never re-blocks', async () => {

@@ -210,7 +210,7 @@ it('a BRIDGE-ONLY restart: the restored item keeps ON AIR and its live layer is 
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
 }, 40_000);
 
-it('a BRIDGE + CASPARCG restart: the restored item returns as LOADED on the empty layer', async () => {
+it('🔴 a BRIDGE + CASPARCG restart: the restored item leaves ON AIR with the restart notice, and NOTHING is sent (C-047)', async () => {
   tracePath = path.join(
     os.tmpdir(),
     `cg-b088-both-restart-${String(process.pid)}-${String(Date.now())}.ndjson`,
@@ -241,25 +241,27 @@ it('a BRIDGE + CASPARCG restart: the restored item returns as LOADED on the empt
   r2.start();
   await r2.whenServerHealthy(HEALTH_MS);
 
-  // The layer is silent → the producer is gone → the item is re-ADDed and rests
-  // at LOADED. It must NOT resurrect an ON AIR claim nothing backs.
-  // The re-ADD is issued off the healthy transition, so wait for the wire, not
-  // just the badge: `loaded` is reachable from the intent alone, and asserting
-  // the layer before the ADD lands would pass for the wrong reason.
-  await expect(mock.waitForCgAddResolution(SLOT, 10_000)).resolves.toBe('resolved');
-  await waitFor(() => status(r2, 'item1') === 'loaded', 8000, 'restored item rests at LOADED');
-  expect(status(r2, 'item1')).toBe('loaded');
-  expect(mock.layerState(SLOT)?.producer).toBe('html'); // re-added…
-  expect(mock.layerState(SLOT)?.onAir).toBe(false); // …but NOT playing
+  // The layer is silent → the producer is gone. It used to be re-ADDed and rest at LOADED;
+  // `CENTRAL-BRIDGE-01` (`C-047`) — detect and say: the row leaves ON AIR, the restart notice
+  // names it (PUT BACK ON AIR is the operator's), and NOTHING is sent for it. It must still NOT
+  // resurrect an ON AIR claim nothing backs.
+  await waitFor(() => r2.emptiedAir() !== null, 8000, 'the restart notice');
+  expect(r2.emptiedAir()?.rows.map((row) => row.itemId)).toEqual(['item1']);
+  expect(status(r2, 'item1')).not.toBe('on-air');
+  expect(status(r2, 'item1')).not.toBe('playing');
+  await delay(500); // every chance for a stray send to land
+  expect(mock.layerState(SLOT)).toBeUndefined(); // nothing was put on the layer
 
-  // The re-ADD carried the retained fields — the operator's data survived too.
-  expect(mock.lastCgAdd(SLOT)?.data).toContain('سلام');
-
-  // Even here, where a CLEAR would have been harmless, the restore issues none:
-  // no restore branch clears, so a mis-read of "silent" can never destroy a producer.
+  // No restore branch sends anything: not a re-ADD, and not a CLEAR — a mis-read of "silent"
+  // can never destroy a producer.
   const lines = (await recvLines(mock, tracePath)).slice(beforeRestore);
-  expect(lines.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(true);
+  expect(lines.some((l) => l.startsWith('CG 1-10 ADD'))).toBe(false);
   expect(lines.some((l) => l.startsWith('CLEAR 1-10'))).toBe(false);
+
+  // …and the retained fields survived: the operator's take puts the graphic back with them.
+  expect((await r2.take('item1')).accepted).toBe(true);
+  await expect(mock.waitForCgAddResolution(SLOT, 10_000)).resolves.toBe('resolved');
+  expect(mock.lastCgAdd(SLOT)?.data).toContain('سلام');
 }, 40_000);
 
 it('INVARIANT: a layer the occupancy tap reports OCCUPIED has its adopt-CLEAR suppressed (late restore, warm tap)', async () => {

@@ -377,3 +377,59 @@ describe('B-225 §3 — the one press, its refusals and its inverses', () => {
     expect(r.emptiedAir(), 'the last row left, so the notice is gone').toBeNull();
   }, 40_000);
 });
+
+// ─────────────── §4 — THE CORE RESTARTS UNDER A RUNNING BRIDGE (C-047) ───────────────
+
+describe('CENTRAL-BRIDGE-01 (C-047, rule 3) — a core restart: reconnect, re-subscribe, say it, send nothing', () => {
+  it('🔴 every layer and every connection dropped: the bridge reconnects, subscribes again, raises the notice — and nothing reaches a layer until PUT BACK ON AIR', async () => {
+    /*
+      The Playout's rule 3, as the owner decided it: a core restart clears every layer, and our
+      answer is to reconnect, ask for OSC again (the subscription died with its connection), and
+      SAY what went — never to put it back by ourselves. `restartCore()` is the mock's in-place
+      restart (same process, same ports, every layer and every connection gone), which is what the
+      Playout's watchdog does to CasparCG; §1 stops and recreates the mock, this one does not, so
+      the trace and the port are continuous across the restart.
+    */
+    const r = await boot();
+    await onAir(r, 'item-1');
+    await onAir(r, 'item-2', 'strap');
+    const subscribe = `OSC SUBSCRIBE ${String(oscPort)}`;
+    const subscribesBefore = (await recvLines()).filter((l) => l === subscribe).length;
+    expect(subscribesBefore, 'the first connection subscribed').toBe(1);
+    const before = (await recvLines()).length;
+
+    if (mock === null) throw new Error('no mock');
+    await mock.restartCore({ downMs: 300 });
+    await waitFor(() => r.health().primary.state === 'healthy', 15_000, 'the reconnect');
+    await waitFor(() => r.emptiedAir() !== null, 10_000, 'the notice to be raised');
+
+    // Reconnected, and subscribed AGAIN on the new connection — same port, never 6250.
+    const sinceRestart = await since(before);
+    expect(sinceRestart.filter((l) => l === subscribe)).toEqual([subscribe]);
+    expect(sinceRestart.some((l) => l.startsWith('OSC SUBSCRIBE 6250'))).toBe(false);
+    // The notice names both rows, and says the connection was a new one.
+    expect(noticeIds(r)).toEqual(['item-1', 'item-2']);
+    expect(r.emptiedAir()?.newConnection).toBe(true);
+
+    // 🔴 Nothing re-sent by itself — watched over several sweeps, not sampled once.
+    await delay(600);
+    const unpressed = await since(before);
+    expect(unpressed.filter((l) => /^(CG|PLAY|LOAD|CLEAR) 1-1[01]\b/.test(l))).toEqual([]);
+    expect(mock.layerState({ channel: 1, layer: 10 })?.onStage ?? false).toBe(false);
+
+    // PUT BACK ON AIR, for one row: that row, through the ordinary take — CG ADD, then PLAY…
+    const pressed = (await recvLines()).length;
+    expect(await r.restoreEmptiedAir(['item-1'])).toEqual({
+      restored: 1,
+      results: [{ itemId: 'item-1', ok: true }],
+    });
+    const sent = await since(pressed);
+    const add = sent.findIndex((l) => l.startsWith('CG 1-10 ADD'));
+    expect(add).toBeGreaterThanOrEqual(0);
+    expect(sent.findIndex((l) => l.startsWith('CG 1-10 PLAY'))).toBeGreaterThan(add);
+    expect(statusOf(r, 'item-1')).toBe('on-air');
+    // …CONTROL: the row not pressed stays listed, and nothing reached its layer.
+    expect(noticeIds(r)).toEqual(['item-2']);
+    expect(sent.some((l) => l.includes(' 1-11'))).toBe(false);
+  }, 40_000);
+});

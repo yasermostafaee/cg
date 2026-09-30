@@ -241,15 +241,20 @@ it('a retained coordinate on a FOREIGN channel reaches the wire not at all', asy
 }, 40_000);
 
 // ── 2 — THE POSITIVE CONTROL ─────────────────────────────────────────────────
-it('the same restore on the bank’s OWN channel comes back and re-ADDs — the control', async () => {
+it('the same restore on the bank’s OWN channel comes back, and its take ADDs on that channel — the control', async () => {
   const r = await boot();
 
   expect(await r.restore(retainedOn(2, 72))).toEqual({ restored: 1, skipped: [], migrated: [] });
+  // `CENTRAL-BRIDGE-01` (`C-047`) — its layer is empty, so the restore itself sends nothing (it used
+  // to re-ADD): the row leaves ON AIR and the notice names it…
+  await waitFor(async () => Promise.resolve(r.emptiedAir() !== null), 'the restart notice');
+  expect(await cgAddTargets()).toEqual([]);
 
-  await waitFor(async () => (await cgAddTargets()).length > 0, 'the re-ADD to reach the wire');
-
-  // The instrument is live: this harness DOES capture a `CG ADD`, on the declared
-  // channel, which is what makes test 1's empty list a measurement rather than a silence.
+  // …and the operator's take puts it back. The instrument is live: this harness DOES capture a
+  // `CG ADD`, on the declared channel, which is what makes test 1's empty list a measurement rather
+  // than a silence.
+  expect((await r.take('item1')).accepted).toBe(true);
+  await waitFor(async () => (await cgAddTargets()).length > 0, 'the take’s ADD to reach the wire');
   expect(await cgAddTargets()).toEqual(['2-72']);
   expect(await linesAddressingChannel(1)).toEqual([]);
 }, 40_000);

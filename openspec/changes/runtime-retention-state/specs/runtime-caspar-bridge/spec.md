@@ -4,12 +4,15 @@
 
 ### Requirement: The browser retains stack intent and restores it on reconnect
 
-Stack items MUST survive a restart of the bridge process. The stack SHALL NOT live only in the
-bridge's memory: the browser SHALL retain the operator's stack INTENT — for each item its id,
-template id, current field values, **the STATE the row was actually in**, any error code that state
-carries, the slot it occupied, and any position override, in stack order — in a **persistent,
-browser-local** store (the same file-backed ownership model [[B-085]] gave the template library), so
-the intent survives both the bridge's death and a page reload.
+Stack items MUST survive a restart of the bridge process, and the stack SHALL NOT live only in the
+bridge's memory. ⚠ **Amended 2026-09-30 by `CENTRAL-BRIDGE-01` (`B-294`, change `central-bridge`):
+the BRIDGE keeps the stack — its own persisted file, restored at its start — and the browser SHALL
+NOT re-deliver a stack, a restore or a template on any connect.** With one bridge per Playout serving
+several consoles, a re-delivery (local-wins) let an older browser copy overwrite newer state. The
+browser MAY keep a DISPLAY copy (the next requirement), and SHALL never send it. What follows, the
+retained record's STATE rules, now governs the bridge's own file: for each item its id, template
+id, current field values, **the STATE the row was actually in**, any error code that state carries,
+the slot it occupied, and any position override, in stack order.
 
 The retained STATE SHALL be a closed set that answers exactly one question — may this row's producer
 be re-seated? — and SHALL distinguish at minimum:
@@ -25,45 +28,32 @@ SHALL be DERIVED from the retained state rather than stored beside it, so the tw
 The mapping from a reconciled status to a retained state SHALL exist in exactly ONE place, shared by
 every consumer; a second copy SHALL NOT be derived locally.
 
-On EVERY (re)connect the browser SHALL reconcile the bridge to that retained intent **before** it
-re-pulls the stack snapshot, and it SHALL re-deliver the retained templates first so each restored
-item resolves against a populated template registry. Because the restore precedes the re-pull, the
-snapshot the SPA adopts is the RESTORED stack — never the empty one a freshly booted bridge would
-otherwise report. A restore that fails SHALL leave the retained intent intact for the next connect
-and SHALL NOT be allowed to blank the retained stack.
+The bridge SHALL restore its own file at start, before its control socket accepts a console, so no
+console ever sees the bridge without its stack. An item whose template is not registered, or for
+which no layer can be obtained, SHALL be skipped rather than failing the whole restore, and an
+unusable file SHALL be said and the bridge started empty, the file kept.
 
-Conflict policy is local-wins, with one exception: an item the connected bridge ALREADY holds SHALL
-NOT be clobbered by the retained copy (a page reload against a healthy bridge changes nothing). An
-item whose template is not registered, or for which no layer can be obtained, SHALL be skipped
-rather than failing the whole restore.
-
-The restored rows SHALL appear as soon as the intent is delivered, without waiting for CasparCG:
-restoring an item SHALL seed the bridge's stack state and publish it immediately, and SHALL send
-NOTHING to CasparCG at that moment. A restored item SHALL be seeded at the state it was retained in
-— a failed row comes back FAILED, a cleared row comes back cleared — and a restore SHALL NEVER
-seed a state better than the one that was retained.
+The restored rows SHALL appear at once, without waiting for CasparCG: restoring an item SHALL seed the
+bridge's stack state and SHALL send NOTHING to CasparCG at that moment. A restored item SHALL be
+seeded at the state it was retained in — a failed row comes back FAILED, a cleared row comes back
+cleared — and a restore SHALL NEVER seed a state better than the one that was retained.
 
 #### Scenario: The stack survives a bridge restart
 
 - **WHEN** the bridge process is killed and restarted while the operator has items on the stack
-- **THEN** the items are still on the stack after the SPA reconnects — the list is NOT emptied
+- **THEN** the items are on the stack of the restarted bridge, from its own file — the list is NOT
+  emptied, and no console had to deliver anything
 
-#### Scenario: The retained intent is delivered before the snapshot is re-pulled
+#### Scenario: A console re-delivers nothing
 
-- **WHEN** the SPA reconnects to a freshly booted, empty bridge
-- **THEN** it re-delivers the retained templates and then the retained stack intent, and the stack
-  snapshot it subsequently adopts contains the restored items rather than an empty list
+- **WHEN** a console connects to a bridge — freshly booted or long running — holding a display copy
+  of an older stack
+- **THEN** it sends no stack restore and no template re-delivery, and the bridge's stack is unchanged
 
-#### Scenario: A live bridge's own stack is never clobbered
+#### Scenario: An unusable file is said, and nothing is deleted
 
-- **WHEN** the SPA connects (e.g. after a page reload) to a bridge that still holds those items
-- **THEN** the bridge keeps its own item state and the retained copy is skipped
-
-#### Scenario: A failed restore does not destroy the retention
-
-- **WHEN** the restore of a retained item is rejected by the bridge
-- **THEN** the retained stack intent is preserved for the next connect, and the SPA does not adopt
-  an empty stack in its place
+- **WHEN** the bridge starts and its stack file is not a stack
+- **THEN** it says so and starts with an empty stack, and the file is left as it was
 
 #### Scenario: A deliberate CLEAR and a bridge death are distinguishable in the retention
 
@@ -177,13 +167,15 @@ real CasparCG goes silent for a cleared layer rather than reporting `empty`):
   adopted so no later adoption can clear it, and sends NOTHING. The resumed OSC re-derives the
   item's real air state on its own — a still-playing graphic reads ON AIR again and is never
   interrupted.
-- **Silent layer** → the producer is gone, so the bridge SHALL re-ADD the item as `loaded` with the
-  ordinary `CG ADD` (carrying its retained fields and position) and SHALL NOT precede it with an
-  adopt-CLEAR.
+- **Silent layer** → the producer is gone. ⚠ **Amended 2026-09-30 by `CENTRAL-BRIDGE-01` (`C-047`,
+  change `central-bridge`): the bridge SHALL send NOTHING for it** (it used to re-ADD it as `loaded`)
+  — the owner's standing decision for our layers is detect and say. An item restored ON AIR SHALL
+  leave ON AIR and be named by the restart notice (PUT BACK ON AIR is the operator's); an item
+  restored `loaded` SHALL stay `loaded`, not resident, so its next take re-ADDs it.
 
-No restore path SHALL emit a layer CLEAR, and no restore path SHALL emit a channel-level CLEAR. The
-adopt-CLEAR of the ORDINARY load path is unchanged — only the restore path adopts without clearing,
-and only for a layer OBSERVED occupied.
+No restore path SHALL emit a layer CLEAR, a `CG ADD`, or a channel-level CLEAR. The adopt-CLEAR of the
+ORDINARY load path is unchanged — only the restore path adopts without clearing, and only for a layer
+OBSERVED occupied.
 
 **A restore SHALL report what it did NOT restore, per item and with a reason**, and the caller SHALL
 NOT be able to discard that report by accident: a bare count is not sufficient, because the operator
@@ -197,13 +189,13 @@ looking at has genuinely disappeared.
 - **WHEN** the retained item is restored and its layer is observed occupied
 - **THEN** NO CLEAR is issued for that layer and the item reads ON AIR again from resumed OSC
 
-#### Scenario: A bridge + CasparCG restart returns the items as loaded
+#### Scenario: A bridge + CasparCG restart takes the items off air, with the notice, sending nothing
 
 - **GIVEN** an item was ON AIR and BOTH the bridge and CasparCG are restarted, so the layers are
   empty
 - **WHEN** the retained item is restored and its layer is observed silent
-- **THEN** the item is re-ADDed onto the empty layer and rests at `loaded` — not a resurrected
-  ON AIR claim
+- **THEN** nothing is sent for it (amended 2026-09-30, `CENTRAL-BRIDGE-01`): it leaves ON AIR and the
+  restart notice names it — not a resurrected ON AIR claim, and not a re-ADD
 
 #### Scenario: A deliberately cleared graphic is NOT put back on its layer
 

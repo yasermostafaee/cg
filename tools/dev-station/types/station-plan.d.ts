@@ -33,6 +33,7 @@ declare module '*station-plan.mjs' {
     readonly playoutInputs: string;
     readonly boundMedia: string;
     readonly liveLayers: string;
+    readonly stack: string;
     readonly audit: string;
     readonly playoutConfig: string;
     readonly consoleDir: string;

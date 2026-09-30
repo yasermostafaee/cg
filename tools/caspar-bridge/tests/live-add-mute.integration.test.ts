@@ -134,16 +134,6 @@ async function mutePair(layer: number): Promise<{ mute: number; add: number }> {
   return { mute, add };
 }
 
-async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs = 8000): Promise<void> {
-  const start = Date.now();
-  // The predicate may be async: a sync-only signature silently passes on the
-  // first tick, because a returned Promise is truthy.
-  while (!(await cond())) {
-    if (Date.now() - start > timeoutMs) throw new Error('waitFor timed out');
-    await new Promise((r) => setTimeout(r, 25));
-  }
-}
-
 it('SITE 1 — the dynamic load()’s ADD is preceded by its mute on the wire', async () => {
   const r = await boot();
 
@@ -171,10 +161,12 @@ it('SITE 1b — loadFixed emits NOTHING at all, so it needs no mute and no guard
   expect((await recvLines()).slice(before)).toEqual([]);
 });
 
-it('🔴 SITE 2 — B-121: the reconnect reconciliation’s re-ADD is muted FIRST', async () => {
-  // The one path nobody triggers on purpose: it runs by itself after a reconnect,
-  // which is what made it the uncovered site. Driven through `restore()`, the real
-  // entry point, rather than by calling the private decider.
+it('🔴 SITE 2 — B-121 → CENTRAL-BRIDGE-01: the restore’s re-ADD is GONE — a restore emits NOTHING, so it needs no mute', async () => {
+  // It was the one path nobody triggers on purpose — it ran by itself after a reconnect — and it
+  // re-ADDed a restored row over an empty layer, muted first. `CENTRAL-BRIDGE-01` (`C-047`) removed
+  // that send: detect and say, nothing re-sent by itself. The stronger form, as SITE 1b's: a path
+  // that cannot emit beats a guard that has to be remembered. Driven through `restore()`, the real
+  // entry point, over the same empty layer that used to be re-ADDed.
   const r = await boot();
   const retained: RetainedStackItem[] = [
     {
@@ -182,19 +174,17 @@ it('🔴 SITE 2 — B-121: the reconnect reconciliation’s re-ADD is muted FIRS
       templateId: 'lower-third',
       fields: {},
       state: 'loaded',
-      // The layer this test then measures the mute/ADD order on — a retained coordinate
-      // is honoured exactly now, so it has to be the one `SLOT` names.
       slot: { ...SLOT, server: 'primary' as const },
     },
   ];
+  const before = (await recvLines()).length;
 
-  void r.restore(retained);
-  // The restore decides adopt-vs-re-ADD only once occupancy is knowable; the layer
-  // is empty here, so it re-ADDs.
-  await waitFor(async () => (await recvLines()).some((l) => l.startsWith('CG 1-')));
+  await r.restore(retained);
+  await new Promise((resolve) => setTimeout(resolve, 600)); // several sweep ticks
 
-  const { mute, add } = await mutePair(SLOT.layer);
-  expect(mute).toBeLessThan(add);
+  expect((await recvLines()).slice(before)).toEqual([]);
+  // …and the row came back LOADED; its take is the one that ADDs — muted first (SITE 4).
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item1')?.status).toBe('loaded');
 });
 
 it('SITE 3 — setPosition’s re-ADD is muted first, and is still NOT rehearse-guarded', async () => {

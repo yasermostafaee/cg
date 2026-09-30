@@ -423,8 +423,10 @@ describe('the station, read from the core', () => {
     expect(plays).toContainEqual(
       expect.stringMatching(/^PLAY 1-(6\d|7\d) "D:\/CasparCG Server\/Server\/media\/AMB"/),
     );
-    // Nothing reached channel 2, and the guard held on every line the core received.
-    expect(lines.filter((l) => /^[A-Z][A-Z ]*? 2(-\d+)?(\s|$)/.test(l))).toEqual([]);
+    // Nothing but a READ reached channel 2 — `CENTRAL-BRIDGE-01`'s start check reads each declared
+    // channel with `INFO <ch>` — and the guard held on every line the core received.
+    expect(lines.filter((l) => /^(?!INFO )[A-Z][A-Z ]*? 2(-\d+)?(\s|$)/.test(l))).toEqual([]);
+    expect(lines.filter((l) => /^INFO 2$/.test(l)).length).toBeLessThanOrEqual(1);
     expect(guardBreaches(lines)).toEqual([]);
   });
 
