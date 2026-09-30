@@ -12559,7 +12559,7 @@ made permanent, each case beside its declared-channel control.
 2 reaches the wire", on a station declaring channel 1 — and is inverted here; see [[B-257]]'s note.
 Cross-refs [[B-257]], [[C-038]], [[C-039]], [[R-062]].
 
-## [ ] B-262 — The control socket accepts any Origin: a page in any browser on the CG Control machine can reach it ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01`
+## [~] B-262 — The control socket accepts any Origin: a page in any browser on the CG Control machine can reach it ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` · → closed by `CENTRAL-BRIDGE-01` (v3) §B, `openspec/changes/central-bridge/`
 
 **Observed:** `new WebSocketServer({ host, port })` in `bridge.ts` has no `verifyClient`; the
 connection handler never reads the upgrade's `Origin`. With auth ON a page still needs a token to
@@ -12567,6 +12567,13 @@ do anything; with auth OFF — every dev bridge, and an installed station until 
 any page open in any browser on that machine can drive the station through `ws://127.0.0.1:5280`.
 **Expected:** only the console's own origins connect. Filed, not fixed: "no new safety mechanism"
 (`DESKTOP-APPS-01`).
+**→ `CENTRAL-BRIDGE-01` (v3):** CG Bridge listens on the network, so an origin check could only be a
+second guess about who is calling. It is closed on the one fact the bridge can check: **CG Bridge never
+runs with auth OFF** — its service configuration always names a Playout — and every connection must
+present a Playout token the bridge verifies (signature, issuer, audience, expiry, D9) before it gets any
+state or any command. Identity and channels come from that token only; nothing a console says about
+itself is trusted (the actor field was already ignored, `actor-context.ts`). An expired or revoked token is
+refused the same way. The `Origin` header is not read.
 
 ## [x] B-264 — A bridge timeout showed the operator an internal request name: `Bridge request timed out: setup.check` ⟨priority: medium⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-C` C2
 
@@ -12949,3 +12956,37 @@ the bridge's only line, nothing re-sent. Preparing that run found the operator's
 clear `CG PLAY`ing the emptied layer (the bridge still recorded the producer as resident); fixed — the
 foreign clear now forgets it, as the operator's own clear does — and the four live re-takes went back on
 air with `CG ADD`. Test: the re-take case in `media-plates.integration.test.ts` (red first).
+
+## [~] B-293 — A template's URL did not always change with its version, and its page carried no cache header ⟨priority: high — CasparCG's CEF keeps pages on disk⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0, rule 12 · `openspec/changes/central-bridge/`
+
+**Found (§0, asked to confirm):** the Playout team's rule 12 says CEF caches template pages on disk, so a
+template's URL must change with its version and carry cache headers. The prompt expected
+`/template/<id>~<version>` to do it; it does only half the time. `TemplateRegistry.#freeServeKey` served a
+version at the BARE template id whenever that key was free, and qualified it (`<id>~<versionId>`) only while
+another version held the bare id — so after a version was collected a later version of the same template
+could be served at the same URL as an older one. The `200` carried `content-type` alone: no
+`Cache-Control`, no `ETag` (`template-http-server.ts`). **Fix:** every new version is served at its
+qualified key, `<templateId>~<versionId>`, for life (a record written before carries its stored key, which
+no later version is ever given), and the page is sent `Cache-Control: no-store`. ⚠ **This changes the URL a
+take sends in `CG ADD`** — the path segment gains `~<versionId>`; nothing else in a take's wire moves.
+
+## [~] B-294 — Every console re-delivered its own copy of the stack and the template library on connect, and a stale copy could win ⟨priority: high — with two consoles on one bridge⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.2 · `openspec/changes/central-bridge/`
+
+**Found (§0.2):** the console kept two stores of shared truth in its own OPFS — the template library
+(`library/*.json`) and the retained stack (`stack/retained.json`) — and re-delivered both on every connect
+(`WebSocketRuntime.#resync`), because the bridge held the stack only in memory. With one bridge and one
+console that was the restart story ([[B-092]]); with several consoles on one bridge it is a fight: a
+re-delivery naming a channel REPLACED a different version the bridge held (local-wins), and removal
+tombstones lived only as long as the bridge process, so after a bridge restart any console's old copy
+brought a removed template back. **Fix:** CG Bridge persists the stack itself and restores it at start from
+its own file; a console re-delivers nothing — the bridge is the one store, the console a view of it.
+
+## [~] B-295 — A failed OSC bind stopped the server's session before AMCP was ever dialled, and said nothing ⟨priority: high — on the Playout machine UDP 6250 is the engine's⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.1 · `openspec/changes/central-bridge/`
+
+**Found (§0.1):** `ServerSession.loop()` bound the OSC socket first and, on failure, emitted `error` and
+RETURNED — so a bridge whose OSC port was taken never dialled AMCP at all, and the only listener on that
+event was a no-op, so nothing reached the log. On the Playout machine the engine holds UDP
+`127.0.0.1:6250`; a bridge there would have sat silent and disconnected forever. **Fix:** a failed OSC bind
+is logged and the session dials AMCP anyway — OSC silence is a confirmation fact, never a reason to leave
+the command axis down (golden rule 8, [[B-101]]); the bind is retried on each reconnect cycle. With
+[[C-046]] the bridge never asks for 6250 at all.

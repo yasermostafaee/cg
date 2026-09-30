@@ -3751,3 +3751,36 @@ the assets downloaded back from the draft (`sumsProblems` — the `0.9.0` job's 
 the line). The `0.9.1` guide adds the one-CG-Control-per-channel limit and Help → About. [[P-031]]'s floor
 is left open — `CENTRAL-BRIDGE-01` sets it at `0.10.0` (the owner, 2026-09-30). The draft itself is read
 back in the change's `tasks.md` (5.4).
+
+## [~] P-061 — Release `0.10.0`: three installers — CG Bridge, CG Control, CG Designer ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §E · `openspec/changes/central-bridge/` · `0.9.1` is never delivered
+
+**What.** One version, `0.10.0`, for CG Bridge, CG Control and CG Designer, through `tools/release`, now
+covering three apps. A `v0.10.0` tag builds all three installers, runs the clean-Windows smoke, and opens a
+DRAFT pre-release holding the three installers, `SHA256SUMS.txt` (names matching the assets, checked
+against them) and the updated Persian install guide (PDF). [[P-031]]'s floor moves to `0.10.0` — the first
+release a client holds. The guide gains the install order (CG Bridge on the Playout machine by the
+Playout's admin; CG Control on each operator's PC; CG Designer), the two places CG Bridge can go (on the
+Playout machine; on a separate server, with what that changes), and what to do for each line the console
+can show; the "one CG Control per channel" limit is removed ([[R-068]]). **The clean-Windows smoke**
+installs CG Bridge and checks the service (automatic start, recovery, no dependency), `/health` under 1 s,
+our firewall rules and that nothing binds UDP `127.0.0.1:6250`, and a silent install, upgrade and uninstall
+with their exit codes; then installs CG Control and checks it connects to that bridge — control: a
+console with no valid token gets no state.
+
+**Why.** The owner's decision of 2026-09-29: one bridge per Playout, before the client delivery
+([[R-067]], [[R-068]]).
+
+**Acceptance:** WHEN the parts are built THEN all three carry `0.10.0`; WHEN `v0.10.0` is pushed THEN a
+draft pre-release holds exactly the three installers, `SHA256SUMS.txt` and the guide, every sums line
+naming one of them with its hash; WHEN the smoke runs THEN each check above passes, and its controls fail
+where they should.
+
+## [ ] P-062 — TLS for the console ↔ CG Bridge connection ⟨priority: low⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §B · filed only
+
+**What.** CG Bridge's console connection (TCP `5280`) is plain WebSocket over HTTP, the transport the
+Playout's own API offers on `8080` — which every console already uses for its D1 sign-in, so the same token
+already crosses the station's network in clear. A TLS listener (as the Playout's `8443`) needs a
+certificate the client does not have and a trust decision in each console. **Why.** Recorded when
+`CENTRAL-BRIDGE-01` chose the transport. **Acceptance (sketch):** WHEN a station enables TLS on CG Bridge
+THEN every console connects over `wss://`, a console that does not trust the bridge's certificate refuses
+with one line, and the Playout's own choice (HTTP or HTTPS) is not constrained.

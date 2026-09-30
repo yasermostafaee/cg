@@ -4022,15 +4022,22 @@ contradicting. — Depends on [[C-037]] and [[C-038]]. Cross-refs [[R-062]], [[C
   control on the same regex for `R-065` which returned `runtime.md:3830`. The registry's dated
   pointer independently reads `R-066`.
 
-## [ ] R-067 — The bridge as a Windows service that survives CG Control closing ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4
+## [~] R-067 — The bridge as a Windows service that survives CG Control closing ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3) as **CG Bridge**, `openspec/changes/central-bridge/`
 
 **What.** Run CG Control's bridge as a service, so closing the window or logging off does not stop
 control. **Why.** Today closing CG Control stops the bridge: air keeps playing (CasparCG holds it)
 and the next launch re-adopts from the ledger ([[B-225]]), but nothing can be taken or cleared
 until the app is open again. **Acceptance:** WHEN CG Control's window closes THEN the bridge keeps
 running AND the next window attaches to it rather than starting a second one.
+**→ Built by `CENTRAL-BRIDGE-01` (v3, 2026-09-30), under the Playout team's rules
+(`docs/integration/playout/PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md`).** The bridge becomes **CG Bridge**,
+its own per-machine installer and a Windows service on the Playout machine (or a server beside it):
+automatic start, restart on failure, no service dependency on `ApasaiEngine`, state and logs under
+`%ProgramData%\CG Bridge\`, configured by command line and by file, a fixed `/health` the Playout's own
+page reads. CG Control no longer starts a bridge ([[R-068]]). The service's acceptance is the change's
+spec (`desktop-delivery`, `runtime-caspar-bridge`).
 
-## [ ] R-068 — One CG Control per channel ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4
+## [~] R-068 — One CG Control per channel ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3): one bridge per Playout, every CG Control a console of it, `openspec/changes/central-bridge/`
 
 **What.** Two CG Control installs driving the same channel run two bridges with two live-layer
 ledgers, and neither knows of the other. **Why.** Recorded, not solved: the install-time rule
@@ -4045,6 +4052,20 @@ over the network (authentication, [[B-262]]); two operators on one channel (the 
 Playout. Until then the `0.9.1` install guide states the limit: one channel is driven from one CG
 Control at a time. `RELEASE-091-01` (DELTA B) fixes the part that holds whoever clears our layer
 ([[B-292]]); what the owner saw station B show at its start is recorded as UNCONFIRMED until he says.
+**The built shape (`CENTRAL-BRIDGE-01` v3, 2026-09-30).** CG Control is the console only: no sidecar,
+no Node. It finds CG Bridge on the Playout host at `5280` from the Playout address the operator types (an
+admin can set another address in Station setup), signs in to the Playout directly with D1 from its native
+side (no `Origin`), and presents that token on every connection; the bridge verifies it (signature,
+issuer, audience, expiry, D9) and scopes both commands and the state it pushes to the token's
+`cg_channels` — a console holds nothing the bridge does not ([[B-262]] closed). The bridge keeps the one
+stack, template store and ledger per Playout and pushes one state to every console; two consoles on one
+channel are serialised by its seat locks, and each audit row names the user and the console machine. The
+console and the bridge must share `major.minor`, else one line and no command. **Acceptance (added):**
+WHEN console A takes a multi-box page THEN console B shows it ON AIR within a second, AND WHEN B clears it
+THEN A shows it cleared within a second with no box left on air (control: another item on the channel
+stays ON AIR on both); WHEN a console closes THEN nothing on air changes and a new console sees it. **Filed
+beside it:** [[R-078]] (an exclusive lock for two operators on one channel), [[R-079]] (a standby bridge on
+the backup Playout).
 
 ## [x] R-069 — Choosing a channel that is already on air warns first ⟨priority: high⟩ — FILED AND DONE 2026-09-23 by `DESKTOP-APPS-01-D` d
 
@@ -4215,3 +4236,26 @@ an endpoint for the state, their own rule when the dongle goes, a development li
 the build. **Acceptance (to confirm):** WHEN the Playout's license lacks CG Control THEN the sign-in is
 refused in one line and nothing can be taken; WHEN the license goes while graphics are on air THEN
 nothing is cleared, new takes are refused with the reason, and removals still work.
+
+## [ ] R-078 — Two operators on one channel: an exclusive lock ⟨priority: low⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §B · filed only
+
+**What.** With one bridge per Playout ([[R-068]]) two consoles may drive one channel at once: the bridge
+serialises their commands through its seat locks, and every audit row names the user and the console
+machine, but neither console can hold the channel for itself. An exclusive lock would let one operator
+take a channel so another console sees it held (by whom, from which machine) and cannot take or clear
+there until it is released or expires. **Why.** The owner asked for no exclusive lock in `0.10.0`
+(`CENTRAL-BRIDGE-01` §B). **Acceptance (sketch):** WHEN console A holds CH 2 THEN console B's takes and
+clears on CH 2 are refused with a line naming A's user and machine, and B's other channels are
+untouched; WHEN A's console closes or its hold expires THEN CH 2 is free.
+
+## [ ] R-079 — A standby bridge on the backup Playout ⟨priority: medium⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), from the Playout team's rule 10 · filed only
+
+**What.** One CG Bridge per Playout runs on the primary machine and drives the backup's core across the
+network (`OSC SUBSCRIBE` to the backup, the primary's IP on the backup's AMCP allow list). If the primary
+MACHINE dies, the backup keeps airing and our layers 50–99 there stay as last set, but no command reaches
+the backup until a bridge does, and every console loses `5280` with the primary. A standby bridge on the
+backup machine, reading the same stores, would take over. **Why.** The Playout team's answer to
+`CG-CONTROL-ASK-BRIDGE-HOST-2026-09-29.md` §2.5 (`PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md` §5); out of
+`0.10.0` by the owner's scope. If only the bridge dies there is no failover — failover follows the
+primary ENGINE's death, not the bridge's. **Acceptance (sketch):** WHEN the primary machine is lost THEN
+the consoles reconnect to the standby bridge and the on-air record is the same as the primary's was.

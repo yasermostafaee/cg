@@ -2867,3 +2867,35 @@ doors take a layer from 50 up and the Station layers tab offers none there, with
 narrow seam exemption — our own stray, on an operator's request; a holder moved while the core runs
 leaves the row saying it waits, until a re-take. Detail: `openspec/changes/route-plates/design.md`,
 last section.
+
+## [~] C-047 — A core restart, and the ledger checked against CasparCG at start ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rules 2 and 3 · `openspec/changes/central-bridge/`
+
+**What.** On the Playout machine the core accepts AMCP 2–6 s after the engine starts, and **every core
+restart clears every layer, 50–99 included** — a crash, «ریستِ پلی‌اوت», or a restart or upgrade of the
+engine service (the Playout team, `PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md` §1). CG Bridge (a service,
+[[R-067]]) therefore (1) tolerates refused connections on `5250` at start and after every restart and
+reconnects on its own — no service dependency on `ApasaiEngine`; (2) re-sends its `OSC SUBSCRIBE`
+([[C-046]]) on every new connection; (3) follows the owner's standing decision for our layers, **detect and
+say** ([[B-225]], `RESTART-NOTICE-01`): the restart notice with PUT BACK ON AIR, nothing back on air by
+itself. The Playout restores only its own on-air item. ⚠ The Playout's letter says the bridge "must put its
+layers back"; the owner's decision stands and the Playout team is told so (`docs/integration/playout/
+CG-BRIDGE-FOR-PLAYOUT.md`). **(4) At start, the ledger is checked against CasparCG with `INFO <ch>`**
+([[B-292]]'s reader; 2.5 answers the whole channel): an entry whose layer is empty leaves ON AIR with the
+notice, nothing re-sent; an occupied layer in 50–99 that no entry holds goes to the strip. **Found (§0):**
+a comment at `caspar-runtime.ts` said the ledger was "already resolved against the server's `INFO` at boot"
+— it was not; the ledger was adopted `unknown` and corrected only from OSC at the first reconnect, and only
+if OSC was heard. **Acceptance:** WHEN the mock drops every layer and the connection THEN the bridge
+reconnects, re-subscribes and shows the restart notice, and nothing is re-sent without PUT BACK ON AIR;
+WHEN the bridge restarts with a ledger entry whose layer the core has since emptied THEN the entry is off
+air with the notice (control: an entry whose layer still plays stays ON AIR).
+
+## [~] C-048 — A take on an unlicensed channel is refused, with the reason ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 11 · `openspec/changes/central-bridge/`
+
+**What.** A channel whose D4 `playlist` is `unlicensed` is **cleared entirely every 60 s by the Playout**
+(`V13-INSTALL`; the backup channel, numbered highest, is the first to become unlicensed). The console
+already says so on the channel (`Unlicensed in the Playout — this channel is cleared every minute.`,
+`channelAir.ts`), but the bridge took on it all the same: `unlicensed` had no reader in the bridge. Now a
+take on such a channel is refused before any AMCP, with the reason in words, and the console shows the
+state on the channel. Removals and clears still work there. **Acceptance:** WHEN a take is asked on a
+channel whose D4 `playlist` is `unlicensed` THEN it is refused with the reason and nothing is sent; control:
+a licensed channel takes.
