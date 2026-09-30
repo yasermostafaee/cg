@@ -273,13 +273,66 @@
 
 ## 6. CG Bridge as a service (`R-067`)
 
-- [ ] 6.1 `--service-config`, `%ProgramData%\CG Bridge\` state and logs, `SIGINT`/`SIGBREAK` shutdown.
-- [ ] 6.2 `/health` (no auth, no secret, < 1 s, fixed shape, schema-tested).
-- [ ] 6.3 The reserved-port check at start (and `--check-ports` for the installer).
-- [ ] 6.4 One-time import of an older per-user state (`--import-state`); nothing deleted.
+- [x] 6.1 `--service-config`, `%ProgramData%\CG Bridge\` state and logs, `SIGINT`/`SIGBREAK` shutdown.
+      `service-config.ts`: `cg-bridge.json` (`playoutAddress`, `amcpHost?`, `amcpPort?`, `oscPort?` —
+      never 6250 —, `controlPort?`, `templatePort?`, `bridgeAddress?`; strict: a typo is refused) fills
+      the flags the command line did not give (the command line wins); its directory is the state
+      home (`.cg-runtime\`, `logs\`); the service always runs `--auth playout`, `--host 0.0.0.0`,
+      `--first-run`, its own `bridge-session.json`, and `requireAuth`. A missing or bad file is a
+      start failure naming the file — never `~/.cg-runtime`. The installer never writes the JSON
+      itself: `--write-service-config <file>` writes it through the same schema and keeps what it
+      was not given (an upgrade). `SIGINT`/`SIGBREAK` were already one shutdown (Shawl stops with
+      Ctrl+C). Tests: `service-config` (8), `service-cli.integration` (6 — a refused start names the
+      file and writes nothing to the home; 6250 refused; the write one-shot and its upgrade; a real
+      start authenticates, answers `/health`, and names every file under the configuration's
+      directory while the user's home stays empty).
+- [x] 6.2 `/health` (no auth, no secret, < 1 s, fixed shape, schema-tested).
+      `health.ts`: `BridgeHealthSchema` (`.strict()` at every level — a field is added with the
+      document, never silently), built from memory (`runtime.health()`, `oscStatus()`, the bridge's
+      own session, D4's last good read, the socket count, the ports, the port problems); no account
+      name, no token. D9: the control socket now sits on its own `http.Server` on `5280` — `/health`
+      beside the upgrade, `503` for the instant before the bridge is built, `426` for anything else
+      (what `ws` answered before). Tests: `health` (6 — the exact example the Playout document
+      quotes; an extra field refused; no account name; backup/failover/silent OSC/down; the
+      needs-admin line; a port problem), `health-endpoint.integration` (3 — 200, the shape, < 1 s,
+      `no-store`, the consoles' socket on the same port counted; 426; a core that is not there).
+- [x] 6.3 The reserved-port check at start (and `--check-ports` for the installer).
+      `reserved-ports.ts`: `netsh interface ipv4 show excludedportrange` for TCP and UDP, read by
+      the rows' shape (the header is localized); a port inside a range is one log line and one
+      `/health` problem naming the port, its role and the range; no verdict (never "free") when the
+      ranges cannot be read; never a port changed. At start after the listen (never delaying it),
+      opted into by the CLI; `--check-ports` exits 3 for the installer to warn. Tests:
+      `reserved-ports` (8 — a real Windows 11 table and a localized one; this host's own table has
+      the same shape).
+- [x] 6.4 One-time import of an older per-user state (`--import-state`); nothing deleted.
+      `import-state.ts`: the NEWEST `<user>\AppData\Roaming\CG Control\.cg-runtime` is copied into an
+      EMPTY service state once — never `bridge-session.json` (a refresh token belongs to one
+      process, `2.9.2` §8), `bridge-playout.json` or `bridge-connection.json` (the service's Playout
+      and CasparCG come from its own configuration); the marker `bridge-imported-state.json` makes it
+      once, whatever the outcome; the source is left byte-identical. Tests: `import-state` (4); the
+      persisted-files census records the marker and `bridge-session.json`'s new default.
 - [ ] 6.5 `/logs.zip` for a station admin; the console's Download logs.
 - [ ] 6.6 `/pgm/<n>` on `5280` behind a socket-issued ticket.
 - [ ] 6.7 The installer (`tools/bridge-installer/cg-bridge.nsi`) + Shawl, built in CI.
+      Written: `cg-bridge.nsi` (ASCII; per machine; `%ProgramFiles%\CG Bridge\` = `cg-bridge.exe` +
+      `shawl.exe` + the bundle; the service `CGBridge` registered once by `shawl add` — Ctrl+C stop,
+      10 s, then the process tree —, then `start= auto`, `obj= NT SERVICE\CGBridge`, recovery
+      restart/5 s/5 s/30 s with `failureflag 1`, NO dependency; the data folder's ACL replaced
+      (SYSTEM, Administrators, the service's own account — no ordinary user reads the bridge's
+      session); the configuration, the import, OUR three firewall rules and the port check all by the
+      bridge's own one-shots, every step logged to `logs\install.log`; exit 0 / 1 cancelled / 2
+      failed; the uninstaller removes our service, rules and files and KEEPS the data folder).
+      `stage-bridge.mjs` (the official `node.exe`, Shawl 1.9.0 from `cargo install --locked`, the
+      bundle, both licences); `desktop.yml` builds it (the runner's NSIS, else Chocolatey's) and a
+      NEW job, `bridge-smoke`, drives `tools/bridge-installer/smoke.mjs` on a clean runner (silent
+      install, the service's state/start/account/dependencies/recovery, `/health` < 1 s, the rules
+      on the exe, nothing on UDP 6250, the ACL, no state for a console with no token, a silent
+      upgrade, a silent uninstall). NOT YET RUN: open until that job is green.
+      The firewall rules: `firewall-rules.ts` + `--firewall add|remove` — `CG Bridge - consoles` (TCP
+      control), `- template pages` (TCP templates), `- OSC from CasparCG` (UDP osc and osc + 1, server
+      B's; never 6250), each scoped to the running `cg-bridge.exe`, on the ports in force; add =
+      delete ours then add ours; remove = delete ours; nothing else touched. Tests: `firewall-rules`
+      (6).
 
 ## 7. CG Control, the console
 
