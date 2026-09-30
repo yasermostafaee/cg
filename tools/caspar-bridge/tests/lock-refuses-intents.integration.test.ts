@@ -243,7 +243,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
   it('THE CENSUS — every route is classified, and only these are reachable while locked', () => {
     const runtime = new CasparRuntime(
       {
-        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
         strategy: 'mirror-sync',
         autoFailoverEnabled: false,
       },
@@ -350,7 +350,7 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     // a browser reloading against a locked bridge still reconciles its library.
     const runtime = new CasparRuntime(
       {
-        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
         strategy: 'mirror-sync',
         autoFailoverEnabled: false,
       },

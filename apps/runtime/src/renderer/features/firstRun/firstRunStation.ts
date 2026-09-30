@@ -2,6 +2,7 @@ import {
   bankForChannel,
   CONNECTION_CHECK_IDS,
   connectionCheckSubject,
+  DEFAULT_OSC_PORT,
   defaultFixedLayerBank,
   fiveRowVisibility,
   type CatalogueChannel,
@@ -23,9 +24,13 @@ import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
  * the same door's plural, in ONE write.
  */
 
-/** The standard AMCP / OSC ports — the ones the Playout's allow list and our firewall rules name. */
+/**
+ * The standard AMCP port — the one the Playout's allow list names — and the bridge's OSC port.
+ * `CENTRAL-BRIDGE-01` rule 7: the OSC port is the bridge's OWN (`DEFAULT_OSC_PORT`), never the
+ * Playout engine's 6250; CG Bridge's service configuration stands over it anyway.
+ */
 export const AMCP_PORT = 5250;
-export const OSC_PORT = 6250;
+export const OSC_PORT = DEFAULT_OSC_PORT;
 
 /**
  * `FIELD-FIXES-01` I — how many rows of each band a NEW bank shows: the highest of each band. The

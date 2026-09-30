@@ -133,7 +133,9 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
  * Boot a runtime with a declared bank of 70–73.
  *
  * `blind: true` points the runtime's OSC socket at a port the mock never sends
- * to. That is a different state from "hearing, and the layer is silent", and the
+ * to — and (`CENTRAL-BRIDGE-01`) has the core refuse the runtime's `OSC SUBSCRIBE`,
+ * which is now the only way a bridge that asks for OSC on its own port hears none.
+ * That is a different state from "hearing, and the layer is silent", and the
  * difference is the whole subject of test 4.
  */
 async function boot(opts: { blind?: boolean } = {}): Promise<CasparRuntime> {
@@ -145,6 +147,9 @@ async function boot(opts: { blind?: boolean } = {}): Promise<CasparRuntime> {
     )}.ndjson`,
   );
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
+  if (opts.blind === true) {
+    mock.setHandler('OSC', () => ({ kind: 'err', code: 400, verb: 'OSC' }));
+  }
   const listenPort = opts.blind === true ? await freeUdpPort() : oscPort;
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, listenPort),

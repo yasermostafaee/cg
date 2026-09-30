@@ -117,7 +117,7 @@ describe('Station setup — Servers (R-010)', () => {
       await Promise.resolve();
     });
     expect(setConfig).toHaveBeenCalledWith({
-      servers: { A: { host: '192.168.1.50', amcpPort: 5250, oscPort: 6250 } },
+      servers: { A: { host: '192.168.1.50', amcpPort: 5250, oscPort: 6251 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: true,
       // `C-024` — AN EMPTY SERVE HOST IS SENT, NOT OMITTED: the field has to be clearable.

@@ -10,7 +10,8 @@
  *      ADR 0011. A console on any other port or host, `localhost` included, cannot sign in. Vite
  *      has no `strictPort` of its own and once moved to 5175 in silence (`docs/integration/playout/
  *      README.md` item 12), so the dev station passes `--strictPort`: 5174 or nothing.
- *   2. OSC. UDP 6250 is bound once, with Node's defaults — no `reuseAddr`
+ *   2. OSC. The bridge's own UDP port — 6251, never the Playout engine's 6250 (`CENTRAL-BRIDGE-01`
+ *      rule 7) — is bound once, with Node's defaults — no `reuseAddr`
  *      (`packages/caspar-client/src/osc/transport.ts`) — and the core sends OSC to each AMCP
  *      client's own address on it (ADR 0010). One holder per machine.
  *   3. ONE STATION PER CHANNEL. Two bridges on one channel each treat the bank as theirs. No sweep
@@ -28,7 +29,7 @@ export const CONSOLE_PORT = 5174;
 export const CONSOLE_URL = `http://${CONSOLE_HOST}:${String(CONSOLE_PORT)}/`;
 export const BRIDGE_PORT = 5280;
 export const TEMPLATE_PORT = 7911;
-export const OSC_PORT = 6250;
+export const OSC_PORT = 6251;
 /**
  * The bridge's OWN console listener, which in the installed app IS 5174. Here Vite holds 5174 for
  * hot reload, so the bridge's listener moves to this internal port and Vite relays the two routes
@@ -211,7 +212,8 @@ function pathFlags(paths) {
  *
  * ⚠ NO `--caspar-host`, `--amcp-port` or `--osc-port`: any one of them makes the bridge build its
  * CasparCG connection from flags and ignore the one first-run writes from the Playout's channel
- * list. OSC's 6250 comes from that connection, exactly as it does in the installed app.
+ * list. OSC's 6251 comes from that connection, and the bridge asks the core for it with
+ * `OSC SUBSCRIBE` (`CENTRAL-BRIDGE-01` rule 7).
  */
 export function bridgeArgs(paths, playoutAddress, ports = {}) {
   return [

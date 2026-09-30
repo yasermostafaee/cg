@@ -2,11 +2,14 @@
 // CLI wrapper around @cg/caspar-bridge (C-001).
 //
 // Usage:
-//   caspar-bridge                                     # ws://127.0.0.1:5280, single CasparCG on 127.0.0.1:5250/6250
+//   caspar-bridge                                     # ws://127.0.0.1:5280, single CasparCG on 127.0.0.1:5250, OSC on 6251
 //   caspar-bridge --port 5280
-//   caspar-bridge --caspar-host 192.168.1.50 --amcp-port 5250 --osc-port 6250
+//   caspar-bridge --caspar-host 192.168.1.50 --amcp-port 5250 --osc-port 6251
 //   caspar-bridge --backup-host 192.168.1.51          # declare a REAL backup (B-046: never assumed)
-//   caspar-bridge --backup-host 127.0.0.1 --backup-amcp-port 5251 --backup-osc-port 6251
+//   caspar-bridge --backup-host 127.0.0.1 --backup-amcp-port 5251 --backup-osc-port 6252
+//                                                     # CENTRAL-BRIDGE-01 rule 7: the bridge never binds UDP 6250
+//                                                     #   (the Playout engine's) - it asks the core for OSC on
+//                                                     #   its own port with OSC SUBSCRIBE
 //   caspar-bridge --host 0.0.0.0 --port 5280          # opt-in LAN exposure of the WS (NOT default)
 //   caspar-bridge --persist-path C:\cg\conn.json      # R-010: where the applied config persists
 //   caspar-bridge --fixed-layers-path C:\cg\fixed.json  # R-021: the fixed operator layer bank
@@ -95,6 +98,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  DEFAULT_OSC_PORT,
+  RESERVED_OSC_PORT,
+  RESERVED_OSC_PORT_REASON,
   fixedBankEnd,
   fixedBankSlots,
   isLayerVisible,
@@ -403,6 +409,17 @@ const hasBackupFlags =
   args['backup-amcp-port'] !== undefined ||
   args['backup-osc-port'] !== undefined;
 
+/*
+  🔴 `CENTRAL-BRIDGE-01` rule 7 — UDP 6250 is the Playout engine's (`RESERVED_OSC_PORT`), on any
+  address. A flag naming it is refused at once, in the one sentence every refusal says, rather than
+  left to fail later at a bind that would break the Playout's engine if it won the race.
+*/
+for (const flag of ['osc-port', 'backup-osc-port']) {
+  if (args[flag] !== undefined && Number(args[flag]) === RESERVED_OSC_PORT) {
+    console.error(`[caspar-bridge] --${flag} ${RESERVED_OSC_PORT}: ${RESERVED_OSC_PORT_REASON}`);
+    process.exit(1);
+  }
+}
 const connection =
   hasPrimaryFlags || hasBackupFlags
     ? {
@@ -410,7 +427,7 @@ const connection =
           A: {
             host: args['caspar-host'] ?? '127.0.0.1',
             amcpPort: args['amcp-port'] !== undefined ? Number(args['amcp-port']) : 5250,
-            oscPort: args['osc-port'] !== undefined ? Number(args['osc-port']) : 6250,
+            oscPort: args['osc-port'] !== undefined ? Number(args['osc-port']) : DEFAULT_OSC_PORT,
           },
           ...(hasBackupFlags
             ? {
@@ -421,7 +438,9 @@ const connection =
                       ? Number(args['backup-amcp-port'])
                       : 5251,
                   oscPort:
-                    args['backup-osc-port'] !== undefined ? Number(args['backup-osc-port']) : 6251,
+                    args['backup-osc-port'] !== undefined
+                      ? Number(args['backup-osc-port'])
+                      : DEFAULT_OSC_PORT + 1,
                 },
               }
             : {}),
@@ -732,6 +751,12 @@ const shutdown = async () => {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+/*
+  `CENTRAL-BRIDGE-01` — as a Windows service the bridge is stopped by a console Ctrl+C (Shawl's stop,
+  which Node delivers as SIGINT above) or Ctrl+Break (SIGBREAK). Both run the same shutdown: Windows
+  gives a child no SIGTERM, and `process.kill` of anything else terminates without running this.
+*/
+process.on('SIGBREAK', shutdown);
 
 /*
   🔴 `DESKTOP-APPS-01` — THE PARENT'S LIFELINE. The desktop shell holds the write end of this

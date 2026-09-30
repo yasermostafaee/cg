@@ -32,7 +32,7 @@ import { STATION_SETUP_PX, colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { hostError, hostValue, portError } from '../../ui/fieldValue.js';
+import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
 import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
@@ -293,8 +293,9 @@ function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): Endpo
  * "no reading" has something to restore TO — what a first open shows — and the null branch
  * cannot be forgotten, because it is the same object the initial state is built from.
  */
-const PRIMARY_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5250', oscPort: '6250' };
-const BACKUP_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5251', oscPort: '6251' };
+// `CENTRAL-BRIDGE-01` rule 7 — never 6250, the Playout engine's; server B's is one above A's.
+const PRIMARY_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5250', oscPort: '6251' };
+const BACKUP_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5251', oscPort: '6252' };
 /*
   ⚠ TYPED, never `as const`. The first spelling was, and the literal types it produced
   (`false`, `true`, `''`) flowed into `useState` as `useState<false>` and friends — nine
@@ -1012,7 +1013,7 @@ export function StationSetupDialog({
       <SetupField
         label="OSC port"
         {...(holdsStationAdmin ? {} : { readOnlyValue: draft.oscPort })}
-        error={portError(draft.oscPort, { min: 0, label: 'OSC port' })}
+        error={oscPortError(draft.oscPort)}
         id={`${prefix}-osc`}
       >
         <NumericInput

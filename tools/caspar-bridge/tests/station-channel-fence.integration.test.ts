@@ -604,7 +604,7 @@ describe('the census: every route that names a channel, classified', () => {
   const runtime = (): CasparRuntime =>
     new CasparRuntime(
       {
-        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
         strategy: 'mirror-sync',
         autoFailoverEnabled: false,
       },

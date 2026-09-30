@@ -237,6 +237,13 @@ async function plantOrphan(m: MockHandle, oscPort: number): Promise<void> {
 async function bootDegraded(m: MockHandle): Promise<CasparRuntime> {
   // `P-057` — from below the ephemeral range: no mock in the suite can be sending to it.
   const deafPort = await deafUdpPort();
+  /*
+    `CENTRAL-BRIDGE-01` — a session asks the core for OSC on its own port with `OSC SUBSCRIBE`, so
+    binding a port the mock never sends to is no longer silence: the core refuses the subscribe
+    here (a core without the command), which is how an AMCP-up, OSC-silent server now comes about.
+    The orphan planted before this ran with the same core; it heard OSC through its predefined port.
+  */
+  m.setHandler('OSC', () => ({ kind: 'err', code: 400, verb: 'OSC' }));
   const r = newRuntime(singleServer(m.amcpPort, deafPort), DEGRADED_TUNING);
   r.start();
   await r.startServing();

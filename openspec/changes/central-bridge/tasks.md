@@ -17,10 +17,20 @@
 - [x] 1.2 `@cg/caspar-client`: `ServerSession` `oscSubscribe` (inside the handshake, after `INFO`), the
       `oscSubscription` and `oscUnavailable` events; a failed OSC bind no longer stops the loop; the transport
       drops channels not served (`server-session-osc-subscribe.test.ts`).
-- [ ] 1.3 Bridge: every session subscribes; A = the configured OSC port (default `6251`), B = `+1`; `6250`
-      refused; served channels = the declared ones; the outcome logged; defaults moved off `6250` everywhere.
-- [ ] 1.4 Bridge integration: a test holds the core's default port first and the bridge still starts and hears
-      the core; the subscribe re-sent after a reconnect; another channel's OSC dropped.
+- [x] 1.3 Bridge: every session subscribes; A = the configured OSC port (default `6251`), B = `+1`
+      (`withBridgeOscPort`, at boot and on every applied config); `6250` refused by the schema
+      (`RESERVED_OSC_PORT_REASON`), the CLI, `createBridge` and the console's two OSC fields
+      (`oscPortError`); served channels = the declared ones (`#servesOscChannel`), and an undeclared
+      channel's occupancy read with `INFO` (`stageProducersOfInfo`) so Change channel… is not misled; the
+      outcome logged per session (`oscStatus()`); `SIGBREAK` stops the bridge like `SIGINT`; defaults moved
+      off `6250` in the console, the mock seed, first-run, the dev station and its fake core (which now sends
+      only to subscribers).
+- [x] 1.4 Bridge integration (`osc-subscribe.integration.test.ts`): the core's default port held by another
+      socket — the bridge subscribes and hears, the holder is untouched; re-subscribed after a reconnect;
+      `6250` refused; the bridge-wide port over A and B; an undeclared channel's occupancy from `INFO`.
+      Tests that built a deaf bridge by pointing the core elsewhere now also have the core refuse the
+      subscribe (their intent kept); three restart tests gained the core restart their "next take" needs.
+      Bridge suite 1479/1479, Runtime 2120/2120, dev station 54/54.
 
 ## 2. The start check and a core restart (rules 2–3, `C-047`)
 

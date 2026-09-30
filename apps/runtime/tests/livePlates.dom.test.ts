@@ -297,7 +297,7 @@ describe('the Live sources section of Station setup defines sources and binds no
     Object.assign(stub.connections, {
       config: () =>
         Promise.resolve({
-          servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+          servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
           strategy: 'mirror-sync',
           autoFailoverEnabled: true,
         }),

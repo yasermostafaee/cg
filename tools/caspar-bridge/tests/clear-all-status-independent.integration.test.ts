@@ -116,6 +116,9 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سل
 async function boot(over: { deaf?: boolean } = {}): Promise<CasparRuntime> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  // `CENTRAL-BRIDGE-01` — and the core refuses the bridge's `OSC SUBSCRIBE`: a bridge that asks for
+  // OSC on its own port is otherwise never deaf.
+  if (over.deaf === true) mock.setHandler('OSC', () => ({ kind: 'err', code: 400, verb: 'OSC' }));
   const listenPort = over.deaf === true ? await freeUdpPort() : oscPort;
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, listenPort),

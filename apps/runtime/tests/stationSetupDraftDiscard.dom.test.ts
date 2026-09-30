@@ -148,7 +148,7 @@ describe('MODAL-TRUTH-01 — Station setup discards an unapplied draft on close'
 
     el = await reopenStationSetup();
     expect(valueOf(el, 'Primary host')).toBe(suggested);
-    expect(valueOf(el, 'Primary OSC port')).toBe('6250');
+    expect(valueOf(el, 'Primary OSC port')).toBe('6251');
   });
 
   it('LAYERS — a typed row name is gone on reopen (already held; pinned)', async () => {

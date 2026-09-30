@@ -124,8 +124,9 @@ export function seedStack(): StackItemState[] {
 export function seedConfig(): ConnectionConfig {
   return {
     servers: {
-      A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 },
-      B: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6251 },
+      // `CENTRAL-BRIDGE-01` rule 7 — the bridge's own OSC ports, never the Playout engine's 6250.
+      A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 },
+      B: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6252 },
     },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,

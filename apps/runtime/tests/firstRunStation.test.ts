@@ -33,8 +33,8 @@ import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 
 const current: ConnectionConfig = {
   servers: {
-    A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 },
-    B: { host: '127.0.0.2', amcpPort: 5251, oscPort: 6251 },
+    A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 },
+    B: { host: '127.0.0.2', amcpPort: 5251, oscPort: 6252 },
   },
   strategy: 'mirror-sync',
   autoFailoverEnabled: true,
@@ -93,7 +93,7 @@ describe('DESKTOP-APPS-01-D b — the layers first-run declares', () => {
 describe('the connection first-run applies', () => {
   it('is ONE server — the Playout-named CasparCG host — on the standard ports, with the serve host', () => {
     expect(firstRunConnection(current, ' 192.168.21.111 ', '192.168.21.93')).toEqual({
-      servers: { A: { host: '192.168.21.111', amcpPort: 5250, oscPort: 6250 } },
+      servers: { A: { host: '192.168.21.111', amcpPort: 5250, oscPort: 6251 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: true,
       templateServeHost: '192.168.21.93',

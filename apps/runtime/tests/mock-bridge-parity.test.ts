@@ -340,7 +340,7 @@ function methodKeys(target: object): string[] {
 /** Loopback config for a NEVER-STARTED `CasparRuntime` — the ctor is pure (no I/O). */
 function offlineConnection(): ConnectionConfig {
   return {
-    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: false,
   };

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { RESERVED_OSC_PORT_REASON } from '@cg/shared-ipc';
 import {
   digitsOnly,
   hostError,
   hostValue,
   indexError,
+  oscPortError,
   portError,
 } from '../src/renderer/ui/fieldValue.js';
 
@@ -68,6 +70,18 @@ describe('§10.3 — a numeric field keeps digits and drops the rest', () => {
 
   it('an empty value stays empty — blank is a state, not a character to invent', () => {
     expect(digitsOnly('')).toBe('');
+  });
+});
+
+describe('CENTRAL-BRIDGE-01 rule 7 — an OSC port is never 6250', () => {
+  it('🔴 6250 is refused in the bridge’s own sentence — control: 6251 and 0 (ephemeral) pass', () => {
+    expect(oscPortError('6250')).toBe(RESERVED_OSC_PORT_REASON);
+    // Typed in Persian digits it is the same port, and the same refusal.
+    expect(oscPortError(digitsOnly('۶۲۵۰'))).toBe(RESERVED_OSC_PORT_REASON);
+    expect(oscPortError('6251')).toBeNull();
+    expect(oscPortError('0')).toBeNull();
+    // …and the ordinary port rules still come first.
+    expect(oscPortError('70000')).toContain('65535');
   });
 });
 

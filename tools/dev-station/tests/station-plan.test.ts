@@ -66,7 +66,7 @@ describe('the origin — exactly http://127.0.0.1:5174', () => {
       { proto: 'tcp', port: 5174 },
       { proto: 'tcp', port: 5280 },
       { proto: 'tcp', port: 7911 },
-      { proto: 'udp', port: 6250 },
+      { proto: 'udp', port: 6251 },
       { proto: 'tcp', port: BRIDGE_CONSOLE_PORT },
     ]);
   });

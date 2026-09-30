@@ -205,9 +205,17 @@ it('transient blip: the reconnect itself sends nothing beyond the handshake, air
 
   // The invalidation is bookkeeping-only: between reconnect and the next
   // operator action the bridge sent nothing but the session handshake, and
-  // what was on air is still on air.
+  // what was on air is still on air. `CENTRAL-BRIDGE-01` — the handshake ends with the
+  // `OSC SUBSCRIBE` of the session's own port, re-sent because the subscription died with the
+  // connection; it touches no layer.
   const sinceBlip = (await recvLines(mock, trace)).slice(preBlipCount);
-  expect(sinceBlip.every((l) => l.startsWith('VERSION') || l.startsWith('INFO'))).toBe(true);
+  expect(
+    sinceBlip.every(
+      (l) =>
+        l.startsWith('VERSION') || l.startsWith('INFO') || l === `OSC SUBSCRIBE ${String(oscPort)}`,
+    ),
+  ).toBe(true);
+  expect(sinceBlip).toContain(`OSC SUBSCRIBE ${String(oscPort)}`);
   expect(mock.layerState(SLOT)?.producer).toBe('html');
   expect(mock.layerState(SLOT)?.onAir).toBe(true);
 

@@ -2,7 +2,7 @@
   "name": "@cg/dev-station",
   "version": "0.0.0",
   "private": true,
-  "description": "DEV-STATION-01 - `pnpm dev:station`: the current source in the browser, on the installed CG Control's own origin and ports (127.0.0.1:5174, 5280, 7911, 6250/udp) and with its own state folder. Plain zero-dependency ESM with no build step; the tests drive the same modules the command runs.",
+  "description": "DEV-STATION-01 - `pnpm dev:station`: the current source in the browser, on the installed CG Control's own origin and ports (127.0.0.1:5174, 5280, 7911, 6251/udp) and with its own state folder. Plain zero-dependency ESM with no build step; the tests drive the same modules the command runs.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json --tsBuildInfoFile typecheck.tsbuildinfo",

@@ -6,7 +6,10 @@ import {
   ConnectionsHealthChangedChannel,
   ConnectionsHealthChannel,
   ConnectionsSetConfigChannel,
+  DEFAULT_OSC_PORT,
   FIRST_ALLOCATABLE_LAYER,
+  RESERVED_OSC_PORT,
+  RESERVED_OSC_PORT_REASON,
   LayersClearChannel,
   PlayoutLayersClearChannel,
   LayersOrphansChangedChannel,
@@ -102,8 +105,8 @@ describe('connections.* channel schemas', () => {
   it('connections.config returns a structured endpoint config', () => {
     const config = {
       servers: {
-        A: { host: '10.0.0.5', amcpPort: 5250, oscPort: 6250 },
-        B: { host: '10.0.0.6', amcpPort: 5250, oscPort: 6250 },
+        A: { host: '10.0.0.5', amcpPort: 5250, oscPort: 6251 },
+        B: { host: '10.0.0.6', amcpPort: 5250, oscPort: 6251 },
       },
       strategy: 'mirror-sync' as const,
       autoFailoverEnabled: true,
@@ -128,8 +131,8 @@ describe('connections.* channel schemas', () => {
 describe('connections.set-config + stack.remove-all channel schemas (R-010)', () => {
   const twoServer = {
     servers: {
-      A: { host: '192.168.1.50', amcpPort: 5250, oscPort: 6250 },
-      B: { host: '192.168.1.51', amcpPort: 5250, oscPort: 6250 },
+      A: { host: '192.168.1.50', amcpPort: 5250, oscPort: 6251 },
+      B: { host: '192.168.1.51', amcpPort: 5250, oscPort: 6251 },
     },
     strategy: 'mirror-sync' as const,
     autoFailoverEnabled: true,
@@ -143,7 +146,7 @@ describe('connections.set-config + stack.remove-all channel schemas (R-010)', ()
 
   it('accepts a backup-less (declared single-server) config', () => {
     const single = {
-      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
       strategy: 'mirror-sync' as const,
       autoFailoverEnabled: true,
     };
@@ -155,15 +158,36 @@ describe('connections.set-config + stack.remove-all channel schemas (R-010)', ()
     expect(() =>
       ConnectionsSetConfigChannel.request.parse({
         ...twoServer,
-        servers: { A: { host: '', amcpPort: 5250, oscPort: 6250 } },
+        servers: { A: { host: '', amcpPort: 5250, oscPort: 6251 } },
       }),
     ).toThrow();
     expect(() =>
       ConnectionsSetConfigChannel.request.parse({
         ...twoServer,
-        servers: { A: { host: '127.0.0.1', amcpPort: 52.5, oscPort: 6250 } },
+        servers: { A: { host: '127.0.0.1', amcpPort: 52.5, oscPort: 6251 } },
       }),
     ).toThrow();
+  });
+
+  it('🔴 CENTRAL-BRIDGE-01 rule 7 — refuses OSC port 6250 on either server, in the one sentence', () => {
+    for (const servers of [
+      { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: RESERVED_OSC_PORT } },
+      {
+        A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 },
+        B: { host: '127.0.0.2', amcpPort: 5250, oscPort: RESERVED_OSC_PORT },
+      },
+    ]) {
+      const parsed = ConnectionsSetConfigChannel.request.safeParse({ ...twoServer, servers });
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues.map((i) => i.message)).toContain(RESERVED_OSC_PORT_REASON);
+    }
+    // CONTROL — the bridge's own default is accepted.
+    expect(
+      ConnectionsSetConfigChannel.request.safeParse({
+        ...twoServer,
+        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: DEFAULT_OSC_PORT } },
+      }).success,
+    ).toBe(true);
   });
 
   it('response carries ok, the optional refusal reason, and the serve info', () => {

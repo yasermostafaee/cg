@@ -270,8 +270,9 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   expect(Object.values(persisted.visibility ?? {})).toHaveLength(20);
   expect(Object.values(persisted.visibility ?? {}).every(Boolean)).toBe(true);
   expect(Object.values(persisted.low?.visibility ?? {}).every(Boolean)).toBe(true);
+  // `CENTRAL-BRIDGE-01` rule 7 — the bridge's own OSC port, never the Playout engine's 6250.
   expect(stationFile('bridge-connection.json')).toMatchObject({
-    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
   });
 });
 
@@ -526,9 +527,10 @@ test('CONTROL — a bridge that is not an installed station never shows first-ru
   🔴 `FIELD-FIXES-01` I — **A NEW STATION SHOWS FIVE ROWS PER BAND, NOT THIRTY**, with the beds in
   sight at 1920 × 1080. First-run reads each channel before declaring it; a channel the tap reads
   gets templates 99–95 and beds 59–55 shown and the rest hidden — except a row whose layer already
-  carries a producer (here a leftover on 2-90), which stays shown. OSC is ON here, on the standard
-  port first-run writes, so the tap can read; the cases above run blind, and the station they set
-  up shows every row, which is the unknown-is-never-hidden control.
+  carries a producer (here a leftover on 2-90), which stays shown. OSC is ON here — the bridge asks
+  the core for it on the port first-run writes (`OSC SUBSCRIBE`, `CENTRAL-BRIDGE-01` rule 7), so the
+  tap can read; the cases above run blind, and the station they set up shows every row, which is the
+  unknown-is-never-hidden control.
 */
 test('FIELD-FIXES-01 I — first-run on two channels shows five rows per band on each; a row already carrying something stays shown', async ({
   page,
@@ -546,13 +548,13 @@ test('FIELD-FIXES-01 I — first-run on two channels shows five rows per band on
   const fake = playout;
   amcp = await createMock({
     amcpPort: 5250,
-    oscPort: 6250,
-    oscHost: '127.0.0.1',
+    // No predefined OSC destination: the bridge's `OSC SUBSCRIBE` is the road (rule 7).
+    oscPort: 0,
     oscHz: 20,
     channels: 2,
     admit: (ip) => fake.isTrusted(ip),
   }).catch((err: unknown) => {
-    throw new Error(`the AMCP mock could not take TCP 5250 / OSC 6250: ${String(err)}`);
+    throw new Error(`the AMCP mock could not take TCP 5250: ${String(err)}`);
   });
   // A producer already on 2-90 before this station exists — a previous install's graphic, or
   // anyone's. Seeded through a raw client, with admission opened for it and closed again.

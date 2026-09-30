@@ -289,11 +289,32 @@ const ConnectionHealthSchema = z.object({
 
 export type ConnectionHealth = z.infer<typeof ConnectionHealthSchema>;
 
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` rule 7 (`C-046`) — **UDP `6250` IS THE PLAYOUT ENGINE'S.** On the Playout's
+ * machine its engine receives the core's OSC on `127.0.0.1:6250` (its meters, genlock, no-picture
+ * detection, loudness and D4's `output` all hang on it); a bridge that bound it first would break the
+ * engine until its next restart. So no bridge ever binds this port: it binds its own (default
+ * {@link DEFAULT_OSC_PORT}) and asks the core for OSC with `OSC SUBSCRIBE`. Refused wherever a port
+ * is accepted, with {@link RESERVED_OSC_PORT_REASON}.
+ */
+export const RESERVED_OSC_PORT = 6250;
+
+/** `CENTRAL-BRIDGE-01` — the bridge's own OSC port by default: server A's (server B's is one above). */
+export const DEFAULT_OSC_PORT = 6251;
+
+/** The one sentence every refusal of {@link RESERVED_OSC_PORT} says. */
+export const RESERVED_OSC_PORT_REASON =
+  "UDP 6250 belongs to the Playout's engine — choose another OSC port (6251 is the default).";
+
 const ServerEndpointSchema = z.object({
   host: z.string().min(1),
   amcpPort: z.number().int().positive(),
-  // OSC port 0 is a valid ephemeral-bind request — the runtime accepts it.
-  oscPort: z.number().int().nonnegative(),
+  // OSC port 0 is a valid ephemeral-bind request — the runtime accepts it. `6250` never is.
+  oscPort: z
+    .number()
+    .int()
+    .nonnegative()
+    .refine((port) => port !== RESERVED_OSC_PORT, { message: RESERVED_OSC_PORT_REASON }),
 });
 
 // R-010 — exported: the bridge validates its persisted config file against

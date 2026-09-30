@@ -75,7 +75,7 @@ function measure(): { declared: string[]; forwarded: string[]; unforwarded: stri
   // `route-coverage.test.ts` argues for `buildRoutes`. This test opens no sockets.
   const runtime = new CasparRuntime(
     {
-      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     },

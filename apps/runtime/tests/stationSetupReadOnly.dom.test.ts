@@ -35,7 +35,7 @@ const HOST = '10.0.0.7';
 
 function config() {
   return {
-    servers: { A: { host: HOST, amcpPort: 5250, oscPort: 6250 } },
+    servers: { A: { host: HOST, amcpPort: 5250, oscPort: 6251 } },
     strategy: 'mirror-sync' as const,
     autoFailoverEnabled: false,
   };

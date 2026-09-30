@@ -86,9 +86,12 @@ it('OSC flowing: health reports when the server was last heard', async () => {
 
 it('AMCP answering but OSC never arrives: HEALTHY with no oscFreshAt — the mis-attributed case', async () => {
   // The install shape: AMCP is perfect, OSC goes to a port nobody is listening on.
+  // `CENTRAL-BRIDGE-01` — and the core refuses the bridge's `OSC SUBSCRIBE` (a core without the
+  // command), which is now the only way a bridge that asks for OSC on its own port hears none.
   const oscPort = await freeUdpPort();
   const deafPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+  mock.setHandler('OSC', () => ({ kind: 'err', code: 400, verb: 'OSC' }));
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, deafPort),
     {},
@@ -141,6 +144,8 @@ it('the signal clears and re-publishes on its own once OSC starts arriving', asy
   const oscPort = await freeUdpPort();
   const deafPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+  // `CENTRAL-BRIDGE-01` — deaf: the core refuses the subscribe, as in the case above.
+  mock.setHandler('OSC', () => ({ kind: 'err', code: 400, verb: 'OSC' }));
   const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort), undefined, {
     layerPolicy: TEST_LAYER_POLICY,
     sweepMs: 300,

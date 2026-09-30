@@ -10,7 +10,9 @@ bridge SHALL NOT bind UDP port `6250` on any address: the connection schema, the
 configuration SHALL refuse it with a sentence that says it belongs to the Playout's engine. A core that
 refuses the subscribe SHALL be reported in one log line and the session SHALL go on. OSC for a channel the
 station does not serve SHALL be dropped at the transport, before any tap or consumer; while no channel is
-declared every channel is served.
+declared every channel is served. A question about the occupancy of a channel whose OSC is dropped (Change
+channel… asks about the new channel before declaring it) SHALL be answered by the core with `INFO <ch>`,
+never by the tap.
 
 #### Scenario: The core's default port is held by someone else
 
@@ -27,6 +29,12 @@ declared every channel is served.
 
 - **WHEN** the core reports a producer on a channel the station does not declare
 - **THEN** no tap and no consumer sees it — control: the same report on a declared channel arrives
+
+#### Scenario: An undeclared channel's occupancy comes from the core
+
+- **WHEN** the occupancy of a channel the station does not declare is asked while another is declared
+- **THEN** the bridge sends `INFO <that channel>` and answers from the reply — control: a declared
+  channel is answered from the tap
 
 #### Scenario: 6250 is refused
 

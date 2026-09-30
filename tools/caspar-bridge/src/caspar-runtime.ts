@@ -804,6 +804,25 @@ export function stageLayersOfInfo(xml: string): ReadonlySet<number> | null {
 }
 
 /**
+ * `CENTRAL-BRIDGE-01` — each layer on the stage with its FOREGROUND producer kind, from the same
+ * `INFO <channel>` reply {@link stageLayersOfInfo} reads (`<layer_N><foreground>…<producer>K`); a
+ * layer whose foreground is `empty` (stopped, still on the stage) is left out. `null` when the reply
+ * is not a channel's info at all; an empty map is an empty channel.
+ */
+export function stageProducersOfInfo(xml: string): ReadonlyMap<number, string> | null {
+  if (!/<channel>/.test(xml)) return null;
+  const producers = new Map<number, string>();
+  const stage = /<stage>([\s\S]*?)<\/stage>/.exec(xml);
+  if (stage === null) return producers;
+  for (const m of (stage[1] ?? '').matchAll(/<layer_(\d+)>([\s\S]*?)<\/layer_\1>/g)) {
+    const foreground = /<foreground>([\s\S]*?)<\/foreground>/.exec(m[2] ?? '');
+    const kind = /<producer>([^<]*)<\/producer>/.exec(foreground?.[1] ?? '')?.[1]?.trim();
+    if (kind !== undefined && kind !== '' && kind !== 'empty') producers.set(Number(m[1]), kind);
+  }
+  return producers;
+}
+
+/**
  * `RELEASE-091-01` (DELTA B, B2) — the layer a settled exchange cleared: a `CLEAR <ch>-<L>` the core
  * answered `202`. Anything else — a refusal, a timeout, a channel-wide `CLEAR` — proves nothing
  * about one layer and answers `null`.
@@ -1636,6 +1655,11 @@ export class CasparRuntime {
    */
   readonly #restoreBlocked = new Map<string, { slot: CommandSlot; producer: string }>();
   /**
+   * `CENTRAL-BRIDGE-01` (`C-046`) — what each server's last `OSC SUBSCRIBE` came to (or `unbound` when
+   * its OSC socket could not be bound). Read by `/health`; absent until the first handshake.
+   */
+  readonly #oscStatus = new Map<ServerLabel, 'subscribed' | 'refused' | 'unbound'>();
+  /**
    * `FIELD-FIXES-01` B — why each row's last take was refused, published on the row
    * (`StackItemState.takeRefusal`) so every console shows the same one line there and none needs
    * a banner. Written by {@link #recordTakeRefusal}; retired by the row's next successful take,
@@ -2253,12 +2277,43 @@ export class CasparRuntime {
         port: ep.amcpPort,
         oscPort: ep.oscPort,
         oscBindHost: deriveOscBindHost(ep.host),
+        /*
+          🔴 `CENTRAL-BRIDGE-01` rule 7 (`C-046`) — every connection asks the core for OSC on the port
+          this session bound, inside its handshake. On the Playout's machine UDP 6250 is the engine's;
+          the core's own default per-client subscription goes there and is left alone.
+        */
+        oscSubscribe: true,
         resyncDurationMs: RESYNC_MS,
         // TEST-ONLY (B-100): empty in production, so ServerSession defaults hold.
         ...this.#sessionTuning,
       });
       built.on('healthy', () => {
         this.#noteAmcpUp();
+      });
+      /*
+        `CENTRAL-BRIDGE-01` rule 7 — `OSC SUBSCRIBE` carries every channel of the core (on the
+        Playout's machine its previews, its holder and its guard among them): only the channels this
+        station declares are taken in. While none is declared (first-run) every channel is.
+      */
+      built.osc.setServedChannels((channel) => this.#servesOscChannel(channel));
+      const where = `${ep.host}:${String(ep.amcpPort)}`;
+      built.on('oscSubscription', ({ port, outcome, detail }) => {
+        this.#oscStatus.set(name, outcome);
+        process.stderr.write(
+          outcome === 'subscribed'
+            ? `[caspar-bridge] OSC: server ${name} (${where}) sends to this bridge's UDP ${String(port)} (OSC SUBSCRIBE)\n`
+            : outcome === 'refused'
+              ? `[caspar-bridge] ⚠ OSC: server ${name} (${where}) refused OSC SUBSCRIBE ${String(port)} (${detail}) - ` +
+                `only what the core sends by default reaches this bridge\n`
+              : `[caspar-bridge] ⚠ OSC: server ${name} (${where}) - no OSC port is bound, so none was asked for\n`,
+        );
+      });
+      built.on('oscUnavailable', ({ host, port, error }) => {
+        this.#oscStatus.set(name, 'unbound');
+        process.stderr.write(
+          `[caspar-bridge] ⚠ OSC: cannot bind UDP ${host}:${String(port)} for server ${name} ` +
+            `(${error.message}) - AMCP is connected without OSC; the bind is tried again at the next reconnect\n`,
+        );
       });
       return built;
     };
@@ -3686,6 +3741,12 @@ export class CasparRuntime {
     state: 'occupied' | 'empty' | 'unknown';
     layers: { layer: number; producer: string }[];
   }> {
+    /*
+      `CENTRAL-BRIDGE-01` rule 7 — a channel this bridge does not serve has its OSC dropped at the
+      transport, so the tap would call it EMPTY for want of data (Change channel… asks about the new
+      channel before declaring it). The core itself answers instead: one `INFO <channel>`.
+    */
+    if (!this.#servesOscChannel(channel)) return this.#occupancyFromInfo(channel, waitMs);
     const deadline = Date.now() + waitMs;
     for (;;) {
       const session = this.#adapter.primarySession;
@@ -3702,6 +3763,45 @@ export class CasparRuntime {
       }
       if (Date.now() >= deadline) return { state: 'unknown', layers: [] };
       await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
+   * `CENTRAL-BRIDGE-01` — {@link channelOccupancy} for a channel whose OSC is not taken in: one
+   * `INFO <channel>` to the primary (never journaled, `low`, the `B-292` reader's own road). A
+   * primary that is not healthy, a refusal or a reply that is not a channel's info answers
+   * `unknown`, which warns of nothing and claims nothing.
+   */
+  async #occupancyFromInfo(
+    channel: number,
+    waitMs: number,
+  ): Promise<{
+    state: 'occupied' | 'empty' | 'unknown';
+    layers: { layer: number; producer: string }[];
+  }> {
+    const unknown = { state: 'unknown' as const, layers: [] };
+    if (this.#adapter.primarySession.state !== 'healthy') return unknown;
+    try {
+      const result = await this.#adapter.send(this.#builder.info(channel), {
+        priority: 'low',
+        timeoutMs: Math.max(500, Math.min(waitMs, 2000)),
+        mirror: false,
+      });
+      const response = result.response;
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      const producers = xml === null ? null : stageProducersOfInfo(xml);
+      if (producers === null) return unknown;
+      const layers = [...producers]
+        .map(([layer, producer]) => ({ layer, producer }))
+        .sort((a, b) => a.layer - b.layer);
+      return { state: layers.length > 0 ? 'occupied' : 'empty', layers };
+    } catch {
+      return unknown;
     }
   }
 
@@ -13903,6 +14003,17 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 7 — **DOES THIS BRIDGE TAKE IN `channel`'S OSC?** A declared channel,
+   * or any channel while none is declared (first-run asks about a channel before it declares it).
+   * The ONE answer the transport filter and {@link channelOccupancy} both read: a channel whose OSC
+   * is dropped must never be judged from the tap, or its occupancy reads "empty" for want of data.
+   */
+  #servesOscChannel(channel: number): boolean {
+    const declared = this.#declaredChannels();
+    return declared.length === 0 || declared.includes(channel);
+  }
+
+  /**
    * 🔴 `ROUTE-PLATES-01` §1.E — **DOES THIS STATION'S OWN CONFIG DECLARE THIS LAYER?** A bank row
    * (the beds included — one union, `LayerManager.isFixed`), the Live Source band in force, or a
    * dynamic policy range; on a declared channel; never a reserved (playout) layer. The send seam's
@@ -15066,6 +15177,15 @@ export class CasparRuntime {
    */
   declaredChannels(): readonly number[] {
     return this.#declaredChannels();
+  }
+
+  /**
+   * `CENTRAL-BRIDGE-01` (`C-046`) — each declared server's OSC as its last handshake left it:
+   * `subscribed`, `refused` (the core answered otherwise), `unbound` (no socket), or absent before the
+   * first handshake. `/health` reports it.
+   */
+  oscStatus(): ReadonlyMap<ServerLabel, 'subscribed' | 'refused' | 'unbound'> {
+    return this.#oscStatus;
   }
 
   /**

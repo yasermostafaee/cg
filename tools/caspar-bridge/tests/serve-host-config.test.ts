@@ -32,7 +32,7 @@ afterEach(async () => {
 });
 
 const LOCAL: ConnectionConfig = {
-  servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+  servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
   strategy: 'mirror-sync',
   autoFailoverEnabled: true,
 };
@@ -41,7 +41,7 @@ const LOCAL: ConnectionConfig = {
 const REMOTE_BACKUP: ConnectionConfig = {
   ...LOCAL,
   servers: {
-    A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 },
+    A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 },
     B: { host: '192.168.21.50', amcpPort: 5251, oscPort: 6251 },
   },
 };

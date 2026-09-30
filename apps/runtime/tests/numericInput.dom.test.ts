@@ -508,7 +508,7 @@ describe('Station setup — Servers ports — R-020 (B-077 interaction)', () => 
     });
     expect(setConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        servers: { A: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6250 } },
+        servers: { A: { host: '127.0.0.1', amcpPort: 5251, oscPort: 6251 } },
       }),
     );
   });

@@ -67,7 +67,7 @@ declare module '*station-plan.mjs' {
   export const CONSOLE_URL: string;
   export const BRIDGE_PORT: 5280;
   export const TEMPLATE_PORT: 7911;
-  export const OSC_PORT: 6250;
+  export const OSC_PORT: 6251;
   export const BRIDGE_CONSOLE_PORT: 5175;
   export const STATION_PORTS: readonly StationPort[];
   export const INSTALLED_IMAGES: readonly string[];

@@ -102,7 +102,7 @@ describe('§3(a) — the strip is told when the config moves under it', () => {
 
     // The admin repoints the station at a host the operator's grant does not name.
     const repointed = await admin.ask('set', 'connections.set-config', {
-      servers: { A: { host: '10.9.9.9', amcpPort: 5250, oscPort: 6250 } },
+      servers: { A: { host: '10.9.9.9', amcpPort: 5250, oscPort: 6251 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     });

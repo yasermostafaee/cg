@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { hostError, hostValue, portError } from '../../ui/fieldValue.js';
+import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
 
@@ -28,11 +28,12 @@ export function BackupServerDialog({
 }): JSX.Element {
   const [host, setHost] = useState('');
   const [amcpPort, setAmcpPort] = useState('5250');
-  const [oscPort, setOscPort] = useState('6250');
+  // `CENTRAL-BRIDGE-01` rule 7 — the backup session's own port, one above the primary's (never 6250).
+  const [oscPort, setOscPort] = useState('6252');
 
   const hostBad = hostError(host, { label: 'Host address' });
   const amcpBad = portError(amcpPort, { min: 1, label: 'AMCP port' });
-  const oscBad = portError(oscPort, { min: 0, label: 'OSC port' });
+  const oscBad = oscPortError(oscPort);
   const invalid = hostBad !== null || amcpBad !== null || oscBad !== null;
 
   return (

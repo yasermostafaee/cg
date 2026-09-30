@@ -25,9 +25,11 @@ import type { FakePlayout, FakePlayoutOptions } from './fake-playout.js';
  *     ever be let in, and the check's AMCP line ended on the approval sentence. The default stays
  *     what it is for every suite; only the dev station opts out, here.
  *   - CASPARCG: `@cg/amcp-mock` on the port the connection check probes and first-run writes
- *     (5250), sending OSC to the station's own UDP port (6250), with `admit` wired to the Playout's
- *     allow list — so it refuses this machine exactly until the station-admin's sign-in lets it in,
- *     as a 2.8.54 Playout's firewall does.
+ *     (5250), with `admit` wired to the Playout's allow list — so it refuses this machine exactly
+ *     until the station-admin's sign-in lets it in, as a 2.8.54 Playout's firewall does. 🔴
+ *     `CENTRAL-BRIDGE-01` rule 7: it sends OSC to NO fixed port. The station's bridge binds its own
+ *     (6251) and asks for OSC with `OSC SUBSCRIBE` on its AMCP connection, exactly as it does on the
+ *     Playout's machine, where UDP 6250 is the engine's — so the dev station exercises that one road.
  *   - THE PROGRAMME FEEDS on `pgmPort(1)` and `pgmPort(2)` (9250, 9251) of the Playout's host, where
  *     the bridge reads them, so SHOW MONITORS shows a picture. A feed whose port is taken is SAID
  *     (one line) and the station runs without it: the monitors say "No return signal" there, which
@@ -46,7 +48,10 @@ export interface FakeStationModules {
 export interface FakeStationPorts {
   /** Where CasparCG listens: the port the connection check probes and first-run writes. */
   readonly amcp: number;
-  /** Where CasparCG sends OSC: the station's own UDP port, which the bridge listens on. */
+  /**
+   * The station's own UDP OSC port, which its bridge binds and names in `OSC SUBSCRIBE`. The fake
+   * CasparCG is not told it: it learns it from the subscribe, as the real core does.
+   */
   readonly osc: number;
   /** Each channel's programme feed, in channel order — `pgmPort(n)`. */
   readonly pgm: readonly number[];
@@ -56,7 +61,7 @@ export const FAKE_STATION_HOST = '127.0.0.1';
 /** The fake Playout's catalogue names channel 1 and channel 2 on this host. */
 export const FAKE_STATION_CHANNELS = 2;
 /** The ports a station uses — `AMCP_PORT`, `OSC_PORT` and `pgmPort(1..2)` — every one explicit. */
-export const FAKE_STATION_PORTS: FakeStationPorts = { amcp: 5250, osc: 6250, pgm: [9250, 9251] };
+export const FAKE_STATION_PORTS: FakeStationPorts = { amcp: 5250, osc: 6251, pgm: [9250, 9251] };
 
 export interface FakeStationOptions {
   /** TEST-ONLY — record every AMCP line CasparCG received (`@cg/amcp-mock`'s trace). */
@@ -99,8 +104,8 @@ export async function startFakeStation(
     caspar = await mods.createMock({
       host,
       amcpPort: ports.amcp,
-      oscHost: host,
-      oscPort: ports.osc,
+      // No predefined OSC destination: the bridge's `OSC SUBSCRIBE` is the only way in (rule 7).
+      oscPort: 0,
       channels: FAKE_STATION_CHANNELS,
       admit: (ip) => playout.isTrusted(ip),
       // `MEDIA-PLATES-01` — a clip the library holds runs for its real length and reports it over OSC.

@@ -105,6 +105,16 @@ function status(r: CasparRuntime, itemId: string): string | undefined {
   return r.stackSnapshot().find((i) => i.itemId === itemId)?.status;
 }
 
+/**
+ * `CENTRAL-BRIDGE-01` — THE DEAF CORE. A bridge asks for OSC on its own port with `OSC SUBSCRIBE`,
+ * so binding "a port the mock never sends to" no longer makes it deaf. The misconfigured-install
+ * shape is now a core that REFUSES the subscribe (a core without the command) and sends its stream
+ * only to a port the bridge never bound.
+ */
+function refuseSubscribe(m: MockHandle): void {
+  m.setHandler('OSC', () => ({ kind: 'err', code: 400, verb: 'OSC' }));
+}
+
 /** Leave a LIVE producer on the probe slot, as a dead bridge session would. */
 async function orphanLiveProducer(m: MockHandle, oscPort: number): Promise<void> {
   const r = new CasparRuntime(
@@ -132,6 +142,7 @@ it('THE REGRESSION: a BLIND tap over a LIVE layer sends NOTHING and says so hone
   );
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
+  refuseSubscribe(mock);
 
   await orphanLiveProducer(mock, oscPort);
   expect(mock.layerState(SLOT)?.onAir).toBe(true); // still live, orphaned
@@ -253,6 +264,7 @@ it('a blind restore RECOVERS: once OSC starts arriving, the sweep decides the it
   // for the life of the process.
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+  refuseSubscribe(mock);
 
   await orphanLiveProducer(mock, oscPort);
 
@@ -288,6 +300,7 @@ it('an operator action RETIRES a parked restore — a later decision cannot repl
   // producer the operator has since taken to air, and revert their field edits.
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+  refuseSubscribe(mock);
   await orphanLiveProducer(mock, oscPort);
 
   const deafPort = await freeUdpPort();
@@ -327,6 +340,7 @@ it('while BLIND, no on-air claim is left confident — not even a non-restored i
   // honest answer is the same one B-086 gives when the link drops.
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
+  refuseSubscribe(mock);
 
   const deafPort = await freeUdpPort();
   const r = new CasparRuntime(

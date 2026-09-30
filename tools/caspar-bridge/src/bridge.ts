@@ -44,6 +44,9 @@ import {
   ConnectionsSetConfigChannel,
   ConnectionsTemplateServeChannel,
   DEFAULT_BRIDGE_HOST,
+  DEFAULT_OSC_PORT,
+  RESERVED_OSC_PORT,
+  RESERVED_OSC_PORT_REASON,
   DEFAULT_BRIDGE_PORT,
   FixedLayersBanksChangedChannel,
   FixedLayersBanksChannel,
@@ -241,6 +244,15 @@ export interface BridgeOptions {
   port?: number;
   /** CasparCG server(s) + OSC bind. Phase 2 drives server A. */
   connection?: ConnectionConfig;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 7 (`C-046`) — **THIS MACHINE'S OSC PORT**, the service
+   * configuration's: server A binds it and server B binds it plus one, whatever connection is in force
+   * — a flag's, the persisted file's, the default, or one a station admin applies. It is a fact about
+   * the bridge's host (which ports its firewall rule opens, which ports the Playout's engine owns), not
+   * a per-server choice, so it overrides the connection's own `oscPort` values rather than competing
+   * with them. Absent: every connection's own values stand (every dev bridge). `6250` is refused.
+   */
+  oscPort?: number;
   /**
    * B-038 Phase 3 — overrides for the template HTTP server (`/template/<id>`).
    * Defaults derive from where CasparCG runs: loopback bind + serve-host when
@@ -1481,10 +1493,31 @@ const WS_MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 function defaultConnection(): ConnectionConfig {
   return {
     servers: {
-      A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 },
+      // `CENTRAL-BRIDGE-01` rule 7 — never 6250, the Playout engine's (`RESERVED_OSC_PORT`).
+      A: { host: '127.0.0.1', amcpPort: 5250, oscPort: DEFAULT_OSC_PORT },
     },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
+  };
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` — **THE BRIDGE'S OSC PORT OVER A CONNECTION** ({@link BridgeOptions.oscPort}):
+ * server A's `oscPort` becomes `oscPort`, server B's `oscPort + 1`. `undefined` returns the config
+ * untouched. The ONE place the rule is written: boot and `connections.set-config` both call it.
+ */
+export function withBridgeOscPort(
+  config: ConnectionConfig,
+  oscPort: number | undefined,
+): ConnectionConfig {
+  if (oscPort === undefined) return config;
+  const { A, B } = config.servers;
+  return {
+    ...config,
+    servers: {
+      A: { ...A, oscPort },
+      ...(B !== undefined ? { B: { ...B, oscPort: oscPort + 1 } } : {}),
+    },
   };
 }
 
@@ -1671,10 +1704,14 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // R-010 boot precedence: explicit connection (CLI flags) > persisted file >
   // the single-server default. Flags are session overrides — they win without
   // clobbering the persisted file.
-  const connection =
+  // `CENTRAL-BRIDGE-01` rule 7 — refused before anything binds, in the sentence every refusal says.
+  if (options.oscPort === RESERVED_OSC_PORT) throw new Error(RESERVED_OSC_PORT_REASON);
+  const connection = withBridgeOscPort(
     options.connection ??
-    (options.persistPath !== undefined ? loadPersistedConnection(options.persistPath) : null) ??
-    defaultConnection();
+      (options.persistPath !== undefined ? loadPersistedConnection(options.persistPath) : null) ??
+      defaultConnection(),
+    options.oscPort,
+  );
   // R-021 stage 1 — resolve the fixed bank (explicit > persisted file > none)
   // and VALIDATE it before anything binds: a bad bank is a hard boot failure,
   // never a warning (fixed-layers-store.ts header). The policy is resolved
@@ -2059,6 +2096,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     pgmReturnStatus: () => pgmReturn.status(),
     connectionCheck,
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
+    ...(options.oscPort !== undefined ? { oscPort: options.oscPort } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
     ...(options.sourceCatalogPath !== undefined
       ? { sourceCatalogPath: options.sourceCatalogPath }
@@ -2959,6 +2997,8 @@ export function buildRoutes(
   b: CasparRuntime,
   paths: {
     persistPath?: string;
+    /** `CENTRAL-BRIDGE-01` — this machine's OSC port over every applied config ({@link withBridgeOscPort}). */
+    oscPort?: number;
     fixedLayersPath?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
@@ -3393,8 +3433,10 @@ export function buildRoutes(
     route(ConnectionsConfigChannel, 'read', 'read', () => b.config()),
     // R-010 — runtime reconfiguration; persisted only after a successful apply.
     route(ConnectionsSetConfigChannel, 'operator', 'station-admin', async (r: ConnectionConfig) => {
-      const result = await b.setConfig(r);
-      if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, r);
+      // `CENTRAL-BRIDGE-01` — this machine's OSC port stands over whatever the panel sent.
+      const applied = withBridgeOscPort(r, paths.oscPort);
+      const result = await b.setConfig(applied);
+      if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, applied);
       return result;
     }),
     /*

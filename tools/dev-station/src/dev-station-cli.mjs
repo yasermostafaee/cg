@@ -14,8 +14,8 @@
  *                                     (DEV-LOCAL-CASPAR-01; loopback only; Node 23+)
  *   pnpm dev:station --no-open        do not open the browser
  *
- * It runs INSTEAD of CG Control, never beside it: the Playout's CORS admits one origin, UDP 6250
- * has one holder, and one channel has one station (`station-plan.mjs` has the three facts). The Playout
+ * It runs INSTEAD of CG Control, never beside it: the Playout's CORS admits one origin, the bridge's
+ * UDP 6251 has one holder, and one channel has one station (`station-plan.mjs` has the three facts). The Playout
  * address is written by the bridge's own one-shot, as CG Control writes it — never over the socket
  * (ADR 0010: a gate whose configuration is behind the gate is not a gate).
  */

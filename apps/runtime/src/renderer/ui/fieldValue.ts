@@ -1,3 +1,4 @@
+import { RESERVED_OSC_PORT, RESERVED_OSC_PORT_REASON } from '@cg/shared-ipc';
 import { normalizeDigits } from './NumericInput.js';
 
 /**
@@ -23,7 +24,7 @@ import { normalizeDigits } from './NumericInput.js';
  * | Host address (A and B)       | `host: z.string().min(1)`                      | ADDRESS  |
  * | Template host                | `templateServeHost: z.string().optional()`     | ADDRESS  |
  * | AMCP port                    | `amcpPort: z.number().int().positive()`        | NUMERIC  |
- * | OSC port                     | `oscPort: z.number().int().nonnegative()`      | NUMERIC  |
+ * | OSC port                     | `oscPort: int().nonnegative()`, never `6250`    | NUMERIC  |
  * | Template port                | `templateServePort: int 0–65535 .optional()`   | NUMERIC  |
  * | Device index / Key device    | `device: z.number().int().positive()`          | NUMERIC  |
  * | Route channel / layer        | `int().positive()` / `int().nonnegative()`     | NUMERIC  |
@@ -106,6 +107,16 @@ export function portError(
     return `${label} is out of range — it must be between ${String(min)} and 65535.`;
   }
   return null;
+}
+
+/**
+ * `CENTRAL-BRIDGE-01` rule 7 — an OSC port field: {@link portError}, and never `6250` — the Playout
+ * engine's port, refused in the bridge's own sentence (`RESERVED_OSC_PORT_REASON`).
+ */
+export function oscPortError(raw: string): string | null {
+  const base = portError(raw, { min: 0, label: 'OSC port' });
+  if (base !== null) return base;
+  return Number(raw.trim()) === RESERVED_OSC_PORT ? RESERVED_OSC_PORT_REASON : null;
 }
 
 /** §10.3 — a positive integer field (a device index, a route channel). */

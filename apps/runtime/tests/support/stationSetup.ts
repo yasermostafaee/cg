@@ -47,7 +47,7 @@ import { openDialog } from './dialog.js';
  */
 
 export const SETUP_CONFIG: ConnectionConfig = {
-  servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+  servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
   strategy: 'mirror-sync',
   autoFailoverEnabled: true,
 };

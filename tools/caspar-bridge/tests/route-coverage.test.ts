@@ -36,7 +36,7 @@ const routedNames = (): string[] => {
   // no sockets.
   const runtime = new CasparRuntime(
     {
-      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     },

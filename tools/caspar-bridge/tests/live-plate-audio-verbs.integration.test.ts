@@ -608,6 +608,13 @@ describe('every verb’s intent survives a bridge blip, through retention', () =
       ];
       await runtime?.stop();
       runtime = null;
+      /*
+        `CENTRAL-BRIDGE-01` — the core lost the page with the bridge. Since the bridge asks for OSC
+        with `OSC SUBSCRIBE`, a fresh bridge HEARS the core (it used to boot on a new port and hear
+        nothing), so a page still playing is adopted and no take follows. The scenario in which the
+        NEXT TAKE re-seats every plate is the one where the layers are gone too.
+      */
+      await mock?.restartCore();
       const fresh = new CasparRuntime(
         singleServer(mock?.amcpPort ?? 0, await freeUdpPort()),
         {},
