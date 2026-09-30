@@ -420,8 +420,9 @@ jobs:
     runs-on: ubuntu-latest
     # P-038 — the two suites' `globalTimeout`s must SUM under this with room for setup and the
     # build; the arithmetic lives in `apps/runtime/playwright.config.ts`. 20 → 24 on 2026-09-24
-    # (`MULTI-CHANNEL-01`): the Runtime suite measured 7.9 of its 8.0.
-    timeout-minutes: 24
+    # (`MULTI-CHANNEL-01`): the Runtime suite measured 7.9 of its 8.0. 24 → 30 on 2026-09-30
+    # (`CENTRAL-BRIDGE-01`): the Runtime suite ran out of its 10.0 (run 36661037161).
+    timeout-minutes: 30
 
     steps:
       - name: Checkout

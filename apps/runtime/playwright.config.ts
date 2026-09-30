@@ -112,8 +112,16 @@ function resolveWorkers(): number | undefined {
  * budget `8 → 10`, the Designer's unchanged at 8.0. 8 + 10 = 18 min against 24 − ~1.6 setup
  * − ~1 build = ~21.4 usable — 3.4 min of margin, more than the old sum ever had. The next
  * growth redoes this arithmetic again, here.
+ *
+ * 🔴 **RAISED AGAIN 2026-09-30 (`CENTRAL-BRIDGE-01`), in its own commit and flagged as shared CI
+ * config.** Run 36661037161 (`4d7d1bfd`) went red having failed nothing: `307 passed`, `3 did not
+ * run`, _"Timed out waiting 600s for the test suite to run"_ — the suite now needs ~10.2 min, and
+ * this change adds specs of its own (two consoles on one bridge, the token refusals). So: the job cap
+ * `24 → 30` min, this budget `10 → 14`, the Designer's unchanged at 8.0. 8 + 14 = 22 min against
+ * 30 − ~1.6 setup − ~1 build = ~27.4 usable — 5.4 min of margin. The next growth redoes this
+ * arithmetic again, here.
  */
-const CI_GLOBAL_TIMEOUT_MS = 10 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 14 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
