@@ -49,7 +49,8 @@ And the release: its `SHA256SUMS.txt` against the files, the version, and a draf
 - **Release `0.9.1`**: the version through `tools/release`; the installer job no longer writes a
   `SHA256SUMS.txt` into its CI artifacts, so the release's is the only one; the release job checks it
   against the uploaded assets; the `0.9.1` install guide, with the known limit "one channel from one CG
-  Control"; `P-031`'s floor at `0.9.1`; the `v0.9.0` draft retitled `v0.9.0 — superseded, do not use`.
+  Control"; `P-031`'s floor left open (the owner: `CENTRAL-BRIDGE-01` sets it at `0.10.0`); the `v0.9.0`
+  draft retitled `v0.9.0 — superseded, do not use`.
 - **Filed only:** `R-075` (the playlist output as a plate source), `R-076` (PGM audio and a VU meter),
   `R-077` (licensed through the Playout's dongle) — each blocked on the Playout team's answer.
 

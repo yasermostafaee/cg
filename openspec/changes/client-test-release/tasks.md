@@ -22,7 +22,7 @@
       (`stationSetupVersion.dom.test.ts`, `tests/e2e/app-version.spec.ts`).
 - [x] 1.5 CG Designer: `Version <release>` on its start screen (`landing-version.dom.test.ts`,
       `tests/e2e/app-version.spec.ts`).
-- [x] 1.6 `P-031`: the compatibility floor is set at `0.9.0`. (Moved to `0.9.1` on 2026-09-30 — `0.9.0` was never delivered — by `release-0-9-1` §5, `P-060`.)
+- [x] 1.6 `P-031`: the compatibility floor is set at `0.9.0`. (Opened again on 2026-09-30 — `0.9.0` was never delivered, nor is `0.9.1`; `CENTRAL-BRIDGE-01` sets it at `0.10.0` — `release-0-9-1`, `P-031`.)
 - [x] 1.7 The installer workflow reads the version before building; the smoke checks both installers'
       names and Installed apps (HKLM for CG Control, HKCU for CG Designer) against it, and the entry's
       absence after uninstall.

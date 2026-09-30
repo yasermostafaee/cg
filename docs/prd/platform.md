@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS SET: `0.9.1`** (moved from `0.9.0`, never delivered, on 2026-09-30 by [[P-060]] — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS OPEN** — `0.9.0` and `0.9.1` are never delivered; `CENTRAL-BRIDGE-01` (`0.10.0`) sets it (the owner, 2026-09-30 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1754,6 +1754,9 @@ reading this after a release has gone out, this section is HISTORY, not licence.
 
 ### 🔴 THE FLOOR IS SET — `0.9.0`, the first client delivery (2026-09-29, `CLIENT-TEST-RELEASE-01` B1)
 
+**Superseded (2026-09-30): `0.9.0` was never delivered, and the floor is OPEN — see the next section.**
+What follows is the record of that day.
+
 **`0.9.0` is the first release a client holds** — CG Control, CG Designer and the bridge, one
 version (`tools/release/src/release-version.mjs` reads all nine files that carry it). **The policy
 above reverses from this release.** Everything `0.9.0` can open must keep opening in every later
@@ -1777,15 +1780,16 @@ owed") was written before `0.9.0` and is history from this date. `CG_RUNTIME_VER
 (`packages/shared-schema/src/runtime-version.ts`) is a rendering-CONTRACT version and is untouched by
 this release, as its header prescribes for an ordinary release.
 
-### 🔴 THE FLOOR MOVES TO `0.9.1` (2026-09-30, `RELEASE-091-01` §5, [[P-060]])
+### 🔴 THE FLOOR IS OPEN until `CENTRAL-BRIDGE-01` sets it at `0.10.0` (the owner, 2026-09-30)
 
-**`0.9.0` was never delivered** — the owner's own check of it found the faults [[P-060]] carries, and
-its draft is retitled `v0.9.0 — superseded, do not use`. The floor is therefore `0.9.1`: everything
-above that `0.9.0` would open, `0.9.1` opens identically (no format moved between them), and it is
-from `0.9.1` that nothing may stop opening. ⚠ **Open for the owner:** `RELEASE-091-01` DELTA B (B0)
-says `0.9.1` is not delivered either — `CENTRAL-BRIDGE-01` (`0.10.0`) comes first. By this section's
-own reasoning the floor would then be the first release a client actually holds; it is moved to
-`0.9.1` because §5 says so, and moves again only on the owner's word.
+**Neither `0.9.0` nor `0.9.1` is delivered.** The owner's own check of `0.9.0` found the faults
+[[P-060]] carries, and its draft is retitled `v0.9.0 — superseded, do not use`; `RELEASE-091-01`
+DELTA B (B0) decided `0.9.1` is not handed to a client either — `CENTRAL-BRIDGE-01` (`0.10.0`, one
+bridge per Playout) comes first. `RELEASE-091-01` §5 had moved the floor to `0.9.1`; the owner's
+decision of 2026-09-30 leaves it **open**, and `CENTRAL-BRIDGE-01` sets it at `0.10.0`, the first
+release a client will hold. Until then no release a client holds constrains a format: the policy above
+applies as it did before `0.9.0`. The list in the section above is what `0.9.0` would have been held
+to; `CENTRAL-BRIDGE-01` writes `0.10.0`'s when it sets the floor.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
@@ -3728,7 +3732,8 @@ setup.exe`) is the INSTALLER JOB's, which the workflow wrote over Tauri's built 
 inside both CI artifacts — it is no longer written, so the only `SHA256SUMS.txt` is the release's, and
 the release job now checks it against the uploaded assets (a line naming a file the release does not
 hold, a missing line or a wrong hash stops it). The `v0.9.0` draft is retitled `v0.9.0 — superseded,
-do not use` and stays a draft. [[P-031]]'s floor moves to `0.9.1`. The install guide for `0.9.1`
+do not use` and stays a draft. [[P-031]]'s floor stays open: `CENTRAL-BRIDGE-01` sets it at `0.10.0`
+(the owner, 2026-09-30; §5 had moved it to `0.9.1`). The install guide for `0.9.1`
 states the one limit that stands until `CENTRAL-BRIDGE-01`: one channel is driven from one CG Control
 at a time ([[R-068]]).
 
@@ -3744,5 +3749,5 @@ WHEN a CI run builds the installers THEN no artifact carries a `SHA256SUMS.txt`.
 installers job logs its hashes and uploads no sums; the release job runs `release-files.mjs verify` over
 the assets downloaded back from the draft (`sumsProblems` — the `0.9.0` job's own sums fail it, naming
 the line). The `0.9.1` guide adds the one-CG-Control-per-channel limit and Help → About. [[P-031]]'s floor
-is `0.9.1`, with DELTA B's "`0.9.1` is never delivered" left to the owner (see [[P-031]]). The draft
-itself is read back in the change's `tasks.md` (5.4).
+is left open — `CENTRAL-BRIDGE-01` sets it at `0.10.0` (the owner, 2026-09-30). The draft itself is read
+back in the change's `tasks.md` (5.4).

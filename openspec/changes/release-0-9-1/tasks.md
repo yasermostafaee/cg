@@ -78,8 +78,8 @@ smoke phases success; draft skipped, not a tag).
       that half applies only where a newer `gh` gives one.
 - [x] 5.3 `0.9.1` in all nine files (`release-version.mjs` reads `0.9.1` and accepts `v0.9.1`; its test
       pin moved with it); `docs/release/0.9.1/` guide — the known limit (one CG Control per channel), and
-      Help → About for the Designer's version, both labels checked by `guide.test.ts`; `P-031`'s floor at
-      `0.9.1` — with DELTA B's "`0.9.1` is never delivered" left to the owner.
+      Help → About for the Designer's version, both labels checked by `guide.test.ts`; `P-031`'s floor
+      left OPEN — the owner, 2026-09-30: `CENTRAL-BRIDGE-01` sets it at `0.10.0` (§5 had said `0.9.1`).
 - [x] 5.4 Tag `v0.9.1` → a draft with the four files, read back; the `v0.9.0` draft retitled
       `v0.9.0 — superseded, do not use`, still a draft.
       Tag `v0.9.1` (annotated) → `cfad5d6b`. Run https://github.com/yasermostafaee/cg/actions/runs/36638504802

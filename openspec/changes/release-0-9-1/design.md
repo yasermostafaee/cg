@@ -121,9 +121,9 @@ download <tag>` finds a DRAFT by its tag and serves its assets; `gh release view
   `gh` 2.71 carries no `digest` field, so the authoritative half is hashing the bytes downloaded back,
   and GitHub's digest is compared only where a newer `gh` reports it; the guide's line verified against
   GitHub's bytes (the installers were not fetched).
-- **The floor (`P-031`).** §5 moves it to `0.9.1` because `0.9.0` was never delivered. DELTA B (B0)
-  says `0.9.1` is not delivered either (`CENTRAL-BRIDGE-01`, `0.10.0`, comes first); by the same reasoning
-  the floor would be the first release a client holds. Moved as §5 says; left to the owner.
+- **The floor (`P-031`): OPEN.** §5 moved it to `0.9.1` because `0.9.0` was never delivered; DELTA B (B0)
+  then said `0.9.1` is not delivered either (`CENTRAL-BRIDGE-01`, `0.10.0`, comes first). The owner's
+  decision of 2026-09-30: the floor stays open, and `CENTRAL-BRIDGE-01` sets it at `0.10.0`.
 
 ## §7 — rows at start (`B-291`)
 
