@@ -1,5 +1,10 @@
 import { useMemo } from 'react';
-import type { ClearedOutsideLayer, OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
+import {
+  CLEARED_BY_PLAYOUT_LICENSE,
+  type ClearedOutsideLayer,
+  type OrphanLayer,
+  type OwnedOccupancyWarning,
+} from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { NoticeDismiss } from '../../ui/Notice.js';
@@ -369,7 +374,10 @@ export function OrphanLayersBanner({
               return (
                 <div key={name} style={styles.row} data-cleared-outside={name}>
                   <span>
-                    Layer {e.layer} on CH {e.channel} was cleared outside CG Control
+                    {/* `PLAYOUT-FEATURES-01` D — the Playout's own license rule, when D4 said so. */}
+                    {e.cause === 'playout-license'
+                      ? `Layer ${String(e.layer)} on CH ${String(e.channel)} — ${CLEARED_BY_PLAYOUT_LICENSE}`
+                      : `Layer ${String(e.layer)} on CH ${String(e.channel)} was cleared outside CG Control`}
                   </span>
                 </div>
               );

@@ -316,6 +316,12 @@ export function createMockBridge(): RuntimeBridge {
       signIn: () => Promise.resolve({ ok: false, failure: 'unexpected' as const }),
     },
 
+    // `PLAYOUT-FEATURES-01` D — test mode has no Playout, so no license read: nothing is refused.
+    license: {
+      state: () => Promise.resolve({ license: null }),
+      onChanged: () => () => undefined,
+    },
+
     connections: {
       config: () => Promise.resolve(mock.config()),
       setConfig: (req) => Promise.resolve(mock.setConfig(req)),

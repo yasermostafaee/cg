@@ -122,6 +122,8 @@ describe('the answer — three facts, kept apart, catalogue first', () => {
         // `UI-POLISH-01` G — the row's air state rides the join (the fake: on air, playing).
         output: 'on-air',
         playlist: 'playing',
+        // `PLAYOUT-FEATURES-01` D — `2.9.2`'s per-channel CG license rides it too (the fake: licensed).
+        cgLicensed: true,
         declared: false,
         permitted: true,
         sources: ['catalogue'],
@@ -132,6 +134,7 @@ describe('the answer — three facts, kept apart, catalogue first', () => {
         named: { id: OURS?.id, name: OURS?.name },
         output: 'off',
         playlist: 'stopped',
+        cgLicensed: true,
         declared: true,
         permitted: true,
         sources: ['catalogue', 'bank', 'channel-settings'],

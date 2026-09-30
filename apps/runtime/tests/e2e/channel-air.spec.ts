@@ -4,8 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { cgOutsideCapReason } from '@cg/shared-ipc';
 import {
   startFakePlayout,
+  FAKE_GRACE_UNTIL,
+  type FakeLicensePreset,
   FAKE_ADMIN,
   FAKE_PLAYOUT_PASSWORD,
   type FakePlayout,
@@ -38,12 +41,16 @@ let playout: FakePlayout | null = null;
 let bridge: ChildProcess | null = null;
 let stateDir: string | null = null;
 
-async function startStation(): Promise<{ bridgeUrl: string; fake: FakePlayout }> {
+async function startStation(
+  license: FakeLicensePreset = 'licensed',
+): Promise<{ bridgeUrl: string; fake: FakePlayout }> {
   const both = [
     { host: '127.0.0.1', channel: 1 },
     { host: '127.0.0.1', channel: 2 },
   ];
   const fake = await startFakePlayout({ grants: { admin: both } });
+  // `PLAYOUT-FEATURES-01` D — the CG license, set before the sign-in reads it.
+  fake.setLicense(license);
   playout = fake;
   stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-air-'));
   const scratch = (name: string): string => path.join(stateDir as string, name);
@@ -127,8 +134,8 @@ test.afterEach(async () => {
   stateDir = null;
 });
 
-async function open(page: Page): Promise<FakePlayout> {
-  const { bridgeUrl, fake } = await startStation();
+async function open(page: Page, license?: FakeLicensePreset): Promise<FakePlayout> {
+  const { bridgeUrl, fake } = await startStation(license);
   await page.addInitScript(
     `window.__CG_BRIDGE_URL__ = ${JSON.stringify(bridgeUrl)}; window.__CG_SPLASH_DISABLED__ = true;`,
   );
@@ -305,4 +312,42 @@ test('G — Change channel… rows and Station setup’s subtitle carry the dot 
   await expect(dot(row(2))).toHaveAttribute('data-output-dot', 'off');
   await expect(dot(row(1))).toHaveCSS('background-color', await cssColour(page, 'var(--r-onair)'));
   await shot(page, 'g-6-change-channel-rows');
+});
+
+/*
+  🔴 `PLAYOUT-FEATURES-01` D (`R-077`) — THE CG LICENSE ON THE STRIP AND IN THE ADMIN'S LINE, in a real
+  browser from a real bridge reading the fake Playout's `2.9.2` license. D4's `cgLicensed` arrives at the
+  next D4 read (5 s); `grace` is set before the sign-in, whose license read brings it at once (the reader's
+  own cadence is a minute).
+*/
+test('D — a channel outside the CG cap reads NO CG LICENSE, with the reason on hover — control: channel 1', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const fake = await open(page);
+  await expect(tab(page, 2)).not.toContainText('NO CG LICENSE');
+  fake.setLicense('cap-1');
+  await expect(tab(page, 2)).toContainText('NO CG LICENSE', NEXT_READ);
+  await expect(tab(page, 2)).toHaveAttribute('title', `Channel 2 · ${cgOutsideCapReason(2)}`);
+  // CONTROL — channel 1 is inside the cap: no mark.
+  await expect(tab(page, 1)).not.toContainText('NO CG LICENSE');
+  await strip(page).screenshot({ path: test.info().outputPath('d-1-cap-one-channel.png') });
+  await test.info().attach('d-1-cap-one-channel', {
+    path: test.info().outputPath('d-1-cap-one-channel.png'),
+    contentType: 'image/png',
+  });
+});
+
+test('D — `grace`: a station admin sees ONE line naming the end of the grace', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, 'grace');
+  const line = page.locator('[data-license-grace-banner]');
+  await expect(line).toHaveCount(1, { timeout: 20_000 });
+  const until = await page.evaluate((iso) => {
+    const at = new Date(iso);
+    const two = (n: number): string => String(n).padStart(2, '0');
+    return `${String(at.getFullYear())}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}`;
+  }, FAKE_GRACE_UNTIL);
+  await expect(line).toHaveText(`Playout license expired — grace until ${until}`);
+  await shot(page, 'd-2-grace-line');
 });

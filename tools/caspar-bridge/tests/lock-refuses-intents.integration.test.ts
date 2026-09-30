@@ -299,6 +299,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'bridge.logs-ticket',
         // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, a READ (its sign-in is refused locked).
         'bridgeSession.state',
+        // `PLAYOUT-FEATURES-01` D — the CG license, as last read.
+        'license.state',
         'channelSettings.get',
         // `DESKTOP-APPS-01` — reads: the unjoined catalogue, the connection check, the route address.
         'channels.catalogue',

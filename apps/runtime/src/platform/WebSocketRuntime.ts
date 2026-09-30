@@ -500,6 +500,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #straySubs = new Subs<readonly ipcChannels.StationStray[]>();
   /** `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session, as the bridge last said. */
   readonly #bridgeSessionSubs = new Subs<ipcChannels.BridgeSessionState>();
+  /** `PLAYOUT-FEATURES-01` D — the CG license as CG Bridge last read it. */
+  readonly #licenseSubs = new Subs<ipcChannels.LicenseState>();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
   readonly #sourceCatalogSubs = new Subs<ConsoleSourceCatalog>();
   readonly #sourceAssignmentSubs = new Subs<SourceAssignments>();
@@ -1173,6 +1175,16 @@ export class WebSocketRuntime implements RuntimeBridge {
         return;
       }
     }
+    // `PLAYOUT-FEATURES-01` D — and the CG license, by the same rule (a bridge too old to answer
+    // leaves it as it was).
+    try {
+      this.#licenseSubs.emit(await this.#invoke(ipcChannels.LicenseStateChannel, undefined));
+    } catch (err) {
+      if (err instanceof BridgeDisconnectedError) {
+        this.#setResyncing(false);
+        return;
+      }
+    }
 
     // First connect: the renderer's `useBridgeSnapshot` pulls the initial
     // stack/health/lock, so only a RECONNECT re-pulls them here.
@@ -1402,6 +1414,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       case ipcChannels.BridgeSessionStateChangedChannel.name: {
         const p = ipcChannels.BridgeSessionStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#bridgeSessionSubs.emit(p.data);
+        break;
+      }
+      // `PLAYOUT-FEATURES-01` D — the CG license moved.
+      case ipcChannels.LicenseStateChangedChannel.name: {
+        const p = ipcChannels.LicenseStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#licenseSubs.emit(p.data);
         break;
       }
       case ipcChannels.StationStraysChangedChannel.name: {
@@ -1901,6 +1919,13 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#bridgeSessionSubs.add(handler),
     signIn: (req: ChannelRequest<typeof ipcChannels.BridgeSessionSignInChannel>) =>
       this.#invoke(ipcChannels.BridgeSessionSignInChannel, req),
+  };
+
+  /** `PLAYOUT-FEATURES-01` D — the CG license, pulled by its hook and pushed on change. */
+  readonly license = {
+    state: () => this.#invoke(ipcChannels.LicenseStateChannel, undefined),
+    onChanged: (handler: (state: ipcChannels.LicenseState) => void) =>
+      this.#licenseSubs.add(handler),
   };
 
   readonly connections = {

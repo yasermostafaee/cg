@@ -678,6 +678,38 @@ describe('RELEASE-091-01 DELTA B — a layer of ours cleared from outside', () =
     await waitFor(() => onAir(r, ROW_TPL), 'the row back on air');
   });
 
+  /*
+    🔴 `PLAYOUT-FEATURES-01` D — THE PLAYOUT'S OWN LICENSE RULE clears an unlicensed channel (`CLEAR <ch>`
+    after the current item, every minute — LICENSE §4). A layer found cleared while D4 reads the channel
+    `unlicensed` is named for it; the same clear with D4 saying nothing stays "outside CG Control".
+  */
+  it('🔴 a layer cleared while D4 reads the channel `unlicensed` is named `Cleared by the Playout: its license` — control: with the channel licensed, no cause', async () => {
+    const { r, mock } = await boot();
+    let unlicensed = false;
+    r.useUnlicensedCheck((channel) => unlicensed && channel === 2);
+    await take(r, 'page-only', TPL, ROW_TPL);
+    await waitFor(() => onAir(r, ROW_TPL), 'the row on air');
+    await delay(300);
+    // The Playout's license lapses while the graphic is on air (a take there is refused — C-048).
+    unlicensed = true;
+    await foreign(mock, `CLEAR 2-${String(TPL.layer)}`);
+    await waitFor(() => statusOf(r, ROW_TPL) === 'idle', 'the row off air', 5_000);
+    expect(r.clearedOutside()).toEqual([
+      expect.objectContaining({ channel: 2, layer: TPL.layer, cause: 'playout-license' }),
+    ]);
+
+    // CONTROL — licensed again: the same clear carries no cause.
+    unlicensed = false;
+    expect(await r.take(ROW_TPL)).toEqual({ accepted: true });
+    await waitFor(() => onAir(r, ROW_TPL), 'the row back on air');
+    await delay(300);
+    await foreign(mock, `CLEAR 2-${String(TPL.layer)}`);
+    await waitFor(() => statusOf(r, ROW_TPL) === 'idle', 'the row off air again', 5_000);
+    const entry = r.clearedOutside().find((e) => e.layer === TPL.layer);
+    expect(entry).toBeDefined();
+    expect(entry?.cause).toBeUndefined();
+  });
+
   it('🔴 a plate left in our band by another client is listed and clears from the strip’s door — controls: a plate this bridge holds is not listed and is refused, and a video above the bands is refused', async () => {
     const { r, mock, mark, sentSince } = await boot();
     await take(r);

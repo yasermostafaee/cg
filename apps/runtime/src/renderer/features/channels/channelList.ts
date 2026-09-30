@@ -160,7 +160,11 @@ export function channelNames(discovered: StationChannels | null): ReadonlyMap<nu
 export function channelAirs(discovered: StationChannels | null): ReadonlyMap<number, ChannelAir> {
   const airs = new Map<number, ChannelAir>();
   for (const c of discovered?.channels ?? []) {
-    if (c.declared && (c.output !== undefined || c.playlist !== undefined)) {
+    // `PLAYOUT-FEATURES-01` D — `cgLicensed` alone is a fact about the channel too (the strip's mark).
+    if (
+      c.declared &&
+      (c.output !== undefined || c.playlist !== undefined || c.cgLicensed !== undefined)
+    ) {
       airs.set(c.channel, airFrom(c));
     }
   }

@@ -48,8 +48,18 @@ export const ClearedOutsideLayerSchema = z.object({
   layer: z.number().int().nonnegative(),
   /** When the bridge learned it (ISO). */
   at: z.string().datetime(),
+  /**
+   * `PLAYOUT-FEATURES-01` D — WHO, when it is known. `playout-license`: D4 read the channel's
+   * `playlist` as `unlicensed` when the layer was found gone — the Playout's OWN license rule, which
+   * sends `CLEAR <channel>` after the current item, every minute (LICENSE §4). Said
+   * `Cleared by the Playout: its license`. Absent: not known, and the line says "outside CG Control".
+   */
+  cause: z.enum(['playout-license']).optional(),
 });
 export type ClearedOutsideLayer = z.infer<typeof ClearedOutsideLayerSchema>;
+
+/** `PLAYOUT-FEATURES-01` D — the words for a known {@link ClearedOutsideLayer.cause}. */
+export const CLEARED_BY_PLAYOUT_LICENSE = 'Cleared by the Playout: its license';
 
 /** Pull the layers cleared outside CG Control that are still to be said (initial state on connect). */
 export const LayersClearedOutsideChannel = defineChannel(

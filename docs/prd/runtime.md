@@ -4222,7 +4222,7 @@ levels (OSC, an endpoint, or the stream), the scale and ballistics, and whether 
 the same audio and levels with D4/D10's authentication. **Acceptance (to confirm):** WHEN the PGM
 monitor shows a channel THEN its sound plays in sync and the meter moves as the Playout's does.
 
-## [!] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · BLOCKED on the Playout team's answer to `CG-CONTROL-ASK-LICENSE-2026-09-29.md`
+## [~] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · ANSWERED by `PLAYOUT-CG-RESPONSE-LICENSE-v1.md` (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` D in `openspec/changes/playout-features/` (§1) · owed: `2.9.2` on `.111`
 
 **What.** CG Control works with a Playout only if that Playout's license includes CG Control. The
 Playout is the only license authority: it refuses an unlicensed CG Control at the `cg-admin` sign-in
@@ -4236,6 +4236,30 @@ an endpoint for the state, their own rule when the dongle goes, a development li
 the build. **Acceptance (to confirm):** WHEN the Playout's license lacks CG Control THEN the sign-in is
 refused in one line and nothing can be taken; WHEN the license goes while graphics are on air THEN
 nothing is cleared, new takes are refused with the reason, and removals still work.
+
+**Answered (`2.9.2`, `PLAYOUT-CG-RESPONSE-LICENSE-v1.md`) and built (`PLAYOUT-FEATURES-01` D, 2026-09-30).**
+The dongle carries a `cg` bit and a CG channel cap; the Playout refuses D1/D2 with `403 cg_not_licensed`
+(built by `CENTRAL-BRIDGE-01-A`), serves `GET /api/cg/license` and adds `cgLicensed` to each D4 row. CG
+Bridge reads the license beside D9 (at most once a minute, after its own sign-in, the last value KEPT
+while the Playout cannot be reached, `404` read as "not served"), pushes it to every console, and refuses
+a take where `licensed` is `false` or the channel's `cgLicensed` is `false` (while D4 is unread, the
+license's own channel list) — before anything is sent, with the Playout's message on the row. Clears,
+stops and removals pass; nothing on air is cleared by us. The strip marks the channel (` · NO CG
+LICENSE`, the reason on hover); a station admin sees one line in `grace`; a layer found cleared while D4
+reads the channel `unlicensed` is named `Cleared by the Playout: its license` (the Playout's OWN rule,
+`B-292`'s notice). Tests: `cg-license.integration.test.ts`, the cause case in
+`media-plates.integration.test.ts`, `cgLicense.dom.test.ts`, e2e `channel-air.spec.ts` (D). **Test
+switches on a real engine** (their §6): `APASAI_LICENSE_BYPASS=1` (license off, CG allowed, no cap) with
+`APASAI_LICENSE_CG=0` (not included) or `=N` (a cap of N); `.111` runs with the bypass on and no
+`APASAI_LICENSE_CG`, so after `2.9.2` it reads licensed with no cap. **Owed:** `2.9.2` on `.111`.
+
+**⚠ Recorded limit — not built around (their §5).** On loopback, AMCP cannot be locked by a license: the
+core's AMCP has no authentication and no per-layer permission, and loopback is outside the firewall, so
+any local process — a modified or unlicensed bridge on the Playout machine included — can send any AMCP
+command. The token gate (D1/D2) and `/api/cg/license` hold our own bridge and consoles; against a
+modified bridge they are advisory. A hard lock needs new work in their C++ core (an authenticated AMCP
+handshake, or a per-connection layer limit), which is not planned. For a bridge on another machine the
+Playout's AMCP allow list and firewall remain the real barrier.
 
 ## [ ] R-078 — Two operators on one channel: an exclusive lock ⟨priority: low⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §B · filed only
 

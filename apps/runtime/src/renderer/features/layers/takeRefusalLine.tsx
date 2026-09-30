@@ -1,4 +1,5 @@
 import {
+  CG_UNLICENSED_CODE,
   notShowableWords,
   unseatableWords,
   type SourceDefinition,
@@ -53,6 +54,11 @@ export interface TakeRefusalLine {
    * `Bed 59 · Plate 1: waiting for the Playout's input list.`
    */
   readonly plate?: string | null;
+  /**
+   * `PLAYOUT-FEATURES-01` D — the clause is the PLAYOUT's own sentence (its license message, Persian),
+   * isolated on its own when rendered.
+   */
+  readonly playoutWords?: string;
 }
 
 /**
@@ -107,6 +113,17 @@ export function takeRefusalLine(
       clause,
       text: `${who}: ${clause}`,
       unseatable: { plate, name: words.name, rest: words.rest },
+    };
+  }
+  if (refusal.code === CG_UNLICENSED_CODE && refusal.message !== undefined) {
+    // `PLAYOUT-FEATURES-01` D — CG is not licensed on the row's channel: the Playout's own words.
+    return {
+      row: rowName,
+      source: null,
+      input: null,
+      clause: refusal.message,
+      text: `${rowName}: ${refusal.message}`,
+      playoutWords: refusal.message,
     };
   }
   if (refusal.code === NO_BAND_CODE) {
@@ -195,6 +212,16 @@ function lowerFirst(sentence: string): string {
  * chrome, so the English clause is never flipped by the name beside it.
  */
 export function TakeRefusalText({ line }: { line: TakeRefusalLine }): JSX.Element {
+  if (line.playoutWords !== undefined) {
+    // The row and the Playout's sentence are both data, each isolated; only `: ` is chrome.
+    return (
+      <>
+        <bdi>{line.row}</bdi>
+        {': '}
+        <bdi>{line.playoutWords}</bdi>
+      </>
+    );
+  }
   if (line.unseatable !== undefined) {
     // The row and the source are data, each isolated; `Plate N` and the clause are chrome.
     return (

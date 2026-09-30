@@ -85,6 +85,8 @@ const PATHS = {
   inputs: '/api/cg/inputs',
   /** `PLAYOUT-SOURCES-01` — D11, the Playout's media library. */
   media: '/api/cg/media',
+  /** `PLAYOUT-FEATURES-01` D — `2.9.2`'s CG license (LICENSE §3.1). */
+  license: '/api/cg/license',
 } as const;
 
 // ── `PLAYOUT-SOURCES-01` §3 — D10 AND D11, AS THEIR ANSWER DESCRIBES THEM ──────────────────────
@@ -537,6 +539,67 @@ export const FAKE_CATALOGUE: readonly FakeCatalogueRow[] = [
   },
 ];
 
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` D — **THE CG LICENSE THE FAKE MODELS** (`PLAYOUT-CG-RESPONSE-LICENSE-v1.md`
+ * §3, and §6's request that a CI fake rebuild these shapes). Four presets, spelled as the Playout sends
+ * them; `null` is a Playout before `2.9.2` (no endpoint — `404` — and no `cgLicensed` in D4).
+ *
+ *   - `licensed` — the default: CG on every channel, the Playout's own license `valid`;
+ *   - `not_included` — the dongle has no `cg` bit: `licensed: false`, the Playout's message, `channels: []`;
+ *   - `cap-1` — a CG cap of one channel: channel 1 only;
+ *   - `grace` — the Playout's own license expired, 48 h left: CG still licensed, `graceUntil` set.
+ *
+ * ⚠ It does NOT also refuse D1/D2 with `cg_not_licensed` under `not_included`: the real Playout does, but a
+ * token issued before the license went stays valid (§4), and that — a signed-in console on an unlicensed
+ * Playout — is the case the take refusal exists for. {@link FakePlayout.setCgNotLicensed} drives D1/D2.
+ */
+export type FakeLicensePreset = 'licensed' | 'not_included' | 'cap-1' | 'grace';
+
+/** `2.9.2` §2's own sentence, verbatim — the one `not_included` answers with. */
+export const FAKE_NOT_INCLUDED_MESSAGE = 'لایسنسِ این Playout شاملِ CG Control نیست.';
+
+/** `grace`'s end, fixed so a spec can assert the line that names it. */
+export const FAKE_GRACE_UNTIL = '2026-10-01T12:00:00Z';
+
+/** The `GET /api/cg/license` body for a preset, over the fake's catalogue (its channels in order). */
+export function fakeLicenseBody(
+  preset: FakeLicensePreset,
+  catalogue: readonly FakeCatalogueRow[],
+): Record<string, unknown> {
+  const all = catalogue.map((r) => ({ casparHost: r.casparHost, casparChannel: r.casparChannel }));
+  const base = {
+    licensed: true,
+    reason: null,
+    message: null,
+    playoutState: 'valid',
+    maxChannels: null,
+    channels: all,
+    expiresAt: '2027-01-01',
+    graceUntil: null,
+  };
+  switch (preset) {
+    case 'licensed':
+      return base;
+    case 'not_included':
+      return {
+        ...base,
+        licensed: false,
+        reason: 'not_included',
+        message: FAKE_NOT_INCLUDED_MESSAGE,
+        channels: [],
+      };
+    case 'cap-1':
+      return { ...base, maxChannels: 1, channels: all.slice(0, 1) };
+    case 'grace':
+      return {
+        ...base,
+        playoutState: 'grace',
+        expiresAt: '2026-09-29',
+        graceUntil: FAKE_GRACE_UNTIL,
+      };
+  }
+}
+
 /** The `aud` the contract fixes (§3.2, Playout Q5 accepted). A literal, for the reason above. */
 const CONTRACT_AUDIENCE = 'cg-control';
 
@@ -827,6 +890,8 @@ export interface FakePlayoutRequestCounts {
   media: number;
   /** `PLAYOUT-SOURCES-01` — D11 `ids=` requests — the one retry's positive control. */
   mediaIds: number;
+  /** `PLAYOUT-FEATURES-01` D — license reads, `404`s included. */
+  license: number;
 }
 
 /**
@@ -999,6 +1064,16 @@ export interface FakePlayout {
   setCredentialFailure(code: FakeCredentialFailure | null): void;
   /** Mint a token directly, bypassing D1 — the only way to reach the malformed/expired cases. */
   issueToken(options?: IssueTokenOptions): Promise<IssuedToken>;
+
+  // ── `PLAYOUT-FEATURES-01` D — Playout `2.9.2`'s CG license ───────────────────────────────────
+  /** `GET /api/cg/license`. Bearer-gated, `no-store`; `404` with CG Control off or with no license. */
+  readonly licenseUrl: string;
+  /**
+   * Set the CG license the fake answers ({@link FakeLicensePreset}); `null` is a Playout before `2.9.2`
+   * (the endpoint `404`s and D4 carries no `cgLicensed`). D4's `ETag` changes, so the bridge sees each
+   * channel's `cgLicensed` at its next read.
+   */
+  setLicense(preset: FakeLicensePreset | null): void;
 
   // ── `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` ─────────────────────────────────────────────────
   /**
@@ -1201,6 +1276,7 @@ class FakePlayoutServer implements FakePlayout {
     inputs: 0,
     media: 0,
     mediaIds: 0,
+    license: 0,
   };
   // `PLAYOUT-SOURCES-01` — D10, D11 and their switch.
   #cgEnabled = true;
@@ -1266,6 +1342,8 @@ class FakePlayoutServer implements FakePlayout {
   readonly #issuedAccess = new Map<FakeUserKey, { jti: string; exp: number }[]>();
   /** `2.9.2` §2 — the message D1 and D2 answer `403 cg_not_licensed` with, or `null` (licensed). */
   #cgNotLicensed: string | null = null;
+  /** `PLAYOUT-FEATURES-01` D — the CG license `GET /api/cg/license` answers; `null` — before `2.9.2`. */
+  #license: FakeLicensePreset | null = 'licensed';
   /** `2.9.2` §2 — D2 refused BEFORE use for another cause than the licence. */
   #refreshRefusal: 'no_cg_access' | null = null;
   /** `2.9.2` §9 — D8 as before `2.9.2`: a multi-channel account's FIRST grant, as a lone object. */
@@ -1672,6 +1750,26 @@ class FakePlayoutServer implements FakePlayout {
     this.#cgNotLicensed = message;
   }
 
+  get licenseUrl(): string {
+    return `${this.baseUrl}${PATHS.license}`;
+  }
+
+  setLicense(preset: FakeLicensePreset | null): void {
+    this.#license = preset;
+    // D4 carries `cgLicensed`, so its answer changes with the license.
+    this.#catalogueRevision += 1;
+  }
+
+  /** `cgLicensed` for one D4 row under the license in force, or `undefined` before `2.9.2`. */
+  #cgLicensedFor(row: FakeCatalogueRow): boolean | undefined {
+    if (this.#license === null) return undefined;
+    const body = fakeLicenseBody(this.#license, this.#catalogue);
+    const channels = body['channels'] as readonly { casparHost: string; casparChannel: number }[];
+    return channels.some(
+      (c) => c.casparHost === row.casparHost && c.casparChannel === row.casparChannel,
+    );
+  }
+
   setRefreshRefusal(code: 'no_cg_access' | null): void {
     this.#refreshRefusal = code;
   }
@@ -1757,6 +1855,11 @@ class FakePlayoutServer implements FakePlayout {
     if (method === 'GET' && pathname === PATHS.inputs) {
       this.#counts.inputs += 1;
       this.#serveInputs(req, res);
+      return;
+    }
+    if (method === 'GET' && pathname === PATHS.license) {
+      this.#counts.license += 1;
+      this.#serveLicense(req, res);
       return;
     }
     if (method === 'GET' && pathname === PATHS.media) {
@@ -1852,7 +1955,32 @@ class FakePlayoutServer implements FakePlayout {
       res.end();
       return;
     }
-    sendJson(res, 200, { channels: this.#catalogue }, { ETag: etag });
+    // `PLAYOUT-FEATURES-01` D — `2.9.2`'s `cgLicensed` per row, from the license in force.
+    const rows = this.#catalogue.map((row) => {
+      const cgLicensed = this.#cgLicensedFor(row);
+      return cgLicensed === undefined ? row : { ...row, cgLicensed };
+    });
+    sendJson(res, 200, { channels: rows }, { ETag: etag });
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` D — `GET /api/cg/license` (LICENSE §3.1): bearer-gated like D4 and D10,
+   * `Cache-Control: no-store`, `404` while CG Control is switched off — and, here, with no license set
+   * (a Playout before `2.9.2` has no such endpoint).
+   */
+  #serveLicense(req: http.IncomingMessage, res: http.ServerResponse): void {
+    if (!this.#cgEnabled || this.#license === null) {
+      sendError(res, 'not_found');
+      return;
+    }
+    const authorization = req.headers.authorization;
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
+      sendError(res, 'invalid_token');
+      return;
+    }
+    sendJson(res, 200, fakeLicenseBody(this.#license, this.#catalogue), {
+      'Cache-Control': 'no-store',
+    });
   }
 
   /**

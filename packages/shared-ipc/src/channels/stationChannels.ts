@@ -127,6 +127,12 @@ export const StationChannelSchema = z.object({
   /** `PLAYOUT-SOURCES-01` / v1.3 — the Playout's settings differ from its running core. */
   pendingRestart: z.boolean().optional(),
   /**
+   * `PLAYOUT-FEATURES-01` D — the joined row's `cgLicensed` (Playout `2.9.2`): may CG Control command
+   * this channel under the Playout's license. ABSENT — a Playout before `2.9.2`, a failed read — is not
+   * a reason to refuse; `false` is (`cgUnlicensedReason`).
+   */
+  cgLicensed: z.boolean().optional(),
+  /**
    * THIS STATION OPERATES IT — `#declaredChannels()`. The one fact that decides what the bridge
    * writes to (the station fence reads the same predicate).
    */

@@ -111,6 +111,10 @@ import {
   BridgeSessionSignInChannel,
   BridgeSessionStateChangedChannel,
   BridgeSessionStateChannel,
+  LicenseStateChangedChannel,
+  LicenseStateChannel,
+  cgUnlicensedReason,
+  type PlayoutLicense,
   StackRestoreReportDismissChannel,
   StackStopAllChannel,
   StackStopChannel,
@@ -245,6 +249,7 @@ import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
 import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
+import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
 import {
   airOf,
   hostJoinsStation,
@@ -264,6 +269,7 @@ import {
   AUTH_OFF,
   loadPlayoutFile,
   persistAdoptedIssuer,
+  playout292Url,
   PLAYOUT_CONTRACT_VERSION,
   resolvePlayoutSettings,
   type PlayoutAuthConfig,
@@ -549,6 +555,8 @@ export interface BridgeOptions {
    * drive the 5 s floor and a Playout outage without sleeping.
    */
   playoutCatalogueOptions?: PlayoutCatalogueOptions;
+  /** TEST-ONLY seam — clock, `fetch` and tick for the CG license read (`PLAYOUT-FEATURES-01` D). */
+  playoutLicenseOptions?: PlayoutLicenseReaderOptions;
   /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
@@ -1304,7 +1312,10 @@ export function stationChannelsFor(
     number,
     {
       named: { id: string; name: string } | null;
-      air: Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'>;
+      air: Pick<
+        CatalogueRow,
+        'output' | 'playlist' | 'videoMode' | 'pendingRestart' | 'cgLicensed'
+      >;
       sources: StationChannelSource[];
     }
   >();
@@ -1312,7 +1323,10 @@ export function stationChannelsFor(
     channel: number,
     source: StationChannelSource,
     named: { id: string; name: string } | null = null,
-    air: Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'> = {},
+    air: Pick<
+      CatalogueRow,
+      'output' | 'playlist' | 'videoMode' | 'pendingRestart' | 'cgLicensed'
+    > = {},
   ): void => {
     const entry = entries.get(channel);
     if (entry === undefined) {
@@ -1367,6 +1381,35 @@ export function joinedPlaylist(
     if (row.casparChannel === channel) return row.playlist ?? null;
   }
   return null;
+}
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` D — **MAY CG COMMAND THIS CHANNEL, by the Playout's license?** D4's
+ * `cgLicensed` from the row that JOINS it (the join {@link joinedPlaylist} makes); while D4 is unread —
+ * it goes absent on any failure — the license's own station-level `channels` list, which the license
+ * reader KEEPS through an outage, so a cap does not lapse because the Playout stopped answering.
+ * `undefined` when neither says (a Playout before `2.9.2`, nothing read): never a reason to refuse.
+ */
+export function joinedCgLicensed(
+  catalogue: readonly CatalogueRow[] | null,
+  hosts: readonly string[],
+  channel: number,
+  license: Pick<PlayoutLicense, 'licensed'> | null,
+  licenseChannels: readonly { casparHost: string; casparChannel: number }[] | null,
+): boolean | undefined {
+  if (catalogue !== null) {
+    for (const row of catalogue) {
+      if (!hostJoinsStation(row.casparHost, hosts)) continue;
+      if (row.casparChannel === channel) return row.cgLicensed;
+    }
+    return undefined;
+  }
+  if (license?.licensed !== true || licenseChannels === null || licenseChannels.length === 0) {
+    return undefined;
+  }
+  return licenseChannels.some(
+    (c) => c.casparChannel === channel && hostJoinsStation(c.casparHost, hosts),
+  );
 }
 
 /**
@@ -1914,6 +1957,27 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           playoutHost: playoutHostOf(auth.playout),
         });
   playoutCatalogue?.start();
+  /*
+    🔴 `PLAYOUT-FEATURES-01` D (`R-077`) — THE CG LICENSE (`GET /api/cg/license`, `2.9.2`), read beside
+    D9 about every 60 s with the same bearer rule, and KEPT while the Playout cannot be reached (their
+    §3.3). A take reads it at take time (`useCgLicenseCheck` below); it is pushed to every console.
+  */
+  const playoutLicense =
+    playoutAuth === null || auth.playout === null
+      ? null
+      : new PlayoutLicenseReader(
+          playout292Url(auth.playout, 'license'),
+          () => playoutAuth.usableBearer(),
+          {
+            ...(options.playoutLicenseOptions ?? {}),
+            playoutHost: playoutHostOf(auth.playout),
+          },
+        );
+  playoutLicense?.start();
+  // The bridge's own session arriving is a reason to read at once (the sign-in's short floor).
+  bridgeSession?.onChanged((state) => {
+    if (state.state === 'signed-in') void playoutLicense?.refresh({ soon: true });
+  });
   // R-010 boot precedence: explicit connection (CLI flags) > persisted file >
   // the single-server default. Flags are session overrides — they win without
   // clobbering the persisted file.
@@ -2082,6 +2146,27 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       ),
     ),
   );
+  /*
+    🔴 `PLAYOUT-FEATURES-01` D (`R-077`, LICENSE §4) — A TAKE WHERE CG IS NOT LICENSED is refused before
+    anything is sent, with the Playout's own message. Read at TAKE time: the license reader's last
+    value (kept through an outage) and the joined D4 row's `cgLicensed` — or, while D4 cannot be read,
+    the license's own station-level channel list. The ONE predicate (`cgUnlicensedReason`) is the
+    console's strip mark's too. With nothing read, nothing is refused.
+  */
+  runtime.useCgLicenseCheck((channel) => {
+    const hosts = configuredCasparHosts(runtime.config());
+    return cgUnlicensedReason(
+      playoutLicense?.license() ?? null,
+      joinedCgLicensed(
+        playoutCatalogue?.rows() ?? null,
+        hosts,
+        channel,
+        playoutLicense?.license() ?? null,
+        playoutLicense?.channels() ?? null,
+      ),
+      channel,
+    );
+  });
   /*
     🔴 `PLAYOUT-SOURCES-01` — THE STATION'S SOURCES, FROM THE PLAYOUT. D10 and the bound media are
     read with the signed-in operator's bearer, checked at use (D4's rule 3); with auth off a test
@@ -2331,6 +2416,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     actorScope: () => socketScope(currentAuthSession(), playoutAuth, runtime),
     // `CENTRAL-BRIDGE-01` (D7) — the bridge's own Playout session, for its state and its sign-in.
     bridgeSession,
+    // `PLAYOUT-FEATURES-01` D — the CG license as last read, for `license.state`.
+    license: () => playoutLicense?.license() ?? null,
     playoutSources,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
@@ -2584,6 +2671,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
             }),
           ]
         : []),
+      // `PLAYOUT-FEATURES-01` D — the CG license, station-wide, behind the same delivery gate.
+      ...(playoutLicense !== null
+        ? [
+            playoutLicense.onChanged((license) => {
+              if (!mayBeTold(authGateState(session, playoutAuth))) return;
+              send(socket, {
+                type: 'publish',
+                channel: LicenseStateChangedChannel.name,
+                payload: LicenseStateChangedChannel.payload.parse({ license }),
+              });
+            }),
+          ]
+        : []),
     );
     socket.on('message', (data) => {
       // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
@@ -2602,6 +2702,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           // D9 at once with that admin's own token (C4) — the read that introduces this machine.
           pushStationChannels();
           void playoutCatalogue?.refresh();
+          // `PLAYOUT-FEATURES-01` D — and the CG license, through its sign-in floor.
+          void playoutLicense?.refresh({ soon: true });
           // `PLAYOUT-SOURCES-01` — D10 and the bound media are read at sign-in too.
           void playoutSources?.refresh(PICKER_FRESH_MS);
           introduceOnSignIn(signIn);
@@ -2784,6 +2886,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       bridgeSession?.dispose();
       // `C-039` — and the D4 tick, for the same reason.
       playoutCatalogue?.dispose();
+      // `PLAYOUT-FEATURES-01` D — and the license's.
+      playoutLicense?.dispose();
       // `PLAYOUT-SOURCES-01` — and the D10 / bound-media tick.
       playoutSources?.dispose();
       // `C-016` — every upstream feed socket and every relayed viewer.
@@ -3467,6 +3571,8 @@ export function buildRoutes(
      * `off` and a sign-in has nothing to sign in.
      */
     bridgeSession?: BridgeSession | null;
+    /** `PLAYOUT-FEATURES-01` D — the CG license as last read, or `null`. Absent: nothing read. */
+    license?: () => PlayoutLicense | null;
     fixedLayersPath?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
@@ -3919,6 +4025,8 @@ export function buildRoutes(
       'read',
       () => paths.bridgeSession?.state() ?? { state: 'off' as const },
     ),
+    // `PLAYOUT-FEATURES-01` D — the CG license as last read; `null` with none read (nothing refused).
+    route(LicenseStateChannel, 'read', 'read', () => ({ license: paths.license?.() ?? null })),
     route(
       BridgeSessionSignInChannel,
       'operator',

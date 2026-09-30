@@ -99,6 +99,11 @@ export const TakeRefusalSchema = z.object({
    * D11 library), so a `source-unavailable` line can say which list it left.
    */
   sourceOrigin: z.enum(['input', 'media']).optional(),
+  /**
+   * `PLAYOUT-FEATURES-01` D — a refusal whose words are the PLAYOUT's own (`cg-unlicensed`: its license
+   * message, Persian, one line). Shown as it is; every other refusal's words stay the console's.
+   */
+  message: z.string().min(1).max(300).optional(),
 });
 export type TakeRefusal = z.infer<typeof TakeRefusalSchema>;
 

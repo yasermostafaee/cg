@@ -158,6 +158,11 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     onChanged: () => () => undefined,
     takeOffAir: () => Promise.resolve({ ok: false }),
   };
+  // `PLAYOUT-FEATURES-01` D — no license read: the quiet answer (nothing is marked for it).
+  cg['license'] ??= {
+    state: () => Promise.resolve({ license: null }),
+    onChanged: () => () => undefined,
+  };
   /*
     `CENTRAL-BRIDGE-01` — the restore-notice dismiss buttons dismiss on the BRIDGE too. Filled into
     a `stack` a spec states itself (only the absent member), answering as a bridge with nothing left

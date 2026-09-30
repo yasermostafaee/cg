@@ -391,6 +391,31 @@ export function playoutEndpointsFor(addressRaw: string): PlayoutEndpoints {
 }
 
 /**
+ * 🔴 `PLAYOUT-FEATURES-01` — **THE `2.9.2` ENDPOINTS, AT D4's ORIGIN.** `GET /api/cg/license` (D) and
+ * `GET /api/cg/meters` (E) are served by the same Playout as D4, under the same authentication, so
+ * they are derived from D4's own URL rather than added to the configuration: a station configured by
+ * its address and one configured by an issuer both reach them, and no configuration file or key
+ * changes. The contract's paths, spelled once here.
+ */
+export const PLAYOUT_292_PATHS = {
+  license: '/api/cg/license',
+  meters: '/api/cg/meters',
+} as const;
+
+/** The URL of a `2.9.2` endpoint for this Playout (see {@link PLAYOUT_292_PATHS}). */
+export function playout292Url(
+  playout: Pick<PlayoutAuthConfig, 'channelsUrl'>,
+  which: keyof typeof PLAYOUT_292_PATHS,
+): string {
+  // D4's own base when its URL ends in the contract's path (a prefix, if any, is kept); else its origin.
+  const d4 = playout.channelsUrl;
+  const base = d4.endsWith(CONTRACT_PATHS.channelsUrl)
+    ? d4.slice(0, d4.length - CONTRACT_PATHS.channelsUrl.length)
+    : new URL(d4).origin;
+  return `${base}${PLAYOUT_292_PATHS[which]}`;
+}
+
+/**
  * 🔴 `DESKTOP-APPS-01-A` A2 — **PERSIST AN ADOPTED ISSUER as `playout.issuer`**, keeping every
  * other key the file holds.
  *

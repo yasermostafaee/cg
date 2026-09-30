@@ -1,3 +1,5 @@
+import { cgUnlicensedReason } from '@cg/shared-ipc';
+import { useLicense } from '../../hooks/useLicense.js';
 import { useLockCoverage } from '../../hooks/useLock.js';
 import { TabStrip, type TabSpec } from '../../ui/Tabs.js';
 import { NO_AIR } from './channelAir.js';
@@ -35,6 +37,7 @@ export function ChannelStrip({
   signals?: ReadonlyMap<number, ChannelSignal>;
 } = {}): JSX.Element {
   const { channels, selected, operable, names, air } = useSelectedChannel();
+  const license = useLicense();
   const coverage = useLockCoverage();
   const locked = coverage.kind === 'partial' ? coverage.channels : [];
 
@@ -82,12 +85,19 @@ export function ChannelStrip({
     not a channel this console operates and has no tab. With no catalogue (auth OFF, the Playout
     unreachable) every label is exactly what it was.
   */
+  /*
+    🔴 `PLAYOUT-FEATURES-01` D (`R-077`) — A CHANNEL WHERE CG IS NOT LICENSED says so on its label
+    (` · NO CG LICENSE`, a fact about the channel, beside READ ONLY's kind), and the Playout's reason
+    rides the tab's `title`. The ONE predicate the bridge's take refusal asks (`cgUnlicensedReason`),
+    so the strip marks exactly the channels a take is refused on.
+  */
   const tabs: TabSpec[] = channels.map((channel) => {
-    const suffix = locked.includes(channel)
-      ? ' · LOCKED'
-      : operable.includes(channel)
-        ? ''
-        : ' · READ ONLY';
+    const unlicensedCg = cgUnlicensedReason(license, air.get(channel)?.cgLicensed, channel);
+    const suffix =
+      (locked.includes(channel) ? ' · LOCKED' : operable.includes(channel) ? '' : ' · READ ONLY') +
+      (unlicensedCg === null ? '' : ' · NO CG LICENSE');
+    const reasonTitle =
+      unlicensedCg === null ? {} : { title: `Channel ${String(channel)} · ${unlicensedCg}` };
     const name = names.get(channel);
     const signal = signals.get(channel);
     const mark =
@@ -106,6 +116,7 @@ export function ChannelStrip({
               {`CHANNEL ${String(channel)}${suffix}`}
             </>
           ),
+          ...reasonTitle,
           ...mark,
         }
       : {
@@ -118,6 +129,7 @@ export function ChannelStrip({
             </>
           ),
           title: `Channel ${String(channel)}`,
+          ...reasonTitle,
           ...mark,
         };
   });

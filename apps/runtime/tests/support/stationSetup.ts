@@ -247,6 +247,11 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       state: () => Promise.resolve({ engaged: false }),
       onStateChanged: () => () => undefined,
     },
+    // `PLAYOUT-FEATURES-01` D — the channel strip reads the CG license (none read: nothing marked).
+    license: {
+      state: () => Promise.resolve({ license: null }),
+      onChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return {

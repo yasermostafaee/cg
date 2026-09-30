@@ -23,6 +23,11 @@ export interface ChannelAir {
   readonly output: ChannelOutput;
   /** The playlist state in the Playout's word, or `null` when it sent none. */
   readonly playlist: string | null;
+  /**
+   * `PLAYOUT-FEATURES-01` D — D4's `cgLicensed` (Playout `2.9.2`): may CG command this channel. ABSENT
+   * when the Playout did not say; read with the license through `cgUnlicensedReason`, never alone.
+   */
+  readonly cgLicensed?: boolean;
 }
 
 /** What the console knows when the Playout has said nothing about a channel. */
@@ -32,8 +37,13 @@ export const NO_AIR: ChannelAir = { output: 'unknown', playlist: null };
 export function airFrom(fields: {
   readonly output?: ChannelOutput | undefined;
   readonly playlist?: string | undefined;
+  readonly cgLicensed?: boolean | undefined;
 }): ChannelAir {
-  return { output: fields.output ?? 'unknown', playlist: fields.playlist ?? null };
+  return {
+    output: fields.output ?? 'unknown',
+    playlist: fields.playlist ?? null,
+    ...(fields.cgLicensed !== undefined ? { cgLicensed: fields.cgLicensed } : {}),
+  };
 }
 
 /**

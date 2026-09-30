@@ -7,6 +7,7 @@ import {
   type BridgeSessionState,
 } from '@cg/shared-ipc';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
+import { useLicense } from '../../hooks/useLicense.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -108,6 +109,45 @@ export function BridgeSessionBanner(): JSX.Element | null {
       )}
       {admin && dialogOpen && <BridgeSignInDialog onClose={() => setDialogOpen(false)} />}
     </div>
+  );
+}
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` D (`R-077`, LICENSE §4) — **THE PLAYOUT'S LICENSE IN GRACE, SAID ONCE, TO A
+ * STATION ADMIN.** The Playout's own license has expired and it runs 48 h on grace; CG Control is still
+ * licensed through it. When the grace ends the Playout clears its channels itself (its own rule, not ours),
+ * so the person who can renew it is told, with the time. An operator is not: nothing they do changes it.
+ *
+ * One line, the banner family's treatment; the time is the Playout's `graceUntil`, in this console's
+ * local time.
+ */
+export function LicenseGraceBanner(): JSX.Element | null {
+  const auth = useAuthSession();
+  const license = useLicense();
+  const admin =
+    auth.kind === 'signed-in' && holdsPermissionClass(auth.principal.roles, 'station-admin');
+  if (!admin || license?.playoutState !== 'grace') return null;
+  const until = license.graceUntil ?? null;
+  return (
+    <div style={styles.banner} role="status" data-license-grace-banner="" data-tone="caution">
+      <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
+      <span style={styles.text}>
+        {until === null
+          ? 'Playout license expired — in grace'
+          : `Playout license expired — grace until ${localDateTime(until)}`}
+      </span>
+    </div>
+  );
+}
+
+/** `2026-10-01T12:00:00Z` → `2026-10-01 15:30` in this console's zone; an unreadable value as sent. */
+export function localDateTime(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  const two = (n: number): string => String(n).padStart(2, '0');
+  return (
+    `${String(at.getFullYear())}-${two(at.getMonth() + 1)}-${two(at.getDate())} ` +
+    `${two(at.getHours())}:${two(at.getMinutes())}`
   );
 }
 

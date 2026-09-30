@@ -132,6 +132,8 @@ const BRIDGE_SURFACE: {
     strays: ['list', 'onChanged', 'takeOffAir'],
     // `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session (the mock: `off`).
     bridgeSession: ['state', 'onChanged', 'signIn'],
+    // `PLAYOUT-FEATURES-01` D — the CG license (the mock: nothing read).
+    license: ['state', 'onChanged'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never

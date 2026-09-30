@@ -10,6 +10,8 @@ import type {
   BridgeSessionSignInChannel,
   BridgeSessionState,
   BridgeSessionStateChannel,
+  LicenseState,
+  LicenseStateChannel,
   SignInFailure,
   ChannelsCatalogueChannel,
   SetupCheckChannel,
@@ -970,6 +972,16 @@ export interface RuntimeBridge {
     signIn(
       req: ChannelRequest<typeof BridgeSessionSignInChannel>,
     ): Promise<ChannelResponse<typeof BridgeSessionSignInChannel>>;
+  };
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` D (`R-077`) — **THE CG LICENSE**, as CG Bridge last read it from the Playout
+   * (`GET /api/cg/license`, kept through an outage). `license: null` — nothing read (auth off, a Playout
+   * before `2.9.2`): nothing is refused for it. The strip's mark and the admin's grace line read it.
+   */
+  license: {
+    state(): Promise<ChannelResponse<typeof LicenseStateChannel>>;
+    onChanged(handler: (state: LicenseState) => void): Unsubscribe;
   };
 
   /**

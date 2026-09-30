@@ -76,6 +76,11 @@ export const CatalogueRowSchema = z.object({
   */
   videoMode: z.string().trim().min(1).nullable().optional().catch(undefined),
   pendingRestart: z.boolean().optional().catch(undefined),
+  /*
+    🔴 `PLAYOUT-FEATURES-01` D (Playout `2.9.2`, LICENSE §3.2) — may CG Control command this channel.
+    LENIENT like the rest: a missing or malformed value is dropped, and a dropped one refuses nothing.
+  */
+  cgLicensed: z.boolean().optional().catch(undefined),
 });
 export type CatalogueRow = z.infer<typeof CatalogueRowSchema>;
 
@@ -86,14 +91,16 @@ const CatalogueBodySchema = z.object({ channels: z.array(CatalogueRowSchema) });
  * this reader kept, so a published answer never carries a key whose value is `undefined`.
  */
 export function airOf(
-  row: Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'>,
-): Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart'> {
+  row: Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart' | 'cgLicensed'>,
+): Pick<CatalogueRow, 'output' | 'playlist' | 'videoMode' | 'pendingRestart' | 'cgLicensed'> {
   return {
     ...(row.output !== undefined ? { output: row.output } : {}),
     ...(row.playlist !== undefined ? { playlist: row.playlist } : {}),
     // `PLAYOUT-SOURCES-01` — v1.3's two, published beside them; `null` is a value and rides.
     ...(row.videoMode !== undefined ? { videoMode: row.videoMode } : {}),
     ...(row.pendingRestart !== undefined ? { pendingRestart: row.pendingRestart } : {}),
+    // `PLAYOUT-FEATURES-01` D — `2.9.2`'s per-channel CG license rides with them.
+    ...(row.cgLicensed !== undefined ? { cgLicensed: row.cgLicensed } : {}),
   };
 }
 

@@ -145,6 +145,7 @@ import {
   ledgerChannels,
   templateAdmitsPassTiming,
   unlicensedTakeRefusal,
+  CG_UNLICENSED_CODE,
 } from '@cg/shared-ipc';
 import {
   operatorActor,
@@ -4521,6 +4522,17 @@ export class CasparRuntime {
     this.#unlicensed = check;
   }
 
+  /**
+   * `PLAYOUT-FEATURES-01` D — why CG is not licensed on a channel (the Playout's message, or our
+   * sentence), or `null` when it is — `cgUnlicensedReason` over the license and D4. Absent: licensed.
+   */
+  #cgUnlicensed: (channel: number) => string | null = () => null;
+
+  /** `PLAYOUT-FEATURES-01` D — hand the runtime the CG license's verdict. */
+  useCgLicenseCheck(check: (channel: number) => string | null): void {
+    this.#cgUnlicensed = check;
+  }
+
   async take(itemId: string): Promise<TakeVerdict> {
     const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
       this.#takeImpl(itemId),
@@ -4613,6 +4625,19 @@ export class CasparRuntime {
         errorCode: 'unlicensed',
         message: unlicensedTakeRefusal(unlicensed),
       };
+    }
+    /*
+      🔴 `PLAYOUT-FEATURES-01` D (`R-077`, the rule agreed with the Playout team, LICENSE §4) — CG IS NOT
+      LICENSED ON THIS CHANNEL. A NEW take is refused, here, before anything is sent and before anything
+      else mutates, with the Playout's own message on the row. Nothing on air is cleared because of it
+      — by us or by the Playout — and a clear, a stop or a removal is not a take and passes. `PUT BACK
+      ON AIR` re-takes through this method, so it is refused the same way.
+    */
+    for (const channel of this.channelsForItem(itemId)) {
+      const reason = this.#cgUnlicensed(channel);
+      if (reason === null) continue;
+      this.#recordTakeRefusal(itemId, { code: CG_UNLICENSED_CODE, message: reason });
+      return { accepted: false, errorCode: CG_UNLICENSED_CODE, message: reason };
     }
     /*
       🔴 `FIELD-FIXES-01-A` DECISION 2 — **A ROW ALREADY ON AIR IS NOT TAKEN, and neither is one
@@ -11605,15 +11630,31 @@ export class CasparRuntime {
       }
     }
     const at = new Date().toISOString();
+    /*
+      `PLAYOUT-FEATURES-01` D — the Playout's OWN license rule clears an unlicensed channel after its
+      current item, every minute (`CLEAR <channel>`, LICENSE §4). When D4 says so for this channel as
+      the layer is found gone, the notice names it; otherwise it stays "outside CG Control".
+    */
+    const byLicense = this.#unlicensed(channel);
     const rest = this.#clearedOutside.filter(
       (e) => !(e.channel === channel && layers.includes(e.layer)),
     );
-    this.#clearedOutside = [...rest, ...layers.map((layer) => ({ channel, layer, at }))].slice(-20);
+    this.#clearedOutside = [
+      ...rest,
+      ...layers.map((layer) => ({
+        channel,
+        layer,
+        at,
+        ...(byLicense ? { cause: 'playout-license' as const } : {}),
+      })),
+    ].slice(-20);
     this.clearedOutsideChanged.emit(this.clearedOutside());
     for (const layer of layers) {
       process.stderr.write(
         `[caspar-bridge] layer ${String(channel)}-${String(layer)} was cleared outside CG Control ` +
-          `(it went silent and INFO no longer lists it) — its row is off air; nothing was re-sent\n`,
+          `(it went silent and INFO no longer lists it)` +
+          `${byLicense ? ' — D4 reads the channel unlicensed: the Playout cleared it' : ''}` +
+          ` — its row is off air; nothing was re-sent\n`,
       );
     }
   }

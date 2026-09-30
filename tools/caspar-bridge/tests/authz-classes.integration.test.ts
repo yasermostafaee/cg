@@ -235,6 +235,8 @@ describe('C-038 — the census: every route, classified', () => {
       'layers.cleared-outside',
       'layers.orphans',
       'layers.owned-occupancy',
+      // `PLAYOUT-FEATURES-01` D — the CG license, as last read. Every console reads it.
+      'license.state',
       // `MEDIA-PLATES-01` — each seated clip's remaining time, pause and end. A viewer may watch air.
       'liveLayers.media-state',
       'liveLayers.state',
