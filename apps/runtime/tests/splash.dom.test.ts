@@ -162,7 +162,7 @@ describe('the phase readout', () => {
     runSplashScript();
     // A step is finished when the NEXT one begins, so entering step 2 puts one behind us.
     // The clock is at 0 here, so the `min` pins both readings to the clock's 0.
-    splash().phase('PROBING BRIDGE');
+    splash().phase('CONNECTING');
     expect(shownPct()).toBe(expected(0, 1));
     expect(railPct()).toBe(shownPct());
 
@@ -204,7 +204,7 @@ describe('the phase readout', () => {
     // The boot never finishes. Pretending the number got there would invent the one thing
     // this readout refuses to invent.
     runSplashScript();
-    splash().phase('PROBING BRIDGE');
+    splash().phase('CONNECTING');
     vi.advanceTimersByTime(SPLASH_CEILING_MS);
     expect(splashEl()?.getAttribute('data-dismissing')).toBe('true');
     expect(shownPct()).toBe('33%');
@@ -397,26 +397,26 @@ describe('the test-suite door', () => {
 });
 
 /**
- * `FIELD-FIXES-01` J — INSIDE CG CONTROL THE SPLASH CONTINUES THE ONE ALREADY ON SCREEN. The
- * window's starting page is this same splash (composed from this file), so the console's copy is
- * marked `data-continued` there and its entrance is already over (the CSS rule; measured in a real
- * browser by `e2e/splash.spec.ts`). The shell's IPC global is the signal; a browser never has it.
+ * 🔴 `CENTRAL-BRIDGE-01` — **IN CG CONTROL'S WINDOW THIS SPLASH IS THE FIRST ONE ON SCREEN.** The app
+ * bundles this page; there is no starting page before it any more, so nothing marks it continued
+ * and its entrance plays there as in a browser. `FIELD-FIXES-01` J's `data-continued` belonged to a
+ * window that showed a starting page while its bridge started — pinned here as an ABSENCE, the
+ * direction it would come back in. (The entrance itself is measured by `e2e/splash.spec.ts`.)
  */
-describe('FIELD-FIXES-01 J — inside CG Control the splash continues the one on screen', () => {
+describe('CENTRAL-BRIDGE-01 — in CG Control’s window the splash makes its entrance', () => {
   afterEach(() => {
     delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   });
 
-  it('🔴 in the shell’s window the splash is marked continued — and keeps its clock', () => {
+  it('🔴 in the shell’s window nothing marks it continued — and it keeps its clock', () => {
     (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {};
     runSplashScript();
-    expect(splashEl()?.getAttribute('data-continued')).toBe('true');
+    expect(splashEl()?.hasAttribute('data-continued')).toBe(false);
     expect(() => splash()).not.toThrow();
   });
 
-  it('CONTROL — in a browser it is not: its entrance plays', () => {
-    runSplashScript();
-    expect(splashEl()?.hasAttribute('data-continued')).toBe(false);
+  it('…and the page carries no rule that would skip an entrance', () => {
+    expect(html).not.toContain('data-continued');
   });
 });
 

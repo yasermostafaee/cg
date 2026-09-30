@@ -36,7 +36,7 @@ import type {
  *   - It writes no file (it imports no file API), so nothing lands in the core's folder.
  *
  * ⚠ **DEV-ONLY, AND NEVER IN THE INSTALLER.** It lives under `tests/`, which `tsc -b` never builds and
- * the sidecar bundle (`scripts/bundle.mjs`) never reaches; `desktop-sidecar.test.ts` reads the bundle
+ * CG Bridge's bundle (`scripts/bundle.mjs`) never reaches; `bundle-service.test.ts` reads the bundle
  * the installer ships and asserts {@link LOCAL_CASPAR_MARKER} is not in it.
  *
  * ⚠ Only TYPE imports of its siblings, for the reason `fake-station.ts` gives: Node's type stripping

@@ -19,7 +19,7 @@ import {
  * (`buildPlayoutSourceCatalog`). Only the source of the two lists differs.
  *
  * ⚠ **TEST-ONLY, AND NEVER IN THE INSTALLER.** It lives under `tests/`, which `tsc -b` does not
- * build and the sidecar bundle (`scripts/bundle.mjs`) never reaches; `desktop-sidecar.test.ts`
+ * build and CG Bridge's bundle (`scripts/bundle.mjs`) never reaches; `bundle-service.test.ts`
  * reads the bundle the installer ships and asserts {@link LOCAL_PLAYOUT_SOURCES_MARKER} is not in it.
  * Its answers are the fake Playout's ({@link answerFakeMediaQuery}, {@link FAKE_INPUTS}), so an
  * in-process test and an HTTP one cannot come to disagree about what the Playout said.

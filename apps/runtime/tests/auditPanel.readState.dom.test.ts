@@ -75,8 +75,8 @@ function stubBridge(audit: {
       operatorName: () => '',
       setOperatorName: () => undefined,
       // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
-      canOpenLogFolder: () => false,
-      openLogFolder: () => Promise.resolve({ accepted: false }),
+      canDownloadLogs: () => false,
+      downloadLogs: () => Promise.resolve({ accepted: false }),
     },
     templates: { list: () => Promise.resolve([]) },
     fixedLayers: { config: () => Promise.resolve(null) },

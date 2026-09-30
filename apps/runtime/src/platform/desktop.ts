@@ -1,11 +1,18 @@
+import type { PlayoutFetchLike, PlayoutResponseLike } from '@cg/shared-ipc';
+
 /**
- * 🔴 `DESKTOP-APPS-01-A` — **THE ONE DOOR THAT WRITES THE PLAYOUT TARGET** (ADR 0011).
+ * 🔴 CG Control's shell, from the console's side (ADR 0011; `CENTRAL-BRIDGE-01`).
  *
- * The Playout address is written by CG Control's desktop shell — its `set_playout_address`
- * command, reachable through Tauri's IPC only from the console the bridge serves in the app's own
- * window — and NEVER over the control socket. A console in a plain browser has no such door, and
- * says so by the door being absent: {@link canSetPlayoutAddress} is `false` and the control that
- * would use it is not rendered.
+ * CG Control no longer runs a bridge: CG Bridge is one service on the Playout machine and this
+ * console connects to it over the network. What is left of the shell is two doors, each granted to
+ * the console the app bundles and to nothing else, and absent in a plain browser:
+ *
+ *   - `playout_post` — the Playout's D1/D2 from the native side, with no `Origin` (rule 8);
+ *   - `keyboard_language` — which keyboard language the window types in (`TEXT-DIGITS-01`).
+ *
+ * `set_playout_address` and `open_bridge_log` are gone with the bridge the app no longer runs: the
+ * console keeps its own Playout address (`stationAddress.ts`), and a station admin downloads CG
+ * Bridge's logs from CG Bridge.
  */
 
 interface TauriInternals {
@@ -20,41 +27,15 @@ function tauri(): TauriInternals | null {
     : null;
 }
 
-/** Is this console running inside CG Control, where the Playout address can be changed? */
-export function canSetPlayoutAddress(): boolean {
-  return tauri() !== null;
-}
-
-/**
- * Write the Playout address and restart the bridge. Resolves with the bridge's own sentence;
- * rejects with it when the address is refused. The console reconnects by itself.
- */
-export async function setPlayoutAddress(address: string): Promise<string> {
-  const door = tauri();
-  if (door === null) throw new Error('Only CG Control can change the Playout address.');
-  try {
-    return String(await door.invoke('set_playout_address', { address }));
-  } catch (err) {
-    throw new Error(
-      typeof err === 'string' ? err : err instanceof Error ? err.message : String(err),
-    );
-  }
-}
-
-/**
- * `FIELD-FIXES-01` G — **THE LOG FOLDER, from the console.** The native menu that held "Open bridge
- * log" is gone (its "CG Control" submenu was the second line repeating the app's name), so the
- * console carries the door instead: `open_bridge_log` opens Explorer on `bridge.log`, beside
- * `amcp.log`. Only inside CG Control; a browser has no such door and renders no control for it.
- */
-export function canOpenBridgeLog(): boolean {
+/** Is this console inside CG Control — the app with a native sign-in and a keyboard-language door? */
+export function insideCgControl(): boolean {
   return tauri() !== null;
 }
 
 /**
  * `TEXT-DIGITS-01` — CG Control's shell reports the keyboard language its window types in through
- * ONE read-only command, `keyboard_language` (granted to this console page only). A browser has no
- * shell and reports nothing; the detector then reads the letters typed instead.
+ * ONE read-only command. A browser has no shell and reports nothing; the detector then reads the
+ * letters typed instead.
  */
 export function shellReportsKeyboardLanguage(): boolean {
   return tauri() !== null;
@@ -66,18 +47,41 @@ export function shellKeyboardLanguage(): Promise<unknown> {
   return door === null ? Promise.resolve('unknown') : door.invoke('keyboard_language');
 }
 
-/** Open the log folder in Explorer. Never throws: a refusal is reported, not raised. */
-export async function openBridgeLog(): Promise<{ accepted: boolean; message?: string }> {
+/**
+ * `CENTRAL-BRIDGE-01-A` — the request never reached the Playout (no route, refused, no answer to
+ * the connect): a refresh token it carried NEVER LEFT, so it is kept and asked again
+ * (`playoutRefresh.ts`). Only the native side can know this; a browser's `fetch` cannot.
+ */
+export class PlayoutNotSentError extends Error {
+  override readonly name = 'PlayoutNotSentError';
+}
+
+type NativeAnswer =
+  | { readonly kind: 'answered'; readonly status: number; readonly body: string }
+  | { readonly kind: 'not-sent'; readonly reason: string }
+  | { readonly kind: 'lost'; readonly reason: string };
+
+function responseOf(status: number, body: string): PlayoutResponseLike {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: () => Promise.resolve(body),
+    json: () => Promise.resolve(JSON.parse(body) as unknown),
+  };
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` rule 8 — **D1/D2 FROM CG CONTROL'S NATIVE SIDE, WITH NO `Origin`.** A
+ * `PlayoutFetchLike`, so `@cg/shared-ipc`'s one reading of the answers applies unchanged. `null`
+ * outside CG Control: a browser keeps its `fetch`.
+ */
+export function nativePlayoutFetch(): PlayoutFetchLike | null {
   const door = tauri();
-  if (door === null)
-    return { accepted: false, message: 'Only CG Control can open its log folder.' };
-  try {
-    await door.invoke('open_bridge_log');
-    return { accepted: true };
-  } catch (err) {
-    return {
-      accepted: false,
-      message: typeof err === 'string' ? err : err instanceof Error ? err.message : String(err),
-    };
-  }
+  if (door === null) return null;
+  return async (url, init) => {
+    const answer = (await door.invoke('playout_post', { url, body: init.body })) as NativeAnswer;
+    if (answer.kind === 'answered') return responseOf(answer.status, answer.body);
+    if (answer.kind === 'not-sent') throw new PlayoutNotSentError(answer.reason);
+    throw new Error(answer.reason);
+  };
 }

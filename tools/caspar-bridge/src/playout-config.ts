@@ -412,12 +412,14 @@ export function persistAdoptedIssuer(configPath: string, issuer: string): void {
 }
 
 /**
- * 🔴 `DESKTOP-APPS-01-A` — **THE PLAYOUT ADDRESS, as the desktop app writes it** (ADR 0011).
+ * 🔴 `DESKTOP-APPS-01-A` — **THE PLAYOUT ADDRESS, written outside the socket** (ADR 0011).
  *
- * The ONE writer of the Playout target, and it is not reachable over the control socket: the CLI
- * runs it as a one-shot (`--set-playout-address`, then exits), and the desktop app runs that CLI
- * from its own IPC command before restarting the bridge. So auth configuration stays out of the
- * socket's reach exactly as this file's header requires.
+ * A writer of the Playout target that is not reachable over the control socket: the CLI runs it as
+ * a one-shot (`--set-playout-address`, then exits), and `pnpm dev:station` runs that CLI before it
+ * starts the bridge. (`CENTRAL-BRIDGE-01`: CG Bridge the service takes its Playout from its
+ * configuration file, `--write-service-config`, which the installer writes — the same rule, a
+ * different file.) So auth configuration stays out of the socket's reach exactly as this file's
+ * header requires.
  *
  * It replaces the WHOLE `playout` group: a new Playout keeps nothing of the old one. That is what
  * clears an adopted issuer (A2) — the next `station-admin` sign-in adopts again — and with it any

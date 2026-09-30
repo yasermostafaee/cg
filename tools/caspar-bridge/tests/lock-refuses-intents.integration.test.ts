@@ -295,6 +295,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         */
         'auth.state',
         'bridge.capabilities',
+        // `CENTRAL-BRIDGE-01` §1 A — a read: a ticket for the logs. A locked station still reports.
+        'bridge.logs-ticket',
         // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, a READ (its sign-in is refused locked).
         'bridgeSession.state',
         'channelSettings.get',
@@ -322,6 +324,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'lock.state',
         // `C-016` — a read: whether the programme return is live. A locked console still watches air.
         'pgmReturn.status',
+        // `CENTRAL-BRIDGE-01` (D9) — a read: the picture's ticket. A locked console still watches air.
+        'pgmReturn.ticket',
         'playoutLayers.state',
         'rehearse.state',
         // `DESKTOP-APPS-01-D` d — a read of the tap before a channel is declared.

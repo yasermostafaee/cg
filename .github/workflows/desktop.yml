@@ -1,16 +1,17 @@
 name: Desktop
 
-# DESKTOP-APPS-01 — the two Windows installers (ADR 0011): CG Control (the console and its
-# bridge sidecar) and CG Designer (on its own). Built here, on windows-latest, so nobody needs
-# Rust locally; then installed and driven on a SECOND, fresh runner that has built nothing.
+# DESKTOP-APPS-01 — the Windows installers (ADR 0011). CENTRAL-BRIDGE-01 made them three: CG Bridge
+# (the service on the Playout machine, per machine), CG Control (a console that connects to it, per
+# user, no bridge of its own) and CG Designer (on its own). Built here, on windows-latest, so nobody
+# needs Rust locally; then installed and driven on fresh runners that have built nothing.
 #
 # A separate workflow from `pr.yml`: that file's jobs, its `required` aggregation and the
 # P-030 reuse guard are keyed to their job names and are untouched. This one is the record of
 # the installers — its artifacts are what the owner downloads.
 #
-# CLIENT-TEST-RELEASE-01 B4 — a tag `v<version>` runs the same two jobs from the tagged commit,
-# and then `release` opens a DRAFT pre-release holding exactly the two installers, SHA256SUMS.txt
-# and the Persian install guide. CI never publishes it: the owner does, or hands the files over.
+# CLIENT-TEST-RELEASE-01 B4 — a tag `v<version>` runs the same jobs from the tagged commit, and
+# then `release` opens a DRAFT pre-release holding exactly the three installers, SHA256SUMS.txt and
+# the Persian install guide. CI never publishes it: the owner does, or hands the files over.
 
 on:
   workflow_dispatch:
@@ -67,8 +68,8 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
 
-      # The Node installed here is also the one the CG Control installer ships: the staging step
-      # copies this official node.exe as the bridge sidecar (`cg-bridge.exe`).
+      # The Node installed here is also the one the CG Bridge installer ships: its staging step
+      # copies this official node.exe as the service's `cg-bridge.exe`.
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
@@ -87,8 +88,10 @@ jobs:
       - name: Build (workspace)
         run: pnpm build
 
-      - name: Stage CG Control's payload (bridge bundle, console, node.exe)
-        run: node tools/caspar-bridge/scripts/stage-control.mjs
+      # CENTRAL-BRIDGE-01 1C — CG Control's shell: its native Playout sign-in (no Origin, http only)
+      # and its one read-only keyboard command, tested before the app is built from it.
+      - name: Test CG Control's shell (Rust)
+        run: cargo test --release -p cg-control
 
       # CENTRAL-BRIDGE-01 1A (D1) — Shawl 1.9.0 (MIT), the service host CG Bridge runs under, built
       # here from crates.io; the installer carries it, so nothing is fetched at install time.
@@ -100,9 +103,10 @@ jobs:
         run: node tools/caspar-bridge/scripts/stage-bridge.mjs --shawl "$env:USERPROFILE\.cargo\bin\shawl.exe"
 
       # CLIENT-TEST-RELEASE-01 — the installers carry no real address and no test secret: every text
-      # file the installers are built from, scanned before any is built.
+      # file the installers are built from, scanned before any is built. CG Control bundles its
+      # console (apps/runtime/dist) the way CG Designer bundles its page.
       - name: Scan what the installers ship
-        run: node tools/release/src/scan-payload.mjs apps/runtime/src-tauri/payload apps/runtime/src-tauri/starting-dist apps/designer/dist tools/bridge-installer/payload
+        run: node tools/release/src/scan-payload.mjs apps/runtime/dist apps/designer/dist tools/bridge-installer/payload
 
       # CENTRAL-BRIDGE-01 1A — CG Bridge's own NSIS installer (per machine; the service CGBridge). The
       # runner's NSIS when it has one; else NSIS from Chocolatey (build time only).
@@ -167,9 +171,10 @@ jobs:
 
   # CENTRAL-BRIDGE-01 1E — CG Bridge on a clean Windows, as the Playout's installer will chain it:
   # silent install, the service (automatic, recovery, no dependency), /health under a second, our
-  # rules, nothing on UDP 6250, no state for a console without a token, a silent upgrade and a
-  # silent uninstall, each exit code read. Its own runner: until CG Control stops carrying its own
-  # bridge, the two would contend for 5280 on one machine.
+  # rules, nothing on UDP 6250, no state for a console without a token, a stop that stays stopped
+  # and a crash that Windows restarts, a silent upgrade and a silent uninstall, each exit code
+  # read. Its own runner: its stop, crash, upgrade and uninstall take away the very service the
+  # app smoke's CG Control is connected to.
   bridge-smoke:
     name: CG Bridge smoke (clean Windows)
     needs: installers
@@ -181,8 +186,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 1
+          # The smoke, and the firewall judge both smokes share (CLIENT-TEST-RELEASE-01 B2).
           sparse-checkout: |
             tools/bridge-installer/smoke.mjs
+            apps/runtime/tests/desktop/firewall-rule.mjs
           sparse-checkout-cone-mode: false
 
       - name: Set up Node (test harness only)
@@ -231,8 +238,8 @@ jobs:
             apps/designer/src-tauri/tauri.conf.json
           sparse-checkout-cone-mode: false
 
-      # Node runs the smoke SCRIPT only. The installed app runs its own cg-bridge.exe, and the
-      # script's health check proves that is the process that answered.
+      # Node runs the smoke SCRIPT only. CG Bridge runs its own cg-bridge.exe as a service, and the
+      # script proves that is the only one: CG Control starts no bridge.
       - name: Set up Node (test harness only)
         uses: actions/setup-node@v7
         with:
@@ -245,18 +252,22 @@ jobs:
           path: installers
           merge-multiple: true
 
-      - name: Install CG Control (elevated)
+      # CENTRAL-BRIDGE-01 — CG Bridge first, per machine, as the Playout's installer chains it: the
+      # service CG Control connects to. Its own lifecycle is the bridge-smoke job's.
+      - name: Install CG Bridge (elevated)
         shell: pwsh
         run: |
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
           $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
           $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
-          node apps/runtime/tests/desktop/installer-smoke.mjs --phase install --control "$control" --designer-installer "$designer" --version "${{ needs.installers.outputs.version }}" --out smoke
+          node apps/runtime/tests/desktop/installer-smoke.mjs --phase install --bridge "$bridge" --control-installer "$control" --designer-installer "$designer" --version "${{ needs.installers.outputs.version }}" --out smoke
 
       # WebView2 ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in an elevated process (wry#1782),
-      # and the runner is elevated — so the apps are driven at medium integrity, as an operator
-      # runs them. gsudo is Tauri's own recipe for this (tauri-apps/tauri test-api-e2e.yml); the
-      # workspace is opened up so the de-elevated process can write its evidence.
-      - name: Install CG Designer, launch and drive both apps (unelevated)
+      # and the runner is elevated — so the apps are installed (each per user, without admin) and
+      # driven at medium integrity, as an operator runs them. gsudo is Tauri's own recipe for this
+      # (tauri-apps/tauri test-api-e2e.yml); the workspace is opened up so the de-elevated process
+      # can write its evidence.
+      - name: Install CG Designer and CG Control, launch and drive both apps (unelevated)
         if: ${{ !cancelled() }}
         shell: pwsh
         run: |
@@ -264,12 +275,13 @@ jobs:
           $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
           $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
           # gsudo re-splits an argument at its spaces (run 35862184574: "…\installers\CG" ENOENT),
-          # so the installer is handed over under a name without one.
-          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
-          Copy-Item $designer installers\cg-designer-setup.exe
+          # so each installer is handed over under a name without one.
+          Copy-Item (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName installers\cg-designer-setup.exe
+          Copy-Item (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName installers\cg-control-setup.exe
           $designer = (Resolve-Path installers\cg-designer-setup.exe).Path
+          $control = (Resolve-Path installers\cg-control-setup.exe).Path
           icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
-          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer $designer --version ${{ needs.installers.outputs.version }} --out smoke
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer $designer --control $control --version ${{ needs.installers.outputs.version }} --out smoke
           exit $LASTEXITCODE
 
       - name: Uninstall CG Control (elevated), and sum every phase
@@ -285,13 +297,14 @@ jobs:
           path: smoke/
           retention-days: 14
 
-  # CLIENT-TEST-RELEASE-01 B4 — ON A TAG ONLY, and only once both installers are built from the
-  # tagged commit and the clean-Windows smoke has passed: a DRAFT pre-release with exactly four
-  # files. Never published here.
+  # CLIENT-TEST-RELEASE-01 B4 — ON A TAG ONLY, and only once the installers are built from the
+  # tagged commit and BOTH clean-Windows smokes have passed (the apps', and CG Bridge's own): a DRAFT
+  # pre-release with exactly five files (CENTRAL-BRIDGE-01: CG Bridge's installer joined the two).
+  # Never published here.
   release:
     name: Draft release (tag only)
     if: ${{ github.ref_type == 'tag' }}
-    needs: [installers, smoke]
+    needs: [installers, smoke, bridge-smoke]
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:
@@ -331,10 +344,10 @@ jobs:
           node tools/release/src/build-guide.mjs "docs/release/$env:VERSION/install-guide.fa.md" --out guide/install-guide.pdf
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      # Exactly four files (tools/release/src/release-files.mjs): both installers under names with no
-      # space (GitHub would rewrite one, and SHA256SUMS.txt would name a file nobody downloads), the
-      # guide, and SHA256SUMS.txt over the other three in sha256sum's own format.
-      - name: Assemble the release's four files
+      # Exactly five files (tools/release/src/release-files.mjs): the three installers under names with
+      # no space (GitHub would rewrite one, and SHA256SUMS.txt would name a file nobody downloads), the
+      # guide, and SHA256SUMS.txt over the other four in sha256sum's own format.
+      - name: Assemble the release's five files
         shell: pwsh
         env:
           VERSION: ${{ needs.installers.outputs.version }}
@@ -350,11 +363,12 @@ jobs:
           VERSION: ${{ needs.installers.outputs.version }}
         run: |
           $notes = @(
-            "APASAI CG $env:VERSION - the first client test build. DRAFT: published by hand, never by CI.",
+            "APASAI CG $env:VERSION - a client test build. DRAFT: published by hand, never by CI.",
             '',
-            '- CG Control installer (per machine; the bridge included; opens UDP 6250 and TCP 7911 for it).',
+            '- CG Bridge installer - install it FIRST: per machine, the Windows service every CG Control connects to, on the Playout machine or on a server beside it. It opens TCP 5280 and 7911 and UDP 6251-6252 for itself only.',
+            '- CG Control installer (per user; no administrator; no bridge of its own - it connects to CG Bridge).',
             '- CG Designer installer (per user; no administrator).',
-            '- SHA256SUMS.txt - the SHA-256 of the other three files.',
+            '- SHA256SUMS.txt - the SHA-256 of the other four files.',
             '- The Persian install guide (PDF).',
             '',
             'Unsigned test build: Windows SmartScreen warns before installing - the guide says what to press.'
@@ -364,7 +378,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       # Read back, never trust the exit code (CLAUDE.md "Verify before claiming"): a draft, a
-      # pre-release, and exactly these four assets.
+      # pre-release, and exactly these five assets.
       - name: Read the draft back
         shell: pwsh
         env:

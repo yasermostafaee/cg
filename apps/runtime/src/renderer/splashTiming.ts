@@ -80,7 +80,7 @@ export const SPLASH_SESSION_KEY = 'CG_RUNTIME_SESSION';
  * Every one of these is a step that EXISTS in `main.tsx`'s boot path; none was invented
  * to lengthen the list.
  */
-export const SPLASH_PHASES = ['INITIALIZING', 'PROBING BRIDGE', 'STARTING INTERFACE'] as const;
+export const SPLASH_PHASES = ['INITIALIZING', 'CONNECTING', 'STARTING INTERFACE'] as const;
 
 export type SplashPhase = (typeof SPLASH_PHASES)[number];
 

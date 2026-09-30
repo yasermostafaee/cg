@@ -56,13 +56,10 @@ test-results/
 Thumbs.db
 desktop.ini
 
-# DESKTOP-APPS-01 — the desktop shells' Cargo output, Tauri's generated schemas, and CG Control's
-# staged payload (the bridge bundle, the console, node.exe), rebuilt by `stage-control.mjs`.
+# DESKTOP-APPS-01 — the desktop shells' Cargo output and Tauri's generated schemas. (CG Control
+# stages nothing since CENTRAL-BRIDGE-01: it bundles its console, and carries no bridge.)
 /target/
 apps/*/src-tauri/gen/
-apps/runtime/src-tauri/payload/
-apps/runtime/src-tauri/binaries/
-apps/runtime/src-tauri/starting-dist/
 # CENTRAL-BRIDGE-01 — CG Bridge's staged payload (`stage-bridge.mjs`) and the installer makensis builds.
 tools/bridge-installer/payload/
 tools/bridge-installer/CG-Bridge_*_x64-setup.exe

@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -16,15 +16,18 @@ import {
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
 
 /**
- * 🔴 `DESKTOP-APPS-01` §2E / §5 — **FIRST-RUN, END TO END**, against a real bridge started as CG
- * Control starts it (`--first-run`, `--state-home`), the fake Playout, and the AMCP mock on the
- * standard port — with `DESKTOP-APPS-01-A` folded in: only the ADDRESS is typed, and the issuer is
- * learned from the station-admin's sign-in.
+ * 🔴 `DESKTOP-APPS-01` §2E / §5 — **FIRST-RUN, END TO END**, against a real bridge started in
+ * first-run (`--first-run`, `--state-home`), the fake Playout, and the AMCP mock on the standard
+ * port — with `DESKTOP-APPS-01-A` folded in: the issuer is learned from the station-admin's
+ * sign-in, never typed.
  *
- * The desktop shell's one door (`set_playout_address`) is played by the harness, exactly as the
- * shell does it: run the bridge CLI's one-shot `--set-playout-address`, then restart the bridge.
- * The console calls it through `window.__TAURI_INTERNALS__.invoke`, which the harness provides —
- * the console under test is byte-for-byte the one CG Control serves.
+ * `CENTRAL-BRIDGE-01` — the bridge is given its Playout when it starts (`--playout-address`), as CG
+ * Bridge's configuration gives it (the installer's `/PLAYOUT=`) and as `pnpm dev:station` passes it.
+ * So a console meets a new station at its SIGN-IN, with the Playout already a fact and checked on
+ * open: there is no address to type into the station any more, and no desktop door to write one.
+ * (CG Control's own question — where the Playout is, so it can find CG Bridge — is its Playout-
+ * address gate, before it connects anywhere: `playoutAddressGate.dom.test.ts` and the installer
+ * smoke.)
  *
  * ⚠ The mock takes TCP 5250 because first-run writes the standard port; a runner where 5250 is
  * taken cannot run this spec, and it says so rather than passing.
@@ -62,8 +65,8 @@ function freePort(): Promise<number> {
 }
 
 /**
- * Start the bridge the way CG Control does, and wait until it says which auth mode it is in.
- * `extra` is appended to the command line.
+ * Start the bridge in first-run, and wait until it says which auth mode it is in. `extra` is
+ * appended to the command line — the Playout (`--playout-address`) among it.
  */
 async function startBridge(port: number, extra: readonly string[] = []): Promise<void> {
   const child = spawn(
@@ -121,7 +124,7 @@ test.afterEach(async () => {
   stateHome = null;
 });
 
-test('first-run: the address, the check, a station-admin sign-in, the channel — and the station is set up', async ({
+test('first-run: the Playout checked, a station-admin sign-in, the channel — and the station is set up', async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -147,36 +150,17 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   });
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
   const port = await freePort();
-  await startBridge(port);
-
-  // CG Control's door, played by the harness exactly as the shell plays it.
-  await page.exposeFunction('__cgSetPlayoutAddress', async (address: string): Promise<string> => {
-    const written = spawnSync(
-      process.execPath,
-      [BRIDGE_CLI, '--state-home', stateHome as string, '--set-playout-address', address],
-      { encoding: 'utf8' },
-    );
-    if (written.status !== 0) throw new Error(written.stderr);
-    await stopBridge();
-    await startBridge(port);
-    return written.stderr.trim();
-  });
+  await startBridge(port, ['--playout-address', playout.baseUrl]);
   await page.addInitScript(
     `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};` +
-      'window.__CG_SPLASH_DISABLED__ = true;' +
-      'window.__TAURI_INTERNALS__ = { invoke: (command, args) => command === "set_playout_address"' +
-      ' ? window.__cgSetPlayoutAddress(args.address) : Promise.reject(new Error("unknown command")) };',
+      'window.__CG_SPLASH_DISABLED__ = true;',
   );
   await page.goto('/');
 
-  // ── 1 · the one field, and the check ────────────────────────────────────────
+  // ── 1 · the Playout, a fact, and the check it gets on open ──────────────────
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
-  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
-  // C3 — typed as the owner typed his: no scheme. The field shows the address actually checked.
-  const addressField = firstRun.getByLabel('Playout address');
-  await addressField.fill(playout.baseUrl.replace(/^http:\/\//, ''));
-  await firstRun.getByRole('button', { name: 'Check' }).click();
-  await expect(addressField).toHaveValue(playout.baseUrl);
+  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
+  await expect(firstRun.locator('[data-playout-address]')).toHaveText(playout.baseUrl);
   await expect(firstRun.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
   });
@@ -187,15 +171,12 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   await expect(amcpLine).toHaveText('CasparCG on 127.0.0.1: waiting for sign-in.');
   // …and it really was refused — the mock turned this machine away (the instrument is live).
   expect(amcp?.refusedConnections ?? 0).toBeGreaterThan(0);
-  await shot('1-address-and-check');
-
-  await firstRun.getByRole('button', { name: 'Connect' }).click();
-  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 30_000 });
-  // Only the address was written — no issuer was typed or stored.
-  expect(stationFile('bridge-playout.json')).toEqual({
-    auth: 'playout',
-    playout: { address: playout.baseUrl },
-  });
+  await shot('1-playout-and-check');
+  // No issuer was typed or stored: it is learned from the station admin's sign-in, below.
+  expect(
+    (stationFile('bridge-playout.json') as { playout?: { issuer?: string } } | null)?.playout
+      ?.issuer,
+  ).toBeUndefined();
 
   // ── 2 · sign in: before adoption, only a station-admin is accepted ─────────
   const signIn = async (username: string): Promise<void> => {
@@ -207,7 +188,8 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   await expect(firstRun.getByText(AUTH_STATION_NOT_SET_UP)).toBeVisible({ timeout: 20_000 });
   await shot('2-sign-in-refused-before-adoption');
   expect(
-    (stationFile('bridge-playout.json') as { playout: { issuer?: string } }).playout.issuer,
+    (stationFile('bridge-playout.json') as { playout?: { issuer?: string } } | null)?.playout
+      ?.issuer,
   ).toBeUndefined();
 
   // C5 — the refused operator reached no D9: nothing is allowed, nothing pending, nothing sealed.
@@ -318,7 +300,14 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
   const apiPort = await startSilentPlayout();
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
   const port = await freePort();
-  await startBridge(port, ['--amcp-port', '1', '--osc-port', '0']);
+  await startBridge(port, [
+    '--amcp-port',
+    '1',
+    '--osc-port',
+    '0',
+    '--playout-address',
+    `http://${SILENT_HOST}:${String(apiPort)}`,
+  ]);
   await page.addInitScript(
     `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};` +
       'window.__CG_SPLASH_DISABLED__ = true;',
@@ -326,15 +315,21 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
   await page.goto('/');
 
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
-  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
-  await firstRun.getByLabel('Playout address').fill(`${SILENT_HOST}:${String(apiPort)}`);
+  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
   const checkButton = firstRun.getByRole('button', { name: /^Check/ });
+  // The check the sign-in asks for on open runs first; this press waits for it, then starts clean.
   await checkButton.click();
 
-  const lines = firstRun.locator('[data-check]');
-  const apiLine = firstRun.locator('[data-check="api"]');
-  const corsLine = firstRun.locator('[data-check="cors"]');
-  const amcpLine = firstRun.locator('[data-check="amcp"]');
+  /*
+    The CHECK's lines — the Playout step's. Below it the sign-in step repeats the ONE line that
+    stops a sign-in, in the check's own words (`DELTA-MULTI-CHANNEL-01-B` B2), which is not the
+    check saying it twice.
+  */
+  const check = firstRun.getByRole('region', { name: 'Playout' });
+  const lines = check.locator('[data-check]');
+  const apiLine = check.locator('[data-check="api"]');
+  const corsLine = check.locator('[data-check="cors"]');
+  const amcpLine = check.locator('[data-check="amcp"]');
   await expect(apiLine).toHaveAttribute('data-status', 'fail', { timeout: 20_000 });
   // B — the no-answer is said ONCE, on the API line; CORS is not checked, and names why.
   await expect(apiLine).toContainText(`on port ${String(apiPort)}`);
@@ -355,12 +350,9 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
   await checkButton.click();
   await expect(lines).toHaveCount(7);
   for (const id of ['proxy', 'route', 'amcp', 'api', 'cors', 'ports', 'topology']) {
-    await expect(firstRun.locator(`[data-check="${id}"]`)).toHaveAttribute(
-      'data-status',
-      'checking',
-    );
+    await expect(check.locator(`[data-check="${id}"]`)).toHaveAttribute('data-status', 'checking');
   }
-  await expect(firstRun.locator('[data-check]:not([data-status="checking"])')).toHaveCount(0);
+  await expect(check.locator('[data-check]:not([data-status="checking"])')).toHaveCount(0);
   await expect(apiLine).toHaveText(`The Playout on port ${String(apiPort)}`);
   await expect(checkButton).toHaveText('Checking…');
   await expect(checkButton).toBeDisabled();
@@ -408,36 +400,16 @@ test('first-run on channel 2: the Layers tab is operable at once, with no reload
   });
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
   const port = await freePort();
-  await startBridge(port);
-  await page.exposeFunction('__cgSetPlayoutAddress', async (address: string): Promise<string> => {
-    const written = spawnSync(
-      process.execPath,
-      [BRIDGE_CLI, '--state-home', stateHome as string, '--set-playout-address', address],
-      { encoding: 'utf8' },
-    );
-    if (written.status !== 0) throw new Error(written.stderr);
-    await stopBridge();
-    await startBridge(port);
-    return written.stderr.trim();
-  });
+  await startBridge(port, ['--playout-address', playout.baseUrl]);
   const bridgeUrl = `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};`;
-  await page.addInitScript(
-    bridgeUrl +
-      'window.__CG_SPLASH_DISABLED__ = true;' +
-      'window.__TAURI_INTERNALS__ = { invoke: (command, args) => command === "set_playout_address"' +
-      ' ? window.__cgSetPlayoutAddress(args.address) : Promise.reject(new Error("unknown command")) };',
-  );
+  await page.addInitScript(bridgeUrl + 'window.__CG_SPLASH_DISABLED__ = true;');
   await page.goto('/');
 
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
-  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
-  await firstRun.getByLabel('Playout address').fill(playout.baseUrl);
-  await firstRun.getByRole('button', { name: 'Check' }).click();
+  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
   await expect(firstRun.locator('[data-check="cors"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
   });
-  await firstRun.getByRole('button', { name: 'Connect' }).click();
-  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 30_000 });
 
   // The page from here on must be the SAME page: a mark that a reload would wipe.
   await page.evaluate(() => {
@@ -574,36 +546,19 @@ test('FIELD-FIXES-01 I — first-run on two channels shows five rows per band on
 
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
   const port = await freePort();
-  await startBridge(port);
-  await page.exposeFunction('__cgSetPlayoutAddress', async (address: string): Promise<string> => {
-    const written = spawnSync(
-      process.execPath,
-      [BRIDGE_CLI, '--state-home', stateHome as string, '--set-playout-address', address],
-      { encoding: 'utf8' },
-    );
-    if (written.status !== 0) throw new Error(written.stderr);
-    await stopBridge();
-    await startBridge(port);
-    return written.stderr.trim();
-  });
+  await startBridge(port, ['--playout-address', playout.baseUrl]);
   await page.addInitScript(
     `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};` +
-      'window.__CG_SPLASH_DISABLED__ = true;' +
-      'window.__TAURI_INTERNALS__ = { invoke: (command, args) => command === "set_playout_address"' +
-      ' ? window.__cgSetPlayoutAddress(args.address) : Promise.reject(new Error("unknown command")) };',
+      'window.__CG_SPLASH_DISABLED__ = true;',
   );
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto('/');
 
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
-  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
-  await firstRun.getByLabel('Playout address').fill(playout.baseUrl);
-  await firstRun.getByRole('button', { name: 'Check' }).click();
+  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
   await expect(firstRun.locator('[data-check="cors"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
   });
-  await firstRun.getByRole('button', { name: 'Connect' }).click();
-  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 30_000 });
   await firstRun.locator('#cg-first-run-user').fill(FAKE_ADMIN.username);
   await firstRun.locator('#cg-first-run-pass').fill(FAKE_PLAYOUT_PASSWORD);
   await firstRun.getByRole('button', { name: 'Sign in' }).click();

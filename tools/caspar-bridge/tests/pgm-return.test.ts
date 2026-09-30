@@ -13,7 +13,7 @@ import {
   type WsFrame,
 } from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
-import { ConsoleHttpServer, isLoopbackPeer } from '../src/console-http-server.js';
+import { ConsoleHttpServer } from '../src/console-http-server.js';
 import {
   MjpegPartParser,
   PgmProtocolError,
@@ -414,37 +414,87 @@ describe('the relay — a well-behaved client', () => {
   });
 });
 
-// ── The route on the console origin ─────────────────────────────────────────────
+// ── The route: the control port's, behind a ticket ─────────────────────────────
 
-async function consoleWith(relay: PgmReturnRelay, host = '127.0.0.1'): Promise<ConsoleHttpServer> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-pgm-console-'));
-  consoleDirs.push(dir);
-  fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>console</title>');
-  const server = new ConsoleHttpServer();
-  await server.start({ dir, port: 0, host, pgmRelay: relay });
-  servers.push(server);
-  return server;
+/*
+  `CENTRAL-BRIDGE-01` (D9) — the programme return has ONE door: `/pgm/<n>?ticket=…` on the control
+  port, opened by a ticket a console's socket was given for that channel. The console's own listener
+  relayed it untokened to loopback peers until then; that door is gone, and says so (the last test).
+  Who may be GIVEN a ticket — a sign-in holding the channel — is `http-tickets.integration.test.ts`.
+*/
+
+/** A real bridge (auth off: the relay reads server A's host) whose relay dials the fake's port. */
+async function bridgeOn(feedPort: number): Promise<BridgeHandle> {
+  const bridge = await createBridge({
+    port: 0,
+    connection: {
+      servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
+      strategy: 'mirror-sync',
+      autoFailoverEnabled: false,
+    },
+    pgmReturn: { portFor: () => feedPort },
+  });
+  bridges.push(bridge);
+  return bridge;
+}
+
+/** A console's socket to the bridge, keeping every frame it is sent. */
+async function consoleSocket(bridge: BridgeHandle): Promise<{ ws: WebSocket; frames: WsFrame[] }> {
+  const ws = await new Promise<WebSocket>((resolve, reject) => {
+    const socket = new WebSocket(bridge.url);
+    sockets.push(socket);
+    socket.once('open', () => resolve(socket));
+    socket.once('error', reject);
+  });
+  const frames: WsFrame[] = [];
+  ws.on('message', (data: Buffer) => {
+    const frame = parseWsFrame(data.toString());
+    if (frame !== null) frames.push(frame);
+  });
+  return { ws, frames };
+}
+
+/** Ask `channel`'s ticket over `socket`, as a console asks it; the URL its `<img>` opens. */
+async function ticketedUrl(
+  bridge: BridgeHandle,
+  socket: { ws: WebSocket; frames: WsFrame[] },
+  channel: number,
+): Promise<string> {
+  const id = `ticket-${String(channel)}-${String(socket.frames.length)}`;
+  socket.ws.send(
+    serializeWsFrame({ type: 'request', id, channel: 'pgmReturn.ticket', payload: { channel } }),
+  );
+  await waitFor(
+    () => socket.frames.some((fr) => fr.type === 'response' && fr.id === id),
+    3000,
+    `the ticket for channel ${String(channel)}`,
+  );
+  const answer = socket.frames.find((fr) => fr.type === 'response' && fr.id === id);
+  const ticketed = answer?.type === 'response' ? (answer.payload as { path: string }).path : '';
+  expect(ticketed).toMatch(new RegExp(`^/pgm/${String(channel)}\\?ticket=`));
+  return `http://127.0.0.1:${String(bridge.port)}${ticketed}`;
 }
 
 /** GET a URL and resolve with the status, headers and the socket, reading nothing further. */
 function open(
   url: string,
-  localAddress?: string,
 ): Promise<{ status: number; type: string; res: http.IncomingMessage; req: http.ClientRequest }> {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, { ...(localAddress ? { localAddress } : {}), agent: false }, (res) =>
+    const req = http.get(url, { agent: false }, (res) =>
       resolve({ status: res.statusCode ?? 0, type: String(res.headers['content-type']), res, req }),
     );
     req.on('error', reject);
   });
 }
 
-describe('the relay route — same-origin, loopback only, bytes untouched', () => {
+describe('the relay route — the control port, behind a ticket, bytes untouched', () => {
   it('relays every JPEG byte for byte in a multipart stream', async () => {
     const planted = jpegWithComment(FRAME_B, Buffer.from('--apasaipgm\r\n', 'latin1'));
     const f = await feed({ frames: [FRAME_A, planted] });
-    const server = await consoleWith(relayOn(f.port));
-    const { status, type, res, req } = await open(`${server.url}/pgm/1`);
+    const bridge = await bridgeOn(f.port);
+    const { status, type, res, req } = await open(
+      await ticketedUrl(bridge, await consoleSocket(bridge), 1),
+    );
     expect(status).toBe(200);
     expect(type).toMatch(/^multipart\/x-mixed-replace; boundary=cgpgm[0-9a-f]{24}$/);
     // Parse the relay's own stream with the same Content-Length reader.
@@ -462,64 +512,36 @@ describe('the relay route — same-origin, loopback only, bytes untouched', () =
     expect(frames.some((fr) => fr.equals(planted))).toBe(true);
   });
 
-  it('refuses a client that is not on this machine; serves one that is', async () => {
-    const lan = Object.values(os.networkInterfaces())
-      .flat()
-      .find((a) => a !== undefined && a.family === 'IPv4' && !a.internal)?.address;
-    expect(lan, 'this machine has a non-loopback IPv4 to test from').toBeDefined();
+  it('takes nothing but a ticket for its channel — refused, nothing is attached; control: the ticket opens it', async () => {
     const f = await feed();
-    // Bound on every interface, so the ONLY fence left is the route's own peer check.
-    const server = await consoleWith(relayOn(f.port), '0.0.0.0');
-    const port = server.port;
-
-    const outside = await open(`http://${lan as string}:${String(port)}/pgm/1`, lan);
-    outside.req.destroy();
-    expect(outside.status).toBe(403);
+    const bridge = await bridgeOn(f.port);
+    const url = await ticketedUrl(bridge, await consoleSocket(bridge), 1);
+    const query = url.split('?')[1] ?? '';
+    const base = `http://127.0.0.1:${String(bridge.port)}`;
+    for (const [what, target] of [
+      ['no ticket', `${base}/pgm/1`],
+      ['a guessed ticket', `${base}/pgm/1?ticket=guessed`],
+      ['channel 1’s ticket on channel 2', `${base}/pgm/2?${query}`],
+    ] as const) {
+      const r = await open(target);
+      r.req.destroy();
+      expect(r.status, what).toBe(403);
+    }
     await new Promise((r) => setTimeout(r, 300));
-    expect(f.connections, 'a refused client attached nothing').toHaveLength(0);
+    expect(f.connections, 'a refused request attached nothing').toHaveLength(0);
 
-    // The positive control: loopback is served, and it does attach.
-    const inside = await open(`http://127.0.0.1:${String(port)}/pgm/1`);
+    // The positive control: the ticket is served, and it does attach.
+    const inside = await open(url);
     expect(inside.status).toBe(200);
-    await waitFor(() => f.connections.length === 1, 3000, 'the loopback viewer’s upstream');
+    await waitFor(() => f.connections.length === 1, 3000, 'the ticketed viewer’s upstream');
     inside.req.destroy();
-  });
-
-  it('knows loopback when it sees it', () => {
-    expect(isLoopbackPeer('127.0.0.1')).toBe(true);
-    expect(isLoopbackPeer('127.4.5.6')).toBe(true);
-    expect(isLoopbackPeer('::1')).toBe(true);
-    expect(isLoopbackPeer('::ffff:127.0.0.1')).toBe(true);
-    expect(isLoopbackPeer('192.168.21.111')).toBe(false);
-    expect(isLoopbackPeer('::ffff:192.168.21.111')).toBe(false);
-    expect(isLoopbackPeer('1127.0.0.1')).toBe(false);
-    expect(isLoopbackPeer(undefined)).toBe(false);
   });
 
   it('through createBridge: the state reaches a console as a publish, and answers the read', async () => {
     const f = await feed();
-    const bridge = await createBridge({
-      port: 0,
-      // Auth off: the relay's host is server A's, the address the AMCP session dials.
-      connection: {
-        servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
-        strategy: 'mirror-sync',
-        autoFailoverEnabled: false,
-      },
-      pgmReturn: { portFor: () => f.port },
-    });
-    bridges.push(bridge);
-    const ws = await new Promise<WebSocket>((resolve, reject) => {
-      const socket = new WebSocket(bridge.url);
-      sockets.push(socket);
-      socket.once('open', () => resolve(socket));
-      socket.once('error', reject);
-    });
-    const frames: WsFrame[] = [];
-    ws.on('message', (data: Buffer) => {
-      const frame = parseWsFrame(data.toString());
-      if (frame !== null) frames.push(frame);
-    });
+    const bridge = await bridgeOn(f.port);
+    const socket = await consoleSocket(bridge);
+    const { ws, frames } = socket;
     const published = (): PgmReturnStatus[][] =>
       frames.flatMap((fr) =>
         fr.type === 'publish' && fr.channel === 'pgmReturn.status-changed'
@@ -541,9 +563,8 @@ describe('the relay route — same-origin, loopback only, bytes untouched', () =
     expect(first?.type === 'response' ? first.payload : null).toEqual([]);
     expect(f.connections).toHaveLength(0);
 
-    // A console watches channel 1 through the console route the CLI wires.
-    const server = await consoleWith(bridge.pgmReturn);
-    const viewer = await open(`${server.url}/pgm/1`);
+    // A console watches channel 1 through its ticket.
+    const viewer = await open(await ticketedUrl(bridge, socket, 1));
     await waitFor(
       () => published().some((list) => list.some((s) => s.channel === 1 && s.state === 'live')),
       4000,
@@ -576,14 +597,39 @@ describe('the relay route — same-origin, loopback only, bytes untouched', () =
     expect(f.openCount()).toBe(0);
   });
 
-  it('answers 404 for a path that is not a channel', async () => {
+  it('refuses a path that is not a channel, whatever ticket it carries', async () => {
     const f = await feed();
-    const server = await consoleWith(relayOn(f.port));
+    const bridge = await bridgeOn(f.port);
+    const query = (await ticketedUrl(bridge, await consoleSocket(bridge), 1)).split('?')[1] ?? '';
+    const base = `http://127.0.0.1:${String(bridge.port)}`;
     for (const bad of ['/pgm/', '/pgm/0', '/pgm/01', '/pgm/abc', '/pgm/1/audio.wav']) {
-      const r = await open(`${server.url}${bad}`);
+      const r = await open(`${base}${bad}?${query}`);
       r.req.destroy();
-      expect(r.status, bad).toBe(404);
+      expect(r.status, bad).toBe(403);
     }
+    expect(f.connections).toHaveLength(0);
+  });
+
+  it('🔴 the console listener relays NOTHING: /pgm/1 is a 404 there, never the page — control: the page is served', async () => {
+    const f = await feed();
+    const bridge = await bridgeOn(f.port);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-pgm-console-'));
+    consoleDirs.push(dir);
+    fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><title>console</title>');
+    const server = new ConsoleHttpServer();
+    await server.start({ dir, port: 0 });
+    servers.push(server);
+
+    const page = await open(`${server.url}/`);
+    page.req.destroy();
+    expect(page.status).toBe(200);
+    for (const route of ['/pgm/1', '/pgm/']) {
+      const r = await open(`${server.url}${route}`);
+      r.req.destroy();
+      expect(r.status, route).toBe(404);
+    }
+    // The bridge beside it was never asked for a picture.
+    expect(bridge.pgmReturn.status()).toEqual([]);
     expect(f.connections).toHaveLength(0);
   });
 });

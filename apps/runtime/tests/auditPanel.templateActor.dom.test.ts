@@ -82,8 +82,8 @@ function stubBridge(entries: AuditEntry[], bank: unknown = BANK): void {
   const stub = {
     audit: {
       // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
-      canOpenLogFolder: () => false,
-      openLogFolder: () => Promise.resolve({ accepted: false }),
+      canDownloadLogs: () => false,
+      downloadLogs: () => Promise.resolve({ accepted: false }),
       recent: () => Promise.resolve(entries),
       health: () =>
         Promise.resolve({

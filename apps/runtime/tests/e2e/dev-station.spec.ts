@@ -12,15 +12,16 @@ import { expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `FIELD-FIXES-01` H — **THE DEV STATION, THROUGH VITE.** On `pnpm dev:station` the console is
- * served by Vite's dev server — a DEVELOPMENT build — and the picture reaches it through Vite's
- * `/pgm/` proxy (`vite.config.ts`, `CG_BRIDGE_CONSOLE`) to the bridge's own console listener and
- * its relay: the path this spec drives, end to end, in a real browser. The C-016 spec
- * (`pgm-return.spec.ts`) loads the BUILT console from the bridge's listener directly, which is the
- * installed app's path and never this one — and a production build never showed the defect: the
- * picture's `<img>` lost its `src` to React StrictMode's second mount (`MonitorPanel.tsx`).
+ * served by Vite's dev server — a DEVELOPMENT build, React StrictMode and all — which is the path
+ * this spec drives, end to end, in a real browser. The C-016 spec (`pgm-return.spec.ts`) loads the
+ * BUILT console, and a production build never showed the defect this guards: the picture's `<img>`
+ * lost its `src` to StrictMode's second mount (`MonitorPanel.tsx`). `CENTRAL-BRIDGE-01` (D9) makes
+ * that mount ASYNC — the source is a ticket the console asks for over its socket before the `<img>`
+ * opens `/pgm/<n>?ticket=…` on the bridge's control port — so a double mount is exercised here
+ * with a request in flight. Vite relays no picture any more.
  *
- * Vite is started as the launcher starts it (`viteEnv`, `tools/dev-station`): the listener to
- * relay to, and the one console host a `localhost` page is sent to.
+ * Vite is started as the launcher starts it (`viteEnv`, `tools/dev-station`): the listener it relays
+ * `/__cg/` to, and the one console host a `localhost` page is sent to.
  *
  * Every address is chosen so a running dev station on this machine is untouched: Vite and the
  * listener on ephemeral ports, and the relay's target — server A's host, auth off — on 127.0.0.2,
@@ -65,7 +66,7 @@ async function startDevStation(): Promise<string> {
     fixedLayers: { ...defaultFixedLayerBank(), channel: CHANNEL },
   });
   listener = new ConsoleHttpServer();
-  await listener.start({ dir: CONSOLE_DIR, port: 0, pgmRelay: bridge.pgmReturn });
+  await listener.start({ dir: CONSOLE_DIR, port: 0 });
   // The runtime's OWN Vite config, reading the two variables exactly as the launcher sets them.
   process.env.CG_BRIDGE_CONSOLE = listener.url;
   process.env.CG_CONSOLE_HOST = '127.0.0.1';
@@ -119,8 +120,12 @@ test('🔴 through Vite’s dev server, channel 2’s programme return arrives a
   await expect
     .poll(() => picture(page).evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBe(64);
+  // …through the bridge's control port, with its ticket — never Vite's origin.
+  expect((await picture(page).getAttribute('src')) ?? '').toMatch(
+    new RegExp(`^http://127\\.0\\.0\\.1:${String((bridge as BridgeHandle).port)}/pgm/2\\?ticket=`),
+  );
   // …and it KEEPS arriving: the relay calls a feed stalled when frames stop, so live seconds later
-  // is frames still crossing Vite's proxy.
+  // is frames still arriving.
   await page.waitForTimeout(3000);
   await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'live');
   expect(feed?.openCount(), 'one upstream, read through the relay').toBe(1);

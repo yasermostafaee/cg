@@ -49,11 +49,11 @@ describe('vite.config — the dev station relay', () => {
     expect(config.server?.proxy).toBeUndefined();
   });
 
-  it('CG_BRIDGE_CONSOLE relays /pgm/ and /__cg/ — and nothing else — to the named listener', async () => {
+  it('CG_BRIDGE_CONSOLE relays /__cg/ — and nothing else, /pgm/ included — to the named listener', async () => {
     process.env.CG_BRIDGE_CONSOLE = 'http://127.0.0.1:5175';
     const config = await loadConfig();
+    // `CENTRAL-BRIDGE-01` (D9): the PROGRAM picture comes from CG Bridge's control port, ticketed.
     expect(config.server?.proxy).toEqual({
-      '/pgm/': 'http://127.0.0.1:5175',
       '/__cg/': 'http://127.0.0.1:5175',
     });
   });

@@ -118,10 +118,15 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     // one ever failed the rule itself would have moved, and the rest would be enforcing
     // something nobody decided.
     (window as unknown as { cg: unknown }).cg = {
+      // `CENTRAL-BRIDGE-01` — the panel asks who is signed in: CG Bridge's logs are an admin's.
+      auth: {
+        state: () => ({ kind: 'off' as const }),
+        onStateChanged: () => () => undefined,
+      },
       audit: {
-        // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
-        canOpenLogFolder: () => false,
-        openLogFolder: () => Promise.resolve({ accepted: false }),
+        // `CENTRAL-BRIDGE-01` — CG Bridge's logs, one zip: offered only while the link is up.
+        canDownloadLogs: () => false,
+        downloadLogs: () => Promise.resolve({ accepted: false }),
         recent: () => Promise.resolve([]),
         health: () => Promise.resolve({ path: null, writable: false, lastError: null }),
         // `B-141` — the panel reads the acting console's self-declared name on open.

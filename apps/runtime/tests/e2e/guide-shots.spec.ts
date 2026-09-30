@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -15,17 +15,23 @@ import {
 
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` B3 — **THE INSTALL GUIDE'S SCREENSHOTS OF CG CONTROL, TAKEN FROM THE REAL
- * CONSOLE**: first-run's Playout address, its sign-in and its channel choice, as `first-run.spec.ts`
- * drives them — a real bridge started as CG Control starts it, the fake Playout, the AMCP mock.
+ * CONSOLE**: CG Control's first question (the Playout's address), then first-run's sign-in and its
+ * channel choice, as `playout-address-gate.spec.ts` and `first-run.spec.ts` drive them.
+ *
+ * `CENTRAL-BRIDGE-01` — picture 1 is CG Control's own Playout-address gate, which only its own page
+ * (`http://tauri.localhost`) shows: the built console is served there by `page.route`, on a page of
+ * its own whose every socket is recorded and closed, never dialled. Pictures 2 and 3 are first-run
+ * against a real bridge given its Playout as CG Bridge's configuration gives it, the fake Playout,
+ * and the AMCP mock.
  *
  * It runs only when `CG_GUIDE_SHOTS` names a folder, and writes its PNGs there
  * (`docs/release/<version>/img/`, then built into the guide by `tools/release`); otherwise it is
  * skipped, so the suite pays nothing for it.
  *
  * NO REAL ADDRESS, TOKEN OR PASSWORD in any picture: the address shown is a documentation address
- * (RFC 5737) typed for the picture before anything is checked; the password is masked by its field;
- * each picture is one section of the dialog, so the check's lines (which name the fake's loopback
- * address) and the serve address (this machine's own LAN address) are in none of them.
+ * (RFC 5737), typed for the picture and never dialled; the password is masked by its field; each
+ * picture is one section of a dialog, so the check's lines (which name the fake's loopback address)
+ * and the serve address (this machine's own LAN address) are in none of them.
  */
 
 const OUT = process.env.CG_GUIDE_SHOTS;
@@ -37,6 +43,8 @@ test.use({ deviceScaleFactor: 2 });
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(here, '../../../..');
 const BRIDGE_CLI = path.join(REPO, 'tools/caspar-bridge/bin/caspar-bridge.mjs');
+/** CG Control's own origin: the page it bundles its console on. */
+const APP = 'http://tauri.localhost';
 /** A documentation address (RFC 5737): what the picture shows typed, never a real Playout's. */
 const EXAMPLE_PLAYOUT = '192.0.2.20';
 
@@ -56,7 +64,7 @@ function freePort(): Promise<number> {
   });
 }
 
-async function startBridge(port: number): Promise<void> {
+async function startBridge(port: number, playoutAddress: string): Promise<void> {
   const child = spawn(
     process.execPath,
     [
@@ -64,6 +72,8 @@ async function startBridge(port: number): Promise<void> {
       '--state-home',
       stateHome as string,
       '--first-run',
+      '--playout-address',
+      playoutAddress,
       '--port',
       String(port),
       '--template-serve-port',
@@ -104,14 +114,51 @@ test.afterEach(async () => {
   stateHome = null;
 });
 
-test('B3 — CG Control’s first run: the Playout address, the sign-in, the channel', async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
+/*
+  Two tests, because they need different things of the machine: picture 1 binds and dials nothing,
+  and runs anywhere; pictures 2 and 3 take the AMCP mock onto TCP 5250 (first-run writes the
+  standard port), which a machine running its own CasparCG does not have free — and there the
+  station they set up would dial that core. Run the second only where 5250 is free.
+*/
+test('B3 — CG Control’s first question: the Playout’s address, typed', async ({ page }) => {
   const out = OUT as string;
   fs.mkdirSync(out, { recursive: true });
   await page.setViewportSize({ width: 1280, height: 860 });
+  const base = test.info().project.use.baseURL as string;
+  await page.route(`${APP}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    try {
+      const response = await route.fetch({ url: `${base}${url.pathname}${url.search}` });
+      await route.fulfill({ response });
+    } catch (err) {
+      // The page closed with this request in flight — the test is over. Anything else is real.
+      if (!/has been closed/.test(String(err))) throw err;
+    }
+  });
+  // Nothing is dialled from this page: no socket, and no request to the example address.
+  await page.routeWebSocket(/.*/, (ws) => ws.close());
+  await page.route(/^https?:\/\/192\.0\.2\.20[:/]/, (route) => route.abort('connectionrefused'));
+  await page.addInitScript(() => {
+    (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
+  });
+  await page.goto(`${APP}/`);
+  const gate = page.locator('[data-playout-address-gate]');
+  await gate.getByLabel('Playout address').fill(EXAMPLE_PLAYOUT);
+  await expect(gate.getByRole('button', { name: 'Connect' })).toBeEnabled();
+  // The card alone: its title, the field and Connect.
+  await gate
+    .getByRole('dialog', { name: 'Set up CG Control' })
+    .screenshot({ path: path.join(out, '1-playout-address.png') });
+  expect(fs.statSync(path.join(out, '1-playout-address.png')).size).toBeGreaterThan(1000);
+});
 
+test('B3 — first-run’s sign-in and channel (the AMCP mock on TCP 5250)', async ({ page }) => {
+  test.setTimeout(120_000);
+  const out = OUT as string;
+  fs.mkdirSync(out, { recursive: true });
+
+  // ── 2 · first-run's sign-in, as cg-admin (the password masked by its field) ──
+  await page.setViewportSize({ width: 1280, height: 860 });
   playout = await startFakePlayout({ sealOnLoopback: false });
   const fake = playout;
   amcp = await createMock({
@@ -122,62 +169,15 @@ test('B3 — CG Control’s first run: the Playout address, the sign-in, the cha
   });
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-guide-shots-'));
   const port = await freePort();
-  await startBridge(port);
-  await page.exposeFunction('__cgSetPlayoutAddress', async (address: string): Promise<string> => {
-    const written = spawnSync(
-      process.execPath,
-      [BRIDGE_CLI, '--state-home', stateHome as string, '--set-playout-address', address],
-      { encoding: 'utf8' },
-    );
-    if (written.status !== 0) throw new Error(written.stderr);
-    await stopBridge();
-    await startBridge(port);
-    return written.stderr.trim();
-  });
+  await startBridge(port, fake.baseUrl);
   await page.addInitScript(
     `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};` +
-      'window.__CG_SPLASH_DISABLED__ = true;' +
-      'window.__TAURI_INTERNALS__ = { invoke: (command, args) => command === "set_playout_address"' +
-      ' ? window.__cgSetPlayoutAddress(args.address) : Promise.reject(new Error("unknown command")) };',
+      'window.__CG_SPLASH_DISABLED__ = true;',
   );
   await page.goto('/');
 
-  // ── 1 · the Playout address, typed and not yet checked ─────────────────────
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
-  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
-  const addressField = firstRun.getByLabel('Playout address');
-  await addressField.fill(EXAMPLE_PLAYOUT);
-  // The dialog's element is its full-window backdrop: the picture is its card, clipped around the
-  // heading, the field and Check with the card's own margin.
-  const heading = await firstRun.getByRole('heading', { name: 'Set up CG Control' }).boundingBox();
-  const field = await addressField.boundingBox();
-  const check = await firstRun.getByRole('button', { name: 'Check' }).boundingBox();
-  if (heading === null || field === null || check === null) {
-    throw new Error('the heading, the field and Check render');
-  }
-  const pad = 24;
-  const left = Math.min(heading.x, field.x) - pad;
-  const top = heading.y - pad;
-  await page.screenshot({
-    path: path.join(out, '1-playout-address.png'),
-    clip: {
-      x: left,
-      y: top,
-      width: check.x + check.width + pad - left,
-      height: field.y + field.height + pad - top,
-    },
-  });
-
-  // The real (fake) Playout, checked and connected — no picture of the check's lines.
-  await addressField.fill(fake.baseUrl.replace(/^http:\/\//, ''));
-  await firstRun.getByRole('button', { name: 'Check' }).click();
-  await expect(firstRun.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {
-    timeout: 20_000,
-  });
-  await firstRun.getByRole('button', { name: 'Connect' }).click();
-  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 30_000 });
-
-  // ── 2 · the sign-in, as cg-admin (the password masked by its field) ────────
+  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
   const signIn = firstRun.getByRole('region', { name: 'Sign in' });
   await firstRun.locator('#cg-first-run-user').fill(FAKE_ADMIN.username);
   await firstRun.locator('#cg-first-run-pass').fill(FAKE_PLAYOUT_PASSWORD);
@@ -195,7 +195,7 @@ test('B3 — CG Control’s first run: the Playout address, the sign-in, the cha
   await page.waitForTimeout(400);
   await channel.screenshot({ path: path.join(out, '3-channel.png') });
 
-  for (const name of ['1-playout-address.png', '2-sign-in.png', '3-channel.png']) {
+  for (const name of ['2-sign-in.png', '3-channel.png']) {
     expect(fs.statSync(path.join(out, name)).size, name).toBeGreaterThan(1000);
   }
 });

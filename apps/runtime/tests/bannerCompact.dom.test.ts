@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionBanner } from '../src/renderer/features/status/ConnectionBanner.js';
+import { setupStub } from './support/authStub.js';
 
 /**
  * The #312 banners are compact strips — and still loud.
@@ -23,10 +24,16 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 async function renderBanner(link: 'disconnected' | 'offline-mock'): Promise<HTMLDivElement> {
+  // The reachability probe is a real `fetch` of the address: refused here, never dialled.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.reject(new Error('refused'))),
+  );
   const stub = {
     link: {
       status: () => link,
@@ -34,6 +41,8 @@ async function renderBanner(link: 'disconnected' | 'offline-mock'): Promise<HTML
       resyncing: () => false,
       onResyncingChanged: () => () => undefined,
     },
+    // `CENTRAL-BRIDGE-01` — the disconnected banner asks whether this console may set up again.
+    setup: setupStub(),
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   container = document.createElement('div');

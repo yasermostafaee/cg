@@ -15,7 +15,8 @@ import { redactUrlCredentials } from '@cg/shared-ipc';
  * the wire. Neither the installed app nor the dev station had ever written one — the only AMCP
  * trace in the tree was the MOCK's own, which the tests switch on. So the log is written HERE, by
  * the bridge, for every launcher: the path comes from `--state-home` (`bin/caspar-bridge.mjs`),
- * which the installed app's sidecar and the dev station both already pass.
+ * which CG Bridge the service (its configuration's folder, `CENTRAL-BRIDGE-01`) and the dev station
+ * both already give it.
  *
  * ── WHAT A LINE SAYS ─────────────────────────────────────────────────────────────
  *

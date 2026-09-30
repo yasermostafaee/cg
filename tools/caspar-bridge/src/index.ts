@@ -118,17 +118,17 @@ export {
   templateServeUnreachableWarning,
 } from './template-http-server.js';
 export type { TemplateServeOptions, TemplateServeOverride } from './template-http-server.js';
-// `DESKTOP-APPS-01` — the console served on its own loopback origin (ADR 0011), and the health
-// identity the desktop shell reads. Never on the template origin (ADR 0010 rule 13).
+// `DESKTOP-APPS-01` — a built console served from a folder on its own loopback origin (the dev
+// station, the e2e specs), and the health identity a launcher reads. Never on the template origin
+// (ADR 0010 rule 13); never the programme return (`CENTRAL-BRIDGE-01`: the control port's, ticketed).
 export {
   CONSOLE_DEFAULT_PORT,
   CONSOLE_HEALTH_APP,
   CONSOLE_HEALTH_PATH,
   ConsoleHttpServer,
-  isLoopbackPeer,
   resolveConsolePath,
 } from './console-http-server.js';
-export type { ConsoleHealth, ConsoleServeOptions, PgmRelayRoute } from './console-http-server.js';
+export type { ConsoleHealth, ConsoleServeOptions } from './console-http-server.js';
 // `C-016` — the programme return: the ONE port rule, the part parser, and the relay.
 export {
   DEFAULT_PGM_RETURN_TUNING,

@@ -1,6 +1,7 @@
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useLink } from '../../hooks/useLink.js';
+import { unreachableReason, useBridgeReachability } from '../../hooks/useBridgeReachability.js';
 import { setTestMode } from '../../../platform/testMode.js';
 
 /**
@@ -64,8 +65,16 @@ const styles = {
 /** Repeating hazard stripes — deliberately unlike any live-air surface in the app. */
 const TEST_STRIPES = `repeating-linear-gradient(135deg, ${cssVars['--r-band-stripe-a']} 0 14px, ${cssVars['--r-band-stripe-b']} 14px 28px)`;
 
-export function ConnectionBanner(): JSX.Element | null {
+export function ConnectionBanner({
+  reload = () => globalThis.location.reload(),
+}: {
+  /** Start the console again (a test passes its own: jsdom's `location.reload` is fixed). */
+  reload?: () => void;
+} = {}): JSX.Element | null {
   const link = useLink();
+  // `CENTRAL-BRIDGE-01` §1 C — WHERE CG Bridge was looked for, and why it did not answer.
+  const address = window.cg.link.bridgeAddress?.() ?? null;
+  const unreachable = useBridgeReachability(address, link === 'disconnected');
 
   if (link === 'live') return null;
 
@@ -98,14 +107,38 @@ export function ConnectionBanner(): JSX.Element | null {
     >
       <span style={styles.text}>
         NOT CONNECTED — NOTHING CAN REACH AIR.
-        <span style={styles.detail}>
-          The Runtime cannot reach the CasparCG bridge. On-air commands are refused, not queued:
-          reissue them once the connection is back.
+        <span style={styles.detail} data-bridge-unreachable={unreachable ?? ''}>
+          {/*
+            `CENTRAL-BRIDGE-01` §1 C — the one line: CG Bridge is on another machine now, so the
+            console names where it looked and, once the probe answers, why nothing came back.
+          */}
+          {address === null
+            ? 'The Runtime cannot reach CG Bridge.'
+            : `CG Bridge not reachable at ${address}${
+                unreachable === null ? '' : ` — ${unreachableReason(unreachable, address)}`
+              }.`}{' '}
+          On-air commands are refused, not queued: reissue them once the connection is back.
         </span>
       </span>
-      <Button variant="secondary" onClick={() => globalThis.location.reload()}>
+      <Button variant="secondary" onClick={reload}>
         Retry connection
       </Button>
+      {/*
+        `CENTRAL-BRIDGE-01` (D8) — THE WAY BACK, inside CG Control: a console pointed at a CG Bridge it
+        cannot reach (a mistyped address, a server that moved) cannot reach Station setup either — that
+        is behind a station admin's sign-in, over that very bridge. So it forgets this console's
+        station and asks again. Absent in a browser, which follows the page's host.
+      */}
+      {window.cg.setup.canSetPlayoutAddress() && (
+        <Button
+          variant="ghost"
+          onClick={() => {
+            if (window.cg.setup.forgetStation()) reload();
+          }}
+        >
+          Set up again
+        </Button>
+      )}
       <Button variant="ghost" onClick={() => setTestMode(true)}>
         Enter test mode
       </Button>

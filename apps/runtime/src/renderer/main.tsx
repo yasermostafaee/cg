@@ -9,6 +9,8 @@ import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
+import { saveStationAddress } from '../platform/stationAddress.js';
+import { PlayoutAddressGate } from './features/firstRun/PlayoutAddressGate.js';
 import { startKeyboardLanguage } from './keyboardLanguage.js';
 import { applyThemeVars } from './theme.js';
 
@@ -78,8 +80,26 @@ function BootComplete({ children }: { children: ReactNode }): JSX.Element {
 }
 
 async function boot(): Promise<void> {
-  window.__CG_SPLASH__?.phase('PROBING BRIDGE');
-  window.cg = await createRuntimeBridge();
+  // `CENTRAL-BRIDGE-01` — the console connects to CG Bridge; it starts none.
+  window.__CG_SPLASH__?.phase('CONNECTING');
+  const bridge = await createRuntimeBridge();
+  if (bridge === null) {
+    /*
+      `CENTRAL-BRIDGE-01` (D8) — CG Control with no Playout address yet: there is no CG Bridge to
+      connect to, so the one question is asked, and nothing else renders until it is answered.
+      The station record's writer is handed in HERE, the composition root: the gate itself imports
+      nothing of the platform (golden rule 1).
+    */
+    root.render(
+      <StrictMode>
+        <BootComplete>
+          <PlayoutAddressGate save={saveStationAddress} />
+        </BootComplete>
+      </StrictMode>,
+    );
+    return;
+  }
+  window.cg = bridge;
   // TEXT-DIGITS-01 — the one keyboard-language detector, with the shell's report when there is one.
   const keyboard = window.cg.keyboard;
   startKeyboardLanguage(document, keyboard.reportsLanguage() ? () => keyboard.language() : null);

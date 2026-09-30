@@ -246,13 +246,14 @@ test.describe('reduced motion', () => {
 });
 
 /**
- * 🔴 `FIELD-FIXES-01` J — **INSIDE CG CONTROL THE SPLASH CONTINUES THE ONE ALREADY ON SCREEN.**
- * The window's starting page is this splash (composed from `index.html`), shown while the bridge
- * starts; when the console replaces it, replaying the entrance would be a second loading screen in
- * the same design. Measured by each entrance's own timing in a real engine — jsdom runs no
- * animation — because a zero-length `forwards` run is how the entrance is already over.
+ * 🔴 `CENTRAL-BRIDGE-01` — **IN CG CONTROL'S WINDOW THE SPLASH MAKES ITS ENTRANCE.** The app bundles
+ * this page and shows it FIRST: there is no starting page before it any more, so nothing may skip the
+ * entrance there. `FIELD-FIXES-01` J once did, for a window that showed a starting page while its
+ * bridge started; that window is gone, and a skipped entrance there would now be the ONLY splash the
+ * operator sees, arriving already in place. Measured by each entrance's own timing in a real engine —
+ * jsdom runs no animation.
  */
-test.describe('FIELD-FIXES-01 J — one splash inside CG Control', () => {
+test.describe('CENTRAL-BRIDGE-01 — the splash CG Control shows first', () => {
   /** Each staged element's entrance, as the engine resolved it. */
   async function entrances(
     page: Page,
@@ -275,7 +276,7 @@ test.describe('FIELD-FIXES-01 J — one splash inside CG Control', () => {
     });
   }
 
-  test('🔴 in the shell’s window every entrance is already over — it continues the starting page', async ({
+  test('🔴 in the shell’s window the splash makes its entrance — nothing skips it', async ({
     page,
   }) => {
     await page.addInitScript(() => {
@@ -286,11 +287,13 @@ test.describe('FIELD-FIXES-01 J — one splash inside CG Control', () => {
     });
     await armMockBoot(page);
     await page.goto('/');
-    await expect(splash(page)).toHaveAttribute('data-continued', 'true');
-    for (const [name, style] of Object.entries(await entrances(page))) {
-      expect(style.duration, `${name} replays its entrance`).toBe('0s');
-      expect(style.opacity, `${name} is not already in place`).toBe('1');
+    await expect(splash(page)).toBeVisible();
+    await expect(splash(page)).not.toHaveAttribute('data-continued', /.*/);
+    const played = await entrances(page);
+    for (const name of ['wordmark', 'company', 'tagline', 'progress', 'foot'] as const) {
+      expect(played[name]?.duration, `${name} makes its entrance`).not.toBe('0s');
     }
+    expect(played.wordmark?.duration).toBe('1s');
   });
 
   test('CONTROL — in a browser the splash makes its entrance, as it always has', async ({

@@ -55,11 +55,16 @@ export function useProgramReturn(channel: number | null): ProgramReturn {
   const live = link === 'live';
   const statuses = useBridgeSnapshot(fetchStatus, subscribeStatus, NOTHING_WATCHED);
   const state = channel === null ? undefined : statuses.find((s) => s.channel === channel)?.state;
-  const base = channel === null ? null : window.cg.pgmReturn.feedUrl(channel);
 
   const [mount, setMount] = useState(0);
   const retries = useRef(0);
   const retry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /*
+    `CENTRAL-BRIDGE-01` (D9) — the picture's URL carries a ticket CG Bridge gives this socket, so it
+    is ASKED FOR, per request: on every mount and after every failure. A refusal is a failed request
+    (the back-off below asks again); nothing is shown while no URL is held.
+  */
+  const [ticketed, setTicketed] = useState<string | null>(null);
 
   /*
     A request made over a link that then dropped died with the bridge (the relay is served by the
@@ -94,8 +99,28 @@ export function useProgramReturn(channel: number | null): ProgramReturn {
     }, delay);
   }, []);
 
+  useEffect(() => {
+    setTicketed(null);
+    if (channel === null || !live) return;
+    let current = true;
+    window.cg.pgmReturn.feedUrl(channel).then(
+      (url) => {
+        if (current) setTicketed(url);
+      },
+      () => {
+        if (current) onError();
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [channel, live, mount, onError]);
+
   // The mount number rides the query so each request is its own resource, never a cached one.
-  const src = base === null || !live ? null : `${base}?v=${String(mount)}`;
+  const src =
+    ticketed === null || !live
+      ? null
+      : `${ticketed}${ticketed.includes('?') ? '&' : '?'}v=${String(mount)}`;
   const signal: ProgramSignal =
     !live || state === undefined
       ? 'none'

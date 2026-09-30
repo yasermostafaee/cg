@@ -212,6 +212,8 @@ export function setupStub(): {
   channelOccupancy: () => Promise<{ state: 'unknown'; layers: [] }>;
   canSetPlayoutAddress: () => boolean;
   setPlayoutAddress: () => Promise<string>;
+  bridgeOverride: () => string | null;
+  forgetStation: () => boolean;
 } {
   return {
     check: () => Promise.resolve({ lines: [], localAddress: null }),
@@ -220,5 +222,8 @@ export function setupStub(): {
     channelOccupancy: () => Promise.resolve({ state: 'unknown', layers: [] }),
     canSetPlayoutAddress: () => false,
     setPlayoutAddress: () => Promise.reject(new Error('this stub is not CG Control')),
+    // `CENTRAL-BRIDGE-01` — no station record here: nothing kept, nothing to forget.
+    bridgeOverride: () => null,
+    forgetStation: () => false,
   };
 }

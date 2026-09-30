@@ -1628,7 +1628,7 @@ export class CasparRuntime {
    * 🔴 `PLATE-BAND-01` — **IS THIS STATION LINKED TO THE PLAYOUT?** Resolved once in `createBridge`
    * from the auth config (`auth.mode === 'playout'`): a Playout address or issuer names one. Read by
    * {@link plateBandInForce} alone, and fixed for the process — a new Playout address restarts the
-   * bridge (`--set-playout-address`, ADR 0011).
+   * bridge (CG Bridge's configuration, `CENTRAL-BRIDGE-01`; `--set-playout-address` in a dev station).
    */
   readonly #playoutLinked: boolean;
 

@@ -135,13 +135,18 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly eleven routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, and the bridge’s own sign-in', () => {
+  it('exactly twelve routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in, and its logs', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
       .sort();
 
     expect(admin).toEqual([
+      /*
+        `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, downloaded (they live on the Playout machine
+        now): what an engineer reads, and what a support call is sent. A station admin's.
+      */
+      'bridge.logs-ticket',
       /*
         `CENTRAL-BRIDGE-01` (D7, rule 8) — a station admin gives CG Bridge the station account's
         password, once. It sets the bearer every Playout read of the bridge's uses, which is a
@@ -236,6 +241,11 @@ describe('C-038 — the census: every route, classified', () => {
       'lock.state',
       // `C-016` — whether the programme return is live. A viewer may watch air.
       'pgmReturn.status',
+      /*
+        `CENTRAL-BRIDGE-01` (D9) — the ticket for the programme return's picture: a viewer may watch
+        air too, but only a channel the sign-in holds (the handler) and this station declares (the fence).
+      */
+      'pgmReturn.ticket',
       'playoutLayers.state',
       'rehearse.state',
       /*

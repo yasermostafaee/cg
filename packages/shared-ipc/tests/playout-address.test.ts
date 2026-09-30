@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONNECTION_CHECK_LINE_MS,
+  normaliseBridgeAddress,
   normalisePlayoutAddress,
   PLAYOUT_API_PORT,
   SETUP_CHECK_WAIT_MS,
+  splitHostPort,
 } from '../src/index.js';
 
 /**
@@ -49,5 +51,43 @@ describe('C2 — the console waits longer than the slowest line, from ONE consta
   it('the wait is derived from the line bound, with margin', () => {
     expect(SETUP_CHECK_WAIT_MS).toBeGreaterThan(CONNECTION_CHECK_LINE_MS);
     expect(SETUP_CHECK_WAIT_MS).toBe(CONNECTION_CHECK_LINE_MS * 2);
+  });
+});
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D8) — **A SEPARATE SERVER'S CG BRIDGE ADDRESS**: `host` or `host:port`, as
+ * typed; nothing typed means CG Bridge is on the Playout's host. The port comes from the TEXT — a URL
+ * parser drops a scheme's default port, and `:80` would silently become the bridge's default.
+ */
+describe('CENTRAL-BRIDGE-01 — normaliseBridgeAddress', () => {
+  it('a host, or a host and a port, as typed (trimmed); nothing typed is ""', () => {
+    expect(normaliseBridgeAddress('192.0.2.30')).toBe('192.0.2.30');
+    expect(normaliseBridgeAddress('  bridge.local:5281 ')).toBe('bridge.local:5281');
+    expect(normaliseBridgeAddress('[::1]:5280')).toBe('[::1]:5280');
+    expect(normaliseBridgeAddress('')).toBe('');
+    expect(normaliseBridgeAddress('   ')).toBe('');
+  });
+
+  it('the port is read from the text — :80 is kept, which a URL parser would drop', () => {
+    expect(splitHostPort('192.0.2.30:80')).toEqual({ host: '192.0.2.30', port: 80 });
+    expect(normaliseBridgeAddress('192.0.2.30:80')).toBe('192.0.2.30:80');
+    expect(splitHostPort('192.0.2.30')).toEqual({ host: '192.0.2.30', port: null });
+  });
+
+  it('CONTROL — a scheme, a path, credentials, a space or a port out of range is null', () => {
+    for (const bad of [
+      'http://192.0.2.30',
+      'ws://192.0.2.30:5280',
+      '192.0.2.30/',
+      '192.0.2.30:5280/x',
+      'user@192.0.2.30',
+      'two words',
+      '192.0.2.30:0',
+      '192.0.2.30:65536',
+      '192.0.2.30:',
+      ':5280',
+    ]) {
+      expect(normaliseBridgeAddress(bad), bad).toBeNull();
+    }
   });
 });

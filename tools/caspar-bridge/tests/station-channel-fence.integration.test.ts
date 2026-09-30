@@ -614,7 +614,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('eighteen routes carry a channel key; fifteen carry it at the top level, where the fence reads', () => {
+  it('nineteen routes carry a channel key; sixteen carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -635,6 +635,12 @@ describe('the census: every route that names a channel, classified', () => {
       'fixedLayers.set-banks': ['req.banks[].channel'],
       'fixedLayers.set-config': ['req.channel'],
       'layers.clear': ['req.channel'],
+      /*
+        `CENTRAL-BRIDGE-01` (D9) — a ticket for ONE channel's programme return names it at the top
+        level, so the fence refuses a channel this station does not declare (and the handler refuses
+        one the sign-in does not hold).
+      */
+      'pgmReturn.ticket': ['req.channel'],
       'playoutLayers.clear': ['req.channel'],
       /*
         `PLAYOUT-SOURCES-01` §1.F — `sources.set-config` carries the plate BAND only now, so the
@@ -698,6 +704,8 @@ describe('the census: every route that names a channel, classified', () => {
       'fixedLayers.clear-layer',
       'fixedLayers.load',
       'layers.clear',
+      // `CENTRAL-BRIDGE-01` (D9) — a programme-return ticket for one channel.
+      'pgmReturn.ticket',
       'playoutLayers.clear',
       // `MULTI-CHANNEL-01` §2 B — the housekeeping verbs, when they name a channel.
       'stack.clear-all',

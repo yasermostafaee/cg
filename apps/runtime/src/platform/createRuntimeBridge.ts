@@ -34,11 +34,14 @@ const PROBE_TIMEOUT_MS = 1500;
  * The backend is fixed for the session either way — a live link that later drops surfaces
  * as `disconnected`, never a silent fall-back to a simulation.
  */
-export async function createRuntimeBridge(): Promise<RuntimeBridge> {
+export async function createRuntimeBridge(): Promise<RuntimeBridge | null> {
   // The ONLY door to the mock. Never inferred from a failed probe.
   if (isTestMode()) return createMockBridge();
 
   const url = resolveBridgeUrl();
+  // `CENTRAL-BRIDGE-01` (D8) — CG Control with no Playout address yet: nowhere to connect, and the
+  // console asks for it (`main.tsx`) rather than guessing a bridge.
+  if (url === null) return null;
   // B-085 / B-092 — this console's DISPLAY copies of the library and the stack, hydrated BEFORE
   // the runtime is returned so the first `templates.list()` and `stack.snapshot()` have something
   // to show with CG Bridge unreachable. `CENTRAL-BRIDGE-01` (`B-294`): never sent — the bridge
@@ -170,6 +173,8 @@ export function createMockBridge(): RuntimeBridge {
       // `CENTRAL-BRIDGE-01` — no CG Bridge in test mode, so no release to differ from.
       versionMismatch: () => null,
       onVersionMismatchChanged: () => () => undefined,
+      // `CENTRAL-BRIDGE-01` — test mode has no CG Bridge to name.
+      bridgeAddress: () => null,
     },
 
     /*
@@ -285,6 +290,9 @@ export function createMockBridge(): RuntimeBridge {
       canSetPlayoutAddress: () => false,
       setPlayoutAddress: () =>
         Promise.reject(new Error('Only CG Control can change the Playout address.')),
+      // `CENTRAL-BRIDGE-01` — test mode has no station record: nothing kept, nothing to forget.
+      bridgeOverride: () => null,
+      forgetStation: () => false,
     },
 
     /*
@@ -349,7 +357,7 @@ export function createMockBridge(): RuntimeBridge {
       and nothing will ever change it. The pane then reads "No return signal", which is true.
     */
     pgmReturn: {
-      feedUrl: () => null,
+      feedUrl: () => Promise.resolve(null),
       status: () => Promise.resolve([]),
       onStatusChanged: () => () => undefined,
     },
@@ -426,9 +434,10 @@ export function createMockBridge(): RuntimeBridge {
       recent: (req) => Promise.resolve(mock.auditRecent(req.limit, req.action, req.actor)),
       health: () => Promise.resolve(mock.auditHealth()),
       // `FIELD-FIXES-01` G — the simulation is not CG Control: no log folder to open.
-      canOpenLogFolder: () => false,
-      openLogFolder: () =>
-        Promise.resolve({ accepted: false, message: 'Only CG Control can open its log folder.' }),
+      // `CENTRAL-BRIDGE-01` — test mode has no CG Bridge, so no logs to download.
+      canDownloadLogs: () => false,
+      downloadLogs: () =>
+        Promise.resolve({ accepted: false, message: 'Test mode has no CG Bridge.' }),
     },
 
     update: {

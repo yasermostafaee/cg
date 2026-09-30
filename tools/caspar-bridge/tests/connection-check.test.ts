@@ -9,7 +9,7 @@ import {
   SETUP_CHECK_WAIT_MS,
   type ConnectionCheckLine,
 } from '@cg/shared-ipc';
-import { ProbeError } from '../src/connection-check.js';
+import { NATIVE_SIGN_IN_LINE, ProbeError } from '../src/connection-check.js';
 import {
   realProbes,
   runConnectionCheck,
@@ -47,8 +47,14 @@ function probes(overrides: Partial<CheckProbes> = {}): CheckProbes {
 }
 
 /** A fake Playout API: the JWKS and the token endpoint's CORS preflight, both configurable. */
-async function fakeApi(opts: { keys: unknown[]; allowOrigin: string | null }): Promise<string> {
+async function fakeApi(opts: {
+  keys: unknown[];
+  allowOrigin: string | null;
+  /** Every request the fake was asked, as `METHOD url` — what a check probed, and what it did not. */
+  seen?: string[];
+}): Promise<string> {
   const server = http.createServer((req, res) => {
+    opts.seen?.push(`${String(req.method)} ${String(req.url)}`);
     if (req.method === 'OPTIONS' && req.url === '/api/cg/auth/token') {
       res.writeHead(
         204,
@@ -516,6 +522,30 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     );
     expect(line(lines, 'api').status).toBe('pass');
     expect(line(lines, 'cors')).toMatchObject({ status: 'fail', command: ORIGIN });
+  });
+
+  it('🔴 CENTRAL-BRIDGE-01 rule 8 — a console that signs in directly (CG Control) meets no CORS list: a fact, never probed — control: the same Playout refuses a browser origin', async () => {
+    const seen: string[] = [];
+    const api = await fakeApi({ keys: [{}], allowOrigin: 'http://elsewhere.example', seen });
+    const native = await runConnectionCheck(
+      { playoutAddress: api, origin: 'http://tauri.localhost', signIn: 'native' },
+      probes(amcpSays({ kind: 'refused' })),
+      { ports: PORTS },
+    );
+    expect(line(native.lines, 'api').status).toBe('pass');
+    expect(line(native.lines, 'cors')).toEqual(NATIVE_SIGN_IN_LINE);
+    // Never probed: the Playout was asked for its keys, and nothing of its CORS list.
+    expect(seen.some((r) => r.startsWith('OPTIONS '))).toBe(false);
+    expect(seen.some((r) => r.startsWith('GET /.well-known/jwks.json'))).toBe(true);
+
+    // CONTROL — the same Playout, for a browser console's origin: the list is asked, and refuses.
+    const browser = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes(amcpSays({ kind: 'refused' })),
+      { ports: PORTS },
+    );
+    expect(line(browser.lines, 'cors')).toMatchObject({ status: 'fail', command: ORIGIN });
+    expect(seen.some((r) => r.startsWith('OPTIONS '))).toBe(true);
   });
 
   it('an API that answers with NO signing keys — CORS is not checked, and says that is why', async () => {

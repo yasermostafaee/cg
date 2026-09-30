@@ -1,9 +1,6 @@
 {
   "identifier": "console",
-  "description": "DESKTOP-APPS-01-A: the console the bridge serves on http://127.0.0.1:5174, in CG Control's own window, may set the Playout address, (FIELD-FIXES-01 G) open the log folder, and (TEXT-DIGITS-01) read which keyboard language the window types in. The first is the one door that writes the Playout target, and it is not the control socket (ADR 0011).",
+  "description": "CENTRAL-BRIDGE-01: the console CG Control bundles, in its own window, may sign in to the Playout natively with no Origin (playout_post: a POST to the Playout's two auth routes only) and (TEXT-DIGITS-01) read which keyboard language the window types in. Nothing else: this app runs no bridge and writes no station setting.",
   "windows": ["main"],
-  "remote": {
-    "urls": ["http://127.0.0.1:5174/*"]
-  },
-  "permissions": ["allow-set-playout-address", "allow-open-bridge-log", "allow-keyboard-language"]
+  "permissions": ["allow-playout-post", "allow-keyboard-language"]
 }

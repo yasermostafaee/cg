@@ -11,9 +11,12 @@ import { disableSplash, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `C-016` / `PGM-RETURN-01` — **THE PROGRAM MONITOR SHOWS WHAT IS ON AIR**, end to end: a
- * real browser, the real console served by the bridge's own console server (the origin CG
- * Control opens, which is where the relay lives), a real in-process bridge, and a fake Playout
- * feed reproducing the Playout team's wire byte for byte.
+ * real browser, the real built console, a real in-process bridge, and a fake Playout feed
+ * reproducing the Playout team's wire byte for byte.
+ *
+ * `CENTRAL-BRIDGE-01` (D9) — the picture's ONE door is the bridge's control port: the console asks
+ * for a ticket over its socket and its `<img>` opens `/pgm/<n>?ticket=…` there. The console is
+ * served here by a listener with NO relay at all, so every frame below came through that door.
  *
  * The fake listens on the RULE port for channel 1 — `pgmPort(1)`, 9250 — and the bridge is given
  * no port seam, so these specs prove the port rule through the whole chain rather than around it.
@@ -28,7 +31,7 @@ import { disableSplash, expect, test } from './fixtures/runtime.js';
 test.describe.configure({ mode: 'serial' });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-/** The built console — the same `dist` CG Control's sidecar serves. */
+/** The built console — the same `dist` CG Control bundles. */
 const CONSOLE_DIR = path.resolve(here, '../../dist');
 
 let feed: FakePgmFeed | null = null;
@@ -56,7 +59,10 @@ async function startFeed(): Promise<FakePgmFeed> {
   return feed;
 }
 
-/** A real bridge (auth off: the relay reads server A's host) and the console on its own origin. */
+/**
+ * A real bridge (auth off: the relay reads server A's host) and the console on its own origin,
+ * served with no relay — the picture can only come from the bridge's control port.
+ */
 async function startStation(): Promise<string> {
   bridge = await createBridge({
     port: 0,
@@ -69,7 +75,7 @@ async function startStation(): Promise<string> {
     fixedLayers: defaultFixedLayerBank(),
   });
   consoleServer = new ConsoleHttpServer();
-  await consoleServer.start({ dir: CONSOLE_DIR, port: 0, pgmRelay: bridge.pgmReturn });
+  await consoleServer.start({ dir: CONSOLE_DIR, port: 0 });
   return consoleServer.url;
 }
 
@@ -123,6 +129,13 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await expect
       .poll(() => picture(page).evaluate((img: HTMLImageElement) => img.naturalWidth))
       .toBe(64);
+    // …through the one door: the bridge's control port, with the ticket the socket was given.
+    const src = await picture(page).getAttribute('src');
+    expect(src ?? '').toMatch(
+      new RegExp(
+        `^http://127\\.0\\.0\\.1:${String((bridge as BridgeHandle).port)}/pgm/1\\?ticket=`,
+      ),
+    );
     expect(f.openCount()).toBe(1);
     // …and the one request the Playout saw is the exact one, with nothing after it.
     expect(f.connections[0]?.received.toString('latin1')).toBe(

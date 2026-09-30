@@ -1273,3 +1273,52 @@ describe('CENTRAL-BRIDGE-01-A — the console’s refresh, on the runtime', () =
     expect(storedSession()).toMatchObject({ refreshToken: 'refresh-renewed' });
   });
 });
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` rule 8 — **THE CHECK ASKS WHAT THIS CONSOLE'S SIGN-IN WILL MEET.** CG
+ * Control signs in natively, with no `Origin`: no CORS list stands in its way, so its check says
+ * `signIn: 'native'` and the bridge does not probe the list with CG Control's page origin — which no
+ * Playout carries, and which disabled a working sign-in before this. The one predicate is the one
+ * the sign-in itself uses (`nativePlayoutFetch`).
+ */
+describe('CENTRAL-BRIDGE-01 rule 8 — the connection check, native or not', () => {
+  afterEach(() => {
+    delete (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  });
+
+  async function checkPayload(): Promise<unknown> {
+    const bridge = new FakeBridge();
+    // The handshake answered, as any bridge answers it: the check is open before a sign-in.
+    bridge.capabilities = playoutCapabilities();
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+    void runtime.setup
+      .check({ playoutAddress: 'http://192.0.2.10:8080', origin: 'http://tauri.localhost' })
+      .catch(() => undefined);
+    await settle();
+    return bridge
+      .socket()
+      .sent.find(
+        (f): f is ipc.WsRequestFrame => f.type === 'request' && f.channel === 'setup.check',
+      )?.payload;
+  }
+
+  it('🔴 inside CG Control the check says the sign-in is native — the CORS list has nothing to judge', async () => {
+    (globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {
+      invoke: () => Promise.reject(new Error('no shell in this test')),
+    };
+    expect(await checkPayload()).toEqual({
+      playoutAddress: 'http://192.0.2.10:8080',
+      origin: 'http://tauri.localhost',
+      signIn: 'native',
+    });
+  });
+
+  it('CONTROL — a browser console asks for its origin to be judged, and says nothing else', async () => {
+    expect(await checkPayload()).toEqual({
+      playoutAddress: 'http://192.0.2.10:8080',
+      origin: 'http://tauri.localhost',
+    });
+  });
+});

@@ -30,13 +30,18 @@
 //                                                     # C-037: require a Playout-issued JWT on the control
 //                                                     #   socket. Default --auth off = today, byte for byte.
 //   caspar-bridge --playout-config-path C:\cg\playout.json  # C-037: where the playout.* group persists
-//   caspar-bridge --state-home "C:\Users\op\AppData\Roaming\CG Control"
+//   caspar-bridge --service-config "C:\ProgramData\CG Bridge\cg-bridge.json"
+//                                                     # CENTRAL-BRIDGE-01: CG Bridge, as its service runs it
+//                                                     #   (the file's folder is the state home)
+//   caspar-bridge --state-home "C:\Users\op\AppData\Local\CG Control Dev"
 //                                                     # DESKTOP-APPS-01: every default below resolves under
 //                                                     #   <state-home>\.cg-runtime\ instead of ~/.cg-runtime\
-//   caspar-bridge --console-dir C:\cg\console --console-port 5174
-//                                                     # DESKTOP-APPS-01: serve the built console on its own
-//                                                     #   loopback origin (never the template port)
+//   caspar-bridge --console-dir C:\cg\console --console-port 5175
+//                                                     # DESKTOP-APPS-01: serve a built console on its own
+//                                                     #   loopback origin (never the template port) — the
+//                                                     #   dev station's; CG Control bundles its own
 //   caspar-bridge --exit-on-stdin-close               # DESKTOP-APPS-01: stop when the parent's pipe closes
+//                                                     #   (a launcher's lifeline — the dev station's)
 //   caspar-bridge --amcp-log-path C:\cg\amcp.log      # FIELD-FIXES-01-A: every AMCP command and its reply
 //                                                     #   (default <state-home>\logs\amcp.log)
 //
@@ -128,11 +133,12 @@ const args = parseArgs(process.argv.slice(2));
 
 /*
   🔴 `CLIENT-TEST-RELEASE-01` B1 — THE FIRST LINE OF EVERY START NAMES THE BRIDGE'S VERSION. A
-  support call starts from CG Control's log folder, and every later line of `bridge.log` is read
-  against which build wrote it — so the version comes before anything else, a refused start
-  included. The bundle the installer ships has it inlined (`scripts/bundle.mjs` defines
-  `__CG_BRIDGE_VERSION__`); a run from source reads this package's own manifest. The one-shot
-  `--set-playout-address` is not a start, and the shell reads its LAST line, so it prints none.
+  support call starts from CG Bridge's logs (`CENTRAL-BRIDGE-01`: one zip, downloaded from any
+  admin console), and every later line is read against which build wrote it — so the version comes
+  before anything else, a refused start included. The bundle the installer ships has it inlined
+  (`scripts/bundle.mjs` defines `__CG_BRIDGE_VERSION__`); a run from source reads this package's
+  own manifest. The one-shot `--set-playout-address` is not a start, and its caller (the dev
+  station) reads its LAST line, so it prints none.
 */
 /* global __CG_BRIDGE_VERSION__ -- defined by `scripts/bundle.mjs`; undeclared from source. */
 function bridgeVersion() {
@@ -453,9 +459,10 @@ const auditLogPath =
 
 // 🔴 `FIELD-FIXES-01-A` — the AMCP LOG: every command sent to CasparCG, its reply line and its
 // time, size-capped with one previous file kept. In the station's LOGS folder when a state home
-// is named — `%APPDATA%\CG Control\logs\amcp.log` for the installed app, beside the `bridge.log`
-// its sidecar writes — so the installed app and the dev station get it from the flag they already
-// pass, and no launcher needs a flag of its own. A bare dev bridge keeps it with its other files.
+// is named — `%ProgramData%\CG Bridge\logs\amcp.log` for CG Bridge the service (`CENTRAL-BRIDGE-01`),
+// beside the service host's own logs — so the service and the dev station get it from the state
+// home they already have, and no launcher needs a flag of its own. A bare dev bridge keeps it with
+// its other files.
 // A file that cannot be written is never a boot failure (`amcp-log.ts`).
 if (args['amcp-log-path'] === true) {
   console.error(
@@ -648,10 +655,11 @@ const playoutConfigPath =
 
 /*
   🔴 `DESKTOP-APPS-01-A` — `--set-playout-address <url>`: a ONE-SHOT. Write the Playout target to
-  the playout config file and exit, binding nothing. This is how the desktop app changes the
-  Playout (its IPC command runs this, then restarts the bridge) — so the auth configuration is
-  written by the app on this machine and NEVER over the control socket. The whole `playout` group
-  is replaced, which clears an adopted issuer: the next station-admin sign-in adopts again.
+  the playout config file and exit, binding nothing. This is how `pnpm dev:station` changes the
+  Playout before it starts the bridge — so the auth configuration is written on this machine and
+  NEVER over the control socket. (`CENTRAL-BRIDGE-01`: CG Bridge the service reads its Playout from
+  its configuration file instead — `--write-service-config`, above.) The whole `playout` group is
+  replaced, which clears an adopted issuer: the next station-admin sign-in adopts again.
 */
 if (args['set-playout-address'] !== undefined) {
   if (args['set-playout-address'] === true) {
@@ -758,6 +766,14 @@ const bridgeOptions = {
   ...(args['first-run'] === true ? { firstRun: true } : {}),
   // `CENTRAL-BRIDGE-01` rule 12 — every CLI start judges its ports against Windows' reserved ranges.
   checkReservedPorts: true,
+  /*
+    `CENTRAL-BRIDGE-01` §1 A — the folder a station admin downloads as `/logs.zip`: the state home's
+    `logs\` (the service's `%ProgramData%\CG Bridge\logs\`, where Shawl and the AMCP log write). A
+    bridge started with no state home offers no download.
+  */
+  ...(typeof args['state-home'] === 'string'
+    ? { logsDir: path.join(args['state-home'], 'logs') }
+    : {}),
   // `CENTRAL-BRIDGE-01` (D3) — CG Bridge the service never answers a socket with auth off.
   ...(serviceConfig !== null ? { requireAuth: true } : {}),
 };
@@ -794,8 +810,12 @@ const handle = await boot();
 const consoleServer = consoleDir !== undefined ? new ConsoleHttpServer() : null;
 if (consoleServer !== null && consoleDir !== undefined) {
   try {
-    // `C-016` — the console's origin also relays the programme return (`/pgm/<n>`, loopback only).
-    await consoleServer.start({ dir: consoleDir, port: consolePort, pgmRelay: handle.pgmReturn });
+    /*
+      `CENTRAL-BRIDGE-01` (D9) — the programme return is NOT here: it has one door, the control
+      port's `/pgm/<n>?ticket=…`, which a console's verified socket is given a ticket for. This
+      listener used to relay it untokened to loopback peers, a second door beside the first.
+    */
+    await consoleServer.start({ dir: consoleDir, port: consolePort });
   } catch (err) {
     console.error(
       `[caspar-bridge] console could not be served on 127.0.0.1:${consolePort}: ` +

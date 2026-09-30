@@ -2,7 +2,9 @@ import * as fs from 'node:fs';
 import * as http from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { bridgeHealth, HEALTH_PATH, type BridgeHealth, type HealthProblem } from './health.js';
+import { HttpTickets, type TicketGrant } from './http-tickets.js';
 import { checkReservedPorts, type BridgePort } from './reserved-ports.js';
+import { entriesUnder, zipEntries } from './zip.js';
 import {
   AppInfoChannel,
   AuditHealthChannel,
@@ -77,6 +79,11 @@ import {
   EmptiedAirRestoreChannel,
   PgmReturnStatusChangedChannel,
   PgmReturnStatusChannel,
+  PgmReturnTicketChannel,
+  BridgeLogsTicketChannel,
+  BRIDGE_LOGS_PATH,
+  PGM_RETURN_PATH_PREFIX,
+  pgmReturnPath,
   type PgmReturnStatus,
   LOCK_ENGAGED_REFUSAL,
   LockEngageChannel,
@@ -493,6 +500,11 @@ export interface BridgeOptions {
    * is spawned (every test).
    */
   checkReservedPorts?: boolean;
+  /**
+   * `CENTRAL-BRIDGE-01` §1 A — the folder a station admin downloads as `/logs.zip` (the service's
+   * `%ProgramData%\CG Bridge\logs\`). Absent: this bridge offers no logs download.
+   */
+  logsDir?: string;
   /**
    * `CENTRAL-BRIDGE-01` (`R-068`) — the release this bridge is (`0.10.0`), told to every console on
    * `bridge.capabilities` so a console on another release line sends nothing. Absent = this
@@ -2302,7 +2314,14 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     });
   }
 
+  /*
+    `CENTRAL-BRIDGE-01` (D9) — the tickets for CG Bridge's HTTP resources (`/pgm/<n>`, `/logs.zip`):
+    issued by the routes below over the verified socket, redeemed by the control port's own server.
+  */
+  const tickets = new HttpTickets();
   const routes = buildRoutes(runtime, {
+    issueTicket: (grant) => tickets.issue(grant),
+    logsAvailable: options.logsDir !== undefined,
     setupPhase,
     // `CENTRAL-BRIDGE-01` — this bridge's release, told to every console at connect.
     ...(bridgeVersion !== null ? { bridgeVersion } : {}),
@@ -2354,7 +2373,58 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   */
   let healthNow: (() => BridgeHealth) | null = null;
   const controlHttp = http.createServer((req, res) => {
-    const pathname = (req.url ?? '/').split('?')[0];
+    const url = new URL(req.url ?? '/', 'http://cg-bridge');
+    const pathname = url.pathname;
+    /*
+      `CENTRAL-BRIDGE-01` (D9) — the programme return for a console on another machine, behind a
+      ticket its verified socket was given for THIS channel. No ticket, a spent one, or one for
+      another channel: 403, and nothing is relayed.
+    */
+    if (
+      (req.method === 'GET' || req.method === 'HEAD') &&
+      pathname.startsWith(PGM_RETURN_PATH_PREFIX)
+    ) {
+      const match = /^\/pgm\/([1-9]\d{0,3})$/.exec(pathname);
+      const channel = match?.[1] === undefined ? Number.NaN : Number(match[1]);
+      const grant = tickets.redeem(
+        url.searchParams.get('ticket'),
+        (g) => g.kind === 'pgm' && g.channel === channel,
+      );
+      if (grant === null) {
+        res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('forbidden');
+        return;
+      }
+      pgmReturn.serve(req, res, channel);
+      return;
+    }
+    // `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, one zip, behind a station admin's one-use ticket.
+    if (req.method === 'GET' && pathname === BRIDGE_LOGS_PATH) {
+      const logsDir = options.logsDir;
+      const grant = tickets.redeem(url.searchParams.get('ticket'), (g) => g.kind === 'logs');
+      if (grant === null || logsDir === undefined) {
+        res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end('forbidden');
+        return;
+      }
+      void entriesUnder(logsDir)
+        .then((entries) => zipEntries(entries))
+        .then((zip) => {
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          res.writeHead(200, {
+            'content-type': 'application/zip',
+            'content-disposition': `attachment; filename="cg-bridge-logs-${stamp}.zip"`,
+            'content-length': zip.length,
+            'cache-control': 'no-store',
+          });
+          res.end(zip);
+        })
+        .catch((err: unknown) => {
+          res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+          res.end(err instanceof Error ? err.message : String(err));
+        });
+      return;
+    }
     if (req.method === 'GET' && pathname === HEALTH_PATH) {
       if (healthNow === null) {
         res.writeHead(503, { 'content-type': 'text/plain', 'retry-after': '1' });
@@ -3450,6 +3520,10 @@ export function buildRoutes(
      * explicit in-process catalogue, or auth off with nothing injected).
      */
     playoutSources?: PlayoutSources | null;
+    /** `CENTRAL-BRIDGE-01` (D9) — a ticket for one of CG Bridge's HTTP resources. */
+    issueTicket?: (grant: TicketGrant) => string;
+    /** Does this bridge keep a log folder to download? */
+    logsAvailable?: boolean;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
@@ -3468,6 +3542,11 @@ export function buildRoutes(
   // B3 — the sign-in failure notes this bridge will write, bridge-wide: a flood cannot fill the log.
   const signInNotes = rateWindow(SIGN_IN_NOTES_PER_MINUTE, 60_000);
   const catalogueRows = paths.catalogueRows ?? ((): readonly CatalogueRow[] | null => null);
+  // `CENTRAL-BRIDGE-01` (D9) — with no ticket issuer (a routes-only test), none is ever valid.
+  const fallbackTickets = new HttpTickets();
+  const issueTicket =
+    paths.issueTicket ?? ((grant: TicketGrant): string => fallbackTickets.issue(grant));
+  const logsAvailable = paths.logsAvailable ?? false;
   const refreshCatalogue = paths.refreshCatalogue ?? ((): Promise<void> => Promise.resolve());
   const connectionCheck =
     paths.connectionCheck ??
@@ -3914,6 +3993,26 @@ export function buildRoutes(
       it is relayed on the console's own origin (`/pgm/<n>`, `pgm-return.ts`).
     */
     route(PgmReturnStatusChannel, 'read', 'read', () => pgmReturnStatus()),
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D9) — the picture is fetched by the console's `<img>`, which carries no
+      token, from CG Bridge's control port: a ticket issued HERE, over the verified socket, opens
+      `/pgm/<n>` for thirty seconds. The request names its channel at the top level, so the gates
+      in front of every route judge it with their one predicate each: the station fence (a channel
+      this station declares) and the permission gate (`authzChannelRefusal` — a channel the sign-in
+      holds). No second copy of either lives here.
+    */
+    route(PgmReturnTicketChannel, 'read', 'read', (req: { channel: number }) => ({
+      path: `${pgmReturnPath(req.channel)}?ticket=${issueTicket({ kind: 'pgm', channel: req.channel })}`,
+    })),
+    /*
+      `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, for a station admin, as one zip: a ticket used
+      once, for `/logs.zip` on the control port. A bridge with no log folder of its own (a dev bridge
+      given none) says so.
+    */
+    route(BridgeLogsTicketChannel, 'read', 'station-admin', () => {
+      if (!logsAvailable) throw new Error('This CG Bridge keeps no log folder.');
+      return { path: `${BRIDGE_LOGS_PATH}?ticket=${issueTicket({ kind: 'logs' })}` };
+    }),
 
     // R-021 stage 2a — the fixed-bank wire contract: config read/update +
     // per-slot state. Order on an applied change: validate → apply → persist

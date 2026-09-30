@@ -1,4 +1,5 @@
-import { DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT } from '@cg/shared-ipc';
+import { DEFAULT_BRIDGE_HOST, DEFAULT_BRIDGE_PORT, splitHostPort } from '@cg/shared-ipc';
+import { loadStationAddress, type StationAddress } from './stationAddress.js';
 
 /**
  * `P-041` — THE ONE PLACE THE RUNTIME DECIDES WHERE ITS BRIDGE IS.
@@ -52,13 +53,72 @@ export function bridgeUrlFor(location: PageLocation | undefined): string {
 }
 
 /**
- * The URL `createRuntimeBridge` probes: the harness override when armed, else the page's
- * own host with the bridge's default port, else loopback.
+ * 🔴 `CENTRAL-BRIDGE-01` (D8) — CG Bridge for a console's own station record: an admin's bridge
+ * address (`host` or `host:port`) when one is set, else the Playout's host, at the bridge's port.
+ * `null` when the record names no usable host.
  */
-export function resolveBridgeUrl(): string {
+export function bridgeUrlForStation(station: StationAddress): string | null {
+  try {
+    if (station.bridgeAddress !== undefined) {
+      // The port from the TEXT (`splitHostPort`): the URL parser would drop `ws://host:80`'s port.
+      const parts = splitHostPort(station.bridgeAddress);
+      if (parts === null) return null;
+      return `ws://${parts.host}:${String(parts.port ?? DEFAULT_BRIDGE_PORT)}`;
+    }
+    const playout = new URL(
+      /^[a-z][a-z0-9+.-]*:\/\//i.test(station.playoutAddress)
+        ? station.playoutAddress
+        : `http://${station.playoutAddress}`,
+    );
+    if (playout.hostname === '') return null;
+    return `ws://${playout.hostname}:${String(DEFAULT_BRIDGE_PORT)}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `host:port` of a bridge URL — what the "not reachable" line names. From the TEXT, as
+ * {@link bridgeUrlForStation} reads it: a URL parser would drop `ws://host:80`'s port and name 5280.
+ */
+export function bridgeHostPort(url: string): string {
+  const authority = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split(/[/?#]/, 1)[0] ?? '';
+  const parts = splitHostPort(authority);
+  return parts === null ? url : `${parts.host}:${String(parts.port ?? DEFAULT_BRIDGE_PORT)}`;
+}
+
+/**
+ * CG Control's own page: the console the app bundles (`http://tauri.localhost`). It is never where
+ * a bridge runs, so a console there follows its station record — or asks for the Playout.
+ */
+function isAppPage(location: PageLocation): boolean {
+  return location.hostname === 'tauri.localhost' || location.protocol === 'tauri:';
+}
+
+/**
+ * The URL `createRuntimeBridge` connects to, in this order:
+ *
+ *   1. the harness override (`__CG_BRIDGE_URL__`);
+ *   2. `CENTRAL-BRIDGE-01` — this console's station record: CG Bridge on the Playout host, or where
+ *      an admin said it is;
+ *   3. the page's own host — a console opened in a browser from the machine that serves it (the dev
+ *      station, `P-041`);
+ *   4. loopback, when there is no page to follow (Node tests, `file:`, `about:`).
+ *
+ * `null`: CG Control's own page with no station record yet — the console asks for the Playout
+ * address before it connects anywhere.
+ */
+export function resolveBridgeUrl(): string | null {
   const override = (globalThis as { __CG_BRIDGE_URL__?: unknown }).__CG_BRIDGE_URL__;
   if (typeof override === 'string' && override.length > 0) return override;
-  return bridgeUrlFor(pageLocation());
+  const station = loadStationAddress();
+  if (station !== null) {
+    const fromStation = bridgeUrlForStation(station);
+    if (fromStation !== null) return fromStation;
+  }
+  const location = pageLocation();
+  if (location !== undefined && isAppPage(location)) return null;
+  return bridgeUrlFor(location);
 }
 
 /** `globalThis.location` when it looks like a `Location`; `undefined` in Node. */

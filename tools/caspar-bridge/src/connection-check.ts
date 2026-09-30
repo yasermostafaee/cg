@@ -391,10 +391,13 @@ export async function runConnectionCheck(
         noSignIn: PLAYOUT_SILENT,
       }),
     ),
-    // 5 — CORS: the token endpoint accepts this console's origin.
+    // 5 — CORS: the token endpoint accepts this console's origin. `CENTRAL-BRIDGE-01` rule 8: a
+    // console that signs in directly (CG Control, no `Origin`) meets no CORS list at all — said as a
+    // fact, never probed with an origin its sign-in does not send.
     line(
       'cors',
       async () => {
+        if (req.signIn === 'native') return NATIVE_SIGN_IN_LINE;
         const ip = await playoutIp;
         if (ip === null) return noIpv4Line('cors', playoutHost);
         return checkCors(probes, endpoints.tokenUrl, req.origin, ip, bounds);
@@ -718,6 +721,16 @@ async function checkJwks(
     noSignIn: null,
   };
 }
+
+/**
+ * `CENTRAL-BRIDGE-01` rule 8 — the CORS line for a console that signs in directly: CG Control posts
+ * D1 from its own process with no `Origin`, so there is no CORS list in the way of its sign-in.
+ */
+export const NATIVE_SIGN_IN_LINE: ConnectionCheckLine = {
+  id: 'cors',
+  status: 'pass',
+  text: 'Sign-in from this console: direct, with no browser origin — no CORS entry is needed.',
+};
 
 async function checkCors(
   probes: CheckProbes,

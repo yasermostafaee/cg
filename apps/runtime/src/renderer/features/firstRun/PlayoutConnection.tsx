@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { normaliseBridgeAddress } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { TextInput } from '../../ui/TextInput.js';
@@ -22,6 +23,10 @@ import {
  * whoever the host surface allows — and is otherwise absent, never greyed. CONNECT writes it
  * through CG Control and never over the control socket; it appears once a check shows the two
  * links a sign-in needs.
+ *
+ * `CENTRAL-BRIDGE-01` (D8) — in Station setup (`showBridge`) the card also says where this console
+ * reaches CG Bridge, and CHANGE edits that too: empty is CG Bridge on the Playout's host; `host` or
+ * `host:port` is a separate server's. Both are this console's own station record.
  */
 const styles = {
   column: { display: 'flex', flexDirection: 'column' as const, gap: 10 },
@@ -46,6 +51,7 @@ export function PlayoutConnection({
   onLines,
   recheck = 0,
   lineFilter,
+  showBridge = false,
 }: {
   /** The configured Playout's origin, or `null` when this station has none. */
   origin: string | null;
@@ -77,10 +83,14 @@ export function PlayoutConnection({
   recheck?: number;
   /** B2 — what a compact surface shows of the lines: the sign-in overlay shows the one that decides. */
   lineFilter?: (lines: readonly ShownCheckLine[]) => readonly ShownCheckLine[];
+  /** `CENTRAL-BRIDGE-01` (D8) — Station setup: where this console reaches CG Bridge, too. */
+  showBridge?: boolean;
 }): JSX.Element {
   const canWrite = mayChange && window.cg.setup.canSetPlayoutAddress();
   const [editing, setEditing] = useState(startEditing);
   const [address, setAddress] = useState(origin ?? '');
+  const [bridge, setBridge] = useState(() => window.cg.setup.bridgeOverride() ?? '');
+  const bridgeTyped = normaliseBridgeAddress(bridge);
   const [lines, setLines] = useState<readonly ShownCheckLine[] | null>(null);
   const [busy, setBusy] = useState<'checking' | 'connecting' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -228,8 +238,8 @@ export function PlayoutConnection({
     setBusy('connecting');
     setError(null);
     try {
-      // CG Control writes the address and restarts the bridge; the console reconnects on its own.
-      await window.cg.setup.setPlayoutAddress(typed);
+      // CG Control saves this console's station record and reconnects to CG Bridge there.
+      await window.cg.setup.setPlayoutAddress(typed, showBridge ? bridge : undefined);
       setEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -295,12 +305,44 @@ export function PlayoutConnection({
           )}
         </div>
       )}
+      {showBridge && editing && canWrite && (
+        <div style={styles.row}>
+          <label htmlFor="cg-bridge-address" style={styles.label}>
+            CG Bridge address
+          </label>
+          <div style={styles.grow}>
+            <TextInput
+              id="cg-bridge-address"
+              value={bridge}
+              onChange={(v) => {
+                setBridge(v);
+              }}
+              dir="ltr"
+              aria-label="CG Bridge address"
+              invalid={bridgeTyped === null}
+              disabled={busy !== null}
+            />
+          </div>
+        </div>
+      )}
+      {showBridge && !editing && (
+        <div style={styles.row}>
+          <span style={styles.label}>CG Bridge</span>
+          <span style={{ ...styles.fact, ...styles.grow }} dir="ltr" data-bridge-address>
+            {window.cg.link.bridgeAddress?.() ?? '—'}
+          </span>
+        </div>
+      )}
       {lines !== null && (
         <ConnectionCheckList lines={lineFilter === undefined ? lines : lineFilter(lines)} />
       )}
       {editing && lines !== null && signInCanWork(lines) && canWrite && (
         <div style={styles.row}>
-          <Button variant="primary" disabled={busy !== null} onClick={() => void connect()}>
+          <Button
+            variant="primary"
+            disabled={busy !== null || (showBridge && bridgeTyped === null)}
+            onClick={() => void connect()}
+          >
             {busy === 'connecting' ? 'Connecting…' : 'Connect'}
           </Button>
         </div>

@@ -27,18 +27,18 @@ const { plugin: buildStampPlugin, stamp: buildStamp } = createBuildStamp(
 );
 
 /**
- * `DEV-STATION-01` — the two routes only the BRIDGE's console listener answers, relayed when
- * `pnpm dev:station` serves the console here in its place: `/pgm/<n>` (the PROGRAM monitor's
- * picture, `C-016`) and `/__cg/health` (the identity the installed CG Control reads before it
- * starts, so it refuses by name while the dev station runs). Absent unless the launcher names the
- * listener in `CG_BRIDGE_CONSOLE` — and the launcher binds this server to 127.0.0.1, so the relay
- * reaches no browser on another machine.
+ * `DEV-STATION-01` — the one route only the BRIDGE's console listener answers, relayed when
+ * `pnpm dev:station` serves the console here in its place: `/__cg/health`, the identity the
+ * launcher reads to tell ITS bridge from a stranger holding the port. Absent unless the launcher
+ * names the listener in `CG_BRIDGE_CONSOLE` — and the launcher binds this server to 127.0.0.1, so
+ * the relay reaches no browser on another machine.
+ *
+ * `CENTRAL-BRIDGE-01` (D9) — `/pgm/<n>` is NOT relayed any more: the console asks CG Bridge for a
+ * ticket over its socket and loads the picture from the bridge's control port, the one door.
  */
 const bridgeConsole = process.env.CG_BRIDGE_CONSOLE;
 const bridgeConsoleProxy =
-  bridgeConsole !== undefined && bridgeConsole !== ''
-    ? { proxy: { '/pgm/': bridgeConsole, '/__cg/': bridgeConsole } }
-    : {};
+  bridgeConsole !== undefined && bridgeConsole !== '' ? { proxy: { '/__cg/': bridgeConsole } } : {};
 
 /**
  * 🔴 `FIELD-FIXES-01` H — **`localhost` IS A TRAP ON THE DEV STATION.** The console has ONE origin,

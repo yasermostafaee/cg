@@ -22,7 +22,6 @@ import {
   EmptiedAirRestoreChannel,
   PgmReturnStatusChangedChannel,
   PgmReturnStatusChannel,
-  pgmReturnPath,
   type PgmReturnStatus,
   LockEngageChannel,
   LockReleaseChannel,
@@ -165,13 +164,13 @@ import {
 } from './playoutRefresh.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
 import {
-  canOpenBridgeLog,
-  canSetPlayoutAddress,
-  openBridgeLog,
-  setPlayoutAddress,
+  insideCgControl,
+  nativePlayoutFetch,
   shellKeyboardLanguage,
   shellReportsKeyboardLanguage,
 } from './desktop.js';
+import { bridgeHostPort, bridgeUrlForStation } from './bridgeUrl.js';
+import { loadStationAddress, saveStationAddress, type StationAddress } from './stationAddress.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -307,7 +306,8 @@ class Subs<T> {
  * snapshot (stack / health / lock) and pushes it to subscribers to resync.
  */
 export class WebSocketRuntime implements RuntimeBridge {
-  readonly #url: string;
+  /** `CENTRAL-BRIDGE-01` — not readonly: a console re-aimed at another CG Bridge ({@link retarget}). */
+  #url: string;
   readonly #createWs: WebSocketFactory;
   #ws: WebSocketLike | null = null;
   #status: BridgeLinkStatus = 'disconnected';
@@ -553,6 +553,22 @@ export class WebSocketRuntime implements RuntimeBridge {
     if (this.#expiryTimer !== null) clearTimeout(this.#expiryTimer);
     this.#expiryTimer = null;
     this.#ws?.close();
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D8) — **CONNECT TO ANOTHER CG BRIDGE** (this console's station record
+   * changed). The socket that is open is closed; its own close handler reconnects, to the new URL,
+   * so this is the reconnect every drop already takes — nothing held is lost, and nothing waits.
+   */
+  retarget(url: string): void {
+    if (url === this.#url) return;
+    this.#url = url;
+    this.#ws?.close();
+  }
+
+  /** Where this console's CG Bridge is — what the "not reachable" line names. */
+  bridgeAddress(): string {
+    return bridgeHostPort(this.#url);
   }
 
   // ── connection lifecycle ────────────────────────────────────────────
@@ -836,11 +852,14 @@ export class WebSocketRuntime implements RuntimeBridge {
         tabs, sends only the latest token, marks it before it leaves and sends it only to a Playout
         that answers; it stores the successor itself, BEFORE anything here uses it.
       */
+      // `CENTRAL-BRIDGE-01` rule 8 — inside CG Control, D2 from the native side, with no `Origin`.
+      const native = nativePlayoutFetch();
       outcome = await refreshConsoleSession(session, {
         refreshUrl,
         tabId: this.#tabId,
         probe: () => probePlayout(refreshUrl),
         locks: pageLocks(),
+        ...(native !== null ? { fetchImpl: native } : {}),
       });
     } catch {
       // Not a D2 failure (those are outcomes): the guard itself failed, so nothing is known about
@@ -1537,7 +1556,27 @@ export class WebSocketRuntime implements RuntimeBridge {
     versionMismatch: (): string | null => this.#versionMismatch,
     onVersionMismatchChanged: (handler: (line: string | null) => void): Unsubscribe =>
       this.#versionSubs.add(handler),
+    bridgeAddress: (): string | null => this.bridgeAddress(),
   };
+
+  /**
+   * `CENTRAL-BRIDGE-01` (D9) — an HTTP resource on CG Bridge: the socket's own host and port, over
+   * `http:` (`https:` beside a `wss:` socket). The path carries its ticket.
+   */
+  #bridgeHttpUrl(path: string): string {
+    const socket = new URL(this.#url);
+    return `${socket.protocol === 'wss:' ? 'https:' : 'http:'}//${socket.host}${path}`;
+  }
+
+  /** Open a download from CG Bridge (the logs zip): the page follows a link the bridge answers. */
+  #openFromBridge(path: string): void {
+    const link = document.createElement('a');
+    link.href = this.#bridgeHttpUrl(path);
+    link.rel = 'noopener';
+    document.body.append(link);
+    link.click();
+    link.remove();
+  }
 
   /**
    * 🔴 `R-066` — the Playout sign-in. See the contract note on `runtime-bridge.ts`.
@@ -1562,7 +1601,15 @@ export class WebSocketRuntime implements RuntimeBridge {
       // ADR 0010 rule 9 — browser → Playout, DIRECTLY. The bridge never sees the password.
       let session: StoredSession;
       try {
-        ({ session } = await signInToPlayout(signInUrl, username, password));
+        // `CENTRAL-BRIDGE-01` rule 8 — inside CG Control, D1 from the native side, with no `Origin`
+        // (no CORS entry is needed for it); a browser keeps its `fetch`.
+        const native = nativePlayoutFetch();
+        ({ session } = await signInToPlayout(
+          signInUrl,
+          username,
+          password,
+          native !== null ? { fetchImpl: native } : {},
+        ));
       } catch (err) {
         /*
           `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's own answer goes to the station's LOG (the
@@ -1772,7 +1819,12 @@ export class WebSocketRuntime implements RuntimeBridge {
     check: (req: ChannelRequest<typeof ipcChannels.SetupCheckChannel>) =>
       this.#invoke(
         ipcChannels.SetupCheckChannel,
-        req,
+        /*
+          `CENTRAL-BRIDGE-01` rule 8 — the check asks what THIS console's sign-in will meet. Where the
+          sign-in is native (CG Control: the same `nativePlayoutFetch` it signs in with, never a
+          second test), it sends no `Origin`, so there is no CORS list to probe for it.
+        */
+        nativePlayoutFetch() === null ? req : { ...req, signIn: 'native' as const },
         req.awaitLetIn === true
           ? ipcChannels.SETUP_CHECK_LET_IN_WAIT_MS
           : ipcChannels.SETUP_CHECK_WAIT_MS,
@@ -1783,8 +1835,51 @@ export class WebSocketRuntime implements RuntimeBridge {
     // `DESKTOP-APPS-01-D` d — the bridge waits up to 3 s for its tap; the default wait covers it.
     channelOccupancy: (req: ChannelRequest<typeof ipcChannels.SetupChannelOccupancyChannel>) =>
       this.#invoke(ipcChannels.SetupChannelOccupancyChannel, req),
-    canSetPlayoutAddress: (): boolean => canSetPlayoutAddress(),
-    setPlayoutAddress: (address: string): Promise<string> => setPlayoutAddress(address),
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D8) — **THIS CONSOLE'S Playout address, which says where its CG Bridge
+      is.** No longer the bridge's configuration (CG Bridge's installer owns that): the console keeps
+      the address in its station record and connects to CG Bridge on that host, or where an admin
+      said it is — without a reload. Offered inside CG Control; a browser follows the page's host.
+    */
+    canSetPlayoutAddress: (): boolean => insideCgControl(),
+    /*
+      `bridgeAddress`: absent keeps this console's CG Bridge address as it is; `''` puts CG Bridge
+      back on the Playout's host; `host` / `host:port` is a separate server's (an admin's override).
+    */
+    setPlayoutAddress: (address: string, bridgeAddress?: string): Promise<string> => {
+      const playoutAddress = ipcChannels.normalisePlayoutAddress(address);
+      if (playoutAddress === null) {
+        return Promise.reject(new Error(ipcChannels.NOT_A_PLAYOUT_ADDRESS));
+      }
+      const bridge =
+        bridgeAddress === undefined
+          ? (loadStationAddress()?.bridgeAddress ?? '')
+          : ipcChannels.normaliseBridgeAddress(bridgeAddress);
+      if (bridge === null) return Promise.reject(new Error(ipcChannels.NOT_A_BRIDGE_ADDRESS));
+      const station: StationAddress = {
+        playoutAddress,
+        ...(bridge === '' ? {} : { bridgeAddress: bridge }),
+      };
+      const url = bridgeUrlForStation(station);
+      if (url === null) return Promise.reject(new Error(ipcChannels.NOT_A_PLAYOUT_ADDRESS));
+      if (!saveStationAddress(station)) {
+        return Promise.reject(new Error('This console could not save the Playout address.'));
+      }
+      this.retarget(url);
+      return Promise.resolve(
+        `Playout address set to ${playoutAddress} - CG Bridge at ${bridgeHostPort(url)}`,
+      );
+    },
+    // `CENTRAL-BRIDGE-01` (D8) — the admin's CG Bridge address this console keeps, if any.
+    bridgeOverride: (): string | null =>
+      insideCgControl() ? (loadStationAddress()?.bridgeAddress ?? null) : null,
+    /*
+      `CENTRAL-BRIDGE-01` (D8) — FORGET this console's station, so it asks again: the way back for a
+      console that cannot reach the CG Bridge it was pointed at (a mistyped address), where Station
+      setup — behind a station admin's sign-in, over that very bridge — cannot be reached. CG Control
+      only; the page restarts to ask.
+    */
+    forgetStation: (): boolean => insideCgControl() && saveStationAddress(null),
   };
 
   /** `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare. */
@@ -1846,14 +1941,16 @@ export class WebSocketRuntime implements RuntimeBridge {
   };
 
   /*
-    C-016 — the programme return. The picture is relayed on the page's OWN origin (the bridge's
-    console server, `127.0.0.1:5174` in CG Control), so the URL is the one relative path both
-    sides spell through `pgmReturnPath`. A page served by anything else (a Vite dev server) asks
-    a server with no relay, gets no picture, and the bridge reports no watched channel — so the
-    pane says "No return signal", which is the truth for that page.
+    C-016 — the programme return. `CENTRAL-BRIDGE-01` (D9): the picture is relayed by CG Bridge on
+    its OWN control port — the console is on another machine now — behind a ticket this socket is
+    given for the channel (`pgmReturn.ticket`), so every request of the picture asks for a fresh
+    one. A refusal (a channel the sign-in does not hold) rejects, and the pane shows no picture.
   */
   readonly pgmReturn = {
-    feedUrl: (channel: number): string | null => pgmReturnPath(channel),
+    feedUrl: async (channel: number): Promise<string | null> => {
+      const { path } = await this.#invoke(ipcChannels.PgmReturnTicketChannel, { channel });
+      return this.#bridgeHttpUrl(path);
+    },
     status: () => this.#invoke(PgmReturnStatusChannel, undefined),
     onStatusChanged: (handler: (status: readonly PgmReturnStatus[]) => void) =>
       this.#pgmReturnSubs.add(handler),
@@ -2012,9 +2109,22 @@ export class WebSocketRuntime implements RuntimeBridge {
     // list can be reported as a quiet session only when the instrument that
     // produced it is provably live.
     health: () => this.#invoke(AuditHealthChannel, {}),
-    // `FIELD-FIXES-01` G — the log folder, through CG Control's own door (never the socket).
-    canOpenLogFolder: (): boolean => canOpenBridgeLog(),
-    openLogFolder: () => openBridgeLog(),
+    /*
+      🔴 `CENTRAL-BRIDGE-01` §1 A — **CG BRIDGE'S LOGS, DOWNLOADED.** They live on the Playout
+      machine now (`%ProgramData%\CG Bridge\logs\`), so "Open log folder" became a download: a
+      station admin asks the bridge for a one-use link and the browser saves `logs.zip`. Offered
+      whenever this console is connected; the bridge refuses anyone but a station admin.
+    */
+    canDownloadLogs: (): boolean => this.#status === 'live',
+    downloadLogs: async (): Promise<{ accepted: boolean; message?: string }> => {
+      try {
+        const { path } = await this.#invoke(ipcChannels.BridgeLogsTicketChannel, undefined);
+        this.#openFromBridge(path);
+        return { accepted: true };
+      } catch (err) {
+        return { accepted: false, message: err instanceof Error ? err.message : String(err) };
+      }
+    },
   };
 
   /** `TEXT-DIGITS-01` — the keyboard language, from CG Control's shell (never the socket). */

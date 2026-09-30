@@ -1342,6 +1342,8 @@ export function StationSetupDialog({
                     origin={playoutOrigin}
                     startEditing={playoutOrigin === null}
                     mayChange={holdsStationAdmin}
+                    // `CENTRAL-BRIDGE-01` (D8) — where this console reaches CG Bridge, and an admin's override.
+                    showBridge
                   />
                 </div>
               </section>

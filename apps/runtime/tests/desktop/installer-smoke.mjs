@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 🔴 `DESKTOP-APPS-01` §5 — **THE TWO INSTALLERS, INSTALLED AND DRIVEN ON A CLEAN WINDOWS RUNNER.**
+ * 🔴 `DESKTOP-APPS-01` §5 — **THE INSTALLERS, INSTALLED AND DRIVEN ON A CLEAN WINDOWS RUNNER.**
  *
  * Run by `.github/workflows/desktop.yml` on a fresh `windows-latest` VM that has built nothing:
  * it installs what the `installers` job produced, launches each app the way an operator does,
@@ -8,9 +8,15 @@
  * (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=…`) — so every page check below
  * is made INSIDE the installed app, not in a test browser.
  *
+ * `CENTRAL-BRIDGE-01` — CG Control is a CONSOLE now: it carries no bridge, no Node and no port, and
+ * connects to CG Bridge, the service on the Playout machine. So this smoke installs CG Bridge first
+ * (as the Playout's installer will chain it), then drives CG Control the way an operator meets it on
+ * a fresh install: one question (the Playout's address), then CG Bridge on that host, port 5280 —
+ * and, with no token, NO state. CG Bridge's own lifecycle (service, recovery, rules, upgrade,
+ * uninstall) is `tools/bridge-installer/smoke.mjs`, on its own runner.
+ *
  * Dependency-free on purpose: Node's own `fetch` and `WebSocket` speak CDP, so the runner needs
- * no `pnpm install`. The runner's Node runs THIS SCRIPT only — CG Control's bridge must run on the
- * `cg-bridge.exe` the installer put down, and the health check proves which one answered.
+ * no `pnpm install`. The runner's Node runs THIS SCRIPT only.
  *
  * Every absence below is paired with the positive control that makes it mean something.
  *
@@ -19,18 +25,23 @@
  * 35856634409 and 35859184149 — both apps' WebView2 running, neither DevTools port open), so the
  * apps are driven at MEDIUM integrity, as an operator runs them, and only what needs admin runs
  * elevated:
- *   install   (elevated) — CG Control's per-machine install, its files and firewall rules
- *   drive     (medium)   — CG Designer's per-user install, then both apps launched and driven
- *   uninstall (elevated) — CG Control's uninstall, then every phase's results summed
+ *   install   (elevated) — the installers' names; CG Bridge, per machine, silently, its /health
+ *   drive     (medium)   — CG Designer and CG Control, each installed per user without admin, then
+ *                          both launched and driven; CG Control connects to CG Bridge
+ *   uninstall (elevated) — CG Control opened no firewall port; its uninstall leaves CG Bridge
+ *                          running; then every phase's results summed
  * A phase that never ran leaves no results file, and the summary counts that as a failure.
  *
  * Usage: node installer-smoke.mjs --phase <install|drive|uninstall> --out <dir> --version <x.y.z>
- *          [--control <setup.exe>] [--designer-installer <setup.exe>] [--designer <setup.exe>]
+ *          [--bridge <setup.exe>] [--control-installer <setup.exe>]
+ *          [--designer-installer <setup.exe>] [--control <setup.exe>] [--designer <setup.exe>]
+ * (the install phase takes the three installers by their built names, to check them; the drive
+ * phase takes CG Control's and CG Designer's under names without a space, which gsudo needs.)
  *
  * `CLIENT-TEST-RELEASE-01` — `--version` is the release version the build read from every file
  * that carries it (`tools/release/src/release-version.mjs`): the installers' names and what Windows
- * lists under Installed apps are checked against it (B1), and each firewall rule is judged by the
- * fields `netsh` prints, never by its name (B2, `firewall-rule.mjs`).
+ * lists under Installed apps are checked against it (B1), and a firewall rule is read by the fields
+ * `netsh` prints, never by its name (B2, `firewall-rule.mjs`).
  *
  * `RELEASE-091-01` §3 (`B-290`) — once both apps are installed, each exe's icon, each shortcut's icon
  * and AppUserModelID, and each Installed-apps icon are read, and the two apps' values must DIFFER
@@ -40,13 +51,13 @@
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes below run INSIDE the installed apps (serialised through CDP), not in Node.
 /* global window, document, navigator, location, performance, File, URL */
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { identityChecks, parseIdentityRead } from './app-identity.mjs';
-import { ruleProblems } from './firewall-rule.mjs';
+import { parseRules } from './firewall-rule.mjs';
 
 const args = Object.fromEntries(
   process.argv
@@ -60,13 +71,21 @@ const args = Object.fromEntries(
 const out = path.resolve(args.out ?? 'smoke');
 fs.mkdirSync(out, { recursive: true });
 
-const CONTROL_DIR = path.join(process.env.ProgramFiles ?? 'C:\\Program Files', 'CG Control');
-const CONTROL_EXE = path.join(CONTROL_DIR, 'cg-control.exe');
-const SIDECAR_EXE = path.join(CONTROL_DIR, 'cg-bridge.exe');
-const CONSOLE = 'http://127.0.0.1:5174';
-const RULE_OSC = 'CG Control - OSC from CasparCG (UDP 6250)';
-const RULE_TEMPLATES = 'CG Control - templates to CasparCG (TCP 7911)';
+/** Both apps' pages: each bundles its own, served by its shell. */
+const APP_PAGE = 'http://tauri.localhost';
+/** CG Bridge, installed by the install phase: the service CG Control connects to. */
+const BRIDGE_HEALTH = 'http://127.0.0.1:5280/health';
+const BRIDGE_LOGS = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'CG Bridge', 'logs');
+/**
+ * The Playout this station is set up with: a port on this runner that nothing answers — the smoke
+ * connects to no Playout. CG Bridge is found on its HOST, so the console connects to 127.0.0.1:5280.
+ */
+const PLAYOUT = 'http://127.0.0.1:59999';
+const BRIDGE_AT = '127.0.0.1:5280';
+/** `AUTH_REQUIRED_REFUSAL` (`@cg/shared-ipc` `channels/auth.ts`) — the auth gate's own words. */
+const NOT_SIGNED_IN = 'This console is not signed in';
 const APPDATA = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
+const LOCALAPPDATA = process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local');
 /** The checkout root: this script sits at `apps/runtime/tests/desktop/`. */
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
@@ -152,12 +171,24 @@ function launch(exe, cdpPort) {
   child.unref();
   return child;
 }
-function firewallRule(name) {
+/** The name of every firewall rule on this machine, as `netsh` prints them (`firewall-rule.mjs`). */
+function firewallRuleNames() {
   try {
-    return run('netsh', ['advfirewall', 'firewall', 'show', 'rule', `name=${name}`, 'verbose']);
+    // Every rule on the machine: more than `execFileSync`'s default 1 MB can hold.
+    const text = execFileSync('netsh', ['advfirewall', 'firewall', 'show', 'rule', 'name=all'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return parseRules(text).map((rule) => rule['Rule Name']);
   } catch {
     return null;
   }
+}
+/** A PowerShell script, encoded — so no quote in it is ever re-parsed by a command line. */
+function powershell(script) {
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return run('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded]);
 }
 /**
  * `CLIENT-TEST-RELEASE-01` B1 — what Windows lists under Installed apps for a product: the uninstall
@@ -195,9 +226,33 @@ function releaseGiven() {
   );
   return RELEASE !== null;
 }
+/** CG Bridge's `/health` body once it answers 200, else `null`. */
 async function health() {
-  const res = await fetch(`${CONSOLE}/__cg/health`, { signal: AbortSignal.timeout(2000) });
+  const res = await fetch(BRIDGE_HEALTH, { signal: AbortSignal.timeout(2000) });
   return res.ok ? res.json() : null;
+}
+/** The installer's own exit code, never thrown: a refusal is a failed check, not a dead smoke. */
+function exitCodeOf(file, argv) {
+  return spawnSync(file, argv, { windowsHide: true }).status;
+}
+/**
+ * The image name of each `cg-bridge.exe`'s PARENT. CG Bridge's is the service host (`shawl.exe`), so
+ * a `cg-bridge.exe` whose parent is anything else was started by someone else — CG Control, say.
+ */
+function bridgeParents() {
+  return powershell(
+    [
+      '$bridges = @(Get-CimInstance Win32_Process -Filter "Name=\'cg-bridge.exe\'")',
+      '$names = foreach ($b in $bridges) {',
+      '  $p = Get-CimInstance Win32_Process -Filter "ProcessId=$($b.ParentProcessId)"',
+      "  if ($p) { $p.Name } else { '?' }",
+      '}',
+      "@($names) -join ','",
+    ].join('\n'),
+  )
+    .trim()
+    .split(',')
+    .filter((name) => name !== '');
 }
 
 /** What to look at when an app cannot be reached: the screen, the processes, the logs. */
@@ -216,6 +271,7 @@ async function diagnose(tag, cdpPort) {
   for (const image of [
     'cg-control.exe',
     'cg-bridge.exe',
+    'shawl.exe',
     'cg-designer.exe',
     'msedgewebview2.exe',
   ]) {
@@ -239,12 +295,18 @@ async function diagnose(tag, cdpPort) {
     .then((r) => r.text())
     .catch((err) => `unreachable (${err instanceof Error ? err.message : String(err)})`);
   lines.push(`DevTools ${String(cdpPort)} /json/list: ${devtools.slice(0, 600)}`);
-  const logs = path.join(APPDATA, 'CG Control', 'logs');
-  for (const file of ['shell.log', 'bridge.log']) {
-    const full = path.join(logs, file);
-    lines.push(
-      `${file}: ${fs.existsSync(full) ? `\n${fs.readFileSync(full, 'utf8').slice(-3000)}` : 'absent'}`,
-    );
+  const shellLog = path.join(APPDATA, 'CG Control', 'logs', 'shell.log');
+  lines.push(
+    `shell.log: ${fs.existsSync(shellLog) ? `\n${fs.readFileSync(shellLog, 'utf8').slice(-3000)}` : 'absent'}`,
+  );
+  lines.push(`CG Bridge /health: ${JSON.stringify(await health().catch(() => null))}`);
+  // CG Bridge's own logs: readable to an elevated phase only (the folder is the service's).
+  try {
+    for (const file of fs.readdirSync(BRIDGE_LOGS).filter((f) => f.endsWith('.log'))) {
+      lines.push(`${file}:\n${fs.readFileSync(path.join(BRIDGE_LOGS, file), 'utf8').slice(-3000)}`);
+    }
+  } catch (err) {
+    lines.push(`CG Bridge logs: unread (${err instanceof Error ? err.message : String(err)})`);
   }
   const text = lines.join('\n');
   fs.writeFileSync(path.join(out, `${tag}-diagnostics.txt`), text);
@@ -338,13 +400,25 @@ async function consoleProbe() {
   */
   const shellAsk = (u) =>
     u.origin === 'http://ipc.localhost' && u.pathname === '/keyboard_language';
+  /*
+    `CENTRAL-BRIDGE-01` — CG Bridge is this console's own server (its state, its PGM return, its
+    logs), so ITS origin is set aside too — by the address the console itself names, never a guess.
+    Anything else — a CDN, the internet, another machine — still counts.
+  */
+  const bridgeAt = window.cg?.link?.bridgeAddress?.() ?? null;
+  const fromBridge = (u) => bridgeAt !== null && u.host === bridgeAt;
   const offOrigin = performance
     .getEntriesByType('resource')
     .map((e) => e.name)
     .filter((n) => {
       try {
         const u = new URL(n);
-        return u.protocol.startsWith('http') && u.origin !== location.origin && !shellAsk(u);
+        return (
+          u.protocol.startsWith('http') &&
+          u.origin !== location.origin &&
+          !shellAsk(u) &&
+          !fromBridge(u)
+        );
       } catch {
         return false;
       }
@@ -445,14 +519,19 @@ async function ffmpegProbe() {
 
 // ── Each app's icon and taskbar identity (`RELEASE-091-01` §3, `B-290`) ──────
 
-/** Where CG Designer's per-user install puts its exe, and the first that exists. */
-function installedDesignerExe() {
+/**
+ * Where a per-user install puts an app's exe, and the first that exists. Both apps install per user
+ * now — CG Designer always did; CG Control since `CENTRAL-BRIDGE-01` (nothing in it needs admin).
+ */
+function installedPerUser(product, exeName) {
   const candidates = [
-    path.join(process.env.LOCALAPPDATA ?? '', 'CG Designer', 'cg-designer.exe'),
-    path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'CG Designer', 'cg-designer.exe'),
+    path.join(LOCALAPPDATA, product, exeName),
+    path.join(LOCALAPPDATA, 'Programs', product, exeName),
   ];
   return { exe: candidates.find((c) => fs.existsSync(c)), candidates };
 }
+const installedDesignerExe = () => installedPerUser('CG Designer', 'cg-designer.exe');
+const installedControlExe = () => installedPerUser('CG Control', 'cg-control.exe');
 
 /**
  * The bundle identifier Tauri's NSIS stamps on every shortcut it writes (`SetLnkAppUserModelId`), read
@@ -530,13 +609,17 @@ function readIdentity(product, exe) {
 
 /** Both apps installed: what Windows shows for each, and that the two DIFFER. */
 function identities() {
-  const designerExe = installedDesignerExe().exe ?? '';
   const apps = [
-    { product: 'CG Control', identifier: identifierOf('runtime'), exe: CONTROL_EXE, hive: 'HKLM' },
+    {
+      product: 'CG Control',
+      identifier: identifierOf('runtime'),
+      exe: installedControlExe().exe ?? '',
+      hive: 'HKCU',
+    },
     {
       product: 'CG Designer',
       identifier: identifierOf('designer'),
-      exe: designerExe,
+      exe: installedDesignerExe().exe ?? '',
       hive: 'HKCU',
     },
   ].map(({ hive, ...app }) => ({
@@ -630,55 +713,61 @@ async function designer() {
   check('CG Designer closes', processCount('cg-designer.exe') === 0);
 }
 
-// ── CG Control ───────────────────────────────────────────────────────────────
+// ── CG Bridge, and the installers' names (install phase, elevated) ──────────
 
-function controlInstall() {
-  // `CLIENT-TEST-RELEASE-01` B1 — both installers are NAMED for the release, before either runs.
+async function install() {
+  // `CLIENT-TEST-RELEASE-01` B1 — all three installers are NAMED for the release, before any runs.
   if (releaseGiven()) {
-    for (const [product, file] of [
-      ['CG Control', args.control],
-      ['CG Designer', args['designer-installer']],
+    for (const [product, file, name] of [
+      ['CG Bridge', args.bridge, `CG-Bridge_${RELEASE}_x64-setup.exe`],
+      ['CG Control', args['control-installer'], `CG Control_${RELEASE}_x64-setup.exe`],
+      ['CG Designer', args['designer-installer'], `CG Designer_${RELEASE}_x64-setup.exe`],
     ]) {
-      const name = path.basename(String(file));
-      check(
-        `the ${product} installer is named for ${RELEASE}`,
-        name === `${product}_${RELEASE}_x64-setup.exe`,
-        name,
-      );
+      const built = path.basename(String(file));
+      check(`the ${product} installer is named for ${RELEASE}`, built === name, built);
     }
   }
-  run(args.control, ['/S']);
-  for (const file of [
-    CONTROL_EXE,
-    SIDECAR_EXE,
-    path.join(CONTROL_DIR, 'payload', 'bridge', 'caspar-bridge.mjs'),
-    path.join(CONTROL_DIR, 'payload', 'console', 'index.html'),
-  ]) {
-    check(`CG Control installs ${path.relative(CONTROL_DIR, file)}`, fs.existsSync(file), file);
-  }
-  // `CLIENT-TEST-RELEASE-01` B2 — each rule by its FIELDS: one rule, enabled, inbound, allowing, on
-  // every profile, for exactly this protocol and port, for the installed sidecar alone.
-  for (const [rule, port, protocol] of [
-    [RULE_OSC, '6250', 'UDP'],
-    [RULE_TEMPLATES, '7911', 'TCP'],
-  ]) {
-    const problems = ruleProblems(firewallRule(rule), {
-      name: rule,
-      protocol,
-      port,
-      program: SIDECAR_EXE,
-    });
+  // `CENTRAL-BRIDGE-01` — CG Bridge first, as the Playout's installer chains it: per machine,
+  // silently, naming the Playout. Its lifecycle is the bridge smoke's; here it is what CG Control
+  // connects to.
+  const code = exitCodeOf(args.bridge, ['/S', `/PLAYOUT=${PLAYOUT}`]);
+  check('CG Bridge installs silently, per machine (exit 0)', code === 0, String(code));
+  const h = await until('CG Bridge to answer /health', health, 90_000).catch(() => null);
+  check(
+    'CG Bridge answers /health on port 5280, as this release, naming the Playout it was given',
+    h !== null && h.app === 'cg-bridge' && h.version === RELEASE && h.playout?.address === PLAYOUT,
+    h === null
+      ? 'no answer'
+      : `${String(h.app)} ${String(h.version)} ${String(h.playout?.address)}`,
+  );
+  if (h === null) await diagnose('bridge', 0);
+}
+
+// ── CG Control (drive phase, medium integrity) ───────────────────────────────
+
+function controlInstall() {
+  // Installed from THIS phase's medium-integrity process: "without admin" is exercised, not read.
+  const code = exitCodeOf(args.control, ['/S']);
+  check('CG Control installs without admin (exit 0)', code === 0, String(code));
+  const { exe, candidates } = installedControlExe();
+  check(
+    'CG Control installs per user, under LOCALAPPDATA',
+    exe !== undefined,
+    exe ?? candidates.join(' | '),
+  );
+  if (exe === undefined) return;
+  // The console is all there is: no bridge, no Node, no staged payload beside it.
+  const dir = path.dirname(exe);
+  check(
+    'CG Control installs no bridge — no cg-bridge.exe, no payload',
+    !fs.existsSync(path.join(dir, 'cg-bridge.exe')) && !fs.existsSync(path.join(dir, 'payload')),
+    dir,
+  );
+  // `CLIENT-TEST-RELEASE-01` B1 — Windows lists it under Installed apps as this release, per user.
+  if (releaseGiven()) {
+    const entry = installedEntry('HKCU', 'CG Control');
     check(
-      `firewall rule "${rule}" allows ${port}/${protocol.toLowerCase()} inbound for the sidecar only`,
-      problems.length === 0,
-      problems.join('; '),
-    );
-  }
-  // `CLIENT-TEST-RELEASE-01` B1 — Windows lists it under Installed apps as this release.
-  if (RELEASE !== null) {
-    const entry = installedEntry('HKLM', 'CG Control');
-    check(
-      `Installed apps lists CG Control ${RELEASE}, for every user of this machine`,
+      `Installed apps lists CG Control ${String(RELEASE)}, for this user`,
       entry?.displayName === 'CG Control' && entry.displayVersion === RELEASE,
       JSON.stringify(entry),
     );
@@ -686,155 +775,164 @@ function controlInstall() {
 }
 
 async function controlDrive() {
-  // Start → the bridge is the INSTALLED sidecar, and the window loads the console from it.
-  launch(CONTROL_EXE, 9230);
-  const h = await until('the bridge to answer on 5174', health, 90_000).catch(() => null);
-  check(
-    'CG Control starts its bridge — the installed cg-bridge.exe, not any other Node',
-    h !== null &&
-      h.app === 'cg-caspar-bridge' &&
-      String(h.execPath).toLowerCase() === SIDECAR_EXE.toLowerCase(),
-    h === null ? 'no answer' : `${h.execPath} (pid ${h.pid})`,
-  );
-  if (h === null) await diagnose('control', 9230);
-  const page = await Cdp.attach(9230, CONSOLE, 90_000).catch((err) => {
-    check('the window loads the console from the bridge', false, err.message);
+  const { exe } = installedControlExe();
+  if (exe === undefined) return; // `controlInstall` has already failed it
+  launch(exe, 9230);
+  const page = await Cdp.attach(9230, APP_PAGE, 90_000).catch(async (err) => {
+    await diagnose('control', 9230);
+    check(
+      'CG Control opens its window on http://tauri.localhost',
+      false,
+      err instanceof Error ? err.message : String(err),
+    );
     return null;
   });
-  if (page !== null) {
-    /*
-      Wait for the console to COMMIT, never a fixed time. `/json/list` names the console URL as soon
-      as the shell navigates, while the window still holds its initial blank document (origin "null",
-      not secure, no text). Run 36691878177 was a slow runner — its bridge answered 16 s after launch,
-      against 4.7 s the run before — and the fixed 4 s sleep probed THAT document; three seconds later
-      first-run passed on the same page. The origin is still asserted below: a console that never
-      commits fails it with whatever the window holds.
-    */
-    await until(
-      'the console to commit its own origin',
-      () => page.evaluate(() => location.origin).then((origin) => origin === CONSOLE),
-      60_000,
-    ).catch(() => null);
-    // Then the settle the probe always had: fonts and the first keyboard asks.
-    await sleep(4000);
-    const facts = await page.evaluate(consoleProbe);
-    fs.writeFileSync(path.join(out, 'control-facts.json'), JSON.stringify(facts, null, 2));
-    check(
-      'the window loads the console from the bridge at http://127.0.0.1:5174',
-      facts.origin === CONSOLE,
-      facts.origin,
-    );
-    // The absence, and the control that makes it mean something.
-    check(
-      'Persian renders in the self-hosted Vazirmatn (control)',
-      facts.vazirmatn === 'loaded' && facts.fonts.length > 0,
-      facts.fonts.join(', '),
-    );
-    check(
-      '…and nothing the console loaded came from another origin',
-      facts.offOrigin.length === 0,
-      facts.offOrigin.join(', '),
-    );
-    // A fresh install opens on first-run, at its first step: the Playout address.
-    const firstRunPhase = () =>
+  if (page === null) return;
+  /*
+    Wait for the console to COMMIT, never a fixed time: `/json/list` names the page as soon as the
+    shell navigates, while the window still holds its initial blank document (origin "null"). Run
+    36691878177 probed that document on a slow runner. The origin is still asserted below.
+  */
+  await until(
+    'the console to commit its own origin',
+    () =>
+      page.evaluate(() => location.origin).then((origin) => origin === 'http://tauri.localhost'),
+    60_000,
+  ).catch(() => null);
+
+  // 1 — a fresh install asks ONE question before it connects anywhere: where the Playout is.
+  const gate = await until(
+    'the Playout-address gate',
+    () => page.evaluate(() => document.querySelector('[data-playout-address-gate]') !== null),
+    30_000,
+  ).catch(() => false);
+  check('a fresh CG Control asks for the Playout address before it connects anywhere', gate);
+  await page.screenshot(path.join(out, 'control-gate.png'));
+  // Typed as an operator types it (through the page's own input pipeline), then CONNECT.
+  await page.evaluate(() => document.getElementById('cg-playout-address')?.focus());
+  await page.send('Input.insertText', { text: PLAYOUT });
+  const pressed = await until(
+    'CONNECT to be pressable',
+    () =>
+      page.evaluate(() => {
+        const connect = [...document.querySelectorAll('[data-playout-address-gate] button')].find(
+          (b) => b.textContent?.trim() === 'Connect',
+        );
+        if (connect === undefined || connect.disabled) return null;
+        // What the gate holds as it is pressed — the address it will save.
+        const typed = document.getElementById('cg-playout-address')?.value ?? '';
+        connect.click();
+        return typed;
+      }),
+    15_000,
+  ).catch(() => null);
+  check('…the address typed, and CONNECT pressed', pressed === PLAYOUT, String(pressed));
+
+  // 2 — saved, and the console starts again aimed at CG Bridge on the Playout's host.
+  const live = await until(
+    'CG Control to connect to CG Bridge',
+    () =>
+      page.evaluate(() =>
+        window.cg?.link?.status?.() === 'live' ? (window.cg.link.bridgeAddress?.() ?? '?') : null,
+      ),
+    60_000,
+  ).catch(() => null);
+  check(
+    `…and connects to CG Bridge on the Playout's host, ${BRIDGE_AT}`,
+    live === BRIDGE_AT,
+    String(live),
+  );
+  if (live === null) await diagnose('control-connect', 9230);
+  // Then the settle the probe always had: fonts and the first keyboard asks.
+  await sleep(4000);
+  const facts = await page.evaluate(consoleProbe);
+  fs.writeFileSync(path.join(out, 'control-facts.json'), JSON.stringify(facts, null, 2));
+  check(
+    'the console is the one CG Control bundles, on http://tauri.localhost',
+    facts.origin === 'http://tauri.localhost',
+    facts.origin,
+  );
+  check('…which is a secure context', facts.secure === true);
+  // The absence, and the control that makes it mean something.
+  check(
+    'Persian renders in the self-hosted Vazirmatn (control)',
+    facts.vazirmatn === 'loaded' && facts.fonts.length > 0,
+    facts.fonts.join(', '),
+  );
+  check(
+    '…and nothing the console loaded came from another origin (CG Bridge aside)',
+    facts.offOrigin.length === 0,
+    facts.offOrigin.join(', '),
+  );
+
+  // 3 — CONTROL: no token, no state. The console's OWN request, over its own socket.
+  const auth = await page.evaluate(() => window.cg.auth.state().kind);
+  check('CONTROL — with no token, CG Control is signed out', auth === 'signed-out', auth);
+  const refused = await page.evaluate(() =>
+    window.cg.stack.snapshot().then(
+      (stack) => `answered with ${String(stack.length)} rows`,
+      (err) => String(err instanceof Error ? err.message : err),
+    ),
+  );
+  check(
+    '…and CG Bridge gives it NO state: its stack.snapshot is refused by the auth gate',
+    refused.startsWith(NOT_SIGNED_IN),
+    refused,
+  );
+  // The station is in first-run, so the sign-in it is sent to is first-run's: CG Bridge's
+  // configuration already holds the Playout, so it opens at the sign-in, not at the address.
+  const firstRun = await until(
+    'the station first-run',
+    () =>
       page.evaluate(
         () => document.querySelector('[data-first-run]')?.getAttribute('data-first-run') ?? null,
-      );
-    const opened = await until('first-run', firstRunPhase, 30_000).catch(() => null);
+      ),
+    30_000,
+  ).catch(() => null);
+  const signIn = await page.evaluate(() => document.getElementById('cg-first-run-user') !== null);
+  check(
+    '…and it is sent to sign in: CG Bridge is in first-run, at its sign-in',
+    firstRun === 'channel' && signIn,
+    `phase ${String(firstRun)}, sign-in ${String(signIn)}`,
+  );
+  await sleep(2000);
+  await page.screenshot(path.join(out, 'control.png'));
+  {
+    const counted = await health().catch(() => null);
     check(
-      'a fresh install opens on first-run, at the Playout address',
-      opened === 'target',
-      String(opened),
+      'CG Bridge counts the console connected to it',
+      (counted?.consoles ?? 0) >= 1,
+      String(counted?.consoles),
     );
-    await sleep(3000);
-    await page.screenshot(path.join(out, 'control.png'));
-    {
-      const title = windowTitle('cg-control.exe');
-      check("CG Control's title bar reads APASAI CG CONTROL", title === 'APASAI CG CONTROL', title);
-    }
-    {
-      // TEXT-DIGITS-01 — granted to this console page (`capabilities/console.json`), read-only.
-      const keyboard = await page.evaluate(keyboardProbe);
-      fs.writeFileSync(path.join(out, 'control-keyboard.json'), JSON.stringify(keyboard, null, 2));
-      check(
-        'the console reads its keyboard language through the app’s one read-only command',
-        keyboard.ok && KEYBOARD_LANGUAGES.includes(keyboard.said),
-        keyboard.said,
-      );
-    }
+  }
+  {
+    const title = windowTitle('cg-control.exe');
+    check("CG Control's title bar reads APASAI CG CONTROL", title === 'APASAI CG CONTROL', title);
+  }
+  {
+    // TEXT-DIGITS-01 — granted to this console page (`capabilities/console.json`), read-only.
+    const keyboard = await page.evaluate(keyboardProbe);
+    fs.writeFileSync(path.join(out, 'control-keyboard.json'), JSON.stringify(keyboard, null, 2));
+    check(
+      'the console reads its keyboard language through the app’s one read-only command',
+      keyboard.ok && KEYBOARD_LANGUAGES.includes(keyboard.said),
+      keyboard.said,
+    );
+  }
+  page.close();
 
-    // DESKTOP-APPS-01-A — the one door that writes the Playout target: the app's own command,
-    // callable from the console this window loaded, never over the control socket.
-    // A mark on the page: a reload would wipe it, so its survival proves the console moved on alone.
-    await page.evaluate(() => {
-      window.cgSmokeMark = 'kept';
-    });
-    const before = await health().catch(() => null);
-    const door = await page.evaluate(async () => {
-      try {
-        const said = await window.__TAURI_INTERNALS__.invoke('set_playout_address', {
-          address: 'http://127.0.0.1:59999/',
-        });
-        return { ok: true, said: String(said) };
-      } catch (err) {
-        return { ok: false, said: String(err) };
-      }
-    });
-    check('the console can set the Playout address through the app', door.ok, door.said);
-    const playoutFile = path.join(APPDATA, 'CG Control', '.cg-runtime', 'bridge-playout.json');
-    const written = fs.existsSync(playoutFile)
-      ? JSON.parse(fs.readFileSync(playoutFile, 'utf8'))
-      : null;
+  // 4 — CG Control runs no bridge: the one cg-bridge.exe on this machine is the SERVICE's.
+  {
+    const parents = bridgeParents();
     check(
-      '…which writes the address, normalised, with no issuer to type',
-      written?.playout?.address === 'http://127.0.0.1:59999' &&
-        written?.playout?.issuer === undefined,
-      JSON.stringify(written),
+      'CG Control started no bridge: the one cg-bridge.exe here is the service’s (its parent is shawl.exe)',
+      parents.length === 1 && parents[0]?.toLowerCase() === 'shawl.exe',
+      parents.join(', ') || 'none',
     );
-    const after = await until('the restarted bridge', health, 60_000).catch(() => null);
-    check(
-      '…and restarts the bridge with the new target in force',
-      after !== null && before !== null && after.pid !== before.pid,
-      `${String(before?.pid)} -> ${String(after?.pid)}`,
-    );
-    const next = await until(
-      'first-run to move on',
-      async () => ((await firstRunPhase()) === 'channel' ? 'channel' : null),
-      60_000,
-    ).catch(() => null);
-    const moved = await page.evaluate(() => ({
-      mark: window.cgSmokeMark ?? null,
-      signIn: document.getElementById('cg-first-run-user') !== null,
-    }));
-    check(
-      '…and the console moves on to the sign-in by itself, without a reload',
-      next === 'channel' && moved.signIn && moved.mark === 'kept',
-      `phase ${String(next)}, sign-in ${String(moved.signIn)}, mark ${String(moved.mark)}`,
-    );
-    await sleep(2000);
-    await page.screenshot(path.join(out, 'control-sign-in.png'));
-    page.close();
   }
 
-  // State lives in this user's own data folder, never ~/.cg-runtime.
-  const log = path.join(APPDATA, 'CG Control', 'logs', 'bridge.log');
-  const logText = fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : '';
-  check(
-    'the bridge log is written under %APPDATA%\\CG Control\\logs (control)',
-    logText.includes('candidate layers'),
-    log,
-  );
-  check(
-    '…and it names every station file under %APPDATA%\\CG Control\\.cg-runtime',
-    logText.includes(path.join(APPDATA, 'CG Control', '.cg-runtime')),
-  );
-  check(
-    'nothing was written to ~/.cg-runtime',
-    !fs.existsSync(path.join(os.homedir(), '.cg-runtime')),
-  );
-
   // A second launch focuses the open window and exits.
-  launch(CONTROL_EXE, 9232);
+  launch(exe, 9232);
   await sleep(8000);
   check(
     'a second launch leaves ONE CG Control running',
@@ -842,62 +940,79 @@ async function controlDrive() {
     `${processCount('cg-control.exe')} running`,
   );
 
-  // Close → no bridge left behind.
-  check(
-    'the bridge is running before the app closes (control)',
-    processCount('cg-bridge.exe') === 1,
-  );
+  // 5 — closed: CG Bridge is a service, not the console's child. It keeps running, and stops
+  // counting the console (`§5`: the service survives a console closing).
   for (const pid of pidsOf('cg-control.exe')) request('taskkill', ['/PID', String(pid)]);
   await until('CG Control to close', () => processCount('cg-control.exe') === 0, 30_000).catch(
     () => undefined,
   );
-  await until('the bridge to stop', () => processCount('cg-bridge.exe') === 0, 20_000).catch(
-    () => undefined,
-  );
+  check('CG Control closes', processCount('cg-control.exe') === 0);
+  const after = await until(
+    'CG Bridge to stop counting the console',
+    () => health().then((h) => (h !== null && h.consoles === 0 ? h : null)),
+    30_000,
+  ).catch(() => null);
   check(
-    'closing CG Control stops the bridge — no process left behind',
-    processCount('cg-control.exe') === 0 && processCount('cg-bridge.exe') === 0,
+    'closing CG Control leaves CG Bridge running — and it no longer counts the console',
+    after !== null,
+    JSON.stringify((await health().catch(() => null))?.consoles ?? 'no answer'),
   );
-  check('…and releases the console port', (await health().catch(() => null)) === null);
 
-  // Killed (a crash, or Task Manager) → the lifeline stops the bridge anyway.
-  launch(CONTROL_EXE, 9233);
-  await until('the bridge to answer again', health, 90_000).catch(() => null);
-  check('a relaunch starts the bridge again (control)', processCount('cg-bridge.exe') === 1);
-  for (const pid of pidsOf('cg-control.exe')) request('taskkill', ['/F', '/PID', String(pid)]);
-  await until(
-    'the orphaned bridge to stop',
-    () => processCount('cg-bridge.exe') === 0,
-    20_000,
-  ).catch(() => undefined);
+  // State and logs live in this user's own folders, never ~/.cg-runtime.
+  const shellLog = path.join(APPDATA, 'CG Control', 'logs', 'shell.log');
+  const logText = fs.existsSync(shellLog) ? fs.readFileSync(shellLog, 'utf8') : '';
   check(
-    'killing CG Control still stops the bridge — its lifeline closed',
-    processCount('cg-bridge.exe') === 0,
+    "CG Control's shell writes its log under %APPDATA%\\CG Control\\logs",
+    logText.includes('page loaded: http://tauri.localhost'),
+    shellLog,
+  );
+  check(
+    'nothing was written to ~/.cg-runtime',
+    !fs.existsSync(path.join(os.homedir(), '.cg-runtime')),
   );
 }
 
+// ── CG Control's uninstall (uninstall phase, elevated) ───────────────────────
+
 async function controlUninstall() {
-  // Uninstall removes exactly the rules the install added (their presence is the install phase's).
-  run(path.join(CONTROL_DIR, 'uninstall.exe'), ['/S']);
-  // `CLIENT-TEST-RELEASE-01` — Tauri's NSIS uninstaller deletes `cg-control.exe` FIRST and the
-  // Installed-apps entry near its END (`Section Uninstall`: files, shortcuts, then `DeleteRegKey`), so
-  // waiting for the exe alone read the registry mid-uninstall (run 36572556033). Wait for its last
-  // add/remove step too, bounded: an entry that never goes still fails the check below.
+  // CG Control opens no port: no firewall rule is named for it. Read while it is still installed,
+  // by the same instrument that lists CG Bridge's three — the control that makes the absence mean
+  // something (and elevated, which a full rule listing may need).
+  {
+    const names = firewallRuleNames();
+    const ours = (prefix) => (names ?? []).filter((n) => n.startsWith(prefix));
+    check(
+      'CG Control added no firewall rule (control: CG Bridge’s three are listed by the same read)',
+      names !== null && ours('CG Control').length === 0 && ours('CG Bridge - ').length === 3,
+      names === null
+        ? 'netsh unread'
+        : `CG Control: [${ours('CG Control').join(', ')}] · CG Bridge: [${ours('CG Bridge - ').join(', ')}]`,
+    );
+  }
+  const { exe } = installedControlExe();
+  if (exe === undefined) {
+    check('CG Control is installed, to be uninstalled', false);
+    return;
+  }
+  // Tauri's uninstaller copies itself away and returns at once; it deletes `cg-control.exe` FIRST
+  // and the Installed-apps entry near its END (`CLIENT-TEST-RELEASE-01`, run 36572556033), so wait
+  // for both, bounded: an entry that never goes still fails the check below.
+  run(path.join(path.dirname(exe), 'uninstall.exe'), ['/S']);
   await until(
     'the uninstaller to finish',
-    () => !fs.existsSync(CONTROL_EXE) && installedEntry('HKLM', 'CG Control') === null,
+    () => !fs.existsSync(exe) && installedEntry('HKCU', 'CG Control') === null,
     60_000,
   ).catch(() => undefined);
-  check(
-    'uninstalling removes both firewall rules',
-    firewallRule(RULE_OSC) === null && firewallRule(RULE_TEMPLATES) === null,
-  );
-  // `CLIENT-TEST-RELEASE-01` B1 — and Installed apps no longer lists it (the install phase's reading of
+  check('uninstalling removes CG Control', !fs.existsSync(exe), exe);
+  // `CLIENT-TEST-RELEASE-01` B1 — and Installed apps no longer lists it (the drive phase's reading of
   // the same key is this absence's positive control).
   check(
     'uninstalling removes CG Control from Installed apps',
-    installedEntry('HKLM', 'CG Control') === null,
+    installedEntry('HKCU', 'CG Control') === null,
   );
+  // CG Bridge is not CG Control's: removing the console leaves the service answering.
+  const still = await health().catch(() => null);
+  check('…and leaves CG Bridge running', still !== null && still.app === 'cg-bridge');
 }
 
 const PHASES = ['install', 'drive', 'uninstall'];
@@ -916,11 +1031,12 @@ const level = integrityLevel();
 if (phase === 'install') {
   // The control for the drive phase's reading: the same instrument must read High here.
   check('the install phase runs elevated (control)', level === 'High', level);
-  await step('CG Control install', controlInstall);
+  await step('CG Bridge install', install);
 } else if (phase === 'drive') {
   check('the apps are driven unelevated, as an operator runs them', level === 'Medium', level);
   await step('CG Designer smoke', designer);
-  // `RELEASE-091-01` §3 — both apps are installed now (CG Control by the install phase).
+  await step('CG Control install', controlInstall);
+  // `RELEASE-091-01` §3 — both apps are installed now, each per user.
   await step('Each app its own icon and taskbar identity', identities);
   await step('CG Control smoke', controlDrive);
 } else {

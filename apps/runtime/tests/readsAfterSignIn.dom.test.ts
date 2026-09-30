@@ -98,7 +98,20 @@ function movingAuth(initial: AuthSessionState): {
  * `RELEASE-091-01` §1's `templates.page` asks the bridge first and falls back to it). Not gated:
  * no bridge refusal reaches the caller.
  */
-const LOCAL = new Set(['templates.list', 'templates.get', 'templates.page']);
+const LOCAL = new Set([
+  'templates.list',
+  'templates.get',
+  'templates.page',
+  /*
+    `CENTRAL-BRIDGE-01` — this console's OWN synchronous reads, answered without the bridge: can it
+    change its Playout, the separate server's CG Bridge address it keeps, and whether CG Bridge's
+    logs are on offer. Wrapped, they would answer a (truthy) rejected promise where a value is read.
+  */
+  'setup.canSetPlayoutAddress',
+  'setup.bridgeOverride',
+  'setup.forgetStation',
+  'audit.canDownloadLogs',
+]);
 
 /**
  * The mock bridge behind the auth gate: every request (not a subscription, not the link, not the

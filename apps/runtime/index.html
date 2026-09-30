@@ -25,10 +25,20 @@
       with a test that proves the need.
       Pinned by `tests/e2e/pvw-video.spec.ts` in a REAL browser: jsdom does not
       enforce CSP, so no unit test can observe this.
+
+      CENTRAL-BRIDGE-01 (D9) — `img-src` ADMITS `http:`/`https:` BECAUSE THE PROGRAM PICTURE IS
+      NOT SAME-ORIGIN ANY MORE. The console is CG Control's bundled page (or Vite's, or a
+      browser's), and the picture is CG Bridge's: `/pgm/<n>?ticket=…` on its control port, on
+      the Playout's host or wherever an admin says — any host, any port the service was given.
+      `connect-src` already admits the same (the socket, the reachability probe). Measured: with
+      `img-src 'self' data: blob:` Chromium refused the picture ("violates … img-src") and the
+      PROGRAM strip never left "No return signal". A rehearsed template stays narrow: its srcdoc
+      frame enforces its OWN policy as well (`img-src data:`), and the intersection wins.
+      Pinned by `tests/e2e/pgm-return.spec.ts` and `dev-station.spec.ts`, in a real browser.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
     <!--
       P-001 — NO FONT COMES OFF THE NETWORK. The UI's Vazirmatn faces are the ones this app
@@ -697,25 +707,6 @@
         }
       }
 
-      /* FIELD-FIXES-01 J — A CONTINUED SPLASH HAS ALREADY MADE ITS ENTRANCE. Inside CG Control this
-         page replaces the window's starting page, which IS this splash (composed from this file
-         by `src-tauri/starting/compose.mjs`); replaying the entrance there would be a second
-         loading screen in the same design. The script below marks the splash `data-continued`
-         in that window, and every entrance lands on its end state at once: a zero-length
-         `forwards` run of its own keyframe, so the end state is the keyframe's and not a second
-         copy of it. The scene's loops still run. */
-      .cg-splash[data-continued='true'] .cg-splash__marks i,
-      .cg-splash[data-continued='true'] .cg-splash__scene,
-      .cg-splash[data-continued='true'] .cg-splash__wordmark,
-      .cg-splash[data-continued='true'] .cg-splash__rule,
-      .cg-splash[data-continued='true'] .cg-splash__company,
-      .cg-splash[data-continued='true'] .cg-splash__tagline,
-      .cg-splash[data-continued='true'] .cg-splash__progress,
-      .cg-splash[data-continued='true'] .cg-splash__foot {
-        animation-delay: 0s;
-        animation-duration: 0s;
-      }
-
       @media (prefers-reduced-motion: reduce) {
         /* Everything stops — but the scene is NOT blanked. It settles on the FULL PACKAGE:
            both rows armed, the lower third, the bug and the ticker all on the monitor.
@@ -994,10 +985,10 @@
           return;
         }
 
-        // FIELD-FIXES-01 J — inside CG Control this splash CONTINUES the one already on screen:
-        // the window's starting page is this same splash, shown while the bridge starts. The
-        // shell's IPC global is how the page knows it is in that window; a browser never has it.
-        if (window.__TAURI_INTERNALS__) el.setAttribute('data-continued', 'true');
+        // CENTRAL-BRIDGE-01 — this splash is the FIRST thing CG Control's window shows: the app
+        // bundles this page, and there is no starting page before it to continue (FIELD-FIXES-01
+        // J's "continued" mark went with the bridge the window used to wait for). So it makes its
+        // entrance there exactly as in a browser.
 
         // Mirrors of `splashTiming.ts` — see this block's header.
         var COLD_FLOOR_MS = 8000;
@@ -1009,7 +1000,7 @@
         // THREE LABELS, THREE WORK STEPS, each naming the work happening NOW. There is no
         // terminal label: see `splashTiming.ts` and the `#cg-splash-phase` rule above for
         // why the label leaves on completion instead of settling on a word.
-        var PHASES = ['INITIALIZING', 'PROBING BRIDGE', 'STARTING INTERFACE'];
+        var PHASES = ['INITIALIZING', 'CONNECTING', 'STARTING INTERFACE'];
 
         var t0 = Date.now();
 

@@ -127,6 +127,14 @@ const BEFORE_AND_AFTER = {
     'cg.runtime.foreign-notice.dismissed.v1',
     'cg.runtime.playoutSession',
     'cg.runtime.shell-layout.v1',
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D8) — NEW: where THIS console finds CG Bridge — the Playout address the
+      operator typed, and an admin's bridge address when CG Bridge is on a separate server
+      (`stationAddress.ts`). A per-console setting, like the shell layout: which bridge a console
+      connects to is a fact about that console. No migration is owed: ABSENT means the console asks
+      for the Playout address, as a fresh install does.
+    */
+    'cg.runtime.station.v1',
   ],
   realSessionStorage: ['CG_RUNTIME_SESSION', 'cg.runtime.testMode'],
   mockLocalStorage: [

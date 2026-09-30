@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Check, Copy, FolderOpen, RefreshCw, ScrollText, Search } from 'lucide-react';
+import { Check, Copy, Download, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
-import { type FixedLayerBank, type TemplateInfo } from '@cg/shared-ipc';
+import { holdsPermissionClass, type FixedLayerBank, type TemplateInfo } from '@cg/shared-ipc';
+import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -93,6 +94,8 @@ type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
  * rest is federating identity, not typing a name.
  */
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
+  // `CENTRAL-BRIDGE-01` — who may download CG Bridge's logs (a station admin).
+  const auth = useAuthSession();
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
   /*
     🔴 `MODAL-TRUTH-01` §3.2/§3.3 — **HAS THE READ ANSWERED, ON ITS OWN AXIS.**
@@ -407,20 +410,24 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           Refresh
         </AsyncButton>
         {/*
-          `FIELD-FIXES-01` G — THE LOG FOLDER, inside CG Control only (`bridge.log` beside
-          `amcp.log`). CG Control's native menu held this door until it was removed; a browser
-          console has no such door, so the control is absent there rather than disabled.
+          `CENTRAL-BRIDGE-01` §1 A — CG BRIDGE'S LOGS, DOWNLOADED. They live on the Playout machine
+          now, so the folder `FIELD-FIXES-01` G opened became one zip, saved from CG Bridge. A
+          station admin's (or anyone's on a station with auth off); absent for everyone else, not
+          disabled — and the bridge refuses the ticket to anyone else anyway.
         */}
-        {window.cg.audit.canOpenLogFolder() && (
-          <AsyncButton
-            variant="neutral"
-            icon={FolderOpen}
-            run={() => window.cg.audit.openLogFolder()}
-            data-audit-open-logs=""
-          >
-            Open log folder
-          </AsyncButton>
-        )}
+        {window.cg.audit.canDownloadLogs() &&
+          (auth.kind === 'off' ||
+            (auth.kind === 'signed-in' &&
+              holdsPermissionClass(auth.principal.roles, 'station-admin'))) && (
+            <AsyncButton
+              variant="neutral"
+              icon={Download}
+              run={() => window.cg.audit.downloadLogs()}
+              data-audit-download-logs=""
+            >
+              Download logs
+            </AsyncButton>
+          )}
       </div>
       {/*
         🔴 `OPERATOR-NAME-SWEEP-01` — **THE CONSOLE-NAME FIELD AND ITS CAVEAT ARE GONE.**

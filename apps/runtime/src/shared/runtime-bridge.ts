@@ -286,6 +286,12 @@ export interface RuntimeBridge {
      */
     versionMismatch(): string | null;
     onVersionMismatchChanged(handler: (line: string | null) => void): Unsubscribe;
+    /**
+     * `CENTRAL-BRIDGE-01` (D8) — where this console's CG Bridge is (`host:port`), for the one line a
+     * console shows when it cannot reach it: "CG Bridge not reachable at <host>:5280". `null` where
+     * there is no bridge (test mode).
+     */
+    bridgeAddress(): string | null;
   };
 
   stack: {
@@ -638,8 +644,12 @@ export interface RuntimeBridge {
     /**
      * Where this console reads channel `n`'s picture, or `null` when it has no relay — test mode
      * has no bridge, so there is no picture to request and the pane says "No return signal".
+     *
+     * `CENTRAL-BRIDGE-01` (D9) — ASYNCHRONOUS: CG Bridge is on another machine, and its `/pgm/<n>`
+     * opens only with a ticket the verified socket is given for that channel, so every request of
+     * the picture asks for a fresh one. Rejects when the bridge refuses (the channel is not held).
      */
-    feedUrl(channel: number): string | null;
+    feedUrl(channel: number): Promise<string | null>;
     /** Every WATCHED channel's state. A channel nobody watches has no entry. */
     status(): Promise<ChannelResponse<typeof PgmReturnStatusChannel>>;
     onStatusChanged(handler: (status: readonly PgmReturnStatus[]) => void): Unsubscribe;
@@ -826,8 +836,20 @@ export interface RuntimeBridge {
      * a browser has no such door, and the control that would use it is then absent.
      */
     canSetPlayoutAddress(): boolean;
-    /** Write the Playout address through CG Control and restart the bridge. Never the socket. */
-    setPlayoutAddress(address: string): Promise<string>;
+    /**
+     * `CENTRAL-BRIDGE-01` (D8) — THIS console's Playout, which says where its CG Bridge is: saved in
+     * its station record, and the console reconnects to CG Bridge there. Never the socket, and never
+     * CG Bridge's own configuration. `bridgeAddress`: absent keeps the console's CG Bridge address;
+     * `''` puts CG Bridge on the Playout's host; `host` / `host:port` is a separate server's.
+     */
+    setPlayoutAddress(address: string, bridgeAddress?: string): Promise<string>;
+    /** `CENTRAL-BRIDGE-01` (D8) — the separate server's CG Bridge address this console keeps, if any. */
+    bridgeOverride(): string | null;
+    /**
+     * `CENTRAL-BRIDGE-01` (D8) — forget this console's station so it asks again (CG Control only;
+     * `false` elsewhere, or when the store refused). The caller restarts the page.
+     */
+    forgetStation(): boolean;
   };
 
   audit: {
@@ -841,13 +863,14 @@ export interface RuntimeBridge {
      */
     health(): Promise<ChannelResponse<typeof AuditHealthChannel>>;
     /**
-     * `FIELD-FIXES-01` G — can THIS console open the station's log folder (`bridge.log` and
-     * `amcp.log`)? Only inside CG Control, whose native menu held the door until it was removed;
-     * a browser has none, and the control that would use it is then absent.
+     * `CENTRAL-BRIDGE-01` §1 A — can THIS console download CG Bridge's logs? They live on the
+     * Playout machine now (`%ProgramData%\CG Bridge\logs\`), so "Open log folder" (`FIELD-FIXES-01`
+     * G) became a download of one zip. Offered while connected; the bridge gives the ticket to a
+     * station admin only, and says so to anyone else.
      */
-    canOpenLogFolder(): boolean;
-    /** Open the log folder in Explorer, through CG Control. A refusal is answered, never thrown. */
-    openLogFolder(): Promise<{ accepted: boolean; message?: string }>;
+    canDownloadLogs(): boolean;
+    /** Save CG Bridge's logs as one zip. A refusal is answered, never thrown. */
+    downloadLogs(): Promise<{ accepted: boolean; message?: string }>;
     /*
       🔴 `OPERATOR-NAME-SWEEP-01` — **THE TWO AUDIT MEMBERS THAT READ AND WROTE THE CONSOLE
       LABEL ARE GONE FROM THIS CONTRACT, and the removal is the point rather than a tidy-up.**

@@ -13,17 +13,19 @@ import {
   redactAmcpLine,
   type AmcpLogEntry,
 } from '../src/amcp-log.js';
+import { startFakePlayout, type FakePlayout } from './support/fake-playout.js';
 import { standardBank, twoChannelRig } from './support/two-channel-rig.js';
 
 /**
  * 🔴 `FIELD-FIXES-01-A` — **THE AMCP LOG: every command, its reply line and its time, in the
- * installed app's logs folder — and never a token.**
+ * installed bridge's logs folder — and never a token.**
  *
  * Why the installed app wrote none of this: NEITHER did the dev bridge. The bridge had no AMCP log
  * at all; the only trace in the tree was the MOCK's, switched on by tests. So it is written by the
  * bridge itself, at the session queue every command passes (`CommandQueue`'s `exchange`), into
- * `<state-home>/logs/amcp.log` — the flag the installed app's sidecar and the dev station already
- * pass. These specs drive the BUNDLED sidecar the way the desktop shell starts it.
+ * `<state-home>/logs/amcp.log` — `%ProgramData%\CG Bridge\logs` for CG Bridge the service
+ * (`CENTRAL-BRIDGE-01`), the dev station's own folder for it. The last spec drives the BUNDLE the
+ * installer ships, the way the service starts it.
  */
 
 const DIST = fileURLToPath(new URL('../dist/index.js', import.meta.url));
@@ -166,15 +168,18 @@ describe('the bridge writes it', () => {
   }, 40_000);
 });
 
-// ───────────────────────────── the installed app's sidecar ─────────────────────────────
+// ───────────────────────────── CG Bridge, as installed ─────────────────────────────
 
 let child: ChildProcessWithoutNullStreams | null = null;
 let mock: MockHandle | null = null;
+let playout: FakePlayout | null = null;
 afterEach(async () => {
   if (child !== null && child.exitCode === null) child.kill();
   child = null;
   await mock?.stop();
   mock = null;
+  await playout?.stop();
+  playout = null;
 });
 
 function freeUdpPort(): Promise<number> {
@@ -188,48 +193,47 @@ function freeUdpPort(): Promise<number> {
   });
 }
 
-describe('the installed app', () => {
-  it('🔴 the sidecar, started as the desktop shell starts it, writes <state-home>/logs/amcp.log — and its own stderr is unchanged', async () => {
+describe('CG Bridge, as installed', () => {
+  it('🔴 the bundle, started as the service starts it, writes <state home>/logs/amcp.log — and its own stderr is unchanged', async () => {
     if (!fs.existsSync(DIST))
       throw new Error(`${DIST} is missing — build @cg/caspar-bridge first.`);
-    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-amcp-sidecar-'));
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-amcp-service-'));
     const bundle = path.join(work, 'bridge', 'caspar-bridge.mjs');
-    const stateHome = path.join(work, 'CG Control');
+    // `%ProgramData%\CG Bridge`: the configuration's directory is the service's state home.
+    const stateHome = path.join(work, 'CG Bridge');
     const fakeHome = path.join(work, 'home');
-    const consoleDir = path.join(work, 'console');
     fs.mkdirSync(fakeHome, { recursive: true });
-    fs.mkdirSync(consoleDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(consoleDir, 'index.html'),
-      '<!doctype html><title>CG Control</title>',
-    );
+    fs.mkdirSync(stateHome, { recursive: true });
     const bundled = spawnSync(process.execPath, [BUNDLE_SCRIPT, bundle], { encoding: 'utf8' });
     if (bundled.status !== 0) throw new Error(`bundling failed:\n${bundled.stderr}`);
 
     const oscPort = await freeUdpPort();
     mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 10 });
+    playout = await startFakePlayout();
+    const config = path.join(stateHome, 'cg-bridge.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        playoutAddress: playout.issuer,
+        amcpHost: '127.0.0.1',
+        amcpPort: mock.amcpPort,
+        oscPort,
+      }),
+    );
     let stderr = '';
     const proc = spawn(
       process.execPath,
       [
         bundle,
-        '--state-home',
-        stateHome,
-        '--console-dir',
-        consoleDir,
-        '--console-port',
-        '0',
-        '--exit-on-stdin-close',
+        '--service-config',
+        config,
+        // Every listener ephemeral and loopback: the command line wins over the file.
+        '--host',
+        '127.0.0.1',
         '--port',
         '0',
         '--template-serve-port',
         '0',
-        '--caspar-host',
-        '127.0.0.1',
-        '--amcp-port',
-        String(mock.amcpPort),
-        '--osc-port',
-        String(oscPort),
       ],
       {
         env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome },
@@ -256,7 +260,7 @@ describe('the installed app', () => {
     }
     // The boot line says where it is…
     expect(stderr).toContain(`AMCP log: ${file}`);
-    // …and the bridge's own stderr (what the shell keeps as bridge.log) carries no exchange line.
+    // …and the bridge's own stderr (what the service host keeps as its log) carries no exchange line.
     expect(stderr).not.toMatch(/ms >> /);
     expect(fs.readdirSync(fakeHome)).toEqual([]);
     fs.rmSync(work, { recursive: true, force: true });

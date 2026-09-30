@@ -246,6 +246,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'auth.state': PER_SOCKET,
   'channels.list': PER_SOCKET,
   'channels.catalogue': PER_SOCKET,
+  // `CENTRAL-BRIDGE-01` (D9) — issued only for a channel this socket's sign-in holds (the handler).
+  'pgmReturn.ticket': PER_SOCKET,
   // ── reads of configuration, health and the library ──
   'app.info': STATION_WIDE,
   'audit.health': STATION_WIDE,
@@ -271,6 +273,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'templates.page': STATION_WIDE,
   'update.state': STATION_WIDE,
   'bridgeSession.state': STATION_WIDE,
+  // `CENTRAL-BRIDGE-01` §1 A — the logs are no channel's; a `station-admin` asks for them.
+  'bridge.logs-ticket': STATION_WIDE,
   // ── intents: the answer is the verdict on the principal's own press ──
   'air.dismiss-emptied': INTENT,
   'air.restore-emptied': INTENT,

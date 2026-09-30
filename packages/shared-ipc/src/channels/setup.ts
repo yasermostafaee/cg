@@ -84,6 +84,45 @@ const WhatwgUrl = (
   globalThis as unknown as { URL: new (input: string) => { protocol: string; hostname: string } }
 ).URL;
 
+/** `CENTRAL-BRIDGE-01` (D8) — the one refusal of a Playout address a console cannot find CG Bridge from. */
+export const NOT_A_PLAYOUT_ADDRESS = 'That is not a Playout address.';
+
+/** `CENTRAL-BRIDGE-01` (D8) — the one refusal of a CG Bridge address that is not `host` or `host:port`. */
+export const NOT_A_BRIDGE_ADDRESS = 'That is not a CG Bridge address.';
+
+/**
+ * `host` or `host:port` — an IPv6 host in brackets — as its parts, or `null` for anything else (a
+ * scheme, a path, a query, credentials, a space, a port out of range). The port is read from the
+ * TEXT: the URL parser drops a scheme's default port (`ws://host:80` reads back with none).
+ */
+export function splitHostPort(value: string): { host: string; port: number | null } | null {
+  const trimmed = value.trim();
+  if (trimmed === '' || /[\s/?#@]/.test(trimmed)) return null;
+  const m = /^(\[[0-9a-fA-F:.]+\]|[^:[\]]+)(?::(\d{1,5}))?$/.exec(trimmed);
+  const host = m?.[1];
+  if (m === null || host === undefined) return null;
+  const port = m[2] === undefined ? null : Number(m[2]);
+  if (port !== null && (port < 1 || port > 65535)) return null;
+  try {
+    if (new WhatwgUrl(`http://${host}`).hostname === '') return null;
+  } catch {
+    return null;
+  }
+  return { host, port };
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D8) — **A TYPED CG BRIDGE ADDRESS**, for a console whose CG Bridge is NOT on
+ * the Playout's host (a separate server): `host` or `host:port` as typed, `''` for nothing typed (CG
+ * Bridge is on the Playout's host, at its port), `null` for anything else.
+ */
+export function normaliseBridgeAddress(typed: string): string | null {
+  if (typed.trim() === '') return '';
+  const parts = splitHostPort(typed);
+  if (parts === null) return null;
+  return parts.port === null ? parts.host : `${parts.host}:${String(parts.port)}`;
+}
+
 export function normalisePlayoutAddress(typed: string): string | null {
   const trimmed = typed.trim();
   if (trimmed === '') return null;
@@ -178,6 +217,14 @@ export const ConnectionCheckRequestSchema = z.object({
   casparHost: z.string().min(1).optional(),
   /** The console's own origin, which the Playout's CORS list must carry. */
   origin: z.string().min(1),
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 8 — **THIS CONSOLE SIGNS IN DIRECTLY.** CG Control posts D1 from its
+   * own process, with no `Origin`, so no browser asks the Playout's CORS list and the CORS line has
+   * nothing to judge: probing it with CG Control's page origin (`http://tauri.localhost`, which no
+   * Playout lists) would disable a sign-in that works, and send a Playout admin to add an entry
+   * nobody needs. Absent: a browser console, whose origin the list must carry.
+   */
+  signIn: z.literal('native').optional(),
   /**
    * 🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **HOLD THE AMCP LINE UNTIL THIS MACHINE IS LET IN.** Sent only
    * by the console's ONE automatic re-run, after a `station-admin` has signed in, while the AMCP line

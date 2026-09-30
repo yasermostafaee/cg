@@ -5,17 +5,18 @@ import path from 'node:path';
 import { PGM_RETURN_PATH_PREFIX } from '@cg/shared-ipc';
 
 /**
- * 🔴 `DESKTOP-APPS-01` — **THE CONSOLE, SERVED BY THE BRIDGE** (ADR 0011).
+ * `DESKTOP-APPS-01` — **A BUILT CONSOLE, SERVED FROM A FOLDER, BESIDE THE BRIDGE** (`--console-dir`).
  *
- * CG Control's desktop window loads the console from HERE rather than from files bundled inside
- * the shell, for the two reasons ADR 0011 records — both of which hold with no console change:
+ * `CENTRAL-BRIDGE-01` — no longer CG Control's: the app bundles its console now and connects to CG
+ * Bridge on the Playout machine, and CG Bridge the service starts no console listener. What is left
+ * is a convenience for a station run from a checkout — `pnpm dev:station`'s stub page and its own
+ * readiness probe (`/__cg/health`, matched by pid), and the e2e specs that serve the built `dist`
+ * next to a real bridge. A console served here derives its bridge from the page's host
+ * (`bridgeUrlFor`), so a page from `http://127.0.0.1:<port>` finds `ws://127.0.0.1:5280`.
  *
- *   1. the console derives its bridge address from the host that served the page
- *      (`bridgeUrlFor`), so a page from `http://127.0.0.1:5174` finds `ws://127.0.0.1:5280`. A
- *      page served from `tauri.localhost` would derive `ws://tauri.localhost:5280`, which is
- *      nothing;
- *   2. the console's origin is ONE fixed string on every install, `http://127.0.0.1:5174`, so a
- *      client Playout's CORS list needs that one entry and nothing site-specific.
+ * ⚠ **NO PROGRAMME RETURN HERE.** It has ONE door, the control port's `/pgm/<n>?ticket=…`, opened by
+ * a ticket a console's verified socket was given for that channel (`http-tickets.ts`). This listener
+ * relayed it untokened to loopback peers until then — a second door beside the first.
  *
  * 🔴 **ITS OWN LISTENER — NEVER THE TEMPLATE ORIGIN.** ADR 0010 rule 13 makes the template server
  * on 7911 a security boundary whose route set is pinned by `template-server-route-set.test.ts`;
@@ -23,63 +24,39 @@ import { PGM_RETURN_PATH_PREFIX } from '@cg/shared-ipc';
  * to the template or control port rather than letting two servers race for one.
  *
  * Loopback, GET/HEAD only. Four answers, from a table in the template server's own idiom:
- *   - `GET /__cg/health` — the identity the desktop shell reads to tell its own leftover bridge
- *     from a stranger holding the port;
- *   - `GET /pgm/<channel>` — `C-016`'s programme return, relayed by the bridge (`pgm-return.ts`),
- *     to LOOPBACK clients only — refused `403` to any other peer, whatever the bind;
+ *   - `GET /__cg/health` — the identity a launcher reads to tell ITS bridge from a stranger holding
+ *     the port;
+ *   - `/pgm/…` — `404`, never the page: the programme return is not here (above), and a door that
+ *     is gone answers as one;
  *   - a file under the served directory;
  *   - `index.html` for any other path that names no file extension (the SPA fallback). A path
  *     WITH an extension that names no file is a 404: answering a missing asset with HTML turns a
  *     broken build into a MIME error nobody can read.
  */
 
-/** The port the desktop shell opens its window on. Fixed, because it IS the console's origin. */
+/** The console's port when `--console-port` is not given (the dev station passes its own). */
 export const CONSOLE_DEFAULT_PORT = 5174;
 
 /** The identity route. Not under `/api`: the console calls no API here, and never will. */
 export const CONSOLE_HEALTH_PATH = '/__cg/health';
 
-/** What the health route calls this process — the shell's test for "this is a bridge". */
+/** What the health route calls this process — a launcher's test for "this is a bridge". */
 export const CONSOLE_HEALTH_APP = 'cg-caspar-bridge';
 
 export interface ConsoleHealth {
   readonly app: typeof CONSOLE_HEALTH_APP;
   readonly pid: number;
-  /**
-   * The executable running this bridge. The desktop shell compares it with its own sidecar
-   * before stopping a leftover: a bridge started by hand from a checkout holds the same ports
-   * and is not the shell's to kill.
-   */
+  /** The executable running this bridge — which process answered, for the one who started it. */
   readonly execPath: string;
-}
-
-/** What the console server hands a `/pgm/<channel>` request to — the bridge's relay. */
-export interface PgmRelayRoute {
-  serve(req: http.IncomingMessage, res: http.ServerResponse, channel: number): void;
 }
 
 export interface ConsoleServeOptions {
   /** The built console — the Runtime's `dist`, with `index.html` at its root. */
   readonly dir: string;
-  /** `0` = ephemeral (tests). The product always passes {@link CONSOLE_DEFAULT_PORT}. */
+  /** `0` = ephemeral (tests). */
   readonly port: number;
-  /** Bind host. Loopback by default and by intent: the console's origin is `127.0.0.1`. */
+  /** Bind host. Loopback by default and by intent. */
   readonly host?: string;
-  /** `C-016` — the programme return relay. Absent: `/pgm/<n>` is a 404. */
-  readonly pgmRelay?: PgmRelayRoute;
-}
-
-/** `/pgm/<channel>`, a 1-based channel with no leading zero; anything else is not the route. */
-const PGM_ROUTE = new RegExp(`^${PGM_RETURN_PATH_PREFIX}([1-9]\\d{0,3})$`);
-
-/**
- * Is this peer on THIS machine? The socket's own address, never a header: IPv4 loopback
- * (`127.0.0.0/8`), IPv6 `::1`, and IPv4 loopback mapped into IPv6.
- */
-export function isLoopbackPeer(address: string | undefined): boolean {
-  if (address === undefined) return false;
-  const bare = address.startsWith('::ffff:') ? address.slice('::ffff:'.length) : address;
-  return bare === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare);
 }
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
@@ -136,7 +113,6 @@ export class ConsoleHttpServer {
   #port = 0;
   #host = '127.0.0.1';
   #root = '';
-  #pgmRelay: PgmRelayRoute | null = null;
   readonly #sockets = new Set<net.Socket>();
 
   /** Start listening. Throws when the directory holds no console, or the port is taken. */
@@ -148,7 +124,6 @@ export class ConsoleHttpServer {
     }
     this.#root = root;
     this.#host = options.host ?? '127.0.0.1';
-    this.#pgmRelay = options.pgmRelay ?? null;
     const server = http.createServer((req, res) => {
       this.#handle(req, res);
     });
@@ -189,8 +164,9 @@ export class ConsoleHttpServer {
       res.end(method === 'HEAD' ? undefined : JSON.stringify(health));
       return;
     }
+    // `CENTRAL-BRIDGE-01` (D9) — the programme return's one door is the control port's, ticketed.
     if (urlPath.startsWith(PGM_RETURN_PATH_PREFIX)) {
-      this.#pgm(req, res, urlPath);
+      this.#notFound(res);
       return;
     }
     const resolved = resolveConsolePath(this.#root, urlPath);
@@ -208,26 +184,6 @@ export class ConsoleHttpServer {
       return;
     }
     this.#sendFile(res, path.join(this.#root, 'index.html'), method, false);
-  }
-
-  /**
-   * 🔴 `C-016` — the programme return, to THIS machine only. The listener already binds loopback;
-   * this is the second fence, and it reads the SOCKET's peer, so no bind, proxy or header can
-   * widen it. The feed itself is readable by the whole LAN at the Playout (its own rule, not
-   * ours); what this route adds — the relay's single upstream — is not.
-   */
-  #pgm(req: http.IncomingMessage, res: http.ServerResponse, urlPath: string): void {
-    if (!isLoopbackPeer(req.socket.remoteAddress)) {
-      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end('forbidden');
-      return;
-    }
-    const match = PGM_ROUTE.exec(urlPath);
-    if (this.#pgmRelay === null || match?.[1] === undefined) {
-      this.#notFound(res);
-      return;
-    }
-    this.#pgmRelay.serve(req, res, Number(match[1]));
   }
 
   #sendFile(res: http.ServerResponse, file: string, method: string, immutable: boolean): void {

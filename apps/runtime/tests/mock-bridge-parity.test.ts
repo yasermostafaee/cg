@@ -108,6 +108,8 @@ const BRIDGE_SURFACE: {
       'onSkewChanged',
       'versionMismatch',
       'onVersionMismatchChanged',
+      // `CENTRAL-BRIDGE-01` (D8) — where CG Bridge is, for the "not reachable" line.
+      'bridgeAddress',
     ],
     // `C-037`/`R-066` — the Playout sign-in. The mock reports `off` (test mode has no bridge
     // process and no Playout), so the shapes match while the ANSWERS differ, which is exactly
@@ -122,6 +124,9 @@ const BRIDGE_SURFACE: {
       'channelOccupancy',
       'canSetPlayoutAddress',
       'setPlayoutAddress',
+      // `CENTRAL-BRIDGE-01` (D8) — a separate server's CG Bridge address, and forgetting the station.
+      'bridgeOverride',
+      'forgetStation',
     ],
     // `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare.
     strays: ['list', 'onChanged', 'takeOffAir'],
@@ -300,7 +305,8 @@ const BRIDGE_SURFACE: {
       consumer, which is the only correct way to move a census.
     */
     // `FIELD-FIXES-01` G — and the log-folder door the native menu held until it was removed.
-    audit: ['recent', 'health', 'canOpenLogFolder', 'openLogFolder'],
+    // `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs are downloaded now; the folder is on another machine.
+    audit: ['recent', 'health', 'canDownloadLogs', 'downloadLogs'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     /**
      * R-022 — REHEARSE belongs in this guard for exactly the reason
