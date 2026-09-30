@@ -253,7 +253,9 @@
       there alone (control: loopback refuses), a console given the address signs in with a `127.0.0.1`
       grant, loads and takes; the core fetches the page from `http://<address>:<port>/template/…`
       (the mock's own GET resolves). The prompt's control for it — no address set, no bridge on the
-      Playout host → the "not reachable" line — is `playout-address-gate.spec`'s first test.
+      Playout host → the "not reachable" line — is `playout-address-gate.spec`'s first test. GREEN in CI
+      on `01ec3826`, which carries `801a402f`: https://github.com/yasermostafaee/cg/actions/runs/36726044762
+      (the `ci` job's `Test` and the `E2E` step both RAN).
 
 ## 5A. Delta `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` (`PLAYOUT-CG-RESPONSE-LICENSE-v1` §2, §8, §9)
 
@@ -470,7 +472,10 @@
       Tests: `station-plan` (the flags and each misuse; what it prints), `local-caspar-station` (the port
       asked for is the fake's, and it answers there — control: none asked, another). Spec:
       `platform-dev-station` ADDED. Not run on the dev host: it reads the core on 5250, which is the
-      owner's.
+      owner's. GREEN in CI on `3899b914`: https://github.com/yasermostafaee/cg/actions/runs/36728454884
+      (the `ci` job and the `E2E` step both RAN — the Runtime suite 314 passed, the Designer's 293) and
+      https://github.com/yasermostafaee/cg/actions/runs/36728455024 (installers and both clean-Windows
+      smokes).
 - **The Linux e2e for 6.5–8.1 WENT RED** on `c7509207`:
   https://github.com/yasermostafaee/cg/actions/runs/36719814205 — the `E2E` step RAN and failed (6
   failed, 1 flaky, 303 passed); the `ci` job was green. Two causes, both in test code, both fixed in
@@ -482,8 +487,14 @@
   `playout-auth-reload` failed `ENOTEMPTY` in teardown: they sent `SIGINT` and removed the bridge's
   folder at once, while a graceful Linux stop flushes `bridge-stack.json` into it (a Windows child has no
   `SIGINT` — Node ends it outright, so it never showed locally). One helper now stops a spawned bridge
-  and waits for its exit, bounded (`fixtures/child-process.ts`), in all six specs that spawn one. The
-  discharge is owed by the next run.
+  and waits for its exit, bounded (`fixtures/child-process.ts`), in all six specs that spawn one.
+  **DISCHARGED** on `01ec3826` (carries `801a402f` too):
+  https://github.com/yasermostafaee/cg/actions/runs/36726044762 — `completed`/`success`; the `E2E` step
+  RAN (the Runtime suite 314 passed and 2 skipped — `guide-shots`, which runs only with
+  `CG_GUIDE_SHOTS` —, the Designer's 293), with `first-run.spec`'s five tests, `plate-band`,
+  `playout-authz`, `playout-auth-reload` and `channel-air` all run on Linux; the `ci` job's `Test` ran
+  green. Its Desktop run: https://github.com/yasermostafaee/cg/actions/runs/36726044614 (installers
+  and both clean-Windows smokes, `success`).
 
 ## 9. Release `0.10.0` (`P-061`)
 
@@ -506,10 +517,22 @@
 - [x] 9.4 `P-031`'s floor at `0.10.0`. `docs/prd/platform.md`: the floor SET at `0.10.0` — what it opens
       and must keep opening (the two formats, CG Bridge's STRICT configuration and its station files,
       the one-time `0.9.x` import, CG Control's station record, `major.minor` protocol compatibility).
-- [ ] 9.5 Tag `v0.10.0` → the draft, its files and sizes read back.
+- [x] 9.5 Tag `v0.10.0` → the draft, its files and sizes read back. The annotated tag `v0.10.0` on
+      `3899b914` (after that commit's own runs were green) ran
+      https://github.com/yasermostafaee/cg/actions/runs/36732476610 — `completed`/`success`: the
+      installers, both clean-Windows smokes, and `Draft release (tag only)` with its `Read the draft back`
+      and `Check SHA256SUMS.txt against the uploaded assets` steps. Read back with `gh release view`: a
+      DRAFT pre-release, "APASAI CG 0.10.0 (test build)",
+      https://github.com/yasermostafaee/cg/releases/tag/untagged-2990fc6531a7848832e4 (a draft's own
+      address until it is published), holding exactly five files — `CG-Bridge_0.10.0_x64-setup.exe`
+      23,619,725 bytes; `CG-Control_0.10.0_x64-setup.exe` 217,691,623 (0.9.1's was 240,555,030 — the
+      bridge payload left it); `CG-Designer_0.10.0_x64-setup.exe` 226,306,691;
+      `APASAI-CG-0.10.0-install-guide-fa.pdf` 213,755; `SHA256SUMS.txt` 398. The guide and CG Bridge's
+      installer were downloaded again here and match their lines in `SHA256SUMS.txt`.
 
 ## 10. For the Playout team, and the report
 
 - [x] 10.1 `docs/integration/playout/CG-BRIDGE-FOR-PLAYOUT.md`, copied to `Claude outputs/` (the copy
       re-made byte for byte after each edit).
-- [ ] 10.2 `Claude outputs/REPORT-CENTRAL-BRIDGE-01-v3-<date>.md`.
+- [x] 10.2 `Claude outputs/REPORT-CENTRAL-BRIDGE-01-v3-2026-09-30.md` (untracked, as `Claude outputs/`
+      always is).

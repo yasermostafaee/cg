@@ -3818,8 +3818,12 @@ where they should.
 `release-files.mjs` names five files; the guide `docs/release/0.10.0/install-guide.fa.md` (nine
 sections, picture 1 the new Playout-address question); the floor set in [[P-031]]. The smokes are
 written (`bridge-smoke`, and the apps' smoke on the v3 model) — their first run found three installer
-defects, fixed in `5530536a`. **Owed:** both smokes green on CI, then the `v0.10.0` tag and the draft
-read back (`central-bridge` tasks 9.3, 9.5).
+defects, fixed in `5530536a`. ~~**Owed:** both smokes green on CI, then the `v0.10.0` tag and the draft
+read back (`central-bridge` tasks 9.3, 9.5).~~ **Done 2026-09-30:** both smokes green (from run
+36719814207 on); the tag `v0.10.0` on `3899b914` ran green (run 36732476610) and opened the DRAFT
+pre-release "APASAI CG 0.10.0 (test build)" with exactly the five files, its `SHA256SUMS.txt` checked
+against what was uploaded (`central-bridge` 9.5 has the sizes and the address). **Still owed:** the
+hardware run on `.111` and the owner's own-PC run; the owner publishes the draft.
 
 ## [ ] P-062 — TLS for the console ↔ CG Bridge connection ⟨priority: low⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §B · filed only
 

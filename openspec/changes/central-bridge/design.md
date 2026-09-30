@@ -95,7 +95,8 @@ downloaded at install time; its MIT licence ships beside it.
 
 - **Stop is graceful:** Shawl's Ctrl+C reaches Node as `SIGINT`; the bridge's CLI handles `SIGINT` and
   `SIGBREAK` exactly as its stdin-lifeline shutdown (it persists every store as it goes, so a kill loses
-  nothing written). `--stop-timeout 15000` fits the ~20 s a service gets at OS shutdown.
+  nothing written). `--stop-timeout 10000` (as built — the draft said 15000) sits well inside the ~20 s a
+  service gets at OS shutdown.
 - **Recovery:** `sc.exe failure CGBridge reset= 86400 actions= restart/5000/restart/5000/restart/30000`
   and `sc.exe failureflag CGBridge 1` (a stop with a non-zero exit code counts as a failure). Shawl runs
   with `--no-restart`, so a crashed bridge ends the service with its exit code and the SCM restarts it.
