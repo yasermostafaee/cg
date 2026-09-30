@@ -6,51 +6,6 @@ TBD - created by archiving change desktop-apps. Update Purpose after archive.
 
 ## Requirements
 
-### Requirement: CI builds two Windows installers
-
-The project SHALL build, on `windows-latest`, an NSIS installer for CG Control (per-machine) and one
-for CG Designer (per-user, no administrator), and SHALL install and drive both on a second, clean
-runner.
-
-#### Scenario: Both installers are produced
-
-- **WHEN** the desktop workflow runs **THEN** both installers are uploaded as artifacts
-
-### Requirement: CG Control starts its bridge and loads the console from it
-
-CG Control SHALL start its bridge sidecar with every path under the user's own data folder, wait
-until the bridge answers on `http://127.0.0.1:5174`, and then load the console from it. Until then
-it SHALL show the console's own splash — ONE design from one source: the starting page SHALL be
-composed at staging from the built console's `index.html` (its title, the splash's CSS and the
-splash markup, byte for byte, build stamp included) and SHALL take none of that splash's clock. While
-it waits, the splash's phase slot SHALL say what the window is waiting for; on failure the splash
-SHALL show, inside itself, the sentence, who holds each port and the log's path, with its progress
-hidden. When the console replaces the starting page inside CG Control, the console's splash SHALL
-continue the one on screen — its entrance already over — while in a browser it SHALL make its
-entrance as before.
-
-#### Scenario: The installed sidecar answers
-
-- **WHEN** CG Control starts **THEN** the bridge answering is the installed `cg-bridge.exe` **AND**
-  the window loads the console from `http://127.0.0.1:5174`
-
-#### Scenario: One splash from launch to ready
-
-- **WHEN** CG Control starts **THEN** the window shows the console's splash, its phase reading
-  `STARTING BRIDGE`, and the console's splash then continues it with no entrance replayed
-- **WHEN** the bridge cannot be started **THEN** the sentence, the port holders and the log's path
-  appear inside that splash
-- **WHEN** the console is opened in a browser **THEN** its splash makes its entrance as before
-
-### Requirement: CG Control leaves no bridge behind
-
-CG Control SHALL stop its bridge when it closes, and a killed CG Control SHALL leave no bridge
-running; a leftover bridge of this install found at start SHALL be stopped and started fresh.
-
-#### Scenario: Close and kill
-
-- **WHEN** CG Control is closed or killed **THEN** no `cg-bridge.exe` is left running
-
 ### Requirement: CG Control runs one instance
 
 CG Control SHALL run a single instance; a second launch SHALL focus the open window.
@@ -58,27 +13,6 @@ CG Control SHALL run a single instance; a second launch SHALL focus the open win
 #### Scenario: A second launch
 
 - **WHEN** CG Control is launched again **THEN** one instance remains
-
-### Requirement: The CG Control installer opens exactly the ports CasparCG needs
-
-The CG Control installer SHALL add inbound firewall rules for UDP 6250 and TCP 7911 scoped to the
-bridge sidecar's own path, and the uninstaller SHALL remove them.
-
-#### Scenario: Install and uninstall
-
-- **WHEN** CG Control is installed **THEN** both rules exist for `cg-bridge.exe` **AND WHEN** it is
-  uninstalled **THEN** neither exists
-
-### Requirement: The Playout address is written only by CG Control
-
-The Playout target SHALL be written only by CG Control's own command, callable from the console the
-bridge serves in CG Control's window, through the bridge CLI's one-shot writer — never over the
-control socket.
-
-#### Scenario: The door
-
-- **WHEN** the console in CG Control sets the Playout address **THEN** the playout config holds the
-  normalised address and no issuer **AND** the bridge restarts with it in force
 
 ### Requirement: The installers need no internet
 
@@ -120,21 +54,12 @@ installers' names and every state or log folder SHALL be unchanged.
 - **WHEN** CG Control's header or CG Designer's landing page renders
 - **THEN** neither shows an in-app brand, and the header still shows the channel strip
 
-### Requirement: CG Control's log folder SHALL be reachable from its console
-
-The log folder (`bridge.log` and `amcp.log`) SHALL open from the audit log's `Open log folder`, inside
-CG Control only, through the shell's own command; a console in a browser SHALL show no such control.
-
-#### Scenario: Inside CG Control and in a browser
-
-- **WHEN** the audit log opens inside CG Control
-- **THEN** `Open log folder` is offered and opens it; in a browser the control is absent
-
 ### Requirement: Each installed app's window SHALL paint its splash's ground before any page does
 
 CG Control's and CG Designer's windows SHALL declare, as their window and webview background, the
-ground of the app's own splash, so that no white frame shows before the first page paints or, in CG
-Control, while the starting page gives way to the console.
+ground of the app's own splash, so that no white frame shows before the first page paints.
+`CENTRAL-BRIDGE-01`: CG Control's window shows its bundled console first — no starting page gives way
+to it any more — so its splash makes its entrance there as in a browser.
 
 #### Scenario: No white frame
 
@@ -173,10 +98,116 @@ GitHub's own digest of that asset when it reports one. Any mismatch SHALL fail t
 
 #### Scenario: The names match
 
-- **WHEN** `v<version>` is released **THEN** each line of `SHA256SUMS.txt` names one of the three other
-  assets exactly, with its hash
+- **WHEN** `v<version>` is released **THEN** each line of `SHA256SUMS.txt` names one of the four other
+  assets exactly (`CENTRAL-BRIDGE-01`: CG Bridge's installer, the two apps', the guide), with its hash
 
 #### Scenario: A wrong name fails
 
 - **WHEN** a line names a file the release does not hold (for example `CG Control_<v>_x64-setup.exe`,
   with a space) **THEN** the check fails, naming the line
+
+### Requirement: CI SHALL build three Windows installers, and drive them on clean runners
+
+The project SHALL build, on `windows-latest`, an NSIS installer for CG Bridge (per machine: the service
+every console connects to), one for CG Control (per user, no administrator: a console with no bridge
+and no port) and one for CG Designer (per user, no administrator), and SHALL drive them on clean runners
+that built nothing: CG Bridge's own lifecycle on one, and the two apps against an installed CG Bridge on
+another. `CENTRAL-BRIDGE-01` §1 A, C, E.
+
+#### Scenario: Three installers are produced
+
+- **WHEN** the desktop workflow runs **THEN** the three installers are uploaded as artifacts, each named
+  for the release
+
+#### Scenario: The apps are driven against CG Bridge
+
+- **WHEN** the apps' smoke runs **THEN** CG Bridge is installed first, CG Control is installed without
+  administrator rights, and it connects to CG Bridge on the Playout's host
+
+### Requirement: CG Bridge SHALL install as an automatic Windows service that depends on nothing
+
+CG Bridge's installer SHALL register the service `CGBridge` (display name `CG Bridge`) under its own
+account, starting automatically, restarted by Windows on failure, with NO service dependency (the Playout
+team's rule 1: never on `ApasaiEngine`). A stop by an administrator SHALL stay a stop: recovery answers a
+failure only. Its state SHALL live in `%ProgramData%\CG Bridge\`, which no ordinary user may read (it
+holds the bridge's Playout session). A silent install (`/S`) SHALL take each value it is given WHOLE —
+`/PLAYOUT=http://host:8080` included — a value running to the next space, and a quoted one holding one.
+An upgrade SHALL stop and start the service itself and keep the configuration; the uninstaller SHALL
+remove the service, its three firewall rules and its program files and keep the data folder, and, given
+`_?=<folder>` as its last, unquoted argument, SHALL finish before it exits so its exit code is the
+uninstall's. Exit codes: 0 done, 1 cancelled, 2 failed.
+
+#### Scenario: A silent install on a clean Windows
+
+- **WHEN** `CG-Bridge_<v>_x64-setup.exe /S /PLAYOUT=http://127.0.0.1:59999` runs **THEN** it exits 0 **AND**
+  the service runs, starts automatically, runs as `NT SERVICE\CGBridge`, depends on nothing and is
+  restarted on failure **AND** `/health` names the Playout `http://127.0.0.1:59999` whole
+
+#### Scenario: A stop stays a stop; a crash does not
+
+- **WHEN** an administrator stops the service **THEN** it is still stopped after the first restart delay
+- **WHEN** the bridge's process is killed **THEN** Windows starts it again (a new `startedAt`)
+
+#### Scenario: Upgrade and uninstall
+
+- **WHEN** the same installer runs again with `/S` **THEN** it exits 0, the configuration is kept and the
+  service runs again
+- **WHEN** `uninstall.exe /S _?=<folder>` runs **THEN** it exits 0 only once the service, the rules and
+  the program files are gone, and the data folder is kept
+
+### Requirement: CG Bridge's installer SHALL open exactly its own ports, and CG Control's none
+
+CG Bridge's installer SHALL add three inbound rules, named as ours (`CG Bridge - consoles`, `CG Bridge -
+template pages`, `CG Bridge - OSC from CasparCG`), each scoped to the installed `cg-bridge.exe`, on the
+ports in force (TCP control, TCP templates, UDP OSC and OSC + 1) — never UDP 6250, the Playout engine's —
+and its uninstaller SHALL remove only those. CG Control's installer SHALL add no firewall rule.
+
+#### Scenario: The rules, by their fields
+
+- **WHEN** CG Bridge is installed **THEN** each rule is one rule, enabled, inbound, allowing, on every
+  profile, for its protocol and port, for `cg-bridge.exe` alone **AND** nothing binds UDP 6250
+
+#### Scenario: CG Control opens nothing
+
+- **WHEN** CG Control is installed and running **THEN** no firewall rule is named for it — control: CG
+  Bridge's three are listed by the same read
+
+### Requirement: CG Control SHALL ask where the Playout is before it connects anywhere
+
+CG Control SHALL load its own bundled console (`http://tauri.localhost`) and SHALL find CG Bridge on the
+Playout's host, port 5280, or at a separate server's address this console was given. With no station
+record it SHALL show ONE question — the Playout's address, and CG Bridge's for a separate server — and
+connect nowhere until it is answered; the answer SHALL be saved in this console's station record
+(`cg.runtime.station.v1`), never over the control socket and never as CG Bridge's configuration. A
+station admin SHALL be able to change both addresses in Station setup. When the console cannot reach
+the CG Bridge it names, it SHALL say where it looked and why nothing answered, and inside CG Control it
+SHALL offer `Set up again`, which forgets this console's station and asks again.
+
+#### Scenario: The first question
+
+- **WHEN** CG Control opens with no station record **THEN** it asks for the Playout's address and opens
+  no socket — control: given `192.0.2.20` it dials `ws://192.0.2.20:5280` and saves
+  `http://192.0.2.20:8080`
+
+#### Scenario: A separate server
+
+- **WHEN** a CG Bridge address `192.0.2.30:5281` is given beside the Playout's **THEN** the console dials
+  `ws://192.0.2.30:5281` and never the Playout's host
+
+#### Scenario: The way back
+
+- **WHEN** CG Bridge is not reachable at the address **THEN** the line names it —
+  `CG Bridge not reachable at <host>:<port>` — with the reason **AND** `Set up again` forgets the record
+  and shows the question — in a browser there is no such control
+
+### Requirement: CG Bridge's logs SHALL be downloadable as one zip by a station admin
+
+The audit log SHALL offer `Download logs` to a station admin (or where auth is off) while the console is
+connected; it SHALL save every file under CG Bridge's `logs\` folder as one zip, opened by a one-use
+ticket the admin's socket was given. A console with no connection, or signed in without station-admin,
+SHALL show no such control.
+
+#### Scenario: An admin downloads the logs
+
+- **WHEN** a station admin presses `Download logs` **THEN** one zip of CG Bridge's logs is saved — control:
+  an operator is offered no such control

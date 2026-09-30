@@ -3791,7 +3791,7 @@ the line). The `0.9.1` guide adds the one-CG-Control-per-channel limit and Help 
 is left open — `CENTRAL-BRIDGE-01` sets it at `0.10.0` (the owner, 2026-09-30). The draft itself is read
 back in the change's `tasks.md` (5.4).
 
-## [~] P-061 — Release `0.10.0`: three installers — CG Bridge, CG Control, CG Designer ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §E · `openspec/changes/central-bridge/` · `0.9.1` is never delivered
+## [x] P-061 — Release `0.10.0`: three installers — CG Bridge, CG Control, CG Designer ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §E · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · `0.9.1` is never delivered · the draft `v0.10.0` opened (the owner publishes) · owed: the `.111` run
 
 **What.** One version, `0.10.0`, for CG Bridge, CG Control and CG Designer, through `tools/release`, now
 covering three apps. A `v0.10.0` tag builds all three installers, runs the clean-Windows smoke, and opens a

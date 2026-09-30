@@ -2868,7 +2868,7 @@ narrow seam exemption — our own stray, on an operator's request; a holder move
 leaves the row saying it waits, until a re-take. Detail: `openspec/changes/route-plates/design.md`,
 last section.
 
-## [~] C-046 — OSC by `OSC SUBSCRIBE` on the bridge's own port, never `6250` ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 7 · `openspec/changes/central-bridge/`
+## [x] C-046 — OSC by `OSC SUBSCRIBE` on the bridge's own port, never `6250` ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 7 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · owed: the `.111` run (whether the Playout's apasai-core fork keeps the command)
 
 **What.** On the Playout machine UDP `6250` belongs to the engine — it takes the core's OSC on
 `127.0.0.1:6250` for its audio meters, genlock and no-picture detection — so a bridge that shares the machine cannot
@@ -2885,14 +2885,14 @@ session goes on. **Upstream (`v2.5.0-stable`, commit `69e8ad5`):** `AMCPCommands
 `<the connection's remote IPv4>:<port>`, keeps it on the connection under `osc-sub-<port>` and answers
 `202 OSC SUBSCRIBE OK` (`403 OSC SUBSCRIBE BAD PORT` for a port that is not a number); the core's default
 per-client subscription (`server.cpp` `setup_osc`, 306–342) is what sent to `<client>:6250`. Detail:
-`openspec/changes/central-bridge/design.md` §0.8. **Filed alongside:** [[B-295]] (a port the session
+`openspec/changes/archive/2026-09-30-central-bridge/design.md` §0.8. **Filed alongside:** [[B-295]] (a port the session
 could not bind kept AMCP down). **Acceptance:** WHEN another process holds the core's default OSC port
 THEN the bridge binds its own, subscribes, and hears the core (control: the holder still receives);
 WHEN the core drops the connection THEN a second `OSC SUBSCRIBE` is sent on the new one; WHEN a config,
 flag or field names `6250` THEN it is refused with the sentence and nothing binds `6250`; WHEN OSC reports
 a channel the station does not declare THEN no tap sees it (control: a declared channel's report arrives).
 
-## [~] C-047 — A core restart, and the ledger checked against CasparCG at start ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rules 2 and 3 · `openspec/changes/central-bridge/`
+## [x] C-047 — A core restart, and the ledger checked against CasparCG at start ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rules 2 and 3 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **What.** On the Playout machine the core accepts AMCP 2–6 s after the engine starts, and **every core
 restart clears every layer, 50–99 included** — a crash, «ریستِ پلی‌اوت», or a restart or upgrade of the
@@ -2913,7 +2913,7 @@ reconnects, re-subscribes and shows the restart notice, and nothing is re-sent w
 WHEN the bridge restarts with a ledger entry whose layer the core has since emptied THEN the entry is off
 air with the notice (control: an entry whose layer still plays stays ON AIR).
 
-## [~] C-048 — A take on an unlicensed channel is refused, with the reason ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 11 · `openspec/changes/central-bridge/`
+## [x] C-048 — A take on an unlicensed channel is refused, with the reason ⟨priority: high⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3), rule 11 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **What.** A channel whose D4 `playlist` is `unlicensed` is **cleared entirely every 60 s by the Playout**
 (`V13-INSTALL`; the backup channel, numbered highest, is the first to become unlicensed). The console

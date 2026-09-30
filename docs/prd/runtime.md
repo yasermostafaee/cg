@@ -4022,7 +4022,7 @@ contradicting. — Depends on [[C-037]] and [[C-038]]. Cross-refs [[R-062]], [[C
   control on the same regex for `R-065` which returned `runtime.md:3830`. The registry's dated
   pointer independently reads `R-066`.
 
-## [~] R-067 — The bridge as a Windows service that survives CG Control closing ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3) as **CG Bridge**, `openspec/changes/central-bridge/`
+## [x] R-067 — The bridge as a Windows service that survives CG Control closing ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3) as **CG Bridge** · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · owed: the `.111` run
 
 **What.** Run CG Control's bridge as a service, so closing the window or logging off does not stop
 control. **Why.** Today closing CG Control stops the bridge: air keeps playing (CasparCG holds it)
@@ -4037,7 +4037,7 @@ automatic start, restart on failure, no service dependency on `ApasaiEngine`, st
 page reads. CG Control no longer starts a bridge ([[R-068]]). The service's acceptance is the change's
 spec (`desktop-delivery`, `runtime-caspar-bridge`).
 
-## [~] R-068 — One CG Control per channel ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3): one bridge per Playout, every CG Control a console of it, `openspec/changes/central-bridge/`
+## [x] R-068 — One CG Control per channel ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4 · → built by `CENTRAL-BRIDGE-01` (v3): one bridge per Playout, every CG Control a console of it · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`) · owed: the `.111` run
 
 **What.** Two CG Control installs driving the same channel run two bridges with two live-layer
 ledgers, and neither knows of the other. **Why.** Recorded, not solved: the install-time rule

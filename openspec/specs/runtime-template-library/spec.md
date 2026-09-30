@@ -22,12 +22,12 @@ alone. A template whose fields live only inside a nested composition (the D-119 
 shape: a graphic composition nested in a full-frame positioning composition) SHALL
 therefore present those fields to the operator, not an empty form.
 
-Registration SHALL be a **local, browser-side** operation that does NOT require the
-SPA↔bridge link. Verify, unpack, single-file HTML export, and registering the template in
-the browser-local library are all local work; none of them commands CasparCG. Import
-SHALL therefore succeed with the bridge process fully unreachable — the imported template
-SHALL appear in the Library and be listed by `templates.list` immediately, and the
-operator SHALL NOT see a "Bridge disconnected — command rejected" refusal for an import.
+Verify, unpack and the single-file HTML export are local work in the browser; none of them
+commands CasparCG. **Registration is CG Bridge's** (`CENTRAL-BRIDGE-01`, `B-294`): the bridge
+keeps the library for every console, so an import SHALL reach it or not happen. With CG Bridge
+unreachable the import SHALL be refused with a sentence that says nothing was imported and to
+import it again once CG Bridge is back — never registered in this console alone to be delivered
+later.
 
 #### Scenario: A verified `.vcg` is registered
 
@@ -57,13 +57,11 @@ operator SHALL NOT see a "Bridge disconnected — command rejected" refusal for 
   as a NESTED value object keyed by the composition instance's stable name, and the
   `stack.load` / `stack.update` payload carries that same nested shape unchanged
 
-#### Scenario: Import succeeds while the bridge is unreachable
+#### Scenario: An import while CG Bridge is unreachable is refused
 
 - **WHEN** the operator imports a valid `.vcg` while the SPA↔bridge WebSocket is down
-  **THEN** the template is verified, unpacked, exported, and registered in the
-  browser-local library, appears in the Library and in `templates.list`, and NO
-  "Bridge disconnected — command rejected" error is shown — nothing was sent to CasparCG
-  because a local registration sends nothing to CasparCG
+  **THEN** the import is refused with a sentence that says nothing was imported, the Library
+  is unchanged, and nothing is queued for later
 
 ### Requirement: The operator Inspector edits structured list fields without coercion
 
@@ -287,123 +285,6 @@ it by joining `templateId` against the registry.
   the registry lookup, and the served template URL all still key on `templateId` — the label
   reaches no AMCP command argument and no lookup key
 
-### Requirement: The template library is browser-local and survives disconnect and reload
-
-The Runtime template library SHALL be owned by **browser-local, file-based storage**
-(`@cg/storage`), not by the bridge process, for the live backend. `templates.list`,
-`templates.get`, `templates.import`, and `templates.remove` SHALL be served from this
-local store and SHALL NOT be refused because the SPA↔bridge WebSocket is down — none of
-these operations commands CasparCG.
-
-The local library SHALL **persist** each registered template's metadata (`TemplateInfo`)
-and its produced self-contained HTML, keyed by `templateId`, so the library survives a
-page reload: a template imported in a previous session SHALL still be listed, displayed,
-inspectable, and removable after reload, with the bridge fully down.
-
-The library SHALL **survive a mid-session disconnect** without emptying: a disconnect
-SHALL NOT clear the displayed library, and the library SHALL NOT require the link to
-repopulate.
-
-The transport guard that refuses commands while the link is down SHALL continue to refuse
-the on-air channels (`stack.take` / `update` / `out` / `setPosition` / `load` /
-`clearAll` / `removeAll`) — the narrowing applies ONLY to the library/registry channels,
-which no longer round-trip the bridge to succeed.
-
-#### Scenario: The library survives a mid-session disconnect
-
-- **WHEN** the SPA↔bridge WebSocket drops while the Library holds templates **THEN** the
-  Library keeps showing them, and `templates.list` keeps returning them
-
-#### Scenario: The library survives a page reload
-
-- **WHEN** the operator reloads the page after importing templates **THEN** the Library
-  re-displays those templates from local storage, even with the bridge process down
-
-#### Scenario: Registry channels are not refused while the link is down
-
-- **WHEN** the link is `disconnected` and the operator lists, inspects, imports, or removes
-  a template **THEN** the operation is served from local state and is NOT rejected, while an
-  on-air command (Take / Update / Out) issued in the same state is STILL refused
-
-### Requirement: The bridge is reconciled to the local library on connect
-
-On every (re)connection of the SPA↔bridge WebSocket, the Runtime SHALL deliver the browser-local
-library's templates (each template's metadata + produced HTML) to the bridge so the bridge can serve
-them to CasparCG when an on-air command later needs them. This reconciliation SHALL generalize the
-existing reconnect re-delivery: the local library is the retention set, and its entries are delivered
-BEFORE the stack/health/lock snapshot re-pull (single-socket FIFO ordering), so a load issued right
-after reconnect resolves against a populated bridge registry.
-
-`CHANNEL-TEMPLATES-01` — the local library SHALL record the CHANNEL each template was imported on, and
-each record SHALL be re-delivered to that channel only. A record written before the per-channel lists
-SHALL be re-delivered naming no channel, which the bridge SHALL read as "restore this if no channel lists
-it" and never as a replacement of a version a channel holds. A record for a channel the signed-in
-principal does not hold SHALL NOT be sent. A record written before the per-channel lists that a removal
-on ONE channel has acted on SHALL stay this browser's copy for every other channel (its offline list and
-its PVW page), hidden on the channel that removed it, and SHALL NOT be re-delivered after that.
-
-The conflict policy SHALL be **local-wins, per channel**: the browser library is the source of truth for
-the channel a record names, so reconciliation makes that channel's entry reflect it
-(delivering/overwriting that channel's copy with the local one). A template registered locally while
-disconnected SHALL be delivered to the bridge on the next connect without any operator action.
-
-A confirmed **removal** SHALL NOT be undone by reconciliation (the removed template is no longer in the
-local library for that channel, so it is not delivered there); a **refused** removal SHALL leave the
-template in the local library and therefore still delivered on reconnect.
-
-#### Scenario: A template imported offline is delivered on reconnect
-
-- **WHEN** a template is imported while the bridge is down and the link later comes up **THEN** the
-  runtime delivers that template (metadata + HTML) to the bridge without operator action, so a
-  subsequent on-air load of it resolves against a populated registry
-
-#### Scenario: Re-delivery precedes the snapshot re-pull
-
-- **WHEN** the link reconnects with a non-empty local library **THEN** every template re-delivery frame
-  is sent before the stack / health / lock snapshot pulls
-
-#### Scenario: A confirmed removal is not resurrected by reconcile
-
-- **WHEN** a template is removed (confirmed) and the link later reconnects **THEN** the removed template
-  is NOT re-delivered to the bridge, while every remaining template is
-
-#### Scenario: Each record returns to its own channel
-
-- **WHEN** a template was imported at one version on CH 1 and another on CH 2, and the bridge comes back
-  with an empty registry **THEN** reconnect re-delivers each version to its own channel, and neither
-  channel receives the other's
-
-#### Scenario: A removal on CH 2 leaves a pre-change record on CH 1
-
-- **WHEN** this browser's only copy of a template was written before the per-channel lists and the
-  template is removed from CH 2 **THEN** CH 2 no longer lists it, CH 1 still lists it offline and PVW
-  still has its page there, both survive a reload, and the record is not re-delivered on reconnect
-
-### Requirement: Removing a template is a local operation, refused only while referenced
-
-Removing a template from the library SHALL be served from the browser-local store and SHALL
-NOT be refused because the SPA↔bridge WebSocket is down. The **refuse-while-referenced**
-invariant (R-005) SHALL be preserved: a template SHALL NOT be removable while any stack item
-references it, regardless of that item's status.
-
-While the link is **live**, the bridge SHALL remain authoritative for the refusal (it holds
-the true stack); a confirmed removal SHALL also drop the template from the local store. While
-the link is **disconnected**, the refusal SHALL be evaluated against the last-known stack
-snapshot — which is exact, because the bridge is the sole mutator of the stack and cannot
-change it while unreachable — and an unreferenced template SHALL be removable offline.
-
-#### Scenario: An unreferenced template is removed offline
-
-- **WHEN** the operator removes a template that no stack item references while the bridge is
-  down **THEN** it disappears from the Library and from `templates.list`, with no
-  "Bridge disconnected" refusal
-
-#### Scenario: A referenced template is still refused offline
-
-- **WHEN** the operator removes a template that a (last-known) stack item references while the
-  bridge is down **THEN** the removal is refused with the referenced-count message and the
-  template stays in the library
-
 ### Requirement: Offline library reads degrade gracefully in the operator UI
 
 The operator UI readers of the template registry SHALL read local state and SHALL NOT empty,
@@ -589,3 +470,40 @@ version that channel imported.
 
 - **WHEN** the picker is opened from a row on CH n **THEN** each row's delete icon's accessible name is
   `Remove <name> from CH n`, and its confirm is titled `Remove “<name>” from CH n?`
+
+### Requirement: A console's template library is a display copy, and an import or a removal needs CG Bridge
+
+The template library SHALL be CG Bridge's: one persisted library per bridge, the same for every
+console connected to it (`CENTRAL-BRIDGE-01`, `B-294`). A console SHALL keep a DISPLAY copy in its
+own browser-local, file-based storage (`@cg/storage`), written only after the bridge accepted an
+import or a removal, so the Library, `templates.list`, `templates.get` and the offline stack's
+template names keep answering while CG Bridge cannot be reached and across a page reload. The
+display copy SHALL NEVER be sent to the bridge: no re-delivery on connect, no replay after a
+reconnect.
+
+An import and a removal SHALL need CG Bridge. With it unreachable the console SHALL refuse each
+with a sentence that says nothing was changed and what to do, and SHALL change neither the
+display copy nor anything queued — there is nothing queued. While live, the bridge's answer SHALL
+stand: a `templates.get` the bridge answers `null` is `null`, whatever the display copy holds. The
+on-air channels stay refused while the link is down, as before.
+
+#### Scenario: The Library stays visible while CG Bridge is down
+
+- **WHEN** the link drops, or the page reloads with CG Bridge down, while the Library holds
+  templates **THEN** the Library keeps showing them and `templates.list` keeps returning them, and
+  nothing is sent
+
+#### Scenario: An import or a removal while CG Bridge is down is refused
+
+- **WHEN** the operator imports or removes a template while CG Bridge cannot be reached **THEN**
+  the console refuses it with a sentence saying nothing was changed, and the Library is as it was
+
+#### Scenario: A connect delivers nothing
+
+- **WHEN** the console connects or reconnects holding templates in its display copy **THEN** it
+  sends no `templates.import` — control: the resync ran (it read the bridge's state)
+
+#### Scenario: A bridge restart keeps the library from the bridge's own store
+
+- **WHEN** CG Bridge restarts on its own files **THEN** every template is back before any console
+  connects — control: a bridge on an empty store gets nothing from a reconnecting console

@@ -12559,7 +12559,7 @@ made permanent, each case beside its declared-channel control.
 2 reaches the wire", on a station declaring channel 1 — and is inverted here; see [[B-257]]'s note.
 Cross-refs [[B-257]], [[C-038]], [[C-039]], [[R-062]].
 
-## [~] B-262 — The control socket accepts any Origin: a page in any browser on the CG Control machine can reach it ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` · → closed by `CENTRAL-BRIDGE-01` (v3) §B, `openspec/changes/central-bridge/`
+## [x] B-262 — The control socket accepts any Origin: a page in any browser on the CG Control machine can reach it ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` · → closed by `CENTRAL-BRIDGE-01` (v3) §B · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **Observed:** `new WebSocketServer({ host, port })` in `bridge.ts` has no `verifyClient`; the
 connection handler never reads the upgrade's `Origin`. With auth ON a page still needs a token to
@@ -12957,7 +12957,7 @@ clear `CG PLAY`ing the emptied layer (the bridge still recorded the producer as 
 foreign clear now forgets it, as the operator's own clear does — and the four live re-takes went back on
 air with `CG ADD`. Test: the re-take case in `media-plates.integration.test.ts` (red first).
 
-## [~] B-293 — A template's URL did not always change with its version, and its page carried no cache header ⟨priority: high — CasparCG's CEF keeps pages on disk⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0, rule 12 · `openspec/changes/central-bridge/`
+## [x] B-293 — A template's URL did not always change with its version, and its page carried no cache header ⟨priority: high — CasparCG's CEF keeps pages on disk⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0, rule 12 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **Found (§0, asked to confirm):** the Playout team's rule 12 says CEF caches template pages on disk, so a
 template's URL must change with its version and carry cache headers. The prompt expected
@@ -12972,7 +12972,7 @@ take sends in `CG ADD`** — the path segment gains `~<versionId>`; nothing else
 **Built (2026-09-30, closed in code; the Linux e2e is owed):** as specified — the 404 is `no-store` too, and
 `take-all-or-nothing`'s recorded take wire moved by exactly that one line.
 
-## [~] B-294 — Every console re-delivered its own copy of the stack and the template library on connect, and a stale copy could win ⟨priority: high — with two consoles on one bridge⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.2 · `openspec/changes/central-bridge/`
+## [x] B-294 — Every console re-delivered its own copy of the stack and the template library on connect, and a stale copy could win ⟨priority: high — with two consoles on one bridge⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.2 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **Found (§0.2):** the console kept two stores of shared truth in its own OPFS — the template library
 (`library/*.json`) and the retained stack (`stack/retained.json`) — and re-delivered both on every connect
@@ -12993,7 +12993,7 @@ standing bridge state (`stack.restore-report`, a push, a dismissal per channel).
 (`runtime-caspar-bridge`, `runtime-template-library`), with `runtime-retention-state` and
 `operator-surface` amended in place.
 
-## [~] B-295 — A failed OSC bind stopped the server's session before AMCP was ever dialled, and said nothing ⟨priority: high — on the Playout machine UDP 6250 is the engine's⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.1 · `openspec/changes/central-bridge/`
+## [x] B-295 — A failed OSC bind stopped the server's session before AMCP was ever dialled, and said nothing ⟨priority: high — on the Playout machine UDP 6250 is the engine's⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §0.1 · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **Found (§0.1):** `ServerSession.loop()` bound the OSC socket first and, on failure, emitted `error` and
 RETURNED — so a bridge whose OSC port was taken never dialled AMCP at all, and the only listener on that
@@ -13003,7 +13003,7 @@ is logged and the session dials AMCP anyway — OSC silence is a confirmation fa
 the command axis down (golden rule 8, [[B-101]]); the bind is retried on each reconnect cycle. With
 [[C-046]] the bridge never asks for 6250 at all.
 
-## [~] B-296 — The dev station's isolation test connected to this host's own CasparCG and bound a station port, on every gate ⟨priority: high — the dev host runs the owner's CasparCG⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) 8.1 · `openspec/changes/central-bridge/` · `ada038bf`
+## [x] B-296 — The dev station's isolation test connected to this host's own CasparCG and bound a station port, on every gate ⟨priority: high — the dev host runs the owner's CasparCG⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) 8.1 · `ada038bf` · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **Found (8.1):** `tools/dev-station/tests/isolation.test.ts` starts the REAL bridge with exactly
 `pnpm dev:station`'s arguments, to prove a dev run writes nothing outside its own folder. Its scratch state
@@ -13016,7 +13016,7 @@ dials no real core; re-measured, it held only its ephemeral listeners and nothin
 test also plants CG Bridge's `%ProgramData%` folder and proves it byte-identical afterwards. `bridgeArgs`
 is unchanged.
 
-## [~] B-297 — On a separate server, CG Bridge refused every explicit channel grant: a token's `127.0.0.1` never matched the Playout's network address ⟨priority: high — the separate server is a supported placement⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §5 · `openspec/changes/central-bridge/` (task 5.6)
+## [x] B-297 — On a separate server, CG Bridge refused every explicit channel grant: a token's `127.0.0.1` never matched the Playout's network address ⟨priority: high — the separate server is a supported placement⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §5 · `801a402f` (task 5.6) · archived 2026-09-30 (`openspec/changes/archive/2026-09-30-central-bridge`)
 
 **Found (§5, "Separate server"):** the prompt's own test, written as the placement really is — the fake
 Playout and its CasparCG on a network address, CG Bridge driving that address, an operator's token

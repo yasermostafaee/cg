@@ -128,7 +128,7 @@ behind the bridge, and the browser talks to nothing but the bridge for control.
    sign-in it checks this station's own Playout and nothing else, so the door cannot make the
    station a network probe for an unsigned caller. The one refusal names nothing it cannot know
    is involved: "…so that was refused and nothing was done". **Amended 2026-09-30
-   (`CENTRAL-BRIDGE-01`, `R-068`, `openspec/changes/central-bridge` D3): an expired or revoked
+   (`CENTRAL-BRIDGE-01`, `R-068`, `openspec/changes/archive/2026-09-30-central-bridge` D3): an expired or revoked
    token is treated like NONE — `read` routes no longer keep answering, and nothing is pushed.**
    One CG Bridge on the Playout machine serves consoles across the network, where the rule is "no
    valid token → no state, no command". The socket still stays open, the open doors stay open (the
