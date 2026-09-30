@@ -239,14 +239,37 @@ or after the Playout refused the saved token), so a station never loses its cata
 revocation list over the needs-admin line; the bridge's own bearer is always preferred
 (`PlayoutAuth.useOwnBearer`). (2) The session file is named by `--bridge-session-path` with NO default: a
 development bridge must not start saying `CG Bridge needs a station admin to sign in`; the service
-configuration names it (6.1). (3) Refresh is scheduled 10 min before `exp`, and an unanswered refresh is
-retried every 30 s with the token kept; the refresh ON a `401` from another read is not built (every
-reader swallows a `401` by design, ADR 0010 rule 5) — the scheduled refresh covers a token's ordinary life,
-and a revoked one is refused at its next refresh. (4) A save that fails keeps the session for THIS process
-and says, in the log, that a restart will need an admin. (5) D1/D2 live once in `@cg/shared-ipc`; the
-console re-exports them. (6) `playoutFetch` had never sent a request body — every call before this was a
-GET — so the bridge's D1 reached the Playout empty; it now sends a text body with its length and refuses
-any other kind.
+configuration names it (6.1). (3) Refresh is scheduled 10 min before `exp`; ~~an unanswered refresh is
+retried every 30 s with the token kept~~ (superseded by (7): only a refresh that never REACHED the
+Playout is retried); the refresh ON a `401` from another read is not built (every reader swallows a `401`
+by design, ADR 0010 rule 5) — the scheduled refresh covers a token's ordinary life, and a revoked one is
+refused at its next refresh. (4) A save that fails keeps the session for THIS process and says, in the
+log, that a restart will need an admin. (5) D1/D2 live once in `@cg/shared-ipc`; the console re-exports
+them. (6) `playoutFetch` had never sent a request body — every call before this was a GET — so the
+bridge's D1 reached the Playout empty; it now sends a text body with its length and refuses any other
+kind.
+
+**As built for Playout `2.9.2` (`CENTRAL-BRIDGE-01-A`, 2026-09-30):** (7) Reuse detection (their §8): a
+spent refresh token back within 10 s is `401` only; after 10 s its whole FAMILY is revoked and every
+access token of that USER goes on D9 — every console signed in as the account. So every refresher (the
+bridge and each console) reads a failed D2 ONE way, `refreshTokenFate` in `@cg/shared-ipc`: `401` →
+**spent**; the contract's named refusals `403`/`423`/`429` → **kept** (their §2: every D2 refusal comes
+before the token is used); anything else — no answer, a timeout, a `5xx`, an unreadable `2xx`, a status
+the contract does not name — → **unknown**, never sent again. `kept` is the dangerous answer to get wrong
+(a kept token is resent a minute later, past the grace), so it is the named refusals only. (8) The bridge
+writes `refreshInFlight` (the token's sha256 id) BEFORE D2 and clears it with the successor; a mark at
+start means a process died with its D2 out → `needs-admin`, nothing sent. A connect-level failure
+(`ECONNREFUSED`, `NO_IPV4`, a 5 s connect bound — `neverReachedPlayout`) is the one failure known not to
+have reached the Playout, and keeps the token. (9) A refusal before use is the state `refused` with the
+Playout's `message`, shown on every console as `CG Bridge: <message>`, retried every 60 s; the token is
+kept. (10) The console: `playoutRefresh.ts` — serial per stored session (a Web Lock where the page has
+one; on a LAN `http://` page, a mark in the stored session read back after 150 ms); the latest token
+(another tab's rotation adopted); a no-token `GET` of the D2 address first, since a browser's `fetch`
+cannot tell "never connected" from "answer lost"; unknown or spent → the refresh token dropped, the access
+token living to `exp` (ADR 0010: a failed refresh never ends a working session). (11) `cg_channels`
+(their §9) is normalised where it is parsed: `"*"`, a list, or D8's pre-`2.9.2` lone object (a list of
+one); nothing reads D8 today. (12) `cg_not_licensed`'s `message` is the one Playout text a sign-in surface
+shows as it is — the owner's decision in the delta.
 
 ### D8 — the console: bundled, native sign-in, the bridge found from the Playout address
 

@@ -176,13 +176,24 @@ When its session file is configured, CG Bridge SHALL sign in to the Playout itse
 station admin names — once, from any console, through a `station-admin` route the lock refuses — SHALL keep
 the refresh token in that file, written durably (a temp file, `fsync`, rename) BEFORE anything the answer
 carries is used, and SHALL NOT store the password anywhere: not in the file, a log, the audit or the
-console. At start it SHALL refresh (D2) with the saved token; a refused refresh SHALL be a lost session,
-and while there is none every console SHALL show `CG Bridge needs a station admin to sign in`, with the
-sign-in offered to a station admin only. Its access token SHALL be the bearer of every Playout read the
-bridge makes (D4, D9, D10, D11) — a signed-in console's being the fallback only while it has none — and
-SHALL keep the revocation list polled with no console signed in. Every request the bridge sends the
-Playout SHALL carry no `Origin` and no `X-Apasai-Mirrored`. The sign-in SHALL be recorded as
-`bridge-sign-in`, naming the admin, with no credential.
+console. At start it SHALL refresh (D2) with the saved token, and while it has no session every console
+SHALL show `CG Bridge needs a station admin to sign in`, with the sign-in offered to a station admin only.
+Its access token SHALL be the bearer of every Playout read the bridge makes (D4, D9, D10, D11) — a
+signed-in console's being the fallback only while it has none — and SHALL keep the revocation list polled
+with no console signed in. Every request the bridge sends the Playout SHALL carry no `Origin` and no
+`X-Apasai-Mirrored`. The sign-in SHALL be recorded as `bridge-sign-in`, naming the admin, with no
+credential.
+
+_Amended 2026-09-30 (`CENTRAL-BRIDGE-01-A`; Playout `2.9.2` §2 and §8, where a spent refresh token that
+comes back more than 10 s after its use revokes its whole family and puts every access token of that user
+on D9):_ the bridge SHALL refresh one at a time, and SHALL write a mark naming the token as in flight to the
+file BEFORE the token is sent — a refresh whose mark cannot be written SHALL NOT be sent — and SHALL write
+the successor with the mark cleared before it is used. A mark found at start, an answer that never arrives
+(a timeout, a dropped connection) and a `401` SHALL each be a lost session, and that token SHALL NOT be sent
+again; a request that never reached the Playout SHALL keep the token and ask again. A refusal the contract
+names — `403` (`cg_not_licensed`, `no_cg_access`, a disabled account), `423`, `429` — comes before the
+token is used, so it SHALL keep the token unmarked, SHALL show the Playout's own message on every console
+as `CG Bridge: <message>`, and SHALL ask again about every 60 s: never a lost session.
 
 #### Scenario: An admin signs the bridge in once
 
@@ -195,13 +206,89 @@ Playout SHALL carry no `Origin` and no `X-Apasai-Mirrored`. The sign-in SHALL be
 
 - **WHEN** the bridge refreshes, saves the rotated token and stops before using it **THEN** the restarted
   bridge refreshes with the saved token and is signed in — control: the spent token is presented exactly
-  once and never again; and a crash before the save leaves the spent token, which the Playout refuses, and
-  the bridge says it needs an admin rather than retrying it
+  once and never again; and a crash before the save leaves the in-flight mark, so the restarted bridge
+  sends nothing and says it needs an admin (amended 2026-09-30: it no longer sends the spent token to be
+  refused — `2.9.2` would read that as theft)
 
 #### Scenario: No Origin and no X-Apasai-Mirrored
 
 - **WHEN** the bridge signs in, polls D9 and reads D4 **THEN** no request the Playout received carries
   either header — control: the same log holds the bridge's D1 and a request carrying a bearer
+
+#### Scenario: A crash between sending a refresh and saving its answer
+
+- **WHEN** the bridge sends D2 and stops before saving the answer, and restarts more than 10 s later
+  **THEN** it sends no refresh with that token, says it needs a station admin, and the Playout counts no
+  reuse — control: a clean refresh keeps working across three restarts, rotating the token each time
+
+#### Scenario: An answer that never arrives
+
+- **WHEN** the D2 reaches the Playout and its answer is lost **THEN** the token is not sent again — not by a
+  retry and not after a restart — and a request that never reached the Playout is asked again and works
+
+#### Scenario: A refusal before use keeps the token
+
+- **WHEN** the Playout answers the refresh `403 cg_not_licensed` with a message **THEN** every console shows
+  `CG Bridge: <message>`, the saved token is kept unmarked, and once the licence is back the same token
+  refreshes
+
+### Requirement: A console SHALL never send one refresh token twice
+
+A console SHALL refresh its Playout session one refresh at a time per stored session — across the tabs of
+one browser too, under a Web Lock where the page has one and otherwise under a mark written into the
+stored session and read back once it has settled — and SHALL send only the stored session's latest token,
+adopting one another tab has already rotated. It SHALL send a refresh token only after the Playout has
+answered a request that carries no token, and SHALL store the token as in flight before sending it. An
+answer that never arrives, a `401`, and a mark nobody can still be waiting on SHALL drop the refresh token
+— the access token keeps working to `exp` — and it SHALL NOT be sent again. A refresh the Playout never
+received SHALL be asked again with backoff. A refusal the contract names before use SHALL keep the token,
+SHALL put the Playout's reason on the signed-in state, and SHALL be asked again about every 60 s.
+
+#### Scenario: An answer lost on its way back
+
+- **WHEN** a console's refresh reaches the Playout and the answer is lost **THEN** the token is never sent
+  again — not 15 s later, not five minutes later — and the console stays signed in — control: a Playout
+  that does not answer at all is asked again, and the token, which never left, then works
+
+#### Scenario: Two tabs, one stored session
+
+- **WHEN** two tabs mark the same token at once **THEN** exactly one of them sends it, and a tab whose token
+  another has rotated adopts the stored one without sending
+
+#### Scenario: A refusal before use
+
+- **WHEN** the Playout answers a console's refresh `403 cg_not_licensed` **THEN** the token is kept, the
+  state carries the Playout's message, and a minute later the same token is asked again and works
+
+### Requirement: A sign-in refused as cg_not_licensed SHALL show the Playout's own message
+
+Every sign-in surface SHALL show the Playout's own `message` when it refuses a sign-in with
+`403 cg_not_licensed` — the gate, first-run and CG Bridge's own sign-in — as it is, in one line and in its
+own bidi isolate (the console's own sentence only when the Playout sent none), and SHALL mark no field and
+keep what was typed.
+
+#### Scenario: The licence refusal
+
+- **WHEN** D1 answers `403 cg_not_licensed` with a Persian message **THEN** the gate's line is exactly that
+  message, isolated, no field is marked, and the username and password are still in their fields —
+  control: a wrong password marks the field and clears it
+
+### Requirement: cg_channels SHALL be read in every shape a Playout sends
+
+Every reader of `cg_channels` — the bridge's token verifier, and whatever reads D8 — SHALL take `"*"`, an
+explicit list (which from Playout `2.9.2` even an admin's token carries on a Playout whose CG licence caps
+the channels) and a lone grant object (what D8 answered before `2.9.2`), reading the lone object as a list
+of one. A role SHALL never stand in for the claim.
+
+#### Scenario: An admin with an explicit list
+
+- **WHEN** a station admin's token carries channel 1 alone **THEN** the admin holds channel 1 and not
+  channel 2
+
+#### Scenario: The three shapes
+
+- **WHEN** the claim is `"*"`, a list, or a lone grant — in a token, or as D8 answers before and after
+  `2.9.2` **THEN** each reads as `"*"` or a list — control: anything else is still refused
 
 ### Requirement: A take on a channel the Playout reports unlicensed SHALL be refused before anything is sent
 

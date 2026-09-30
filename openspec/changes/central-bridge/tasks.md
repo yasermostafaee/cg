@@ -198,7 +198,8 @@
       Found and fixed on the way: `playoutFetch` sent NO request body (every earlier call was a GET),
       so the bridge's own D1 reached the Playout empty. Tests: `bridge-session` (needs-admin; the
       admin's sign-in — no password in the file; a wrong password — the code, nothing written; a
-      restart rotates the token; a refused refresh is a lost session), `bridge-session.integration`
+      restart rotates the token; a `401` refresh is a lost session — A.2: a refusal BEFORE use is
+      not), `bridge-session.integration`
       (operator refused, admin succeeds, every console pushed, the record names the admin and holds
       no password, the D9 read carries `cg-admin`'s bearer, D4 continues with it after every console
       closed), census updates (`authz-classes`, `lock-refuses-intents`, `audit-append-sites`), runtime
@@ -207,8 +208,10 @@
 - [x] 5.2 The crash-between-receive-and-use test; control: the old token never reused.
       `bridge-session` 5.2: the refresh saves T1 and the process "dies" at the first step after the
       save; the restart refreshes with T1 and is signed in; D2 saw `[T0, T1]` — T0 once, never again.
-      The residual the Playout's letter names is pinned beside it: a crash BEFORE the save leaves the
-      spent T0, the restart presents it once, is refused, and says it needs an admin.
+      ~~The residual: a crash BEFORE the save leaves the spent T0, the restart presents it once, is
+      refused, and says it needs an admin.~~ SUPERSEDED 2026-09-30 by A.1: under Playout `2.9.2` that
+      second presentation is a reuse (theft, past 10 s), so the restart now sends NOTHING — the
+      in-flight mark says why; that test was replaced by A.1's.
 - [x] 5.3 A take on an `unlicensed` channel refused with the reason; control: a licensed channel takes.
       `isUnlicensedPlaylist` and `unlicensedTakeRefusal` live once in `@cg/shared-ipc`; the console's
       line (`channelAir.isUnlicensed`) now asks the same predicate; the runtime refuses FIRST in
@@ -226,6 +229,47 @@
       The BRIDGE half is done: `bridge-session.integration` reads every request the fake Playout
       received (the bridge's D1, the D9 poll, D4) for both headers — none — with its control (the log
       holds the D1 and a bearer). The NATIVE half (CG Control's own D1/D2) is owed with 7.2.
+
+## 5A. Delta `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` (`PLAYOUT-CG-RESPONSE-LICENSE-v1` §2, §8, §9)
+
+- [x] A.1 The bridge's refresh under reuse detection (their §8): serial; the in-flight mark
+      (`refreshInFlight`, the token's sha256 id) written BEFORE D2 — no mark, no send; the successor
+      written with the mark cleared before use; a mark at start, an unknown outcome (timeout, dropped
+      answer) and a `401` → `needs-admin`, the token never sent again; a request that never reached
+      the Playout (`ECONNREFUSED`, `NO_IPV4`, a 5 s connect bound) keeps the token. `refreshTokenFate`
+      is the one reading, in `@cg/shared-ipc`. Tests (`bridge-session`, A1): the crash-between-send-
+      and-save restart past 10 s sends nothing and trips no theft; an unknown outcome is never
+      retried; no mark, no send; never reached → asked again; CONTROL three clean restarts; the
+      INSTRUMENT (the fake trips on a reuse after 10 s, not within, and puts the account's access
+      tokens on D9). Ablations, each reddening its test: the mark ignored in BOTH `start()` and
+      `#refresh()` (either alone holds), unknown retried, mark-less send, 403 lost, never-reached lost.
+- [x] A.2 A refusal before use keeps the token (their §2): `403`/`423`/`429` → state `refused` with the
+      Playout's message, unmarked, asked again every 60 s; every console shows `CG Bridge: <message>`
+      (isolated); a station admin keeps the sign-in. `kept` is the contract's named refusals only — a
+      wrong `kept` resends a used token a minute later, so a status the contract does not name is
+      `unknown`. Tests: `bridge-session` A2 (`cg_not_licensed` kept, the same token then refreshes;
+      `no_cg_access`); `playout-session` (the fate of every status); `bridgeSessionBanner.dom` A2.
+- [x] A.3 `cg_channels` in three shapes (their §2, §9): `normalizePlayoutChannels` inside
+      `PlayoutChannelsSchema` — `"*"`, a list, a lone grant (D8 before `2.9.2`) → a list of one; no role
+      stands in for the claim. Nothing in the product reads D8 today; the fake's D8 answers both
+      versions (`setMeLegacy`). Tests: `cg-channels-shapes` (the verifier: `"*"`, an ADMIN's explicit
+      list holds only that channel, a lone object; D8 2.9.2 and legacy parse), `playout-channels`.
+      Ablation: the normalizer removed reddens exactly the lone-object cases on both sides.
+- [x] A.4 `403 cg_not_licensed` at D1 (their §2): `signInFailureLine` — the Playout's message as it is,
+      one line (whitespace collapsed), in a `<bdi>`; no field marked; the form kept; the console's
+      sentence only as the fallback. The gate, first-run and the bridge's admin dialog.
+      `signInOverlay.dom` A4 (both), `bridgeSessionBanner.dom` A4.
+- [x] A.5 The CONSOLE's refresh (`playoutRefresh.ts`): one at a time per stored session — a Web Lock
+      where the page has one, else a mark read back after it settles (a LAN `http://` page has
+      neither `navigator.locks` nor `crypto.randomUUID`); the latest token (another tab's rotation
+      adopted); a no-token probe first, so "never sent" is known; a lost answer, a `401`, an orphaned
+      mark → the refresh token dropped, the access token living to `exp`; `refused` → kept, on the
+      signed-in state (the pill's `title`), asked again every 60 s. The old retry (the same token 15 s
+      later) is gone. Tests: `playoutRefresh` (14), `webSocketRuntimeAuth` (3 — RED on the old
+      runtime: the token sent FIVE times in five minutes; the A2 state missing).
+- [ ] A.6 The Linux e2e discharge for A.1–A.5 (run URL).
+- A.7 A dedicated Playout account for CG Bridge (not `cg-admin`): assessed in the report, NOT built — it
+  needs an admin step in the Playout, and the owner decides.
 
 ## 6. CG Bridge as a service (`R-067`)
 

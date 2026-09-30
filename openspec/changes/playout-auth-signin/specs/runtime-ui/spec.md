@@ -21,7 +21,11 @@ field.
 The console SHALL post the credentials to the PLAYOUT directly, at the address the bridge
 advertised, so that the bridge never sees a password; it SHALL NOT route them through the bridge
 and SHALL NOT route them through the template origin. It SHALL map the Playout's stable error
-CODE to its own sentence and SHALL NOT display the Playout's free-text message.
+CODE to its own sentence and SHALL NOT display the Playout's free-text message — with ONE exception
+(amended 2026-09-30, `CENTRAL-BRIDGE-01-A` A4, the owner's decision): a `403 cg_not_licensed`'s
+message SHALL be shown as it is, in one line and bidi-isolated, marking no field and keeping what was
+typed, because which licence condition failed only the Playout can word (`central-bridge`'s
+requirement "A sign-in refused as cg_not_licensed SHALL show the Playout's own message").
 
 The sign-in SHALL appear only when the bridge has SAID that it authenticates. A bridge that has
 not answered yet SHALL produce no sign-in, because an unanswered handshake is not a statement
