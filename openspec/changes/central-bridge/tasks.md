@@ -154,7 +154,20 @@
       `auditPanel.legibility.dom` (the title and `data-audit-console` — control: a row without it has no
       title).
 - [ ] 4.5 e2e: two consoles, one bridge (the multi-box take, the clear, the control).
-- [ ] 4.6 Tokens: none, expired, without channel 2 — refused; control: channel 2 works.
+- [x] 4.6 Tokens: none, expired, without channel 2 — refused; control: channel 2 works.
+      `central-bridge-tokens.integration` on the authed two-channel rig, read at the fake CasparCG's
+      own trace: no token — a take and a read refused with the sign-in sentence, no write, no push;
+      an expired token — refused at presentation (`AUTH_TOKEN_EXPIRED`), then treated as none; a
+      channel-1 token — a take and a load on channel 2 refused naming channel 2, no channel-2 write,
+      and channel 2's row absent from its stack — CONTROL: a channel-2 token takes the same row and
+      the same instrument sees `CG 2-80 PLAY`.
+- **Linux e2e discharged for 4.1, 4.3 and 4.4** on `a832b533` (carries `27ccc5c2` and `4502488f`):
+  https://github.com/yasermostafaee/cg/actions/runs/36679895375 — `completed`/`success`, the `ci` job's
+  `Test` step and the `e2e` job's `E2E` step both RAN. The same push's Desktop run
+  (https://github.com/yasermostafaee/cg/actions/runs/36679895363) FAILED at "Scan what the installers
+  ship": 4.4's doc comments used a private example address that the builds keep — fixed in `9ec34e2a`
+  (a documentation address; the local scan of the staged payload passes, and the replaced comment is
+  shown present in the three bundles the run named).
 
 ## 5. The bridge's own session (rule 8), unlicensed (rule 11), backup (rules 9–10)
 
