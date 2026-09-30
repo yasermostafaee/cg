@@ -375,6 +375,44 @@ rule 11: a technical fact rides the `title`).
 - **WHEN** the Log shows a row with a console machine **THEN** the actor cell reads the user and its title
   reads `From 192.0.2.50` — control: a row without one has no title
 
+### Requirement: CG Bridge's picture and logs SHALL open only with a ticket its console's socket was given
+
+`/pgm/<n>` and `/logs.zip` on the control port SHALL answer only a request carrying a ticket that a
+console's verified socket was given for exactly that resource — the programme of channel `n`
+(`pgmReturn.ticket`, a read the station fence and the permission gate judge for that channel) or CG
+Bridge's logs (`bridge.logs-ticket`, `station-admin`). A ticket SHALL be random, SHALL expire after 30 s,
+and a logs ticket SHALL open once. Anything else SHALL be `403` and relay nothing. The programme return
+SHALL have that ONE door: no other listener of the bridge SHALL serve it.
+
+#### Scenario: A held channel's ticket opens its picture
+
+- **WHEN** a console whose sign-in holds channel 1 asks a ticket for channel 1 **THEN** `/pgm/1?ticket=…`
+  relays the programme byte for byte — control: no ticket, a guessed one, or channel 1's on channel 2 is
+  `403` and attaches nothing
+
+#### Scenario: The logs, once, for an admin
+
+- **WHEN** a station admin's ticket opens `/logs.zip` **THEN** the logs arrive as one zip **AND** the same
+  ticket is `403` the second time — control: an operator is given no ticket
+
+#### Scenario: One door
+
+- **WHEN** a built console is served beside the bridge (`--console-dir`) **THEN** `/pgm/1` there is `404`,
+  never the page
+
+### Requirement: The connection check SHALL judge the sign-in this console will make
+
+The connection check's CORS line SHALL be judged for the sign-in the asking console makes: a console that
+signs in directly from its own process (CG Control, with no `Origin` — the Playout team's rule 8) SHALL
+say so in its request, and the bridge SHALL answer its CORS line as passed, as a fact, without probing the
+Playout's CORS list; a browser console's own origin SHALL be judged against that list as before.
+
+#### Scenario: CG Control's check
+
+- **WHEN** CG Control checks a Playout whose CORS list does not carry `http://tauri.localhost` **THEN** the
+  CORS line passes and the Playout is asked nothing of its CORS list — control: the same Playout, for a
+  browser console's origin, is asked and refuses
+
 ## MODIFIED Requirements
 
 ### Requirement: A loopback casparHost is the Playout's own machine

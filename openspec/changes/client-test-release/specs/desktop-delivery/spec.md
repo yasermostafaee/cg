@@ -83,17 +83,19 @@ real address, token or password in them; and SHALL mark every Playout-side step 
 - **THEN** the PDF is built from the source and carries its sections in order: the package, the needs,
   installing CG Control, the first run, CG Designer, reporting a problem, the known limits
 
-### Requirement: A version tag SHALL open a draft release with exactly four files
+### Requirement: A version tag SHALL open a draft release holding exactly its installers, the sums and the guide
 
-A pushed tag `v<version>` SHALL build both installers from the tagged commit, SHALL refuse a tag that
-does not name the parts' version, SHALL run the clean-Windows smoke, and only then SHALL create a DRAFT
-pre-release holding exactly: the two installers, `SHA256SUMS.txt` (the SHA-256 of the other three), and
-the install guide PDF. CI SHALL never publish it.
+A pushed tag `v<version>` SHALL build the installers from the tagged commit, SHALL refuse a tag that
+does not name the parts' version, SHALL run the clean-Windows smokes, and only then SHALL create a DRAFT
+pre-release holding exactly: the installers, `SHA256SUMS.txt` (the SHA-256 of every other file), and
+the install guide PDF. CI SHALL never publish it. (Amended 2026-09-30, `CENTRAL-BRIDGE-01`: written for
+the two apps' installers — four files; from `0.10.0` CG Bridge's installer joins them, five files, and
+the draft also waits for CG Bridge's own smoke. `tools/release/src/release-files.mjs` names them.)
 
 #### Scenario: The tag names the release
 
-- **WHEN** `v<version>` is pushed and the smoke passes
-- **THEN** a draft pre-release `v<version>` holds exactly those four files
+- **WHEN** `v<version>` is pushed and the smokes pass
+- **THEN** a draft pre-release `v<version>` holds exactly those files — five from `0.10.0`
 
 #### Scenario: A wrong tag is refused
 

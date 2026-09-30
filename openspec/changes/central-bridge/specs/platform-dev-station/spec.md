@@ -1,0 +1,28 @@
+## ADDED Requirements
+
+### Requirement: The dev station SHALL stop nothing, and SHALL name what holds its ports
+
+`pnpm dev:station` SHALL never stop, ask to stop, or kill another process. `CENTRAL-BRIDGE-01`: the
+`cg-bridge.exe` that may hold its ports is CG Bridge, a Windows service — on a Playout machine the plant's
+bridge — which Windows starts again five seconds after its process dies, so ending it is both useless and
+harmful. Every program on one of the station's ports SHALL be NAMED, one line each, and the start SHALL
+refuse; a port held by `cg-bridge.exe` SHALL be named as CG Bridge, with how to stop it by hand
+(`Stop-Service CGBridge` in an administrator PowerShell, or closing an older CG Control). A process that
+holds no station port — CG Control, a console now — SHALL never be in the way. The dev station's state
+folder SHALL overlap neither CG Control's (`%APPDATA%\CG Control`) nor CG Bridge's
+(`%ProgramData%\CG Bridge`), and a dev run SHALL write nothing in either.
+
+#### Scenario: CG Bridge holds 5280
+
+- **WHEN** `cg-bridge.exe` holds a station port **THEN** the start refuses with the one CG Bridge line
+  naming the port, the process and `Stop-Service CGBridge` **AND** that process is still alive afterwards
+
+#### Scenario: CG Control is running
+
+- **WHEN** `cg-control.exe` runs and holds no station port **THEN** nothing is said about it and the start
+  goes on — control: the same list with a port holder refuses
+
+#### Scenario: The two installed folders
+
+- **WHEN** a dev run ends **THEN** CG Control's and CG Bridge's folders are byte-identical to before, and
+  the dev station's own folder holds its state

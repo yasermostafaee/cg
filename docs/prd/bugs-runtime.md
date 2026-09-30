@@ -13002,3 +13002,16 @@ event was a no-op, so nothing reached the log. On the Playout machine the engine
 is logged and the session dials AMCP anyway — OSC silence is a confirmation fact, never a reason to leave
 the command axis down (golden rule 8, [[B-101]]); the bind is retried on each reconnect cycle. With
 [[C-046]] the bridge never asks for 6250 at all.
+
+## [~] B-296 — The dev station's isolation test connected to this host's own CasparCG and bound a station port, on every gate ⟨priority: high — the dev host runs the owner's CasparCG⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) 8.1 · `openspec/changes/central-bridge/` · `ada038bf`
+
+**Found (8.1):** `tools/dev-station/tests/isolation.test.ts` starts the REAL bridge with exactly
+`pnpm dev:station`'s arguments, to prove a dev run writes nothing outside its own folder. Its scratch state
+held no CasparCG connection, so the bridge fell back to its defaults — `127.0.0.1:5250` and UDP `6251`.
+Measured with `netstat` during a run (2026-09-30): the test's bridge held UDP `6251`, a station port, and
+an AMCP session with the `casparcg.exe` running on the dev host. That test is in `pnpm gate`, so every gate
+on this host — the pre-push one and the Stop hook's — did the same. **Fix:** the test writes the station's
+connection as first-run would — a closed loopback port, OSC `0` — so the bridge binds no station port and
+dials no real core; re-measured, it held only its ephemeral listeners and nothing on `5250` or `6251`. The
+test also plants CG Bridge's `%ProgramData%` folder and proves it byte-identical afterwards. `bridgeArgs`
+is unchanged.

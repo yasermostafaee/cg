@@ -4,45 +4,61 @@ The Runtime is the on-air control surface — installed as **CG Control**. The f
 
 ## Installing and connecting
 
-There are two installers. **CG Designer** is for building templates; **CG Control** is the on-air
-console. Install only the one you need on each machine. Put CG Control on a machine of its own —
-not on the Playout server.
+There are three installers. **CG Bridge** is the service every CG Control connects to — ONE per
+Playout, installed once, on the Playout machine or on a server beside it. **CG Control** is the on-air
+console: install it on every machine an operator works at — several consoles can work one station at
+once. **CG Designer** is for building templates.
 
 **In this order:**
 
 1. Install the Playout.
-2. **Right after that**, install CG Control on a machine with a **static IP**.
-3. Sign in **first as `cg-admin`**, with the password from
+2. Install **CG Bridge** on the Playout machine (recommended), or on a server beside it with a
+   **static IP**.
+3. Install **CG Control** on each operator's machine, then **CG Designer** where templates are made.
+4. Sign in **first as `cg-admin`**, with the password from
    **تنظیمات ← اتصال به CG Control ← حسابِ داخلیِ CG Control** (copy button).
-4. Once, look at the list on that same Playout page. Only this machine should be there.
 
-**Before you start, ask the Playout's administrator for** the Playout's address, the `cg-admin`
-password, and that `http://127.0.0.1:5174` is in the Playout's CORS list.
+**Before you start, ask the Playout's administrator for** the Playout's address and the `cg-admin`
+password.
 
-1. **Install.** Run `CG Designer_…-setup.exe` or `CG Control_…-setup.exe`. Windows may say
-   _"Windows protected your PC"_: press **More info**, then **Run anyway**. CG Designer installs for
-   you alone and needs no administrator; CG Control asks for one, because it opens two ports in the
-   firewall (UDP 6250 and TCP 7911) for CasparCG.
-2. **Open CG Control.** The first time, it opens on **Set up CG Control**.
-3. **Playout** — type the Playout's address (`192.168.21.111` is enough; the field shows
-   `http://192.168.21.111:8080`) and press **Check**. Each line says what it tested; a red line
-   says what is wrong. The CasparCG line says **waiting for sign-in** — that is expected. Press
-   **Connect** when the Playout lines pass. If the Playout does not answer, only its own line says
+1. **Install CG Bridge.** On the Playout machine, run `CG-Bridge_…_x64-setup.exe` (Windows may say
+   _"Windows protected your PC"_: press **More info**, then **Run anyway**) and allow it administrator
+   rights. It installs the Windows service **CG Bridge** — it starts with Windows, and Windows starts it
+   again if it fails — and opens TCP 5280 and 7911 and UDP 6251–6252 for itself only. On a separate
+   server, install it from an administrator PowerShell, giving the Playout's address, the Playout
+   machine's IP for CasparCG and this server's own IP:
+   `CG-Bridge_…_x64-setup.exe /S /PLAYOUT=http://<Playout IP>:8080 /AMCPHOST=<Playout IP> /BRIDGEADDRESS=<this server's IP>`.
+   On that machine, `http://127.0.0.1:5280/health` names `cg-bridge` and its version.
+2. **Install CG Control** (`CG-Control_…-setup.exe`) on each operator's machine. It needs no
+   administrator and opens no port.
+3. **Open CG Control.** The splash reads **CONNECTING**. The first time, **Set up CG Control** asks
+   where the Playout is: type its address under **Playout address** (the IP is enough). If CG Bridge
+   is on a separate server, type that server's address under **CG Bridge address**; otherwise leave it
+   empty. Press **Connect**.
+4. **Playout** — on a new station, **Set up CG Control** shows the Playout CG Bridge was given and
+   checks it. Each line says what it tested; a red line says what is wrong. The CasparCG line says
+   **waiting for sign-in** — that is expected. If the Playout does not answer, only its own line says
    so: the sign-in line reads **not checked**, and the CasparCG line says what it found. Pressing
    **Check** again clears every line until the new results arrive.
-4. **Sign in** as `cg-admin`. The first sign-in sets the station up; until it has, other accounts
+5. **Sign in** as `cg-admin`. The first sign-in sets the station up; until it has, other accounts
    are told the station is not set up yet. Within seconds the CasparCG line turns OK and the
-   channels appear. If it says this machine is waiting for approval, the Playout's administrator
-   approves it at **تنظیمات ← اتصال به CG Control**; the line names this machine's address.
-5. **Channel** — pick the channel, or channels, this station drives; nothing is picked for you. Each
+   channels appear. With CG Bridge on a separate server, the line may say that server is waiting for
+   approval: the Playout's administrator approves it at **تنظیمات ← اتصال به CG Control**; the line
+   names its address.
+6. **Channel** — pick the channel, or channels, this station drives; nothing is picked for you. Each
    press adds a channel or takes it back out; the channels must be on one CasparCG. Each channel
    shows its name and its number (`· CH 2`). If a channel is already on air with another system's
    content, CG Control says so in one line (for example _"آپاسای · CH 1 is already on air — another
    system is playing on layer 5."_) and asks you to press **Use this channel anyway**. That is a
    warning, not a refusal: at a client, CG graphics do go on the programme channel, above the
    Playout's layers. On the test Playout, use `cg-test2` (channel 2).
-6. **Serve address** — CG Control fills in this machine's address; change it only if the Playout's
+7. **Serve address** — CG Control fills in CG Bridge's address; change it only if the Playout's
    administrator tells you to. Press **Use this channel** (or **Use these channels**).
+8. **CG Bridge's own sign-in.** CG Bridge signs in to the Playout by itself, once, as `cg-admin`. If
+   **CG Bridge needs a station admin to sign in** appears, press **Sign in CG Bridge…** and sign in.
+   It keeps its own session — never the password.
+
+Every other operator's machine only opens CG Control, answers **Playout address**, and signs in.
 
 **Wrong channels, or one more?** **SETTINGS → Channel → Change channel…** (a station admin only) shows
 the same list and the same warning, with the station's channels already picked: add one, take one
@@ -55,15 +71,15 @@ On air on another channel**, with its channel, layer and template, for a station
 air** stops and clears that one layer and nothing else on that channel.
 
 The console opens, signed in, with its controls — no reload. Everything is in **SETTINGS**
-afterwards: the Playout and its check under **Servers**, the CasparCG host beside them, and the rows
-under **Layers**. Every layer row is shown after setup; hide the ones you do not use there once
+afterwards: the Playout, where this console finds CG Bridge (a station admin can change both) and the
+check under **Servers**, the CasparCG host beside them, and the rows under **Layers**. Every layer row is shown after setup; hide the ones you do not use there once
 CasparCG is connected. **A row's `#` and its default name are its real CasparCG layer** — the top
 row is `99`, _Layer 99_; beds read _Bed 59_ … _Bed 50_. A name you give a row replaces the default.
 
-**Closing CG Control stops control, not air.** What is on air stays on air, and the next start
-picks the rows up again. If CG Control will not start, it says why on its own screen and names
-its log file there; once it runs, **LOG → Open log folder** (in the audit log) opens the folder to
-send to support.
+**Closing CG Control stops control, not air.** What is on air stays on air, CG Bridge keeps running,
+and the next start picks the rows up again. If CG Control cannot reach CG Bridge, its banner says
+**CG Bridge not reachable at …** and why; if the address itself was typed wrong, **Set up again** asks
+for it again. For support, **LOG → Download logs** (a station admin) saves CG Bridge's logs as one zip.
 
 ## Daily flow
 

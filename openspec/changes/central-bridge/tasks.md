@@ -228,7 +228,11 @@
 - [ ] 5.5 No `Origin` and no `X-Apasai-Mirrored` on any request to the Playout (bridge and native).
       The BRIDGE half is done: `bridge-session.integration` reads every request the fake Playout
       received (the bridge's D1, the D9 poll, D4) for both headers — none — with its control (the log
-      holds the D1 and a bearer). The NATIVE half (CG Control's own D1/D2) is owed with 7.2.
+      holds the D1 and a bearer). The NATIVE half is WRITTEN (2026-09-30):
+      `playout.rs`'s `the_request_carries_no_origin_and_no_mirror_header` reads the bytes CG Control
+      writes off a real loopback socket — neither header; control: the route, the host and the body.
+      It runs in `desktop.yml`'s new `Test CG Control's shell (Rust)` step (no Rust on the dev host):
+      open until that step is green.
 
 ## 5A. Delta `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` (`PLAYOUT-CG-RESPONSE-LICENSE-v1` §2, §8, §9)
 
@@ -267,7 +271,9 @@
       signed-in state (the pill's `title`), asked again every 60 s. The old retry (the same token 15 s
       later) is gone. Tests: `playoutRefresh` (14), `webSocketRuntimeAuth` (3 — RED on the old
       runtime: the token sent FIVE times in five minutes; the A2 state missing).
-- [ ] A.6 The Linux e2e discharge for A.1–A.5 (run URL).
+- [x] A.6 The Linux e2e discharge for A.1–A.5 (run URL). DISCHARGED by the `E2E (Playwright)` job of
+      https://github.com/yasermostafaee/cg/actions/runs/36703284678 (`d260fa5b`, which carries
+      `95623398` and `a29e8f51`): completed, `success`, its `E2E` step RAN (2026-09-30).
 - A.7 A dedicated Playout account for CG Bridge (not `cg-admin`): assessed in the report, NOT built — it
   needs an admin step in the Playout, and the owner decides.
 
@@ -311,9 +317,43 @@
       and CasparCG come from its own configuration); the marker `bridge-imported-state.json` makes it
       once, whatever the outcome; the source is left byte-identical. Tests: `import-state` (4); the
       persisted-files census records the marker and `bridge-session.json`'s new default.
-- [ ] 6.5 `/logs.zip` for a station admin; the console's Download logs.
-- [ ] 6.6 `/pgm/<n>` on `5280` behind a socket-issued ticket.
+- [x] 6.5 `/logs.zip` for a station admin; the console's Download logs.
+      `bridge.logs-ticket` (`station-admin`, STATION_WIDE) gives a ONE-USE, 30 s ticket
+      (`http-tickets.ts`); `/logs.zip?ticket=…` on the control port answers every file under
+      `<state home>/logs` as one zip (`zip.ts`, store + CRC-32, 512 MB cap; read back by an independent
+      reader in `zip.test.ts`), `attachment`, `no-store`; a bridge with no log folder says so. The
+      console: `audit.canDownloadLogs` (the link live) and, in the Audit log, `Download logs` for a
+      station admin (or auth off) — `Open log folder` (CG Control's own sidecar folder) is gone.
+      Tests: `http-tickets.integration` (the admin downloads once; an operator is given no ticket),
+      `zip` (3), `auditPanel.downloadLogs.dom` (4); the route censuses (fence, authz, lock) count it.
+- [x] 6.6 `/pgm/<n>` on `5280` behind a socket-issued ticket.
+      `pgmReturn.ticket` (`read`, PER_SOCKET — the fence and the permission gate judge the channel)
+      gives a 30 s ticket for ONE channel; `/pgm/<n>?ticket=…` on the control port relays the
+      programme. ONE door: the console listener's untokened loopback `/pgm/` is removed (it answers
+      404, pinned) and Vite no longer relays `/pgm/`. The console asks a ticket per mount and after
+      every failure (`useProgramReturn`). ⚠ MEASURED IN A REAL ENGINE (golden rule 12): the page's
+      own CSP refused the picture (`img-src 'self' data: blob:`) and PROGRAM never left "No return
+      signal" — `img-src` now admits `http:`/`https:` (`index.html`, argued in place). Tests:
+      `http-tickets.integration` (3 — held channel opens, none/other/guessed 403; no sign-in, no
+      ticket), `pgm-return` (the relay, byte for byte, through the ticket; a path that is not a
+      channel refused whatever its ticket; the listener's 404), e2e `pgm-return.spec` (the `src` is
+      the control port's, ticketed) and `dev-station.spec` (the same through Vite, StrictMode's double
+      mount with a ticket in flight) — both GREEN locally after the CSP fix.
 - [ ] 6.7 The installer (`tools/bridge-installer/cg-bridge.nsi`) + Shawl, built in CI.
+      ⚠ ITS FIRST CLEAN-WINDOWS RUN FOUND THREE DEFECTS (`bridge-smoke`, run 36703284775, 2026-09-30),
+      each fixed: (1) `/PLAYOUT=http://…` reached the configuration as `http:` — NSIS's `GetOptions`
+      ends a value at the option's FIRST CHARACTER, `/`; now spelled ` /PLAYOUT=` over ` $Args` (a
+      value runs to the next space; a quoted one may hold one); (2) the smoke's silent uninstall
+      exited 0 in 220 ms and removed nothing yet — Node QUOTED `_?=C:\Program Files\CG Bridge`, NSIS
+      never saw `_?=`, and the uninstaller copied itself away and worked on; the smoke now writes the
+      command line whole through `cmd` (`_?=` last and unquoted is NSIS's rule, documented in the
+      script's header and for the Playout team); (3) the smoke's no-token CONTROL was VACUOUS — it sent
+      `stack.snapshot` with `payload: null`, was refused by the request PARSE (which runs before the
+      auth gate) and passed; it now sends a well-formed request and requires the auth gate's own
+      sentence. Added: a stop by hand STAYS stopped (recovery answers a failure only), and the
+      bridge's process killed is started again by Windows (measured by a new `startedAt`); the rules
+      judged by their FIELDS (`firewall-rule.mjs`, now shared, `LocalPort` in either spelling of the
+      port pair); a first install's "stopping the service" logs exit 0 for a service not there yet.
       Written: `cg-bridge.nsi` (ASCII; per machine; `%ProgramFiles%\CG Bridge\` = `cg-bridge.exe` +
       `shawl.exe` + the bundle; the service `CGBridge` registered once by `shawl add` — Ctrl+C stop,
       10 s, then the process tree —, then `start= auto`, `obj= NT SERVICE\CGBridge`, recovery
@@ -336,23 +376,83 @@
 
 ## 7. CG Control, the console
 
-- [ ] 7.1 Bundled console; no sidecar, no Node, no firewall rule; per-user installer.
-- [ ] 7.2 Native D1/D2 (no `Origin`); a browser keeps `fetch`.
-- [ ] 7.3 The bridge found from the Playout address; the Station setup override; the lines (not reachable,
+- [x] 7.1 Bundled console; no sidecar, no Node, no firewall rule; per-user installer.
+      `tauri.conf.json`: `frontendDist ../dist`, `installMode currentUser`, no `externalBin`, no
+      resources, no NSIS hooks; `main.rs` without the sidecar (single instance, the page-load log);
+      DELETED: `sidecar.rs`, `windows/installer-hooks.nsh`, `starting/*` (and its two tests),
+      `tools/caspar-bridge/scripts/stage-control.mjs`, the staged-payload entries in `.gitignore`,
+      the eslint ignore and `turbo.json`. The splash is the FIRST thing the window shows, so nothing
+      marks it "continued" any more (`FIELD-FIXES-01` J's rule removed, pinned as an absence in
+      `splash.dom` and `e2e/splash.spec`). The installer smoke (`installer-smoke.mjs`) rewritten:
+      CG Bridge installed first (elevated), CG Control per user without admin, the gate answered,
+      the console on CG Bridge at `127.0.0.1:5280`, and CONTROL: signed out, its own `stack.snapshot`
+      refused by the auth gate; the one `cg-bridge.exe` on the machine is the service's (parent
+      `shawl.exe`); closing CG Control leaves CG Bridge running and uncounting it; no firewall rule
+      named for CG Control. `desktop.yml`: no CG Control staging, the console's `dist` scanned, the
+      Rust tests run. Open until the `smoke` job is green on the new model.
+- [x] 7.2 Native D1/D2 (no `Origin`); a browser keeps `fetch`.
+      `playout.rs` (`playout_post`, http only, the two auth routes only, IPv4 first; `not-sent` vs
+      `lost`); `desktop.ts` `nativePlayoutFetch`. ⚠ FOUND WHILE WRITING THE GUIDE: the connection
+      check probed the Playout's CORS list with CG Control's page origin (`http://tauri.localhost`,
+      which no Playout lists), so the CORS line FAILED and `signInCanWork` disabled a sign-in that
+      works — in first-run and in the sign-in overlay. The check's request now says
+      `signIn: 'native'` (the same `nativePlayoutFetch` predicate the sign-in uses) and the bridge
+      answers the line as a fact, never probed (`NATIVE_SIGN_IN_LINE`). Tests: `connection-check`
+      (native: pass, no OPTIONS asked; control: the same Playout refuses a browser origin),
+      `webSocketRuntimeAuth` (2 — native in CG Control; control: a browser sends only its origin).
+- [x] 7.3 The bridge found from the Playout address; the Station setup override; the lines (not reachable,
       needs admin, unlicensed, version); the splash `CONNECTING`.
+      `PlayoutAddressGate` (CG Control's own page with no station record: `Playout address`, and
+      `CG Bridge address` for a SEPARATE SERVER, else empty; saved as `cg.runtime.station.v1`; the
+      writer handed in by `main.tsx`, so the renderer imports nothing of the platform), laid out as a
+      page (it renders INSTEAD of the app — no third hand-rolled scrim). `normaliseBridgeAddress` /
+      `splitHostPort` in `@cg/shared-ipc` (the port read from the TEXT: a URL parser drops `:80`, and
+      `bridgeUrlForStation` and `bridgeHostPort` both read it that way now). Station setup → Servers →
+      Playout: the `CG Bridge` line, and an admin's Change edits both addresses
+      (`setPlayoutAddress(address, bridgeAddress?)`, `bridgeOverride`). The disconnected banner:
+      `CG Bridge not reachable at <host:port>` with the reason (`useBridgeReachability`) and, inside
+      CG Control, `Set up again` (`forgetStation`) — the way back from a mistyped address, which
+      Station setup (behind a sign-in over that very bridge) cannot give. Needs-admin, refused
+      (`CG Bridge: <the Playout's message>`) and version lines are §5/A's. Tests:
+      `playoutAddressGate.dom` (7), `connectionBannerSetUpAgain.dom` (4), `bridgeUrl` (+1, port 80),
+      `playout-address` (+3), e2e `playout-address-gate.spec` (3 — the gate at `tauri.localhost`,
+      every socket recorded and never dialled: saved, dials `ws://<host>:5280`, the line and its
+      reason, `Set up again` back to the gate; a separate server's address; the refusal).
 
 ## 8. Dev station
 
-- [ ] 8.1 `pnpm dev:station` (`--fake`, `--caspar`) starts a bridge the console connects to as to CG Bridge.
-- [ ] 8.2 The fake Playout: loopback AMCP, `OSC SUBSCRIBE`, a rotating refresh token, an `unlicensed` channel.
+- [x] 8.1 `pnpm dev:station` (`--fake`, `--caspar`) starts a bridge the console connects to as to CG Bridge.
+      The station runs the bridge on CG Bridge's ports with the Playout given; the console (Vite, 5174) derives it from its host. ⚠ It STOPS NOTHING now: every holder of a station port is
+      NAMED — `cg-bridge.exe` as CG Bridge with how to stop it (`Stop-Service CGBridge`), since on a
+      Playout machine it is the plant's bridge and Windows restarts it — and CG Control (a console,
+      no port) is never in the way; the state-folder overlap refusal covers `%ProgramData%\CG Bridge`.
+      ⚠ FOUND: `isolation.test.ts`'s bridge, run by every `pnpm gate`, bound UDP 6251 and held an
+      AMCP session with the `casparcg.exe` on the dev host; it now names a scratch connection (a
+      closed port, OSC 0) and plants CG Bridge's folder, byte-identical after. `@cg/dev-station`: 55.
+- [x] 8.2 The fake Playout: loopback AMCP, `OSC SUBSCRIBE`, a rotating refresh token, an `unlicensed` channel.
+      Built with 1.1 (`OSC SUBSCRIBE` on `@cg/amcp-mock`), 5.3 (an `unlicensed` channel), 5.1 and A.1
+      (the rotating refresh token, `2.9.2`'s reuse window) — the same fakes `--fake` composes.
 
 ## 9. Release `0.10.0` (`P-061`)
 
-- [ ] 9.1 `tools/release` covers three apps; every file carries `0.10.0`.
-- [ ] 9.2 The Persian guide `docs/release/0.10.0/install-guide.fa.md`.
+- [x] 9.1 `tools/release` covers three apps; every file carries `0.10.0`.
+      `release-files.mjs`: FIVE files — `CG-Bridge_<v>_x64-setup.exe` (built under that name), the two
+      apps' renamed installers, the guide, `SHA256SUMS.txt` over the other four; the release job waits
+      for `bridge-smoke` too and says CG Bridge is installed first. `release-version.mjs` reads
+      `0.10.0` from all nine files (CG Bridge is built from the same number, `/DVERSION=`).
+- [x] 9.2 The Persian guide `docs/release/0.10.0/install-guide.fa.md`.
+      Nine sections: CG Bridge first (its two placements — the Playout machine, or a server beside it
+      by command line), then CG Control, first run, CG Designer, WHAT TO DO FOR EACH CONSOLE LINE,
+      reporting (Download logs), limits — the "one CG Control per channel" limit gone (pinned as an
+      absence). Picture 1 is CG Control's new gate (`guide-shots.spec`'s first test, which binds and
+      dials nothing); 2–4 are 0.9.1's, their screens unchanged. `guide.test` (14) holds every quoted
+      label to the file that renders it; the PDF builds (3 pages).
 - [ ] 9.3 The clean-Windows smoke: CG Bridge's service, `/health`, rules, `6250` unbound, silent
       install/upgrade/uninstall exit codes; CG Control connects; control: no token, no state.
-- [ ] 9.4 `P-031`'s floor at `0.10.0`.
+      Written (6.7's `bridge-smoke` and 7.1's `smoke`); open until both jobs are green.
+- [x] 9.4 `P-031`'s floor at `0.10.0`. `docs/prd/platform.md`: the floor SET at `0.10.0` — what it opens
+      and must keep opening (the two formats, CG Bridge's STRICT configuration and its station files,
+      the one-time `0.9.x` import, CG Control's station record, `major.minor` protocol compatibility).
 - [ ] 9.5 Tag `v0.10.0` → the draft, its files and sizes read back.
 
 ## 10. For the Playout team, and the report

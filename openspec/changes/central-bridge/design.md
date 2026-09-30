@@ -282,12 +282,37 @@ Control; `fetch` in a browser (dev, where the fake Playout allows any origin). T
 line naming both versions, and `WebSocketRuntime` refuses every request but `auth` and
 `bridge.capabilities` locally, so nothing is sent. The installer becomes per-user, with no firewall rule.
 
+**As built (2026-09-30), where it departs from the above:**
+
+- ONE Tauri command, `playout_post` (`playout.rs`), carries D1 and D2 — a raw HTTP/1.0 POST on a
+  `TcpStream`, IPv4 first, `http://` and the two auth routes only — not `ureq`: `Cargo.lock` is
+  tracked and the dev host has no Rust, so no new crate. It answers `answered` / `not-sent` / `lost`,
+  which the refresh (A.5) needs. Its bytes carry no `Origin` (5.5, a real-socket Rust test).
+- The FIRST question is its own page, `PlayoutAddressGate`, shown when CG Control's page
+  (`tauri.localhost`) has no station record: the Playout address, and `CG Bridge address` for a
+  separate server. The Station setup override is the Playout card's Change (a station admin, CG
+  Control): both addresses. And a way BACK — the disconnected banner's `Set up again`, which forgets
+  the record — because a console that cannot reach its CG Bridge cannot reach Station setup either.
+- The connection check asks what THIS console's sign-in meets: `signIn: 'native'` from CG Control,
+  and the bridge answers the CORS line as a fact rather than probing the list with
+  `http://tauri.localhost` — which disabled a working sign-in until then.
+- The page's CSP admits `http:`/`https:` images: PROGRAM is CG Bridge's `/pgm/<n>`, another origin
+  (measured: refused before, "No return signal" forever).
+- The splash is the window's first page now; `FIELD-FIXES-01` J's "continued" mark is gone.
+
 ### D9 — transport: plain WebSocket over HTTP on `5280`
 
 The Playout's own API offers HTTP `8080` and HTTPS `8443`; every console already signs in over `8080`, so the
 same token already crosses the station network in clear. A TLS listener needs a certificate the client does
 not have and a trust decision per console — filed as `P-062`. `/health`, `/pgm/<n>` and `/logs.zip` are
 served on the same port as the WebSocket (one `http.Server`, the upgrade on the same socket).
+
+**As built (2026-09-30):** an `<img>` and a download link carry no token, so `/pgm/<n>` and `/logs.zip`
+open only with a TICKET the console's verified socket asks for (`pgmReturn.ticket`, `bridge.logs-ticket`;
+`http-tickets.ts`): random, 30 s, bound to what it was issued for — a channel, or the logs — and a logs
+ticket spent on first use. Who may be given one is the route's own gate (the fence and the permission
+class), so the HTTP side decides nothing new. The console listener's untokened loopback `/pgm/` is
+removed — ONE door.
 
 ### D10 — `/health` (rule 13), fixed and documented
 

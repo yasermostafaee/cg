@@ -3814,6 +3814,13 @@ draft pre-release holds exactly the three installers, `SHA256SUMS.txt` and the g
 naming one of them with its hash; WHEN the smoke runs THEN each check above passes, and its controls fail
 where they should.
 
+**Built in code (2026-09-30, `9c93ace7` and before).** The nine version files carry `0.10.0`;
+`release-files.mjs` names five files; the guide `docs/release/0.10.0/install-guide.fa.md` (nine
+sections, picture 1 the new Playout-address question); the floor set in [[P-031]]. The smokes are
+written (`bridge-smoke`, and the apps' smoke on the v3 model) — their first run found three installer
+defects, fixed in `5530536a`. **Owed:** both smokes green on CI, then the `v0.10.0` tag and the draft
+read back (`central-bridge` tasks 9.3, 9.5).
+
 ## [ ] P-062 — TLS for the console ↔ CG Bridge connection ⟨priority: low⟩ — FILED 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §B · filed only
 
 **What.** CG Bridge's console connection (TCP `5280`) is plain WebSocket over HTTP, the transport the
