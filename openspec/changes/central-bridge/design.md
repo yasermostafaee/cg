@@ -344,6 +344,12 @@ backup core is declared in Station setup as before, its OSC arrives through its 
 `<primary's IP>:<its port>` (the installer's UDP rule covers both sessions' ports), and the Playout's admin
 adds the primary's IP to the backup's AMCP allow list. A standby bridge is `R-079`.
 
+**As built (2026-09-30, `B-297`):** the rule reaches the token too. A grant's `host` is the same
+`casparHost` (the join key), so the verifier reads a loopback grant as the Playout's host
+(`resolveGrantHosts`, fed the value the D4 reader is). Found by §5's separate-server test: CG Bridge
+driving the Playout by its network address refused every `127.0.0.1` grant — which is every explicit
+grant on `.111`. So a separate server needs no `CasparHostOverride` in the Playout.
+
 ### D14 — OSC ports
 
 The bridge-wide OSC port (config `oscPort`, default `6251`) is server A's; server B's is `oscPort + 1`. The

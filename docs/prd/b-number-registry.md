@@ -3073,12 +3073,18 @@ file's range and pointer lines.
 
 ⇒ **Next free after this session is `B-293`**, **`D-162`**, **`P-061`**, **`R-078`** and **`C-046`**.
 
-### 2026-09-30 — `CENTRAL-BRIDGE-01` (v3) takes `B-293`…`B-295`, `C-046`…`C-048`, `P-061`, `P-062`, `R-078`, `R-079`
+### 2026-09-30 — `CENTRAL-BRIDGE-01` (v3) takes `B-293`…`B-297`, `C-046`…`C-048`, `P-061`, `P-062`, `R-078`, `R-079`
 
 - `B-293` — a template's URL did not always change with its version, and carried no cache header (§0,
   rule 12); `B-294` — every console re-delivered its own stack and library, and a stale copy could win
   (§0.2); `B-295` — a failed OSC bind stopped the session before AMCP was dialled, silently (§0.1) — all in
   [bugs-runtime.md](bugs-runtime.md).
+- Taken later the same day, in the same file, each filed and closed in code: `B-296` — the dev station's
+  isolation test dialled this host's CasparCG on every gate (8.1); `B-297` — a CG Bridge on a separate
+  server refused every explicit channel grant (§5). Measured free before use:
+  `git grep -n --untracked -E "^## \[.\] B-29[67] " -- docs` on every local branch (`ai-stale`,
+  `design/live-source-multibox`, `dev`, `main`) returned only `B-296`'s own heading on `dev` once it was
+  written — the positive control — and nothing for `B-297`; no stash.
 - `C-046` — OSC by `OSC SUBSCRIBE` on the bridge's own port, never `6250` (rule 7); `C-047` — a core
   restart, and the ledger checked with `INFO` at start (rules 2–3); `C-048` — a take on an unlicensed
   channel is refused (rule 11) — [caspar.md](caspar.md).
@@ -3093,4 +3099,4 @@ Measured free before use: `git grep -n --untracked -E "^## \[.\] (B-29[3-9]|P-06
 -- docs` returned nothing, on `dev` and on both other local branches, against positive controls on `B-292`,
 `C-044`, `C-045`, `P-060` and `R-077`, which returned one hit each; no stash.
 
-⇒ **Next free after this session is `B-296`**, **`D-162`**, **`P-063`**, **`R-080`** and **`C-049`**.
+⇒ **Next free after this session is `B-298`**, **`D-162`**, **`P-063`**, **`R-080`** and **`C-049`**.

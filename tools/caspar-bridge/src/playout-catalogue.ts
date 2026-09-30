@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CHANNEL_OUTPUTS } from '@cg/shared-ipc';
+import { CHANNEL_OUTPUTS, type PlayoutChannels } from '@cg/shared-ipc';
 import { playoutFetch } from './playout-http.js';
 
 /**
@@ -136,6 +136,35 @@ export function isLoopbackCasparHost(host: string): boolean {
 export function resolveCasparHost(host: string, playoutHost: string | undefined): string {
   if (playoutHost === undefined || isLoopbackCasparHost(playoutHost)) return host;
   return isLoopbackCasparHost(host) ? playoutHost : host;
+}
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` rule 9 — **A TOKEN'S GRANTS, BY THE SAME RULE.** A grant's `host` is the
+ * Playout's `casparHost` again — the contract makes the two one spelling, because the pair is the join
+ * key (`PLAYOUT-INTEGRATION-CONTRACT-v1` §3.2 and §4.4) — so a loopback one names the Playout's
+ * machine exactly as a D4 row's does, and is rewritten here by {@link resolveCasparHost} and nothing
+ * else.
+ *
+ * ⚠ Found by §5's separate-server test (`B-297`): on `.111` the Playout spells `casparHost`
+ * `127.0.0.1` (the bridge-host letter §3), so every explicit grant said `127.0.0.1`. A CG Bridge on
+ * the Playout's own machine drives `127.0.0.1` and matched; one on a separate server drives the
+ * Playout's network address, rewrote D4's rows to it, and refused every operator every command —
+ * `cg-admin` too, once `2.9.2` turns its `"*"` into a list. A grant naming another machine passes
+ * byte for byte, so it still authorises nothing here; `"*"` is left as it is.
+ */
+export function resolveGrantHosts(
+  channels: PlayoutChannels,
+  playoutHost: string | undefined,
+): PlayoutChannels {
+  if (channels === '*') return channels;
+  let rewritten = false;
+  const resolved = channels.map((grant) => {
+    const host = resolveCasparHost(grant.host, playoutHost);
+    if (host === grant.host) return grant;
+    rewritten = true;
+    return { ...grant, host };
+  });
+  return rewritten ? resolved : channels;
 }
 
 /** A4 — a D4 row as a consumer must see it (see {@link resolveCasparHost}). */

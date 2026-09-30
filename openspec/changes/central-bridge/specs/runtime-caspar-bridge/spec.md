@@ -66,6 +66,13 @@ At close the stack SHALL be written whatever is pending.
 - **WHEN** a bridge with rows on air is stopped and a new bridge starts on the same file
 - **THEN** the new bridge holds the same rows, in order, before any console connects
 
+#### Scenario: A console closes; the service does not notice
+
+- **WHEN** the only console, having taken a row, closes
+- **THEN** nothing is sent to CasparCG, the layer stays on air, the file still records the row on air,
+  and a console that connects afterwards is told the row ON AIR — control: the same read, once that
+  console clears the row, says it is not
+
 #### Scenario: An unusable file
 
 - **WHEN** the stack file is not a stack
@@ -423,6 +430,12 @@ byte. `CENTRAL-BRIDGE-01` (D13): the rule is per READER — a reader built for a
 SHALL read that Playout's loopback rows as the BACKUP's host, never as the local core's nor as the
 primary's (the Playout team's rules 9–10: each engine names its own core `127.0.0.1`).
 
+Amended 2026-09-30 (`B-297`, found by §5's separate-server test): a token's `cg_channels` grant carries
+the same `casparHost` (the contract's join key), so the token verifier SHALL read a grant whose host is
+loopback as the host of the configured Playout address, by the same rule and nothing else; a grant
+naming another machine SHALL pass byte for byte, and `"*"` SHALL be left as it is. With a loopback
+Playout address — CG Bridge on the Playout's own machine — no grant and no row is rewritten.
+
 #### Scenario: One value everywhere
 
 - **WHEN** the catalogue names a channel on `127.0.0.1` **THEN** `channels.catalogue` and
@@ -432,6 +445,14 @@ primary's (the Playout team's rules 9–10: each engine names its own core `127.
 
 - **WHEN** a reader built for the backup Playout's address reads a row naming `127.0.0.1` **THEN** the
   row's host is the backup's — control: the primary's reader reads the same row as the primary's host
+
+#### Scenario: A separate server honours a loopback grant
+
+- **WHEN** CG Bridge on a separate server drives the Playout's CasparCG by the Playout's network
+  address, and an operator's token grants channel 1 on `127.0.0.1` **THEN** the operator's load and
+  take on channel 1 go out and CasparCG fetches the page from CG Bridge's address **AND** a grant naming
+  another machine still holds nothing here — control: read as the grant spells it, the same token holds
+  nothing on the network address
 
 ### Requirement: A restore refuses to decide rather than act on absent evidence
 

@@ -233,6 +233,26 @@
       writes off a real loopback socket — neither header; control: the route, the host and the body.
       It runs in `desktop.yml`'s new `Test CG Control's shell (Rust)` step (no Rust on the dev host):
       open until that step is green.
+- [x] 5.6 (`B-297`) A loopback grant is the Playout's own machine — FOUND by §5's separate-server
+      test, which went RED as first written: on `.111` the Playout spells `casparHost` `127.0.0.1`, so a
+      token's grants say `127.0.0.1`; a CG Bridge on a separate server drives the Playout's network
+      address, and `grantsChannel` refused the operator's load ("This sign-in does not cover channel
+      1…"). The token verifier now reads a grant by the ONE host rule D4's rows are read by
+      (`resolveGrantHosts` beside `resolveCatalogueHost`; `PlayoutAuth`'s `playoutHost`, given the same
+      value as the D4 reader); another machine's grant and `"*"` pass as they are. Tests:
+      `cg-channels-shapes` B-297 (the rule; the verifier with the Playout's host — CONTROL: without it,
+      the grant holds nothing on the network address; another station's grant still holds nothing),
+      `central-bridge-service.integration` (below). Spec: the MODIFIED loopback requirement amended in
+      place (dated), with a separate-server scenario.
+      §5's two remaining tests, in `central-bridge-service.integration.test.ts`: **the service outlives
+      a console** — the only console takes a row and closes; nothing is written to the channel, the
+      layer stays on air, `bridge-stack.json` still says ON AIR, and a NEW console is told it ON AIR
+      (control: after that console clears it, the same read says it is not); **a separate server** —
+      the fake Playout and CasparCG on this machine's own network address, CG Bridge's control socket
+      there alone (control: loopback refuses), a console given the address signs in with a `127.0.0.1`
+      grant, loads and takes; the core fetches the page from `http://<address>:<port>/template/…`
+      (the mock's own GET resolves). The prompt's control for it — no address set, no bridge on the
+      Playout host → the "not reachable" line — is `playout-address-gate.spec`'s first test.
 
 ## 5A. Delta `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` (`PLAYOUT-CG-RESPONSE-LICENSE-v1` §2, §8, §9)
 

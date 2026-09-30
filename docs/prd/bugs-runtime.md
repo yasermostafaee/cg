@@ -13015,3 +13015,23 @@ connection as first-run would — a closed loopback port, OSC `0` — so the bri
 dials no real core; re-measured, it held only its ephemeral listeners and nothing on `5250` or `6251`. The
 test also plants CG Bridge's `%ProgramData%` folder and proves it byte-identical afterwards. `bridgeArgs`
 is unchanged.
+
+## [~] B-297 — On a separate server, CG Bridge refused every explicit channel grant: a token's `127.0.0.1` never matched the Playout's network address ⟨priority: high — the separate server is a supported placement⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `CENTRAL-BRIDGE-01` (v3) §5 · `openspec/changes/central-bridge/` (task 5.6)
+
+**Found (§5, "Separate server"):** the prompt's own test, written as the placement really is — the fake
+Playout and its CasparCG on a network address, CG Bridge driving that address, an operator's token
+granting channel 1 on `127.0.0.1` — went red: the load was refused with `This sign-in does not cover
+channel 1…`. A grant's `host` is the Playout's `casparHost` (the contract's join key,
+`PLAYOUT-INTEGRATION-CONTRACT-v1` §3.2 and §4.4), and on `.111` the Playout spells it `127.0.0.1` (the
+bridge-host letter §3). The D4 reader already read a loopback row as the Playout's host
+(`DESKTOP-APPS-01-A` A4, `resolveCasparHost`); the token verifier read the grant literally, and
+`grantsChannel` compared it with the hosts CG Bridge drives. So on the Playout's own machine (AMCP to
+`127.0.0.1`) every grant matched, and on a separate server (AMCP to the Playout's address) none did:
+every operator refused every command — and, from Playout `2.9.2`, `cg-admin` too, whose `"*"` becomes an
+explicit list when not every channel is CG-licensed (`CENTRAL-BRIDGE-01-A` A3). **Fix:** the verifier
+reads a grant by the ONE host rule (`resolveGrantHosts`, beside `resolveCatalogueHost`), with the same
+Playout host the D4 reader is given; another machine's grant and `"*"` pass as they are, and with a
+loopback Playout address nothing is rewritten. ⚠ One edge stays, the same for grants and D4 rows: a CG
+Bridge ON the Playout machine given the machine's network address as its Playout (instead of the
+installer's loopback default) rewrites both to that address while it drives `127.0.0.1`, so neither joins —
+an undocumented configuration; both documents say `/S` alone there.

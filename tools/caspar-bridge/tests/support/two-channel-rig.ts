@@ -19,8 +19,11 @@ import { awaitChannelModeRead, HEALTH_MS, track } from './harness.js';
  * others: a spec that asks "did anything reach channel 2" reads the SAME trace, filtered by the
  * SAME addressing rule, as every other.
  *
- * Loopback only: the fake binds an ephemeral AMCP port and an ephemeral OSC port on 127.0.0.1, and
- * the bridge is handed that connection explicitly, so nothing here can reach a real server.
+ * Loopback by default: the fake binds an ephemeral AMCP port and an ephemeral OSC port on 127.0.0.1,
+ * and the bridge is handed that connection explicitly, so nothing here can reach a real server. A
+ * spec that stands up a SEPARATE SERVER (`CENTRAL-BRIDGE-01` §5) passes `host`, one of THIS
+ * machine's own addresses: the fake and the bridge's control socket bind there instead — still
+ * nothing that can reach another machine.
  */
 
 /** The standard bank on a channel — templates 80–99, beds 50–59 — with every row shown. */
@@ -93,9 +96,15 @@ export async function twoChannelRig(
     channels?: number;
     bridge?: Partial<BridgeOptions>;
     awaitBlanket?: boolean;
+    /**
+     * Where the fake CasparCG listens and the bridge's control socket binds — `127.0.0.1` unless a
+     * spec stands up a separate server on one of this machine's own addresses.
+     */
+    host?: string;
   } = {},
 ): Promise<TwoChannelRig> {
   const banks = opts.banks ?? [standardBank(1), standardBank(2)];
+  const host = opts.host ?? '127.0.0.1';
   const oscPort = await freeUdpPort();
   const tracePath = path.join(
     os.tmpdir(),
@@ -106,9 +115,10 @@ export async function twoChannelRig(
   });
   const mock = track(
     await createMock({
+      host,
       amcpPort: 0,
       oscPort,
-      oscHost: '127.0.0.1',
+      oscHost: host,
       oscHz: 40,
       channels: opts.channels ?? 3,
       tracePath,
@@ -116,12 +126,13 @@ export async function twoChannelRig(
     (m) => m.stop(),
   );
   const connection: ConnectionConfig = {
-    servers: { A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort } },
+    servers: { A: { host, amcpPort: mock.amcpPort, oscPort } },
     strategy: 'mirror-sync',
     autoFailoverEnabled: true,
   };
   const handle = track(
     await createBridge({
+      host,
       port: 0,
       connection,
       ...(opts.fromFile !== undefined

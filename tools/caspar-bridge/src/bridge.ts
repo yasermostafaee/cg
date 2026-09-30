@@ -1841,6 +1841,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       ? null
       : new PlayoutAuth(auth.playout, {
           ...(options.playoutAuthOptions ?? {}),
+          // `B-297` — a loopback grant names the Playout's own machine, as D4's loopback row does.
+          playoutHost: playoutHostOf(auth.playout),
           /*
             🔴 `DESKTOP-APPS-01-A` A2 — an address-configured station LEARNS its issuer from the first
             `station-admin` sign-in, and keeps it: persisted as `playout.issuer`, after which it is an

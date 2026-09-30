@@ -11,6 +11,7 @@ import {
   type PlayoutChannels,
   type PlayoutPrincipal,
 } from '@cg/shared-ipc';
+import { resolveGrantHosts } from './playout-catalogue.js';
 import type { PlayoutAuthConfig } from './playout-config.js';
 import { playoutFetch } from './playout-http.js';
 
@@ -138,6 +139,12 @@ export interface PlayoutAuthOptions {
    * reported and never refuses the sign-in that earned the adoption.
    */
   readonly onIssuerAdopted?: (issuer: string) => void;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` rule 9 (`B-297`) — the host of the configured Playout address. A grant
+   * whose `host` is loopback names the Playout's own machine, and is read as this host — the rule
+   * D4's rows are read by ({@link resolveGrantHosts}). Absent: every grant as the token says it.
+   */
+  readonly playoutHost?: string | undefined;
 }
 
 /**
@@ -199,11 +206,13 @@ export class PlayoutAuth {
    */
   #issuer: string | null;
   readonly #onIssuerAdopted: ((issuer: string) => void) | undefined;
+  readonly #playoutHost: string | undefined;
 
   constructor(config: PlayoutAuthConfig, options: PlayoutAuthOptions = {}) {
     this.#config = config;
     this.#issuer = config.issuer;
     this.#onIssuerAdopted = options.onIssuerAdopted;
+    this.#playoutHost = options.playoutHost;
     this.#now = options.now ?? ((): number => Date.now());
     this.#fetch = options.fetchImpl ?? playoutFetch;
     this.#jwks = createRemoteJWKSet(new URL(config.jwksUrl), {
@@ -334,7 +343,12 @@ export class PlayoutAuth {
           name,
           sub: claims.data.sub,
           roles: claims.data.roles,
-          channels: claims.data.cg_channels satisfies PlayoutChannels,
+          // `B-297` — every consumer of a grant (the gate, the scope, the lock, the strip) reads it
+          // HERE, so a loopback grant is resolved once, as D4's row is.
+          channels: resolveGrantHosts(
+            claims.data.cg_channels satisfies PlayoutChannels,
+            this.#playoutHost,
+          ),
           expiresAt: new Date(claims.data.exp * 1000).toISOString(),
           nameTruncated: truncated,
         },
