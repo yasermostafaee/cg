@@ -233,6 +233,21 @@ bridge's access token is the bearer for D4, D9, D10 and D11 (the borrowed consol
 refreshed 10 min before `exp` and on a `401`. Every request: no `Origin`, no `X-Apasai-Mirrored`, ≤ 600/min
 shared per IP (D4 every 5 s, D9 every 60 s, D10 every 30 s is ~26/min).
 
+**As built (5.1/5.2), and where it differs from the paragraph above:** (1) the borrowed console bearer is
+NOT gone — it is the FALLBACK while the bridge has no session (a fresh install before an admin signs it in,
+or after the Playout refused the saved token), so a station never loses its catalogue, sources or
+revocation list over the needs-admin line; the bridge's own bearer is always preferred
+(`PlayoutAuth.useOwnBearer`). (2) The session file is named by `--bridge-session-path` with NO default: a
+development bridge must not start saying `CG Bridge needs a station admin to sign in`; the service
+configuration names it (6.1). (3) Refresh is scheduled 10 min before `exp`, and an unanswered refresh is
+retried every 30 s with the token kept; the refresh ON a `401` from another read is not built (every
+reader swallows a `401` by design, ADR 0010 rule 5) — the scheduled refresh covers a token's ordinary life,
+and a revoked one is refused at its next refresh. (4) A save that fails keeps the session for THIS process
+and says, in the log, that a restart will need an admin. (5) D1/D2 live once in `@cg/shared-ipc`; the
+console re-exports them. (6) `playoutFetch` had never sent a request body — every call before this was a
+GET — so the bridge's D1 reached the Playout empty; it now sends a text body with its length and refuses
+any other kind.
+
 ### D8 — the console: bundled, native sign-in, the bridge found from the Playout address
 
 CG Control's window loads the console from the app itself (`http://tauri.localhost`, a secure context).

@@ -112,6 +112,13 @@ const NON_VERB_ACTIONS = [
   */
   'set-media-playback',
   'media-transport',
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — a station admin gave CG Bridge its own Playout sign-in. An
+    IDENTITY row like `sign-in`, written directly by the bridge, reaching no air. Driven by
+    `tests/bridge-session.integration.test.ts`, which asserts the admin is the actor and that no
+    row carries the password.
+  */
+  'bridge-sign-in',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {

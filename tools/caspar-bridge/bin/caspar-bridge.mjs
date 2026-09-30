@@ -189,6 +189,22 @@ const stackPath =
     ? args['stack-path']
     : path.join(path.dirname(persistPath), 'bridge-stack.json');
 
+/*
+  🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — CG BRIDGE'S OWN PLAYOUT SESSION (`bridge-session.json`: the
+  rotating refresh token, never a password). NO default, on purpose: a bridge that keeps a session
+  says "CG Bridge needs a station admin to sign in" until one does, and a development bridge that
+  never asked for that must not start saying it. The service configuration names it; a valueless
+  flag is a hard boot error, as every path flag's is.
+*/
+if (args['bridge-session-path'] === true) {
+  console.error(
+    '[caspar-bridge] --bridge-session-path needs a value (the JSON file CG Bridge keeps its Playout session in).',
+  );
+  process.exit(1);
+}
+const bridgeSessionPath =
+  typeof args['bridge-session-path'] === 'string' ? args['bridge-session-path'] : undefined;
+
 // R-021 — mirrors --persist-path, EXCEPT for what an absent file means: here it
 // means the built-in default bank, not "no bank" (see the header).
 const fixedLayersPath =
@@ -570,6 +586,7 @@ const bridgeOptions = {
   ...(bridgeVersion() !== 'unknown' ? { version: bridgeVersion() } : {}),
   persistPath,
   stackPath,
+  ...(bridgeSessionPath !== undefined ? { bridgeSessionPath } : {}),
   fixedLayersPath,
   reservedLayers,
   reservedLayersPath,

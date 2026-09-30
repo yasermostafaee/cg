@@ -103,6 +103,17 @@ export async function playoutFetch(
     if (name !== 'origin') headers[name] = value;
   });
   const signal = init.signal ?? null;
+  /*
+    `CENTRAL-BRIDGE-01` (D7) — a STRING body is sent, with its length. Every request this made before
+    was a GET read and it wrote no body at all, so the bridge's own D1/D2 (a JSON POST) reached the
+    Playout empty and was refused as a wrong password. Any other body kind is refused rather than
+    silently dropped the same way.
+  */
+  const body = init.body ?? null;
+  if (body !== null && typeof body !== 'string') {
+    throw new PlayoutRequestError('FAILED', 'only a text body can be sent to the Playout');
+  }
+  if (body !== null) headers['content-length'] = String(Buffer.byteLength(body, 'utf8'));
   const ip = await pinnedIPv4(url.hostname).catch(() => null);
   if (ip === null) {
     throw new PlayoutRequestError('NO_IPV4', `${url.hostname} has no IPv4 address`);
@@ -180,6 +191,7 @@ export async function playoutFetch(
         reject(new PlayoutRequestError('CONNECT_TIMEOUT', err.message));
       else reject(err);
     });
-    req.end();
+    if (body !== null) req.end(body, 'utf8');
+    else req.end();
   });
 }

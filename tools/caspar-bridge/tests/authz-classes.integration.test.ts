@@ -135,13 +135,19 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly ten routes are station-admin: the configuration verbs, the unjoined catalogue, and the two channel-scope doors', () => {
+  it('exactly eleven routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, and the bridge’s own sign-in', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
       .sort();
 
     expect(admin).toEqual([
+      /*
+        `CENTRAL-BRIDGE-01` (D7, rule 8) — a station admin gives CG Bridge the station account's
+        password, once. It sets the bearer every Playout read of the bridge's uses, which is a
+        station's configuration, not an operator's press.
+      */
+      'bridgeSession.sign-in',
       'channelSettings.set',
       /*
         `DESKTOP-APPS-01` §2E — the Playout's channels UNJOINED, host and all. A read, on the
@@ -207,6 +213,8 @@ describe('C-038 — the census: every route, classified', () => {
       'auth.sign-out',
       'auth.state',
       'bridge.capabilities',
+      // `CENTRAL-BRIDGE-01` (D7) — whether CG Bridge holds its own Playout session. Every console says it.
+      'bridgeSession.state',
       'channelSettings.get',
       // `R-062` gap 2 — the channel-discovery call. A read: it NAMES channels and decides nothing.
       'channels.list',

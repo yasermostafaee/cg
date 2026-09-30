@@ -8,6 +8,7 @@ import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { BridgeSkewBanner } from './features/status/BridgeSkewBanner.js';
+import { BridgeSessionBanner } from './features/status/BridgeSessionBanner.js';
 import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js';
 import { losingAirChecks, OutputMissingBanner } from './features/status/OutputMissingBanner.js';
 import { getRefusal, onRefusal } from './features/status/refusalStore.js';
@@ -343,6 +344,9 @@ export function App(): JSX.Element {
         <ConnectionBanner />
         {/* B-153 — the bridge PROCESS is older than this page. Reports, never gates. */}
         <BridgeSkewBanner />
+        {/* `CENTRAL-BRIDGE-01` (D7) — CG Bridge has no Playout session of its own: one line, and a
+          station admin's one-time sign-in. Renders nothing otherwise. */}
+        <BridgeSessionBanner />
         {/* R-006 — the failover banner describes REAL servers, so it renders NOTHING in test
           mode. That gate lives INSIDE the component since `RUNTIME-REDESIGN-01` Phase 9 (it was
           `link !== 'offline-mock' && …` here, where no component test could reach it and the

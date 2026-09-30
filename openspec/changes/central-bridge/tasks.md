@@ -174,15 +174,47 @@
   ship": 4.4's doc comments used a private example address that the builds keep — fixed in `9ec34e2a`
   (a documentation address; the local scan of the staged payload passes, and the replaced comment is
   shown present in the three bundles the run named).
+- **Linux e2e discharged for 4.2** on `9ec34e2a` (carries `8315909c`):
+  https://github.com/yasermostafaee/cg/actions/runs/36683576370 — `completed`/`success`, `Test` and `E2E`
+  both RAN (with `playout-authz`'s viewer fact). Its Desktop run
+  (https://github.com/yasermostafaee/cg/actions/runs/36683576368) passed the payload scan and the
+  clean-Windows installer smoke. **For 4.5 and 4.6** on `d2eb0cd9`:
+  https://github.com/yasermostafaee/cg/actions/runs/36685100324 — `completed`/`success`, `Test` and `E2E`
+  both RAN (`two-consoles.spec.ts` on Linux).
 
 ## 5. The bridge's own session (rule 8), unlicensed (rule 11), backup (rules 9–10)
 
-- [ ] 5.1 `bridge-session.json`: the rotating refresh token persisted before use; `needs-admin`; the
+- [x] 5.1 `bridge-session.json`: the rotating refresh token persisted before use; `needs-admin`; the
       admin's one-time sign-in; D4/D9/D10/D11 on the bridge's bearer.
-- [ ] 5.2 The crash-between-receive-and-use test; control: the old token never reused.
+      `bridge-session.ts` (tmp → write → `fsync` → rename, owner-only; the record never holds a
+      password); D1/D2 moved ONCE to `@cg/shared-ipc` (`playout-session.ts`, the console re-exports
+      it); `bridgeSession.state` / `.state-changed` / `.sign-in` (station-admin, operator lock,
+      audited `bridge-sign-in` with no credential); `PlayoutAuth.useOwnBearer` — the bridge's bearer
+      first for D4/D10/D11 (`usableBearer`) and D9 (the poll, armed with no console signed in), a
+      console's only as the fallback; the introducing D9 read on every token gained. CLI
+      `--bridge-session-path`, NO default (a dev bridge must not start asking for an admin; the
+      service configuration names it — 6.1). Console: the `BridgeSessionBanner` line, and a station
+      admin's dialog (the account prefilled `cg-admin`, the password dropped after its one request).
+      Found and fixed on the way: `playoutFetch` sent NO request body (every earlier call was a GET),
+      so the bridge's own D1 reached the Playout empty. Tests: `bridge-session` (needs-admin; the
+      admin's sign-in — no password in the file; a wrong password — the code, nothing written; a
+      restart rotates the token; a refused refresh is a lost session), `bridge-session.integration`
+      (operator refused, admin succeeds, every console pushed, the record names the admin and holds
+      no password, the D9 read carries `cg-admin`'s bearer, D4 continues with it after every console
+      closed), census updates (`authz-classes`, `lock-refuses-intents`, `audit-append-sites`), runtime
+      `bridgeSessionBanner.dom` (the line; no control for an operator; the refusal's sentence; the
+      password gone after a refusal, after close and from storage).
+- [x] 5.2 The crash-between-receive-and-use test; control: the old token never reused.
+      `bridge-session` 5.2: the refresh saves T1 and the process "dies" at the first step after the
+      save; the restart refreshes with T1 and is signed in; D2 saw `[T0, T1]` — T0 once, never again.
+      The residual the Playout's letter names is pinned beside it: a crash BEFORE the save leaves the
+      spent T0, the restart presents it once, is refused, and says it needs an admin.
 - [ ] 5.3 A take on an `unlicensed` channel refused with the reason; control: a licensed channel takes.
 - [ ] 5.4 A backup's loopback `casparHost` reaches the backup's host (pinned).
 - [ ] 5.5 No `Origin` and no `X-Apasai-Mirrored` on any request to the Playout (bridge and native).
+      The BRIDGE half is done: `bridge-session.integration` reads every request the fake Playout
+      received (the bridge's D1, the D9 poll, D4) for both headers — none — with its control (the log
+      holds the D1 and a bearer). The NATIVE half (CG Control's own D1/D2) is owed with 7.2.
 
 ## 6. CG Bridge as a service (`R-067`)
 

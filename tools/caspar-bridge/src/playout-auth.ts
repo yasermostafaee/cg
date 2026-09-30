@@ -167,6 +167,13 @@ export class PlayoutAuth {
    */
   #bearer: { readonly raw: string; readonly jti: string | null; readonly exp: number } | null =
     null;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7) — **CG BRIDGE'S OWN BEARER**, from its own Playout session
+   * (`bridge-session.ts`): the station's account, refreshed by the bridge, and live whether or not
+   * any console is signed in. Preferred for every Playout read; the borrowed console bearer above is
+   * the fallback while the bridge has no session of its own.
+   */
+  #ownBearer: (() => string | null) | null = null;
   /** The background tick. Armed by the first live token, cleared by {@link dispose}. */
   #ticker: ReturnType<typeof setInterval> | null = null;
   /** Count of D9 requests actually issued — the positive control a cadence test needs. */
@@ -409,10 +416,37 @@ export class PlayoutAuth {
    * stands" rules are pinned by the revocation suite, and this change is about D4.
    */
   usableBearer(): string | null {
+    // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session first; a console's only as the fallback.
+    const own = this.#ownBearer?.() ?? null;
+    if (own !== null) return own;
     const held = this.#bearer;
     if (held === null) return null;
     if (this.isExpired(held.exp) || this.isRevoked(held.jti)) return null;
     return held.raw;
+  }
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7) — **HAND THE BRIDGE ITS OWN BEARER.** The provider answers the
+   * session's current access token, or `null` while it has none (so every read falls back to a
+   * signed-in console's, exactly as before this change).
+   */
+  useOwnBearer(provider: () => string | null): void {
+    this.#ownBearer = provider;
+  }
+
+  /**
+   * Keep the D9 list fresh for the bridge's own session: arm the tick and poll now if due. Called
+   * when the bridge's session gains a token, so the revocation list no longer waits for a console
+   * to sign in.
+   */
+  startPolling(): void {
+    this.#armTicker();
+    this.#maybePoll();
+  }
+
+  /** The D9 bearer: the bridge's own first, then the last live console token. */
+  #pollBearer(): string | null {
+    return this.#ownBearer?.() ?? this.#bearer?.raw ?? null;
   }
 
   /**
@@ -485,7 +519,7 @@ export class PlayoutAuth {
    */
   #maybePoll(): void {
     if (this.#polling) return;
-    if (this.#bearer === null) return;
+    if (this.#pollBearer() === null) return;
     if (this.#now() - this.#lastPollMs < REVOCATION_POLL_MS) return;
     this.#polling = true;
     this.#lastPollMs = this.#now();
@@ -497,7 +531,7 @@ export class PlayoutAuth {
 
   /** Force a poll now, bypassing the cadence. Tests only — never called on the request path. */
   async pollRevokedNow(): Promise<void> {
-    if (this.#bearer === null) return;
+    if (this.#pollBearer() === null) return;
     this.#lastPollMs = this.#now();
     this.#pollCount += 1;
     await this.#pollRevoked();
@@ -526,7 +560,7 @@ export class PlayoutAuth {
   }
 
   async #pollRevoked(presented?: string): Promise<void> {
-    const bearer = presented ?? this.#bearer?.raw ?? null;
+    const bearer = presented ?? this.#pollBearer();
     if (bearer === null) return;
     try {
       const headers: Record<string, string> = { Authorization: `Bearer ${bearer}` };

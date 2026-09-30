@@ -477,6 +477,8 @@ export class WebSocketRuntime implements RuntimeBridge {
    * `CENTRAL-BRIDGE-01`.)
    */
   readonly #straySubs = new Subs<readonly ipcChannels.StationStray[]>();
+  /** `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session, as the bridge last said. */
+  readonly #bridgeSessionSubs = new Subs<ipcChannels.BridgeSessionState>();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
   readonly #sourceCatalogSubs = new Subs<ConsoleSourceCatalog>();
   readonly #sourceAssignmentSubs = new Subs<SourceAssignments>();
@@ -1068,6 +1070,21 @@ export class WebSocketRuntime implements RuntimeBridge {
         return;
       }
     }
+    /*
+      `CENTRAL-BRIDGE-01` (D7) — whether CG Bridge holds its own Playout session. Pulled here because
+      this runs at every connect AND after every sign-in (the read needs a signed-in socket); a bridge
+      too old to answer, or a socket not yet signed in, leaves it as it was.
+    */
+    try {
+      this.#bridgeSessionSubs.emit(
+        await this.#invoke(ipcChannels.BridgeSessionStateChannel, undefined),
+      );
+    } catch (err) {
+      if (err instanceof BridgeDisconnectedError) {
+        this.#setResyncing(false);
+        return;
+      }
+    }
 
     // First connect: the renderer's `useBridgeSnapshot` pulls the initial
     // stack/health/lock, so only a RECONNECT re-pulls them here.
@@ -1293,6 +1310,12 @@ export class WebSocketRuntime implements RuntimeBridge {
         break;
       }
       // `DESKTOP-APPS-01-D` j — the strays moved.
+      // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session moved.
+      case ipcChannels.BridgeSessionStateChangedChannel.name: {
+        const p = ipcChannels.BridgeSessionStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#bridgeSessionSubs.emit(p.data);
+        break;
+      }
       case ipcChannels.StationStraysChangedChannel.name: {
         const p = ipcChannels.StationStraysChangedChannel.payload.safeParse(payload);
         if (p.success) this.#straySubs.emit(p.data);
@@ -1700,6 +1723,18 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#straySubs.add(handler),
     takeOffAir: (req: ChannelRequest<typeof ipcChannels.StationTakeOffAirChannel>) =>
       this.#invoke(ipcChannels.StationTakeOffAirChannel, req),
+  };
+
+  /**
+   * `CENTRAL-BRIDGE-01` (D7, rule 8) — CG Bridge's own Playout session. The sign-in's password goes
+   * out in this one request and this object keeps nothing of it.
+   */
+  readonly bridgeSession = {
+    state: () => this.#invoke(ipcChannels.BridgeSessionStateChannel, undefined),
+    onChanged: (handler: (state: ipcChannels.BridgeSessionState) => void) =>
+      this.#bridgeSessionSubs.add(handler),
+    signIn: (req: ChannelRequest<typeof ipcChannels.BridgeSessionSignInChannel>) =>
+      this.#invoke(ipcChannels.BridgeSessionSignInChannel, req),
   };
 
   readonly connections = {

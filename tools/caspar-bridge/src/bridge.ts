@@ -97,6 +97,9 @@ import {
   BridgeCapabilitiesChannel,
   StackRestoreReportChangedChannel,
   StackRestoreReportChannel,
+  BridgeSessionSignInChannel,
+  BridgeSessionStateChangedChannel,
+  BridgeSessionStateChannel,
   StackRestoreReportDismissChannel,
   StackStopAllChannel,
   StackStopChannel,
@@ -227,7 +230,8 @@ import {
   type CheckOptions,
   type CheckProbes,
 } from './connection-check.js';
-import { pinnedIPv4 } from './playout-http.js';
+import { pinnedIPv4, playoutFetch } from './playout-http.js';
+import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import {
@@ -300,6 +304,13 @@ export interface BridgeOptions {
    * persists (an embedder; most tests). No console re-delivers a stack any more.
    */
   stackPath?: string;
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — **WHERE CG BRIDGE KEEPS ITS OWN PLAYOUT SESSION**
+   * (`bridge-session.json`: the rotating refresh token, never a password). Named, the bridge signs
+   * itself in to the Playout and reads with its own bearer; omitted (a development bridge, most
+   * tests), it has no session and borrows a signed-in console's, as before.
+   */
+  bridgeSessionPath?: string;
   /**
    * R-021 stage 1 — the fixed operator layer bank, explicit. Highest
    * precedence; see {@link resolveFixedBank} for the full order. The bank is
@@ -1809,6 +1820,41 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           },
         });
   /*
+    🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — **CG BRIDGE'S OWN PLAYOUT SESSION**, when
+    a session file is named (the service configuration names one). Its access token becomes the
+    bearer for every Playout read (`PlayoutAuth.useOwnBearer`) and keeps the revocation list polled
+    with no console signed in; each token it gains makes the introducing D9 read (C4) at once. With
+    no file named — a development bridge, every test that does not ask — nothing changes: reads use
+    a signed-in console's bearer, as before, and the state reads `off`.
+  */
+  const bridgeSession =
+    playoutAuth === null || auth.playout === null || options.bridgeSessionPath === undefined
+      ? null
+      : new BridgeSession({
+          file: options.bridgeSessionPath,
+          tokenUrl: auth.playout.tokenUrl,
+          refreshUrl: auth.playout.refreshUrl,
+          verify: async (accessToken) => {
+            const verified = await playoutAuth.verify(accessToken);
+            return verified.ok
+              ? {
+                  ok: true,
+                  name: verified.token.principal.name,
+                  sub: verified.token.principal.sub,
+                }
+              : { ok: false, reason: verified.refusal };
+          },
+          fetchImpl: playoutFetch,
+          onAccess: (accessToken) => {
+            playoutAuth.startPolling();
+            void playoutAuth.introduce(accessToken);
+          },
+        });
+  if (bridgeSession !== null) {
+    playoutAuth?.useOwnBearer(() => bridgeSession.accessToken());
+    void bridgeSession.start();
+  }
+  /*
     🔴 `C-039` — THE PLAYOUT'S CHANNEL CATALOGUE (D4). Built only with auth ON: with auth OFF there
     is no principal, so no bearer, so no read — and the discovery answer is exactly the two sources
     the console unioned before. Its bearer is `usableBearer`, checked at USE (never expired, never
@@ -2217,6 +2263,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(bridgeVersion !== null ? { bridgeVersion } : {}),
     // `CENTRAL-BRIDGE-01` (D4) — the acting principal's channels, through the actor context.
     actorScope: () => socketScope(currentAuthSession(), playoutAuth, runtime),
+    // `CENTRAL-BRIDGE-01` (D7) — the bridge's own Playout session, for its state and its sign-in.
+    bridgeSession,
     playoutSources,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
@@ -2382,6 +2430,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           payload: told,
         });
       }),
+      // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, behind the same delivery gate.
+      ...(bridgeSession !== null
+        ? [
+            bridgeSession.onChanged((state) => {
+              if (!mayBeTold(authGateState(session, playoutAuth))) return;
+              send(socket, {
+                type: 'publish',
+                channel: BridgeSessionStateChangedChannel.name,
+                payload: BridgeSessionStateChangedChannel.payload.parse(state),
+              });
+            }),
+          ]
+        : []),
     );
     socket.on('message', (data) => {
       // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
@@ -2531,6 +2592,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
       // process open; clearing it is what keeps a test suite from leaving one per bridge.
       playoutAuth?.dispose();
+      // `CENTRAL-BRIDGE-01` (D7) — and the bridge's own session refresh.
+      bridgeSession?.dispose();
       // `C-039` — and the D4 tick, for the same reason.
       playoutCatalogue?.dispose();
       // `PLAYOUT-SOURCES-01` — and the D10 / bound-media tick.
@@ -3204,6 +3267,12 @@ export function buildRoutes(
      * told. Absent — auth OFF, and the route-coverage guard — is every channel.
      */
     actorScope?: () => Holds | null;
+    /**
+     * `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session, or `null`/absent when this bridge
+     * keeps none (auth OFF, a development bridge, the route-coverage guard): its state then reads
+     * `off` and a sign-in has nothing to sign in.
+     */
+    bridgeSession?: BridgeSession | null;
     fixedLayersPath?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
@@ -3634,6 +3703,33 @@ export function buildRoutes(
     // `CENTRAL-BRIDGE-01` (`B-294`) — there is no `stack.restore`: the bridge restores its own
     // stack at start. What survives is the restore's REPORT, standing state like `air.emptied`.
     route(StackRestoreReportChannel, 'read', 'read', () => b.restoreReport()),
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — CG Bridge's own Playout session: its state, which every
+      console reads (the needs-admin line), and a station admin's one-time sign-in. The sign-in is
+      an operator-lock verb (a locked console gives the bridge no credential) and `station-admin`
+      only; its row names the admin and never carries the password, which leaves this handler with
+      its one D1 request.
+    */
+    route(
+      BridgeSessionStateChannel,
+      'read',
+      'read',
+      () => paths.bridgeSession?.state() ?? { state: 'off' as const },
+    ),
+    route(
+      BridgeSessionSignInChannel,
+      'operator',
+      'station-admin',
+      async (r: { username: string; password: string }) => {
+        const session = paths.bridgeSession ?? null;
+        if (session === null) return { ok: false, failure: 'unexpected' as const };
+        const result = await session.signIn(r.username, r.password);
+        b.recordBridgeSignIn(
+          result.ok ? { outcome: 'ok' } : { outcome: 'failed', errorCode: result.failure },
+        );
+        return result;
+      },
+    ),
     route(
       StackRestoreReportDismissChannel,
       'operator',

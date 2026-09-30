@@ -298,6 +298,16 @@ export function createMockBridge(): RuntimeBridge {
         Promise.resolve({ ok: false, message: 'Test mode has nothing on another channel.' }),
     },
 
+    /*
+      `CENTRAL-BRIDGE-01` (D7) — test mode has no Playout, so no bridge session: `off`, which draws
+      nothing, and a sign-in has nothing to sign in.
+    */
+    bridgeSession: {
+      state: () => Promise.resolve({ state: 'off' as const }),
+      onChanged: () => () => undefined,
+      signIn: () => Promise.resolve({ ok: false, failure: 'unexpected' as const }),
+    },
+
     connections: {
       config: () => Promise.resolve(mock.config()),
       setConfig: (req) => Promise.resolve(mock.setConfig(req)),

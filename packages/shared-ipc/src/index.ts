@@ -95,3 +95,9 @@ export * from './channels/sources.js';
 // `PLAYOUT-SOURCES-01` — the Playout's input list (D10) and media library (D11): the contract's
 // shapes, the one builder of the catalogue in force, the credential redaction and the route gate.
 export * from './playout-sources.js';
+// `CENTRAL-BRIDGE-01` (D7) — the Playout's D1 sign-in and D2 refresh, for the console and for CG
+// Bridge's own session alike.
+export * from './playout-session.js';
+// `CENTRAL-BRIDGE-01` (D7, rule 8) — CG Bridge's own Playout session: its state, and the admin's
+// one-time sign-in.
+export * from './channels/bridgeSession.js';

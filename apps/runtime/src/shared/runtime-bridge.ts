@@ -7,6 +7,9 @@
  * the contract.
  */
 import type {
+  BridgeSessionSignInChannel,
+  BridgeSessionState,
+  BridgeSessionStateChannel,
   ChannelsCatalogueChannel,
   SetupCheckChannel,
   SetupPhase,
@@ -922,6 +925,20 @@ export interface RuntimeBridge {
     takeOffAir(
       req: ChannelRequest<typeof StationTakeOffAirChannel>,
     ): Promise<ChannelResponse<typeof StationTakeOffAirChannel>>;
+  };
+
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — **CG BRIDGE'S OWN PLAYOUT SESSION.**
+   * One per bridge. While it `needs-admin`, every console says so in one line; a station admin gives
+   * the station account's password once, and the bridge keeps the refresh token and drops the
+   * password. This console never stores it either — the dialog forgets it when it closes.
+   */
+  bridgeSession: {
+    state(): Promise<ChannelResponse<typeof BridgeSessionStateChannel>>;
+    onChanged(handler: (state: BridgeSessionState) => void): Unsubscribe;
+    signIn(
+      req: ChannelRequest<typeof BridgeSessionSignInChannel>,
+    ): Promise<ChannelResponse<typeof BridgeSessionSignInChannel>>;
   };
 
   /**

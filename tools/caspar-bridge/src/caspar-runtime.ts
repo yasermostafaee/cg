@@ -13583,6 +13583,16 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D7, rule 8) — **A STATION ADMIN SIGNED CG BRIDGE IN, OR TRIED.** Written
+   * inside the admin's own request, so the actor, `actorSub` and the console machine are that
+   * admin's. NARROW for `recordIdentityEvent`'s reason, and narrower still: it has no parameter a
+   * password or a token could travel in.
+   */
+  recordBridgeSignIn(entry: { outcome: 'ok' | 'failed'; errorCode?: string }): void {
+    this.#recordAudit({ action: 'bridge-sign-in', actor: operatorActor(), ...entry });
+  }
+
+  /**
    * 🔴 `C-038` — **A COMMAND WAS REFUSED BECAUSE OF WHO ASKED.** The one writer.
    *
    * `outcome: 'failed'` because that is what happened to the request; the ACTION says why.

@@ -100,6 +100,14 @@ export const AuditEntrySchema = z.object({
     */
     'set-media-playback',
     'media-transport',
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D7, the Playout team's rule 8) — a station admin gave CG Bridge its
+      own Playout sign-in, or tried: `ok`, or `failed` with the contract's failure CODE in
+      `errorCode`. The actor is the admin who did it. It never carries the account's password or
+      any token — the bridge drops the password after its one request, and the record keeps who and
+      when and whether it took.
+    */
+    'bridge-sign-in',
   ]),
   /**
    * 🔴 `C-037` / ADR 0010 rule 3 — the token's `sub`: an opaque, stable user id, kept

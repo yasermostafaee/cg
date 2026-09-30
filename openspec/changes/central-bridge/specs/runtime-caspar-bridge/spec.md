@@ -170,6 +170,39 @@ routes what the page calls, and reports without refusing.
 - **WHEN** a bridge answers without `bridgeVersion` **THEN** the console reads it as a release older than
   `0.10` and sends nothing
 
+### Requirement: CG Bridge SHALL keep its own Playout session, and never the password
+
+When its session file is configured, CG Bridge SHALL sign in to the Playout itself (D1) as the account a
+station admin names — once, from any console, through a `station-admin` route the lock refuses — SHALL keep
+the refresh token in that file, written durably (a temp file, `fsync`, rename) BEFORE anything the answer
+carries is used, and SHALL NOT store the password anywhere: not in the file, a log, the audit or the
+console. At start it SHALL refresh (D2) with the saved token; a refused refresh SHALL be a lost session,
+and while there is none every console SHALL show `CG Bridge needs a station admin to sign in`, with the
+sign-in offered to a station admin only. Its access token SHALL be the bearer of every Playout read the
+bridge makes (D4, D9, D10, D11) — a signed-in console's being the fallback only while it has none — and
+SHALL keep the revocation list polled with no console signed in. Every request the bridge sends the
+Playout SHALL carry no `Origin` and no `X-Apasai-Mirrored`. The sign-in SHALL be recorded as
+`bridge-sign-in`, naming the admin, with no credential.
+
+#### Scenario: An admin signs the bridge in once
+
+- **WHEN** the bridge starts with no saved session **THEN** every console shows the line; an operator's
+  sign-in of the bridge is refused for its role; a station admin's succeeds, every console is told, the
+  record names the admin and holds no password, and the bridge's own Playout reads carry its own bearer,
+  still after every console has gone
+
+#### Scenario: A crash between receiving a rotated token and using it
+
+- **WHEN** the bridge refreshes, saves the rotated token and stops before using it **THEN** the restarted
+  bridge refreshes with the saved token and is signed in — control: the spent token is presented exactly
+  once and never again; and a crash before the save leaves the spent token, which the Playout refuses, and
+  the bridge says it needs an admin rather than retrying it
+
+#### Scenario: No Origin and no X-Apasai-Mirrored
+
+- **WHEN** the bridge signs in, polls D9 and reads D4 **THEN** no request the Playout received carries
+  either header — control: the same log holds the bridge's D1 and a request carrying a bearer
+
 ### Requirement: Every console on one CG Bridge SHALL see a press made on another within a second
 
 CG Bridge SHALL hold the one state every console acts on — there is no per-console copy to disagree —

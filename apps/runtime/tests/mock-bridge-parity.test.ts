@@ -125,6 +125,8 @@ const BRIDGE_SURFACE: {
     ],
     // `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare.
     strays: ['list', 'onChanged', 'takeOffAir'],
+    // `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session (the mock: `off`).
+    bridgeSession: ['state', 'onChanged', 'signIn'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never

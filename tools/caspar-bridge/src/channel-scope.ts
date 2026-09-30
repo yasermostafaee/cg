@@ -221,6 +221,8 @@ export const PUBLISH_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'channelSettings.changed': STATION_WIDE,
   'sources.config-changed': STATION_WIDE,
   'sources.assignments-changed': STATION_WIDE,
+  // `CENTRAL-BRIDGE-01` (D7) — the bridge's own Playout session: one per bridge.
+  'bridgeSession.state-changed': STATION_WIDE,
 };
 
 /** Every route the bridge ANSWERS, by name. */
@@ -268,6 +270,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'templates.list': STATION_WIDE,
   'templates.page': STATION_WIDE,
   'update.state': STATION_WIDE,
+  'bridgeSession.state': STATION_WIDE,
   // ── intents: the answer is the verdict on the principal's own press ──
   'air.dismiss-emptied': INTENT,
   'air.restore-emptied': INTENT,
@@ -314,6 +317,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'templates.remove': INTENT,
   'update.cancel': INTENT,
   'update.request': INTENT,
+  'bridgeSession.sign-in': INTENT,
 };
 
 /**
