@@ -10,6 +10,7 @@ import {
   FAKE_PLAYOUT_PASSWORD,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
+import { stopChild } from './fixtures/child-process.js';
 
 /**
  * 🔴 `PLAYOUT-AUTH-01 · DELTA C` — **THE REAL PAGE, RELOADED, AGAINST A REAL BRIDGE.**
@@ -155,7 +156,8 @@ function auditRows(auditPath: string): { action: string; actor?: string; actorSu
 }
 
 test.afterEach(async () => {
-  bridge?.kill('SIGINT');
+  // Gone before its folder is: a graceful stop writes into it (`stopChild`).
+  await stopChild(bridge);
   bridge = null;
   await playout?.stop();
   playout = null;

@@ -14,6 +14,7 @@ import {
   startFakePlayout,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
+import { stopChild } from './fixtures/child-process.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01` §2E / §5 — **FIRST-RUN, END TO END**, against a real bridge started in
@@ -21,8 +22,11 @@ import {
  * port — with `DESKTOP-APPS-01-A` folded in: the issuer is learned from the station-admin's
  * sign-in, never typed.
  *
- * `CENTRAL-BRIDGE-01` — the bridge is given its Playout when it starts (`--playout-address`), as CG
- * Bridge's configuration gives it (the installer's `/PLAYOUT=`) and as `pnpm dev:station` passes it.
+ * `CENTRAL-BRIDGE-01` — the bridge is given its Playout when it starts (`--auth playout
+ * --playout-address`), as CG Bridge's configuration gives it (the installer's `/PLAYOUT=`) and as
+ * `pnpm dev:station` passes it. ⚠ The address alone is not enough: with no `--auth` and no playout
+ * file the bridge starts with auth OFF and the address unread — which is how this spec first went
+ * red on Linux (run 36719814205), still asking for the Playout.
  * So a console meets a new station at its SIGN-IN, with the Playout already a fact and checked on
  * open: there is no address to type into the station any more, and no desktop door to write one.
  * (CG Control's own question — where the Playout is, so it can find CG Bridge — is its Playout-
@@ -65,8 +69,8 @@ function freePort(): Promise<number> {
 }
 
 /**
- * Start the bridge in first-run, and wait until it says which auth mode it is in. `extra` is
- * appended to the command line — the Playout (`--playout-address`) among it.
+ * Start the bridge in first-run with auth ON, and wait until it says which auth mode it is in.
+ * `extra` is appended to the command line — the Playout (`--playout-address`) among it.
  */
 async function startBridge(port: number, extra: readonly string[] = []): Promise<void> {
   const child = spawn(
@@ -76,6 +80,8 @@ async function startBridge(port: number, extra: readonly string[] = []): Promise
       '--state-home',
       stateHome as string,
       '--first-run',
+      '--auth',
+      'playout',
       '--port',
       String(port),
       '--template-serve-port',
@@ -100,11 +106,7 @@ async function startBridge(port: number, extra: readonly string[] = []): Promise
 async function stopBridge(): Promise<void> {
   const child = bridge;
   bridge = null;
-  if (child === null || child.exitCode !== null) return;
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
-  child.kill('SIGINT');
-  await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))]);
-  if (child.exitCode === null) child.kill('SIGKILL');
+  await stopChild(child);
 }
 
 function stationFile(name: string): unknown {

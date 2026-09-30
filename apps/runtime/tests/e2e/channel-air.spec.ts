@@ -10,6 +10,7 @@ import {
   FAKE_PLAYOUT_PASSWORD,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
+import { stopChild } from './fixtures/child-process.js';
 import { cssColour } from './fixtures/runtime.js';
 
 /**
@@ -115,7 +116,8 @@ async function startStation(): Promise<{ bridgeUrl: string; fake: FakePlayout }>
 }
 
 test.afterEach(async () => {
-  bridge?.kill('SIGINT');
+  // Gone before its folder is: a graceful stop writes into it (`stopChild`).
+  await stopChild(bridge);
   bridge = null;
   await playout?.stop();
   playout = null;

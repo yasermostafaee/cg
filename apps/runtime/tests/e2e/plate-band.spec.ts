@@ -10,6 +10,7 @@ import {
   FAKE_PLAYOUT_PASSWORD,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
+import { stopChild } from './fixtures/child-process.js';
 
 /**
  * 🔴 `PLATE-BAND-01` — **STATION SETUP ▸ LIVE SOURCES, ON A REAL BRIDGE LINKED TO THE PLAYOUT, READS
@@ -122,7 +123,8 @@ async function startStation(config: {
 }
 
 test.afterEach(async () => {
-  bridge?.kill('SIGINT');
+  // Gone before its folder is: a graceful stop writes into it (`stopChild`).
+  await stopChild(bridge);
   bridge = null;
   await playout?.stop();
   playout = null;

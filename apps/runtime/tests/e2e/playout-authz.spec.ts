@@ -14,6 +14,7 @@ import {
   FAKE_PLAYOUT_PASSWORD,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
+import { stopChild } from './fixtures/child-process.js';
 
 /**
  * 🔴 `C-038` / `R-066` bullets 3 and 4 — **THE READ-ONLY CONSOLE, IN A REAL BROWSER.**
@@ -145,7 +146,8 @@ async function startStation(bankChannel = 1): Promise<{ bridgeUrl: string }> {
 }
 
 test.afterEach(async () => {
-  bridge?.kill('SIGINT');
+  // Gone before its folder is: a graceful stop writes into it (`stopChild`).
+  await stopChild(bridge);
   bridge = null;
   await playout?.stop();
   playout = null;

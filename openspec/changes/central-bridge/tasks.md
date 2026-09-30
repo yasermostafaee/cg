@@ -225,14 +225,15 @@
       bridge's own `playoutHostOf`) reads a `127.0.0.1` row as the backup's host — control: the
       primary's reader reads the same row as the primary's. The living requirement "A loopback
       casparHost is the Playout's own machine" MODIFIED with the per-reader clause.
-- [ ] 5.5 No `Origin` and no `X-Apasai-Mirrored` on any request to the Playout (bridge and native).
+- [x] 5.5 No `Origin` and no `X-Apasai-Mirrored` on any request to the Playout (bridge and native).
       The BRIDGE half is done: `bridge-session.integration` reads every request the fake Playout
       received (the bridge's D1, the D9 poll, D4) for both headers — none — with its control (the log
-      holds the D1 and a bearer). The NATIVE half is WRITTEN (2026-09-30):
-      `playout.rs`'s `the_request_carries_no_origin_and_no_mirror_header` reads the bytes CG Control
-      writes off a real loopback socket — neither header; control: the route, the host and the body.
-      It runs in `desktop.yml`'s new `Test CG Control's shell (Rust)` step (no Rust on the dev host):
-      open until that step is green.
+      holds the D1 and a bearer). The NATIVE half: `playout.rs`'s
+      `the_request_carries_no_origin_and_no_mirror_header` reads the bytes CG Control writes off a real
+      loopback socket — neither header; control: the route, the host and the body. RAN GREEN in
+      `desktop.yml`'s `Test CG Control's shell (Rust)` step on `c7509207`
+      (https://github.com/yasermostafaee/cg/actions/runs/36719814207 — the log reads
+      `playout::tests::the_request_carries_no_origin_and_no_mirror_header ... ok`, 5 passed).
 - [x] 5.6 (`B-297`) A loopback grant is the Playout's own machine — FOUND by §5's separate-server
       test, which went RED as first written: on `.111` the Playout spells `casparHost` `127.0.0.1`, so a
       token's grants say `127.0.0.1`; a CG Bridge on a separate server drives the Playout's network
@@ -359,7 +360,10 @@
       channel refused whatever its ticket; the listener's 404), e2e `pgm-return.spec` (the `src` is
       the control port's, ticketed) and `dev-station.spec` (the same through Vite, StrictMode's double
       mount with a ticket in flight) — both GREEN locally after the CSP fix.
-- [ ] 6.7 The installer (`tools/bridge-installer/cg-bridge.nsi`) + Shawl, built in CI.
+- [x] 6.7 The installer (`tools/bridge-installer/cg-bridge.nsi`) + Shawl, built in CI. **GREEN on a
+      clean runner** on `c7509207` (carries the fixes in `5530536a`):
+      https://github.com/yasermostafaee/cg/actions/runs/36719814207 — in the CG Bridge smoke job,
+      the `Install, check, upgrade and uninstall CG Bridge (elevated)` step RAN, `success`.
       ⚠ ITS FIRST CLEAN-WINDOWS RUN FOUND THREE DEFECTS (`bridge-smoke`, run 36703284775, 2026-09-30),
       each fixed: (1) `/PLAYOUT=http://…` reached the configuration as `http:` — NSIS's `GetOptions`
       ends a value at the option's FIRST CHARACTER, `/`; now spelled ` /PLAYOUT=` over ` $Args` (a
@@ -409,7 +413,10 @@
       refused by the auth gate; the one `cg-bridge.exe` on the machine is the service's (parent
       `shawl.exe`); closing CG Control leaves CG Bridge running and uncounting it; no firewall rule
       named for CG Control. `desktop.yml`: no CG Control staging, the console's `dist` scanned, the
-      Rust tests run. Open until the `smoke` job is green on the new model.
+      Rust tests run. GREEN on the new model on `c7509207`:
+      https://github.com/yasermostafaee/cg/actions/runs/36719814207 — the Installer smoke job's three
+      steps (CG Bridge elevated; CG Designer and CG Control launched and driven unelevated; CG Control
+      uninstalled) RAN, `success`.
 - [x] 7.2 Native D1/D2 (no `Origin`); a browser keeps `fetch`.
       `playout.rs` (`playout_post`, http only, the two auth routes only, IPv4 first; `not-sent` vs
       `lost`); `desktop.ts` `nativePlayoutFetch`. ⚠ FOUND WHILE WRITING THE GUIDE: the connection
@@ -452,6 +459,19 @@
 - [x] 8.2 The fake Playout: loopback AMCP, `OSC SUBSCRIBE`, a rotating refresh token, an `unlicensed` channel.
       Built with 1.1 (`OSC SUBSCRIBE` on `@cg/amcp-mock`), 5.3 (an `unlicensed` channel), 5.1 and A.1
       (the rotating refresh token, `2.9.2`'s reuse window) — the same fakes `--fake` composes.
+- **The Linux e2e for 6.5–8.1 WENT RED** on `c7509207`:
+  https://github.com/yasermostafaee/cg/actions/runs/36719814205 — the `E2E` step RAN and failed (6
+  failed, 1 flaky, 303 passed); the `ci` job was green. Two causes, both in test code, both fixed in
+  the commit that records this run: (1) `first-run.spec` — 7afcb69c started its bridge with `--playout-address` and no
+  `--auth playout`, and the CLI reads an address only with auth on (`flags.auth ?? file?.auth ?? 'off'`),
+  so the console was still asked for its Playout; the spec cannot run on the dev host (the owner's
+  CasparCG holds TCP 5250), so Linux was its first run. `guide-shots`' second test carried the same
+  omission (it runs only with `CG_GUIDE_SHOTS`); (2) `plate-band`, `playout-authz` and
+  `playout-auth-reload` failed `ENOTEMPTY` in teardown: they sent `SIGINT` and removed the bridge's
+  folder at once, while a graceful Linux stop flushes `bridge-stack.json` into it (a Windows child has no
+  `SIGINT` — Node ends it outright, so it never showed locally). One helper now stops a spawned bridge
+  and waits for its exit, bounded (`fixtures/child-process.ts`), in all six specs that spawn one. The
+  discharge is owed by the next run.
 
 ## 9. Release `0.10.0` (`P-061`)
 
@@ -467,9 +487,10 @@
       absence). Picture 1 is CG Control's new gate (`guide-shots.spec`'s first test, which binds and
       dials nothing); 2–4 are 0.9.1's, their screens unchanged. `guide.test` (14) holds every quoted
       label to the file that renders it; the PDF builds (3 pages).
-- [ ] 9.3 The clean-Windows smoke: CG Bridge's service, `/health`, rules, `6250` unbound, silent
+- [x] 9.3 The clean-Windows smoke: CG Bridge's service, `/health`, rules, `6250` unbound, silent
       install/upgrade/uninstall exit codes; CG Control connects; control: no token, no state.
-      Written (6.7's `bridge-smoke` and 7.1's `smoke`); open until both jobs are green.
+      Both jobs GREEN on `c7509207`: https://github.com/yasermostafaee/cg/actions/runs/36719814207
+      (`CG Bridge smoke` and `Installer smoke`, every step RAN).
 - [x] 9.4 `P-031`'s floor at `0.10.0`. `docs/prd/platform.md`: the floor SET at `0.10.0` — what it opens
       and must keep opening (the two formats, CG Bridge's STRICT configuration and its station files,
       the one-time `0.9.x` import, CG Control's station record, `major.minor` protocol compatibility).
@@ -477,5 +498,6 @@
 
 ## 10. For the Playout team, and the report
 
-- [ ] 10.1 `docs/integration/playout/CG-BRIDGE-FOR-PLAYOUT.md`, copied to `Claude outputs/`.
+- [x] 10.1 `docs/integration/playout/CG-BRIDGE-FOR-PLAYOUT.md`, copied to `Claude outputs/` (the copy
+      re-made byte for byte after each edit).
 - [ ] 10.2 `Claude outputs/REPORT-CENTRAL-BRIDGE-01-v3-<date>.md`.

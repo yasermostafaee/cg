@@ -12,6 +12,7 @@ import {
   startFakePlayout,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
+import { stopChild } from './fixtures/child-process.js';
 
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` B3 — **THE INSTALL GUIDE'S SCREENSHOTS OF CG CONTROL, TAKEN FROM THE REAL
@@ -72,6 +73,9 @@ async function startBridge(port: number, playoutAddress: string): Promise<void> 
       '--state-home',
       stateHome as string,
       '--first-run',
+      // The address alone leaves auth OFF and the address unread (`first-run.spec.ts` met it).
+      '--auth',
+      'playout',
       '--playout-address',
       playoutAddress,
       '--port',
@@ -97,11 +101,7 @@ async function startBridge(port: number, playoutAddress: string): Promise<void> 
 async function stopBridge(): Promise<void> {
   const child = bridge;
   bridge = null;
-  if (child === null || child.exitCode !== null) return;
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
-  child.kill('SIGINT');
-  await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5000))]);
-  if (child.exitCode === null) child.kill('SIGKILL');
+  await stopChild(child);
 }
 
 test.afterEach(async () => {
