@@ -250,6 +250,7 @@ import { BridgeSession } from './bridge-session.js';
 import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
+import { BackupMediaLookup, backupMediaUrl } from './backup-media.js';
 import {
   airOf,
   hostJoinsStation,
@@ -557,6 +558,11 @@ export interface BridgeOptions {
   playoutCatalogueOptions?: PlayoutCatalogueOptions;
   /** TEST-ONLY seam — clock, `fetch` and tick for the CG license read (`PLAYOUT-FEATURES-01` D). */
   playoutLicenseOptions?: PlayoutLicenseReaderOptions;
+  /**
+   * TEST-ONLY seam — the BACKUP Playout's D11 URL (`PLAYOUT-FEATURES-01` A). In production it is the configured
+   * Playout's address at server B's host; a suite whose two fake servers share `127.0.0.1` names it.
+   */
+  backupPlayoutMediaUrl?: string;
   /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
@@ -2168,6 +2174,50 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     );
   });
   /*
+    🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — THE BACKUP'S OWN CLIPS. With a Playout and a server B, every bound
+    clip's fingerprint is looked up in the BACKUP Playout's own D11 (the configured Playout's address at
+    server B's host) — on every catalogue change, after server B reconnects, and every 30 s — and cached. A
+    clip's `PLAY` then reaches server B with B's own path, or not at all; a take never waits on it. With no
+    Playout (auth off) there is no lookup, and a clip's `PLAY` mirrors as it always did.
+  */
+  const backupMedia =
+    playoutAuth === null || auth.playout === null
+      ? null
+      : new BackupMediaLookup({
+          url: () =>
+            options.backupPlayoutMediaUrl ??
+            backupMediaUrl(
+              (auth.playout as PlayoutAuthConfig).mediaUrl,
+              runtime.config().servers.B?.host,
+            ),
+          bearer: () => playoutAuth.usableBearer(),
+          log: (line) => {
+            process.stderr.write(`[caspar-bridge] ${line}\n`);
+          },
+        });
+  if (backupMedia !== null) {
+    runtime.useBackupMedia((fingerprint) => backupMedia.lookup(fingerprint));
+    const fingerprintsOf = (catalog: SourceCatalog): string[] =>
+      catalog.sources.flatMap((s) =>
+        s.media?.fingerprint !== undefined ? [s.media.fingerprint] : [],
+      );
+    runtime.sourceCatalogChanged.subscribe((catalog) => {
+      void backupMedia.track(fingerprintsOf(catalog));
+    });
+    runtime.onServerConnected((label) => {
+      if (label === 'B') void backupMedia.refreshAll();
+    });
+    let backupHost = runtime.config().servers.B?.host;
+    runtime.configChanged.subscribe(() => {
+      const host = runtime.config().servers.B?.host;
+      if (host === backupHost) return;
+      backupHost = host;
+      void backupMedia.reset();
+    });
+    void backupMedia.track(fingerprintsOf(runtime.sourceCatalog()));
+    backupMedia.start();
+  }
+  /*
     🔴 `PLAYOUT-SOURCES-01` — THE STATION'S SOURCES, FROM THE PLAYOUT. D10 and the bound media are
     read with the signed-in operator's bearer, checked at use (D4's rule 3); with auth off a test
     injects a local provider behind the same interface, and with neither there are no lists. The
@@ -2888,6 +2938,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutCatalogue?.dispose();
       // `PLAYOUT-FEATURES-01` D — and the license's.
       playoutLicense?.dispose();
+      // `PLAYOUT-FEATURES-01` A — and the backup media lookup's.
+      backupMedia?.dispose();
       // `PLAYOUT-SOURCES-01` — and the D10 / bound-media tick.
       playoutSources?.dispose();
       // `C-016` — every upstream feed socket and every relayed viewer.

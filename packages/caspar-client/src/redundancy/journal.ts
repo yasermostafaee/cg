@@ -25,8 +25,13 @@ export interface JournalEntry {
   seq: number;
   /** Wall-clock ms when the command was enqueued. */
   at: number;
-  /** AMCP line as sent (post-quote). */
+  /** AMCP line as sent (post-quote) — to server A, and to B unless {@link lineB} says otherwise. */
   line: string;
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — the line SERVER B gets instead (its own clip), or `null`: B gets
+   * nothing. Absent: B gets {@link line}. Read by every replay through `journalLineFor`.
+   */
+  lineB?: string | null;
   /** Intent target — informational for failover/reconciliation. */
   target: 'primary' | 'backup' | 'both';
   /** Resolved outcome on the primary path. */
@@ -36,8 +41,8 @@ export interface JournalEntry {
 }
 
 export interface CommandJournal {
-  /** Append a new entry; returns the assigned seq. */
-  append(line: string, target: 'primary' | 'backup' | 'both'): number;
+  /** Append a new entry; returns the assigned seq. `lineB`: server B's own line (see {@link JournalEntry}). */
+  append(line: string, target: 'primary' | 'backup' | 'both', lineB?: string | null): number;
   /** Update an entry's outcome by seq. */
   resolve(seq: number, outcome: JournalOutcome, code?: number): void;
   /** All entries since `sinceSeq` (exclusive). */
@@ -80,9 +85,16 @@ export class InMemoryJournal implements CommandJournal {
     this.retentionMs = options.retentionMs ?? 300_000;
   }
 
-  append(line: string, target: 'primary' | 'backup' | 'both'): number {
+  append(line: string, target: 'primary' | 'backup' | 'both', lineB?: string | null): number {
     const seq = this.nextSeq++;
-    this.entries.push({ seq, at: this.now(), line, target, outcome: 'pending' });
+    this.entries.push({
+      seq,
+      at: this.now(),
+      line,
+      ...(lineB !== undefined ? { lineB } : {}),
+      target,
+      outcome: 'pending',
+    });
     this.bound();
     return seq;
   }
@@ -121,4 +133,17 @@ export class InMemoryJournal implements CommandJournal {
   get lastSeq(): number {
     return this.nextSeq - 1;
   }
+}
+
+/**
+ * `PLAYOUT-FEATURES-01` A (`B-286`) — **THE LINE A SERVER GETS for one journaled entry**: server A always gets
+ * `line`; server B gets `lineB` when the entry carries one (its own clip), `null` meaning nothing at all.
+ * The ONE reader, so a replay can never carry the primary's path to B.
+ */
+export function journalLineFor(
+  entry: Pick<JournalEntry, 'line' | 'lineB'>,
+  label: 'A' | 'B',
+): string | null {
+  if (label === 'A' || entry.lineB === undefined) return entry.line;
+  return entry.lineB;
 }

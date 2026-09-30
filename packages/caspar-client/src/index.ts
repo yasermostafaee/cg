@@ -74,7 +74,7 @@ export type {
   SendOptions,
   ServerLabel,
 } from './redundancy/types.js';
-export { InMemoryJournal } from './redundancy/journal.js';
+export { InMemoryJournal, journalLineFor } from './redundancy/journal.js';
 export type { CommandJournal, JournalEntry, JournalOutcome } from './redundancy/journal.js';
 
 export { Reconciler } from './reconciler/reconciler.js';

@@ -12810,7 +12810,7 @@ every unmount. And `localhost`: the dev station sends a `localhost:5174` page to
 the origin the Playout's CORS list admits. Tests: `dev-station.spec.ts` (through Vite),
 `programPicture.dom.test.ts`, `vite-config.test.ts`, `station-plan.test.ts`.
 
-## [ ] B-286 — a backup server is sent the primary's media paths, byte for byte ⟨priority: medium⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` §0.8 · not fixed
+## [~] B-286 — a backup server is sent the primary's media paths, byte for byte ⟨priority: medium⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` §0.8 · CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` A (`openspec/changes/playout-features/` §4) · owed: a Playout pair on `2.9.1`
 
 The bridge builds each AMCP line once, and `RedundancyAdapter.send` mirrors that SAME string to
 server B (`mirror-sync`, the default — `redundancy-adapter.ts:250-253`) or replays the journaled
@@ -12824,7 +12824,29 @@ Found while establishing `PLAYOUT-SOURCES-01` §0.8, which makes a Playout's med
 to a plate and so makes the case reachable. **Not fixed there**: a per-server path needs the
 Playout to say where each install keeps an item, which the contract does not carry yet. Anchors:
 `CasparRuntime`'s `#send` → `RedundancyAdapter.send`;
-`openspec/changes/archive/2026-09-27-playout-sources/design.md` §0.8.
+`openspec/changes/archive/2026-09-27-playout-sources/design.md` §0.8. ⚠ The line anchors above moved with
+`c8626f4b`; at `a8b59df5` they are `redundancy-adapter.ts:254-257` (the fan-out), `:199-203` (the failover
+replay), `:515-526` (`replayJournalTo`) and `connections.ts:309-318`.
+
+**Closed in code (`PLAYOUT-FEATURES-01` A, 2026-09-30).** Playout `2.9.1` gives each D11 item `source` and a
+`fingerprint` (the same for the same bytes on any server; given only when `clip`'s bytes really match) and a
+`?fingerprint=` filter (`PLAYOUT-CG-RESPONSE-ROUTE-ON-DONE-v1.md` §2). The bound clip keeps its fingerprint
+through every re-read; CG Bridge looks each one up in the BACKUP Playout's own D11 (the configured Playout's
+address at server B's host) when a clip is bound, after server B reconnects and every 30 s, and caches the
+answers (`backup-media.ts`). A take, a swap and a restore read the cache and never wait. `RedundancyAdapter`
+gains a per-server line, `SendOptions.serverB`, keyed to SERVER B (not the backup role, so after a failover
+B still gets its own), kept in the journal beside A's so a failover catch-up and a corrective resend send
+each server its own. A clip B lists goes to B at B's path; a clip with no fingerprint, one B lacks, a backup
+older than `2.9.1` (its items carry no fingerprint) or a list not read yet sends B NOTHING — the primary airs
+it, the row says `Backup has no copy of <name>; this box stays empty on the backup` (a reason other than a
+missing copy in brackets), a clip's `PAUSE`/`RESUME`/`CALL` reaches the primary only, and while B is the
+primary such a clip is refused (`backup-no-copy`). **Tests:** `backup-media.integration.test.ts` (B's own
+path; control: the clip B lacks sent nothing while A airs it; no fingerprint; an old backup; the take not
+waiting — measured under 2 s against the lookup's 5 s bound; transport verbs), `backup-media.test.ts`,
+`redundancy-adapter.test.ts` (`serverB` under all three strategies, a failover, B as primary). Planted
+plain mirroring: 4 of 5 red. **Owed:** a backup Playout on `2.9.1` beside a primary — and whether a backup
+accepts the primary's CG token for its D11 is for that pair to show (if not, every clip reads "its media list
+has not been read" and stays empty on the backup, which is the safe side).
 
 ## [x] B-287 — `SendOptions.target` is documented as an override and read by nothing ⟨priority: low⟩ — FILED 2026-09-28 by `ROUTE-PLATES-01` §0.5 · CLOSED IN CODE 2026-09-28 by `FOLLOWUPS-01` C (deleted)
 

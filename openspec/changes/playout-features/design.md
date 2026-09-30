@@ -107,3 +107,26 @@ plate on it.
    this does not parse is timed at 23.976 fps, the slowest this product drives.
 6. **The picker disables only the playlist row the Playout marks unavailable**; every other unavailable input
    keeps its rule (bindable, tagged), as `runtime-playout-sources` states it.
+
+## A — the backup's own clip (`B-286`)
+
+1. **The lookup is its own module** (`backup-media.ts`), outside the take: the fingerprint of every bound clip
+   is asked of the BACKUP Playout's D11 (`?fingerprint=`, ≤ 100 a request) on a catalogue change, after
+   server B's new connection (`CasparRuntime.onServerConnected` — private, so no console hears it) and every
+   30 s; answers are cached by fingerprint; a server-B address change forgets them (`reset`). A take reads
+   `lookup()` synchronously.
+2. **Only an item's OWN fingerprint counts.** A Playout older than `2.9.1` ignores the filter and answers the
+   first page of its library; its items carry no fingerprint, which is how the lookup knows it is old.
+3. **The per-server line is keyed to SERVER B, not to the backup ROLE** (`SendOptions.serverB`): after a
+   failover B is the primary and must still get its own path. The journal keeps both lines
+   (`JournalEntry.lineB`, read by `journalLineFor`), so the live fan-out, the failover catch-up and the
+   corrective resend all send each server its own, and an entry B has none of is never replayed to B.
+4. **"The backup is never sent a path it has not listed" is total:** no fingerprint, no copy, an old backup, or
+   an unread list — B is sent nothing for that plate, and while B is the primary the seat is refused
+   (`backup-no-copy`). A clip's transport verbs to such a seat go to the primary only (a `CALL` to an empty
+   layer is not something to send the Playout's core). The row's line comes from the ledger record
+   (`backupRefused`, persisted) and is published per plate (`StackItemState.backupNoCopy`).
+5. **Auth off** — no Playout, no lookup — a clip's `PLAY` mirrors as before: there is no list for B to be held to.
+6. **Open, for the Playout team:** the lookup uses the bridge's own bearer, the primary Playout's. Whether a
+   backup Playout (its own install, its own keys) accepts it is unknown; if not, every clip stays empty on the
+   backup and says its list could not be read.

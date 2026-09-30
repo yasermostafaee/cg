@@ -377,6 +377,11 @@ export const SourceDefinitionSchema = z.object({
       folder: z.string().optional(),
       /** When this station last bound it — the picker's `Recent` group. */
       lastBoundAt: z.string().optional(),
+      /**
+       * `PLAYOUT-FEATURES-01` A (`B-286`) — the clip's content fingerprint (D11, `2.9.1`): the key the BACKUP's
+       * own copy is found by. Absent: none given, and the backup is sent nothing for it.
+       */
+      fingerprint: z.string().optional(),
       /** `MEDIA-PLATES-01` — the clip's two playback settings ({@link mediaPlaybackOf}). */
       loop: z.boolean().optional(),
       whenHidden: MediaWhenHiddenSchema.optional(),

@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { isServerReachable } from '@cg/shared-ipc';
 import type { ServerSession, ServerSessionState } from '../session/server-session.js';
 import type { CommandQueue, QueueResult } from '../queue/command-queue.js';
-import { InMemoryJournal, type CommandJournal } from './journal.js';
+import { InMemoryJournal, journalLineFor, type CommandJournal } from './journal.js';
 import type {
   FailoverEvent,
   FailoverReason,
@@ -153,6 +153,23 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     return this.sessions[this.primary === 'A' ? 'B' : 'A'] ?? null;
   }
 
+  /** The label of the server in the backup role right now. */
+  private get backupLabel(): ServerLabel {
+    return this.primary === 'A' ? 'B' : 'A';
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — the line SERVER `label` gets for this send: A always `line`; B its
+   * own ({@link SendOptions.serverB}) when the caller gave one, `null` meaning nothing. The journal's
+   * replays read the same rule (`journalLineFor`).
+   */
+  private lineFor(label: ServerLabel, line: string, options: SendOptions): string | null {
+    return journalLineFor(
+      { line, ...(options.serverB !== undefined ? { lineB: options.serverB } : {}) },
+      label,
+    );
+  }
+
   /**
    * Unified send. Behavior depends on the configured strategy:
    *
@@ -164,6 +181,13 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     // `ROUTE-PLATES-01` — a line that must never reach the backup: primary only, not journaled.
     if (options.mirror === false) {
       return this.sendPrimaryUnjournaled(line, options);
+    }
+    /*
+      `PLAYOUT-FEATURES-01` A (`B-286`) — a line server B has no version of cannot be sent while B is the
+      primary: nothing is sent, and the caller (which checks this first) refuses it as it refuses a PLAY.
+    */
+    if (this.lineFor(this.primary, line, options) === null) {
+      throw new Error(`no line for server ${this.primary} (it has no copy)`);
     }
     // B-046 — no declared backup: every strategy degenerates to primary-only.
     if (this.backupSession === null) {
@@ -199,7 +223,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       if (this.strategy === 'journal-replay' || this.strategy === 'mirror-async') {
         // Backup may be cold/lagging — drain the retained journal to it
         // (skipped when the target session is not live at fire time).
-        await this.replayJournalTo(this.sessions[to]);
+        await this.replayJournalTo(to);
       }
       this.primary = to;
       this.resetFailoverCounters();
@@ -248,14 +272,22 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private async sendMirrorSync(line: string, options: SendOptions): Promise<RedundancySendResult> {
     const backup = this.backupSession;
     if (backup === null) return this.sendJournalReplay(line, options);
-    const seq = this.journal.append(line, 'both');
+    const seq = this.journal.append(line, 'both', options.serverB);
     const primaryQ = this.primarySession.queue;
     const backupQ = backup.queue;
+    // `B-286` — each server its OWN line; a backup with none is sent nothing, and is no divergence.
+    const primaryLine = this.lineFor(this.primary, line, options) ?? line;
+    const backupLine = this.lineFor(this.backupLabel, line, options);
     const [pRes, bRes] = await Promise.allSettled([
-      primaryQ.enqueue(line, options),
-      backupQ.enqueue(line, options),
+      primaryQ.enqueue(primaryLine, options),
+      backupLine === null ? Promise.resolve(null) : backupQ.enqueue(backupLine, options),
     ]);
-    if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled') {
+    if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled' && bRes.value === null) {
+      this.journal.resolve(seq, 'ok', pRes.value.response.code);
+      this.recordPrimaryResult(pRes.value);
+      return { ...pRes.value, winner: this.primary };
+    }
+    if (pRes.status === 'fulfilled' && bRes.status === 'fulfilled' && bRes.value !== null) {
       this.journal.resolve(seq, 'ok', pRes.value.response.code);
       if (pRes.value.response.code !== bRes.value.response.code) {
         this.reportDivergence(seq, pRes.value.response.code, bRes.value.response.code);
@@ -271,7 +303,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       this.reportDivergence(seq, pRes.value.response.code, -1);
       return { ...pRes.value, winner: this.primary };
     }
-    if (bRes.status === 'fulfilled') {
+    if (bRes.status === 'fulfilled' && bRes.value !== null) {
       this.journal.resolve(seq, 'err');
       this.recordPrimaryFailure();
       return { ...bRes.value, winner: this.primary === 'A' ? 'B' : 'A' };
@@ -284,15 +316,20 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private async sendMirrorAsync(line: string, options: SendOptions): Promise<RedundancySendResult> {
     const backup = this.backupSession;
     if (backup === null) return this.sendJournalReplay(line, options);
-    const seq = this.journal.append(line, 'both');
+    const seq = this.journal.append(line, 'both', options.serverB);
     const primaryQ = this.primarySession.queue;
     const backupQ = backup.queue;
+    const backupLine = this.lineFor(this.backupLabel, line, options);
     try {
-      const result = await primaryQ.enqueue(line, options);
+      const result = await primaryQ.enqueue(
+        this.lineFor(this.primary, line, options) ?? line,
+        options,
+      );
       this.journal.resolve(seq, 'ok', result.response.code);
       this.recordPrimaryResult(result);
-      // Backup runs in parallel — divergence detection is best-effort.
-      backupQ.enqueue(line, options).then(
+      // Backup runs in parallel — divergence detection is best-effort. `B-286`: its own line, or none.
+      if (backupLine === null) return { ...result, winner: this.primary };
+      backupQ.enqueue(backupLine, options).then(
         (bRes) => {
           if (bRes.response.code !== result.response.code) {
             this.reportDivergence(seq, result.response.code, bRes.response.code);
@@ -333,9 +370,12 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     line: string,
     options: SendOptions,
   ): Promise<RedundancySendResult> {
-    const seq = this.journal.append(line, 'primary');
+    const seq = this.journal.append(line, 'primary', options.serverB);
     try {
-      const result = await this.primarySession.queue.enqueue(line, options);
+      const result = await this.primarySession.queue.enqueue(
+        this.lineFor(this.primary, line, options) ?? line,
+        options,
+      );
       this.journal.resolve(seq, 'ok', result.response.code);
       this.recordPrimaryResult(result);
       return { ...result, winner: this.primary };
@@ -445,9 +485,12 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       const queue = session.queue;
       const entries = this.journal.all().filter((e) => e.outcome === 'ok');
       for (const entry of entries) {
-        this.emit('corrective-resend', { seq: entry.seq, line: entry.line, target });
+        // `B-286` — the server's OWN line; an entry it has none of is not replayed to it.
+        const own = journalLineFor(entry, target);
+        if (own === null) continue;
+        this.emit('corrective-resend', { seq: entry.seq, line: own, target });
         try {
-          await queue.enqueue(entry.line, { priority: 'urgent' });
+          await queue.enqueue(own, { priority: 'urgent' });
         } catch {
           // Replay best-effort. The next divergence burst will fire again.
         }
@@ -512,13 +555,17 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    * for the journal-replay / mirror-async strategies). Skipped when the
    * target is not live at fire time (B-046).
    */
-  private async replayJournalTo(session: ServerSession | undefined): Promise<void> {
+  private async replayJournalTo(label: ServerLabel): Promise<void> {
+    const session = this.sessions[label];
     if (session === undefined || !isLiveState(session.state)) return;
     const queue: CommandQueue = session.queue;
     const entries = this.journal.all().filter((e) => e.outcome === 'ok');
     for (const entry of entries) {
+      // `B-286` — the server's OWN line; an entry it has none of is not replayed to it.
+      const own = journalLineFor(entry, label);
+      if (own === null) continue;
       try {
-        await queue.enqueue(entry.line, { priority: 'urgent' });
+        await queue.enqueue(own, { priority: 'urgent' });
       } catch {
         // Replay best-effort; the Reconciler resolves the rest.
       }

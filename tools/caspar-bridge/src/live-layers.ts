@@ -165,6 +165,18 @@ export interface LiveLayerRecord {
    * Additive: absent is every other seat.
    */
   readonly audioLocked?: true | undefined;
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **server B was sent NOTHING for this clip**: its own Playout lists
+   * no copy of it (by fingerprint), gave none, is older than `2.9.1`, or has not been read. The primary airs
+   * it; the row says `Backup has no copy of <name>; this box stays empty on the backup`; a transport verb
+   * to it reaches the primary only. `name` is the clip's name as the take resolved it. Additive.
+   */
+  readonly backupRefused?:
+    | {
+        readonly reason: 'no-fingerprint' | 'no-copy' | 'backup-old' | 'backup-unread';
+        readonly name: string;
+      }
+    | undefined;
 }
 
 /**
@@ -213,6 +225,13 @@ const LiveLayerRecordSchema = z.object({
     .optional(),
   // Additive — see {@link LiveLayerRecord.audioLocked}. Absent is every seat but a playlist box.
   audioLocked: z.literal(true).optional(),
+  // Additive — see {@link LiveLayerRecord.backupRefused}. Absent: server B got this seat's line.
+  backupRefused: z
+    .object({
+      reason: z.enum(['no-fingerprint', 'no-copy', 'backup-old', 'backup-unread']),
+      name: z.string().min(1),
+    })
+    .optional(),
 });
 
 export const PersistedLiveLayersSchema = z.array(

@@ -17,13 +17,20 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 - [x] 1.3 Bridge: a take refused where CG is not licensed, with the Playout's message; removals pass
 - [x] 1.4 B-292's cause: `Cleared by the Playout: its license`
 - [x] 1.5 Console: the strip's mark and title; the admin's grace line; the row's refusal line
-- [ ] 1.6 Tests (bridge integration, dom) and gate; pushed; CI read
+- [x] 1.6 Tests (bridge integration, dom) and gate; pushed `d5558324` (`pnpm gate` 99/99, 0 cached); CI COMPLETED
+      green with its jobs RUN: PR <https://github.com/yasermostafaee/cg/actions/runs/36762704100> — `ci` success,
+      `E2E (Playwright)` success, runtime 316 passed (`channel-air.spec` D both), designer 293 passed; Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/36762704499> success
 
 ## 2. B — `ownOutputOf` (`B-298`)
 
 - [x] 2.1 Parse and join; the one predicate; picker title; bridge refusal (take, switch, swap)
 - [x] 2.1b `B-299` (found on the way): the binding door asks rule 1 and the loop of NEW bindings only
-- [ ] 2.2 Tests; gate; pushed; CI read
+- [x] 2.2 Tests; gate; pushed `f59a9b5c` (B) and `c34cc497` (`B-299`), each `pnpm gate` 99/99, 0 cached; CI
+      COMPLETED green with its jobs RUN — B: PR <https://github.com/yasermostafaee/cg/actions/runs/36765058119>
+      (E2E RAN: runtime 316, designer 293), Desktop <https://github.com/yasermostafaee/cg/actions/runs/36765058098>;
+      `B-299`: PR <https://github.com/yasermostafaee/cg/actions/runs/36767019064> (E2E RAN: runtime 316, designer 293),
+      Desktop <https://github.com/yasermostafaee/cg/actions/runs/36767019083>
 
 ## 3. C — the playlist output as a box source (`R-075`)
 
@@ -36,10 +43,10 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 
 ## 4. A — the backup's own clip (`B-286`)
 
-- [ ] 4.1 D11 `source`/`fingerprint`; the bound clip keeps its fingerprint
-- [ ] 4.2 The backup lookup (the backup Playout's D11 `?fingerprint=`), cached, off the take's path
-- [ ] 4.3 `RedundancyAdapter`: a per-server line, journaled for B; a plate refused on B sends B nothing
-- [ ] 4.4 The row's line; the renderer
+- [x] 4.1 D11 `source`/`fingerprint`; the bound clip keeps its fingerprint
+- [x] 4.2 The backup lookup (the backup Playout's D11 `?fingerprint=`), cached, off the take's path
+- [x] 4.3 `RedundancyAdapter`: a per-server line, journaled for B; a plate refused on B sends B nothing
+- [x] 4.4 The row's line; the renderer
 - [ ] 4.5 Tests; gate; pushed; CI read
 
 ## 5. E — PGM sound and the VU meter (`R-076`)

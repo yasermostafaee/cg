@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
@@ -248,6 +248,18 @@ export interface FakeMediaItem {
   readonly height?: number;
   readonly folder: string;
   readonly updatedAt: string;
+  /** `PLAYOUT-FEATURES-01` A (`2.9.1`) — the logical source path. */
+  readonly source?: string;
+  /** `PLAYOUT-FEATURES-01` A (`2.9.1`) — the content fingerprint: 64 lower-case hex, the same on any server. */
+  readonly fingerprint?: string;
+}
+
+/**
+ * `PLAYOUT-FEATURES-01` A — a deterministic fingerprint for a fixture item: the SHA-256 of its id, so the same
+ * item has the same fingerprint in a primary's library and a backup's, whatever path each keeps it at.
+ */
+export function fakeFingerprint(id: string): string {
+  return createHash('sha256').update(id, 'utf8').digest('hex');
 }
 
 /** How big the fake library is (§3: 5,000 items). */
@@ -378,7 +390,15 @@ export function fakeMediaLibrary(): FakeMediaItem[] {
       updatedAt: `2026-08-${day}T${String(i % 24).padStart(2, '0')}:${minute}:00Z`,
     });
   }
-  return items;
+  // `PLAYOUT-FEATURES-01` A — `2.9.1`'s two fields on every item: the ORIGINAL path as `source` (a cached
+  // clip's too), and the content fingerprint — the same whether `clip` is the cache copy or the original.
+  return items.map((m) => ({
+    ...m,
+    source: m.clip.includes('/Engine/bin/engine/data/cache/')
+      ? originalClip(m.folder, m.name, 'mp4')
+      : m.clip,
+    fingerprint: fakeFingerprint(m.id),
+  }));
 }
 
 /**
@@ -461,6 +481,22 @@ export function answerFakeMediaQuery(
   query: URLSearchParams,
 ): FakeMediaPage | null {
   const all = [...library];
+  /*
+    `PLAYOUT-FEATURES-01` A (`2.9.1`, ROUTE-ON-DONE §2) — `fingerprint=`: at most 100 values, case-insensitive,
+    not paged, and never with `ids=` (`400`); a value no item carries is simply absent (`items: []`).
+  */
+  const fingerprintParam = query.get('fingerprint');
+  if (fingerprintParam !== null) {
+    if (query.has('ids')) return null;
+    const wanted = fingerprintParam
+      .split(',')
+      .filter((f) => f !== '')
+      .map((f) => f.toLowerCase());
+    if (wanted.length === 0 || wanted.length > 100) return null;
+    const set = new Set(wanted);
+    const items = all.filter((m) => m.fingerprint !== undefined && set.has(m.fingerprint));
+    return { items, total: items.length, nextCursor: null };
+  }
   const idsParam = query.get('ids');
   if (idsParam !== null) {
     const ids = idsParam.split(',').filter((id) => id !== '');
@@ -1111,6 +1147,11 @@ export interface FakePlayout {
    * channel's `cgLicensed` at its next read.
    */
   setLicense(preset: FakeLicensePreset | null): void;
+  /**
+   * `PLAYOUT-FEATURES-01` A — D11 as a Playout before `2.9.1` serves it: no `fingerprint` or `source` on any
+   * item, and `fingerprint=` ignored (answered as a plain search). Default off (`2.9.1`).
+   */
+  setD11Legacy(legacy: boolean): void;
 
   // ── `CENTRAL-BRIDGE-01-A` — Playout `2.9.2` ─────────────────────────────────────────────────
   /**
@@ -1381,6 +1422,8 @@ class FakePlayoutServer implements FakePlayout {
   #cgNotLicensed: string | null = null;
   /** `PLAYOUT-FEATURES-01` D — the CG license `GET /api/cg/license` answers; `null` — before `2.9.2`. */
   #license: FakeLicensePreset | null = 'licensed';
+  /** `PLAYOUT-FEATURES-01` A — D11 as before `2.9.1`: no `fingerprint`/`source`, the filter ignored. */
+  #d11Legacy = false;
   /** `2.9.2` §2 — D2 refused BEFORE use for another cause than the licence. */
   #refreshRefusal: 'no_cg_access' | null = null;
   /** `2.9.2` §9 — D8 as before `2.9.2`: a multi-channel account's FIRST grant, as a lone object. */
@@ -1791,6 +1834,10 @@ class FakePlayoutServer implements FakePlayout {
     return `${this.baseUrl}${PATHS.license}`;
   }
 
+  setD11Legacy(legacy: boolean): void {
+    this.#d11Legacy = legacy;
+  }
+
   setLicense(preset: FakeLicensePreset | null): void {
     this.#license = preset;
     // D4 carries `cgLicensed`, so its answer changes with the license.
@@ -1964,7 +2011,17 @@ class FakePlayoutServer implements FakePlayout {
       sendError(res, 'invalid_token');
       return;
     }
-    const answer = answerFakeMediaQuery(this.#library.values(), query);
+    /*
+      `PLAYOUT-FEATURES-01` A — a Playout before `2.9.1` knows neither field nor the filter: it answers
+      `fingerprint=` as a plain search (the first page), and its items carry no fingerprint.
+    */
+    const legacy = this.#d11Legacy;
+    const effective = new URLSearchParams(query);
+    if (legacy) effective.delete('fingerprint');
+    const library = legacy
+      ? [...this.#library.values()].map(({ fingerprint: _f, source: _s, ...rest }) => rest)
+      : this.#library.values();
+    const answer = answerFakeMediaQuery(library, effective);
     if (answer === null) {
       sendError(res, 'invalid_query');
       return;

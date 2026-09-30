@@ -24,6 +24,17 @@ export interface SendOptions extends EnqueueOptions {
    * never valid on another, and the backup carries the graphic without that plate.
    */
   mirror?: false;
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **THE LINE SERVER B GETS INSTEAD OF `line`**: a media `PLAY`
+   * carrying the clip BACKUP'S OWN Playout lists for the same content, since the two installs keep their
+   * files at different paths. `null`: server B is sent nothing for it — it has no copy — and nothing is
+   * journaled for B. Absent: B gets `line`, as always.
+   *
+   * ⚠ Keyed to SERVER B, never to the backup ROLE: after a failover B is the primary, and it must still
+   * get its own path. Every path that reaches a server — the live fan-out, a failover catch-up, a
+   * corrective resend — sends that server's own line, read from the journal where both are kept.
+   */
+  serverB?: string | null;
 }
 
 export interface PairedSessions {

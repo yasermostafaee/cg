@@ -31,6 +31,8 @@ import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAud
 import { rowState, type RowBinding } from './rowState.js';
 import {
   BACKUP_UNMIRRORED_LINE,
+  BackupNoCopyText,
+  backupNoCopyLine,
   plateLabelOf,
   takeRefusalLine,
   TakeRefusalText,
@@ -421,6 +423,8 @@ export function LayerRow({
       : null;
   // `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes: one line, here.
   const backupLine = item?.backupUnmirrored === true ? BACKUP_UNMIRRORED_LINE : null;
+  // `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for: one line, here.
+  const noCopyLine = backupNoCopyLine(item?.backupNoCopy ?? []);
 
   const templateLabel =
     template !== null
@@ -1067,6 +1071,17 @@ export function LayerRow({
             dir="ltr"
           >
             <TakeRefusalText line={refusalLine} />
+          </span>
+        ) : noCopyLine !== null ? (
+          <span
+            style={styles.secondary}
+            data-backup-no-copy=""
+            title={
+              templateLabel === null ? noCopyLine.text : `${noCopyLine.text} — ${templateLabel}`
+            }
+            dir="ltr"
+          >
+            <BackupNoCopyText line={noCopyLine} />
           </span>
         ) : backupLine !== null ? (
           <span

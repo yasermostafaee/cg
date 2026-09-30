@@ -256,6 +256,23 @@ export const StackItemStateSchema = z.object({
    * {@link RetainedStackItemSchema}, for `removeExempt`'s reason: it describes the plant now.
    */
   backupUnmirrored: z.boolean().optional(),
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **THE CLIPS SERVER B WAS SENT NOTHING FOR**, one per plate: the
+   * backup's own Playout lists no copy of the clip (found by fingerprint), gave none, is older than `2.9.1`,
+   * or has not been read. The primary airs them; the row says, per plate, `Backup has no copy of <name>;
+   * this box stays empty on the backup`. `name` is the clip's name in the operator's words.
+   *
+   * ABSENT means the backup got every clip of this row. ⚠ NOT retained, for `backupUnmirrored`'s reason.
+   */
+  backupNoCopy: z
+    .array(
+      z.object({
+        plateId: z.string().min(1),
+        name: z.string().min(1),
+        reason: z.enum(['no-fingerprint', 'no-copy', 'backup-old', 'backup-unread']),
+      }),
+    )
+    .optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 

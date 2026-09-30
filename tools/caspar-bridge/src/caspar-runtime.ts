@@ -204,6 +204,10 @@ import {
   resolvePlateAssignments,
 } from './live-plate-assignment.js';
 import { amcpLineRefusal } from './amcp-guard.js';
+import { type BackupClip, type BackupRefusalReason } from './backup-media.js';
+
+/** `PLAYOUT-FEATURES-01` A (`B-286`) — a clip's `PLAY` refused because server B, the primary now, has no copy. */
+export const BACKUP_NO_COPY_CODE = 'backup-no-copy';
 import {
   ROUTE_EPOCH_READ_MS,
   ROUTE_EPOCH_STALE_CODE,
@@ -388,6 +392,8 @@ interface LivePlatePlacement {
      * at `VOLUME 0` (`isPlaylistOutput`).
      */
     readonly playlistOf?: number;
+    /** `PLAYOUT-FEATURES-01` A (`B-286`) — a clip's content fingerprint: the key server B's own copy is found by. */
+    readonly fingerprint?: string;
   };
   /** `FILL` and `CLIP`, from ONE computation — never assembled separately. */
   readonly fit: { readonly fill: NormalizedRect; readonly clip: NormalizedRect };
@@ -521,6 +527,8 @@ interface SeatResult {
    * the reveal waits until {@link ROUTE_REVEAL_AFTER_PLAY_MS} after the latest one.
    */
   readonly routePlayedAt?: number;
+  /** `PLAYOUT-FEATURES-01` A (`B-286`) — why server B was sent nothing for this clip (the row says so). */
+  readonly backupRefused?: BackupRefusalReason;
   readonly errorCode?: string;
   /** The refused line as `#send` summarised it (`B-209`). */
   readonly command?: string;
@@ -584,6 +592,8 @@ function sourceLabelOf(source: SourceDefinition): LivePlatePlacement['source'] {
     ...(source.origin !== undefined ? { origin: source.origin } : {}),
     // `PLAYOUT-FEATURES-01` C — the playlist output's seat is locked at volume 0 (`isPlaylistOutput`).
     ...(source.playlistOf !== undefined ? { playlistOf: source.playlistOf } : {}),
+    // `PLAYOUT-FEATURES-01` A — the backup's own copy is found by it (`B-286`).
+    ...(source.media?.fingerprint !== undefined ? { fingerprint: source.media.fingerprint } : {}),
   };
 }
 
@@ -1306,6 +1316,22 @@ export class CasparRuntime {
   /** `RELEASE-091-01` (DELTA B, B1) — the layers cleared outside CG Control, pushed on change. */
   readonly clearedOutsideChanged = new Emitter<readonly ClearedOutsideLayer[]>();
   /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — who is told a server gained a NEW connection (`healthy`, never the same
+   * socket's `degraded → healthy`): its core may have restarted with another library, so the bridge re-reads
+   * what the backup's own Playout lists for the bound clips. PRIVATE, not an `Emitter` field: it is the
+   * bridge's own business and reaches no console (`publish-coverage.test.ts` holds every public emitter to
+   * that).
+   */
+  readonly #serverConnectedHandlers = new Set<(label: 'A' | 'B') => void>();
+
+  /** `PLAYOUT-FEATURES-01` A — be told when a server gains a new connection. Returns an unsubscribe. */
+  onServerConnected(handler: (label: 'A' | 'B') => void): () => void {
+    this.#serverConnectedHandlers.add(handler);
+    return () => {
+      this.#serverConnectedHandlers.delete(handler);
+    };
+  }
+  /**
    * `multibox-layout-switch` `tasks.md` 6.5 / §12.4 — emitted for EVERY plate the
    * reconcile releases, held or torn down.
    *
@@ -1825,6 +1851,8 @@ export class CasparRuntime {
   readonly #emptiedLayers = new Set<string>();
   /** `ROUTE-PLATES-01` C4 — the rows last published `backupUnmirrored` (see `#publishLiveLayers`). */
   #backupUnmirroredItems = new Set<string>();
+  /** `PLAYOUT-FEATURES-01` A — each row's last published `backupNoCopy`, as JSON (see `#publishLiveLayers`). */
+  #backupNoCopyItems = new Map<string, string>();
   /**
    * D-137 / C-015 — which catalog entry each template's each PLATE uses.
    * LOADED, VALIDATED and PRUNED in `createBridge`, before the WebSocket binds.
@@ -2449,6 +2477,7 @@ export class CasparRuntime {
           still the last thing anyone saw.
         */
         if (to === 'healthy' && from !== 'degraded') {
+          for (const handler of [...this.#serverConnectedHandlers]) handler(label);
           this.#declaredConsumers.delete(label);
           this.#outputReadAt.delete(label);
           for (const [channel, readFrom] of [...this.#modeReadFrom]) {
@@ -2860,6 +2889,8 @@ export class CasparRuntime {
       const takeRefusal = this.#takeRefusals.get(item.itemId);
       // `ROUTE-PLATES-01` C4 — the backup carries this row without its Playout route plates.
       const backupUnmirrored = this.#backupUnmirrored(item.itemId);
+      // `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for.
+      const backupNoCopy = this.#backupNoCopy(item.itemId);
       /*
         ⚠ **EVERY OPTIONAL FIELD BELOW MUST BE NAMED IN THIS GUARD.** It is the
         "nothing to join, return the identical object" fast path, and a field it does not
@@ -2885,7 +2916,8 @@ export class CasparRuntime {
         timingOverride === undefined &&
         !removeExempt &&
         takeRefusal === undefined &&
-        !backupUnmirrored
+        !backupUnmirrored &&
+        backupNoCopy.length === 0
       )
         return item;
       return {
@@ -2899,6 +2931,7 @@ export class CasparRuntime {
         ...(timingOverride !== undefined && { timingOverride }),
         ...(removeExempt && { removeExempt: true }),
         ...(backupUnmirrored && { backupUnmirrored: true }),
+        ...(backupNoCopy.length > 0 && { backupNoCopy }),
         /*
           `FIELD-FIXES-01` B / Decision 1 — a row whose last take was REFUSED reads ERROR, whatever
           the wire now says about its layer. The refused take took its own graphic back off that
@@ -4551,6 +4584,65 @@ export class CasparRuntime {
   /** `PLAYOUT-FEATURES-01` D — hand the runtime the CG license's verdict. */
   useCgLicenseCheck(check: (channel: number) => string | null): void {
     this.#cgUnlicensed = check;
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — what server B gets for a clip, by fingerprint, from the BACKUP
+   * Playout's own D11 (`BackupMediaLookup.lookup`: synchronous, never awaited). `null` — no Playout, or
+   * no server B — and a clip's `PLAY` is mirrored as it always was.
+   */
+  #backupClip: ((fingerprint: string | undefined) => BackupClip) | null = null;
+
+  /** `PLAYOUT-FEATURES-01` A — hand the runtime the backup's own media lookup. */
+  useBackupMedia(lookup: ((fingerprint: string | undefined) => BackupClip) | null): void {
+    this.#backupClip = lookup;
+  }
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **SERVER B'S OWN `PLAY` FOR A CLIP**: the same line with the path
+   * B's own Playout listed for the clip's fingerprint, or `null` — B is sent nothing — with the reason.
+   * Nothing (`{}`) when there is no lookup, no server B, or the seat is not a clip: mirrored as always.
+   */
+  #backupPlayFor(
+    placement: LivePlatePlacement,
+    play: { readonly loop: boolean },
+  ): { readonly serverB?: string | null; readonly refused?: BackupRefusalReason } {
+    const lookup = this.#backupClip;
+    if (lookup === null || this.config().servers.B === undefined) return {};
+    if (placement.producer.kind !== 'media') return {};
+    const clip = lookup(placement.source.fingerprint);
+    if (clip.kind === 'copy') {
+      return {
+        serverB: this.#builder.playSource(
+          placement.slot,
+          { ...placement.producer, file: clip.clip },
+          play,
+        ),
+      };
+    }
+    return { serverB: null, refused: clip.reason };
+  }
+
+  /**
+   * `PLAYOUT-FEATURES-01` A (`B-286`) — is this a clip's transport verb (`PAUSE`, `RESUME`, `CALL`) to a seat
+   * server B was sent NOTHING for? Then it reaches the primary only: B's layer holds nothing of ours, and a
+   * `CALL` to anything but a file producer holds the Playout core's AMCP for seconds.
+   */
+  #primaryOnlyTransport(line: string): boolean {
+    const [verb, target] = line.split(' ');
+    if (verb !== 'PAUSE' && verb !== 'RESUME' && verb !== 'CALL') return false;
+    const match = /^(\d+)-(\d+)$/.exec(target ?? '');
+    if (match === null) return false;
+    const channel = Number(match[1]);
+    const layer = Number(match[2]);
+    for (const records of this.#liveLayers.values()) {
+      for (const r of records) {
+        if (r.slot.channel === channel && r.slot.layer === layer && r.backupRefused !== undefined) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   async take(itemId: string): Promise<TakeVerdict> {
@@ -8817,6 +8909,7 @@ export class CasparRuntime {
         hidden: r.hide,
         ...(sent.playedArg !== undefined && { playedArg: sent.playedArg }),
         ...(sent.routePlayedAt !== undefined && { routePlayedAt: sent.routePlayedAt }),
+        ...(sent.backupRefused !== undefined && { backupRefused: sent.backupRefused }),
         ...(sent.errorCode !== undefined && { errorCode: sent.errorCode }),
         ...(sent.command !== undefined && { command: sent.command }),
       });
@@ -8877,16 +8970,27 @@ export class CasparRuntime {
     routePlayedAt?: number;
     /** A route's own reading of what its failure left on the layer (`loaded`); else from the reply. */
     outcome?: SeatOutcome;
+    /** `PLAYOUT-FEATURES-01` A — server B was sent nothing for this clip, and why. */
+    backupRefused?: BackupRefusalReason;
   }> {
     // `ROUTE-PLATES-01` — a Playout route is started by its own pair, here and nowhere else.
     if (placementIsPlayoutRoute(placement)) return this.#startRouteProducer(placement);
     // `MEDIA-PLATES-01` §1.B — a clip whose Loop is on is played with `LOOP`; one that is not freezes
     // on its last frame at its end (2.5.0's ffmpeg producer — nothing more is needed for that).
     const play = { loop: placement.playback?.loop === true };
+    // 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — server B's OWN line for a clip, read off the backup lookup's
+    // cache (never awaited): B's own path, or nothing at all with the reason for the row.
+    const backup = this.#backupPlayFor(placement, play);
+    const sendOptions = backup.serverB === undefined ? {} : { serverB: backup.serverB };
+    const withBackup = <T extends object>(
+      result: T,
+    ): T & { backupRefused?: BackupRefusalReason } =>
+      backup.refused === undefined ? result : { ...result, backupRefused: backup.refused };
     const first = await this.#send(
       this.#builder.playSource(placement.slot, placement.producer, play),
       this.#nextSeq(),
       'urgent',
+      sendOptions,
     );
     /*
       🔴 `PLAYOUT-SOURCES-01` §1.C — **THE ONE RETRY.** A Playout media item's `clip` moves between
@@ -8904,18 +9008,19 @@ export class CasparRuntime {
       placement.producer.kind !== 'media' ||
       placement.source.origin !== 'media'
     ) {
-      return first;
+      return withBackup(first);
     }
     const fresh = await freshen(placement.source.id, placement.producer.file);
-    if (fresh === null) return first;
+    if (fresh === null) return withBackup(first);
     const producer = { ...placement.producer, file: fresh };
     const retried = await this.#send(
       this.#builder.playSource(placement.slot, producer, play),
       this.#nextSeq(),
       'urgent',
+      sendOptions,
     );
     // The ledger records the argument actually SENT — asked of the one formatter, never re-spelt.
-    return { ...retried, playedArg: this.#builder.sourceArgument(producer) };
+    return withBackup({ ...retried, playedArg: this.#builder.sourceArgument(producer) });
   }
 
   /**
@@ -9369,6 +9474,19 @@ export class CasparRuntime {
                 }
               : { loop: placement.playback?.loop === true },
         }),
+        /*
+          🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — SERVER B WAS SENT NOTHING FOR THIS CLIP, and why: the row
+          says so in one line, and a transport verb to it reaches the primary only. The prior's verdict for
+          a seat this action does not re-`PLAY`; this `PLAY`'s for one it does.
+        */
+        ...(() => {
+          const reason = seatUnchanged
+            ? prior?.backupRefused?.reason
+            : seats.get(producer)?.backupRefused;
+          return reason === undefined
+            ? {}
+            : { backupRefused: { reason, name: placement.source.name } };
+        })(),
       };
       const recordIndex = next.length;
 
@@ -11334,6 +11452,38 @@ export class CasparRuntime {
     for (const id of unmirrored) if (!this.#backupUnmirroredItems.has(id)) this.#markDirty(id);
     for (const id of this.#backupUnmirroredItems) if (!unmirrored.has(id)) this.#markDirty(id);
     this.#backupUnmirroredItems = unmirrored;
+    // `PLAYOUT-FEATURES-01` A — and a row whose list of clips B was sent nothing for moved, likewise.
+    const noCopy = new Map(
+      [...this.#liveLayers.keys()]
+        .map((id) => [id, JSON.stringify(this.#backupNoCopy(id))] as const)
+        .filter(([, list]) => list !== '[]'),
+    );
+    for (const [id, list] of noCopy)
+      if (this.#backupNoCopyItems.get(id) !== list) this.#markDirty(id);
+    for (const id of this.#backupNoCopyItems.keys()) if (!noCopy.has(id)) this.#markDirty(id);
+    this.#backupNoCopyItems = noCopy;
+  }
+
+  /**
+   * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **THE CLIPS OF THIS ROW SERVER B WAS SENT NOTHING FOR**, one per plate,
+   * from the ledger's records (`backupRefused`), in seat order. Empty with no server B.
+   */
+  #backupNoCopy(itemId: string): {
+    plateId: string;
+    name: string;
+    reason: NonNullable<LiveLayerRecord['backupRefused']>['reason'];
+  }[] {
+    if (this.#config.servers.B === undefined) return [];
+    const out: {
+      plateId: string;
+      name: string;
+      reason: NonNullable<LiveLayerRecord['backupRefused']>['reason'];
+    }[] = [];
+    for (const r of this.#liveLayers.get(itemId) ?? []) {
+      if (r.backupRefused === undefined || out.some((o) => o.plateId === r.sourceId)) continue;
+      out.push({ plateId: r.sourceId, name: r.backupRefused.name, reason: r.backupRefused.reason });
+    }
+    return out;
   }
 
   /**
@@ -15016,6 +15166,11 @@ export class CasparRuntime {
        * silently closed by the guard.
        */
       readonly strayTarget?: CommandSlot;
+      /**
+       * `PLAYOUT-FEATURES-01` A (`B-286`) — the line SERVER B gets instead (its own clip), or `null`: B is sent
+       * nothing (the adapter's `SendOptions.serverB`). Absent on every line but a clip's `PLAY`.
+       */
+      readonly serverB?: string | null;
     } = {},
   ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
     /*
@@ -15070,6 +15225,21 @@ export class CasparRuntime {
       sent only from the current, confirmed epoch. A refusal is answered like a refused command —
       the caller's refusal path runs — logged, and NOTHING is sent.
     */
+    /*
+      🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — SERVER B HAS NO COPY AND IS THE PRIMARY (after a failover): the
+      clip cannot be played there, and B is never sent a path it has not listed. Refused like a refused
+      `PLAY`, with nothing sent.
+    */
+    if (options.serverB === null && this.#adapter.currentPrimary === 'B') {
+      this.#clearExpiry(seq);
+      this.#reconciler.applyAck(seq, false, BACKUP_NO_COPY_CODE);
+      return {
+        ok: false,
+        onPrimary: false,
+        errorCode: BACKUP_NO_COPY_CODE,
+        command: summarizeWireLine(line),
+      };
+    }
     const refusal =
       options.routeEpoch !== undefined && !this.#routeEpochIsCurrent(options.routeEpoch)
         ? {
@@ -15131,9 +15301,15 @@ export class CasparRuntime {
     }
     try {
       // `ROUTE-PLATES-01` C4 — a Playout route reaches the primary only, and is never journaled.
+      // `PLAYOUT-FEATURES-01` A — a clip's `PLAY` carries server B's own line; a transport verb to a
+      // clip server B was sent nothing for reaches the primary only (B's layer holds nothing of ours).
       const result = await this.#adapter.send(
         line,
-        options.routeEpoch !== undefined ? { priority, mirror: false } : { priority },
+        options.routeEpoch !== undefined || this.#primaryOnlyTransport(line)
+          ? { priority, mirror: false }
+          : options.serverB !== undefined
+            ? { priority, serverB: options.serverB }
+            : { priority },
       );
       // A response ARRIVED, so the B-044 bounded timeout no longer applies —
       // and the ack below settles the intent either way (B-070: a failed ack

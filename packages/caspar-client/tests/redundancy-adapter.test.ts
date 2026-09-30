@@ -690,3 +690,78 @@ describe('RedundancyAdapter — ROUTE-PLATES-01 a line with `mirror: false`', ()
     expect(adapter.journal.all()).toHaveLength(1);
   });
 });
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **SERVER B GETS ITS OWN LINE** (`SendOptions.serverB`): a media
+ * `PLAY` carrying the clip B's own Playout lists. Every path that reaches B — the live fan-out, a failover
+ * catch-up — sends B's line and never A's; `null` sends B nothing. Keyed to SERVER B, not the role: after a
+ * failover B is the primary and still gets its own.
+ */
+describe('RedundancyAdapter — B-286 a per-server line (`serverB`)', () => {
+  const lineA = 'PLAY 1-60 "C:/Apasai CIaB/Promo/Studio 1.mov"';
+  const lineB = 'PLAY 1-60 "E:/Backup Library/Promo/Studio 1.mov"';
+
+  function record(mocks: [MockHandle, MockHandle]): { seenA: string[]; seenB: string[] } {
+    const seenA: string[] = [];
+    const seenB: string[] = [];
+    mocks[0].setHandler('PLAY', (req) => {
+      seenA.push(req.args[1] ?? '?');
+      return { kind: 'ok', code: 202, verb: 'PLAY' };
+    });
+    mocks[1].setHandler('PLAY', (req) => {
+      seenB.push(req.args[1] ?? '?');
+      return { kind: 'ok', code: 202, verb: 'PLAY' };
+    });
+    return { seenA, seenB };
+  }
+
+  it.each(['mirror-sync', 'mirror-async', 'journal-replay'] as const)(
+    '🔴 %s: A gets its line, B gets ITS OWN — live or by the failover catch-up — and never A’s',
+    async (strategy) => {
+      const { adapter, mocks } = await setup(strategy);
+      const { seenA, seenB } = record(mocks);
+      const result = await adapter.send(lineA, { serverB: lineB });
+      expect(result.winner).toBe('A');
+      await new Promise((r) => setTimeout(r, 50));
+      expect(seenA).toEqual(['C:/Apasai CIaB/Promo/Studio 1.mov']);
+      await adapter.failover('manual');
+      // Mirrored live (sync/async), replayed at the failover (journal-replay) — or both (mirror-async's
+      // catch-up re-sends what B may have missed): B's own path every time, and never A's.
+      expect(seenB.length).toBeGreaterThan(0);
+      expect(new Set(seenB)).toEqual(new Set(['E:/Backup Library/Promo/Studio 1.mov']));
+    },
+  );
+
+  it.each(['mirror-sync', 'mirror-async', 'journal-replay'] as const)(
+    '🔴 %s: `serverB: null` — B has no copy — sends B nothing, live or at a failover; A airs it',
+    async (strategy) => {
+      const { adapter, mocks } = await setup(strategy);
+      const { seenA, seenB } = record(mocks);
+      await adapter.send(lineA, { serverB: null });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(seenA).toEqual(['C:/Apasai CIaB/Promo/Studio 1.mov']);
+      await adapter.failover('manual');
+      expect(seenB).toEqual([]);
+    },
+  );
+
+  it('🔴 after a failover B is the PRIMARY and still gets its own line; A — the backup now — gets A’s', async () => {
+    const { adapter, mocks } = await setup('mirror-sync');
+    await adapter.failover('manual');
+    const { seenA, seenB } = record(mocks);
+    const result = await adapter.send(lineA, { serverB: lineB });
+    expect(result.winner).toBe('B');
+    expect(seenB).toEqual(['E:/Backup Library/Promo/Studio 1.mov']);
+    expect(seenA).toEqual(['C:/Apasai CIaB/Promo/Studio 1.mov']);
+    // …and with no copy on B, nothing is sent while B is the primary.
+    await expect(adapter.send(lineA, { serverB: null })).rejects.toThrow(/no copy/);
+    expect(seenB).toHaveLength(1);
+  });
+
+  it('control: without the option both servers get the same line, as always', async () => {
+    const { adapter, mocks } = await setup('mirror-sync');
+    const { seenA, seenB } = record(mocks);
+    await adapter.send(lineA);
+    expect(seenA).toEqual(seenB);
+  });
+});

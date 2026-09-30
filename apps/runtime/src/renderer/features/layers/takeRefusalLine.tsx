@@ -7,7 +7,7 @@ import {
   type SourceDefinition,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import type { TakeRefusal } from '@cg/shared-schema';
+import type { StackItemState, TakeRefusal } from '@cg/shared-schema';
 import { amcpCommandFacts, amcpRefusalWords } from '../../ui/amcpRefusal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 
@@ -69,6 +69,65 @@ export interface TakeRefusalLine {
  * Said on the row and in its Inspector, in the channel's own view; a refused take's line outranks it.
  */
 export const BACKUP_UNMIRRORED_LINE = 'Backup: live boxes not mirrored.';
+
+/**
+ * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — the row's other backup fact: server B was sent NOTHING for these
+ * clips (`StackItemState.backupNoCopy`). One line, the clip names apart so each can be isolated:
+ *
+ *     Backup has no copy of “Sting”; this box stays empty on the backup
+ *     Backup has no copy of “پرومو” (its Playout is older than 2.9.1), “Sting”; these boxes stay empty on the backup
+ *
+ * A reason other than a missing copy is named in brackets after its clip.
+ */
+export interface BackupNoCopyLine {
+  readonly clips: readonly { readonly name: string; readonly why: string | null }[];
+  readonly rest: string;
+  readonly text: string;
+}
+
+const BACKUP_REASON_WORDS: Readonly<
+  Record<NonNullable<StackItemState['backupNoCopy']>[number]['reason'], string | null>
+> = {
+  'no-copy': null,
+  'no-fingerprint': 'the Playout gave it no fingerprint',
+  'backup-old': 'its Playout is older than 2.9.1',
+  'backup-unread': 'its media list has not been read',
+};
+
+export function backupNoCopyLine(
+  entries: NonNullable<StackItemState['backupNoCopy']>,
+): BackupNoCopyLine | null {
+  if (entries.length === 0) return null;
+  const clips = entries.map((e) => ({ name: e.name, why: BACKUP_REASON_WORDS[e.reason] }));
+  const rest =
+    entries.length === 1
+      ? '; this box stays empty on the backup'
+      : '; these boxes stay empty on the backup';
+  const text =
+    'Backup has no copy of ' +
+    clips.map((c) => `“${c.name}”${c.why === null ? '' : ` (${c.why})`}`).join(', ') +
+    rest;
+  return { clips, rest, text };
+}
+
+/** The line as rendered: each clip's name in its own `<bdi>`, the rest LTR chrome. */
+export function BackupNoCopyText({ line }: { line: BackupNoCopyLine }): JSX.Element {
+  return (
+    <>
+      {'Backup has no copy of '}
+      {line.clips.map((c, i) => (
+        <span key={`${String(i)}-${c.name}`}>
+          {i > 0 && ', '}
+          {'“'}
+          <bdi>{c.name}</bdi>
+          {'”'}
+          {c.why !== null && ` (${c.why})`}
+        </span>
+      ))}
+      {line.rest}
+    </>
+  );
+}
 
 /** The codes a take refused before any AMCP because of what became of a bound entry (§1.C). */
 const UNSEATABLE_CODES = new Set(['source-unavailable', 'source-unusable']);

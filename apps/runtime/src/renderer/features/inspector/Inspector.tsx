@@ -32,6 +32,8 @@ import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
 import {
   BACKUP_UNMIRRORED_LINE,
+  BackupNoCopyText,
+  backupNoCopyLine,
   plateLabelOf,
   takeRefusalLine,
   TakeRefusalText,
@@ -730,6 +732,15 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
             />
           </p>
         )}
+        {/* `PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent nothing for. */}
+        {(() => {
+          const noCopy = backupNoCopyLine(item.backupNoCopy ?? []);
+          return noCopy === null ? null : (
+            <p style={styles.backupLine} data-inspector-backup-no-copy="" dir="ltr">
+              <BackupNoCopyText line={noCopy} />
+            </p>
+          );
+        })()}
         {/* `ROUTE-PLATES-01` C4 — the backup carries this row without its live boxes. */}
         {item.backupUnmirrored === true && (
           <p style={styles.backupLine} data-inspector-backup-unmirrored="" dir="ltr">

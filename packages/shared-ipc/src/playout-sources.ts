@@ -175,6 +175,15 @@ export function parsePlayoutInputs(
 
 // ── D11: the media ──────────────────────────────────────────────────────────
 
+/**
+ * `PLAYOUT-FEATURES-01` A (`2.9.1`, ROUTE-ON-DONE §2) — a content fingerprint: 64 hexadecimal characters, the
+ * same for the same bytes on any server. Kept lower-cased; anything else is not one.
+ */
+export const PlayoutFingerprintSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{64}$/)
+  .transform((s) => s.toLowerCase());
+
 /** ONE D11 item as received. `clip` is an ABSOLUTE path with `/` (their answer §2.1). */
 export const PlayoutMediaItemSchema = z.object({
   id: PlayoutIdSchema,
@@ -186,6 +195,14 @@ export const PlayoutMediaItemSchema = z.object({
   height: z.number().int().positive().optional().catch(undefined),
   folder: z.string().optional().catch(undefined),
   updatedAt: z.string().optional().catch(undefined),
+  /** `PLAYOUT-FEATURES-01` A (`2.9.1`) — the logical source path, as it sits in the playlist. */
+  source: z.string().min(1).optional().catch(undefined),
+  /**
+   * `PLAYOUT-FEATURES-01` A (`2.9.1`) — the content fingerprint, given ONLY when `clip`'s bytes really match
+   * it. The key a BACKUP's own copy is found by (`B-286`); absent — an older Playout, or a source rewritten
+   * in place — there is none, and the backup is sent nothing for this clip.
+   */
+  fingerprint: PlayoutFingerprintSchema.optional().catch(undefined),
 });
 export type PlayoutMediaItem = z.infer<typeof PlayoutMediaItemSchema>;
 
@@ -279,6 +296,12 @@ export const BoundMediaItemSchema = z.object({
   folder: z.string().optional(),
   lastBoundAt: z.string(),
   unavailable: z.literal(true).optional(),
+  /** `PLAYOUT-FEATURES-01` A — the last read's `source` and `fingerprint` (absent when it gave none). */
+  source: z.string().min(1).optional(),
+  fingerprint: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .optional(),
   /**
    * `MEDIA-PLATES-01` — the clip's two playback settings, station-wide (`MediaPlayback`). A reference
    * bound before they existed has neither, and reads as the defaults (`mediaPlaybackOf`).
@@ -311,6 +334,10 @@ export function toBoundMedia(
     ...(item.height !== undefined ? { height: item.height } : {}),
     ...(item.folder !== undefined ? { folder: item.folder } : {}),
     lastBoundAt,
+    // `PLAYOUT-FEATURES-01` A — refreshed by every read, like `clip`: a fingerprint the Playout stops
+    // giving (the file rewritten in place) is dropped, and the backup is sent nothing for it.
+    ...(item.source !== undefined ? { source: item.source } : {}),
+    ...(item.fingerprint !== undefined ? { fingerprint: item.fingerprint } : {}),
     loop: playback.loop,
     whenHidden: playback.whenHidden,
   };
@@ -517,6 +544,8 @@ export function buildPlayoutSourceCatalog(input: PlayoutCatalogInput): SourceCat
         ...(m.width !== undefined ? { width: m.width } : {}),
         ...(m.height !== undefined ? { height: m.height } : {}),
         ...(m.folder !== undefined ? { folder: m.folder } : {}),
+        // `PLAYOUT-FEATURES-01` A — the key the backup's own copy is found by.
+        ...(m.fingerprint !== undefined ? { fingerprint: m.fingerprint } : {}),
         lastBoundAt: m.lastBoundAt,
         ...(m.loop !== undefined ? { loop: m.loop } : {}),
         ...(m.whenHidden !== undefined ? { whenHidden: m.whenHidden } : {}),
