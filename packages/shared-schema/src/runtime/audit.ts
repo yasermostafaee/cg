@@ -124,7 +124,7 @@ export const AuditEntrySchema = z.object({
   actorNameTruncated: z.literal(true).optional(),
   /**
    * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — the CONSOLE MACHINE the action came from: the peer address
-   * of the console's socket (`192.168.21.50`). One CG Bridge serves consoles on several machines,
+   * of the console's socket (`192.0.2.50`). One CG Bridge serves consoles on several machines,
    * so a row names the user AND where they pressed. Kept beside the actor as `actorSub` is — a
    * technical fact, never the sentence (golden rule 11: the Log shows it on hover). Absent on a row
    * no console caused, and on every row written before.

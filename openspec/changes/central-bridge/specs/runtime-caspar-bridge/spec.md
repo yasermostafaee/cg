@@ -218,13 +218,13 @@ rule 11: a technical fact rides the `title`).
 
 #### Scenario: A take names the console machine
 
-- **WHEN** a signed-in console at `192.168.21.50` takes a row **THEN** the row's actor is the user and its
-  `consoleAddress` is `192.168.21.50` — control: an action the bridge takes by itself carries none
+- **WHEN** a signed-in console at `192.0.2.50` takes a row **THEN** the row's actor is the user and its
+  `consoleAddress` is `192.0.2.50` — control: an action the bridge takes by itself carries none
 
 #### Scenario: The Log shows the machine on hover
 
 - **WHEN** the Log shows a row with a console machine **THEN** the actor cell reads the user and its title
-  reads `From 192.168.21.50` — control: a row without one has no title
+  reads `From 192.0.2.50` — control: a row without one has no title
 
 ## MODIFIED Requirements
 

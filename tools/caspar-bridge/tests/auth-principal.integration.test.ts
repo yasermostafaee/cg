@@ -348,8 +348,8 @@ describe('C-037 — the record learns who arrived, and keeps saying so', () => {
   });
 
   it('`CENTRAL-BRIDGE-01` — a console’s address as the record names it: IPv4-mapped reduced, others kept', () => {
-    expect(consoleAddressOf('::ffff:192.168.21.50')).toBe('192.168.21.50');
-    expect(consoleAddressOf('192.168.21.50')).toBe('192.168.21.50');
+    expect(consoleAddressOf('::ffff:192.0.2.50')).toBe('192.0.2.50');
+    expect(consoleAddressOf('192.0.2.50')).toBe('192.0.2.50');
     expect(consoleAddressOf('fe80::1')).toBe('fe80::1');
     expect(consoleAddressOf(undefined)).toBeNull();
     expect(consoleAddressOf('')).toBeNull();

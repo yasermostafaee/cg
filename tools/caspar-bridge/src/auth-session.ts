@@ -19,7 +19,7 @@ import type { VerifiedToken } from './playout-auth.js';
 export class AuthSession {
   /**
    * 🔴 `CENTRAL-BRIDGE-01` (`R-068`) — **THE CONSOLE MACHINE this socket came from**: its peer
-   * address (`192.168.21.50`; an IPv4-mapped IPv6 form reduced to IPv4), or `null` when unknown.
+   * address (`192.0.2.50`; an IPv4-mapped IPv6 form reduced to IPv4), or `null` when unknown.
    * One CG Bridge serves consoles on several machines, so an audit row names the user AND the
    * machine they pressed on. Fixed for the life of the socket — a connection does not move.
    */

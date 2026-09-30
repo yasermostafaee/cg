@@ -1049,7 +1049,7 @@ export function refusedByAuth(route: Route, state: AuthGateState): boolean {
 
 /**
  * `CENTRAL-BRIDGE-01` (`R-068`) — a console socket's peer address as the audit record names the
- * machine: an IPv4-mapped IPv6 address (`::ffff:192.168.21.50`) reduced to its IPv4 form, anything
+ * machine: an IPv4-mapped IPv6 address (`::ffff:192.0.2.50`) reduced to its IPv4 form, anything
  * else kept as the socket reports it; `null` when the socket reports none — or one longer than a
  * row may carry, since a shortened address would name a machine that does not exist.
  */
