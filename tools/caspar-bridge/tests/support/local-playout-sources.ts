@@ -107,6 +107,12 @@ export class LocalPlayoutSources implements PlayoutSourcesProvider {
     this.#revision += 1;
   }
 
+  /** Replace the whole input list (the Playout's list changed: a mark added, an input renamed). */
+  setInputs(inputs: readonly FakeInput[]): void {
+    this.#inputs = inputs;
+    this.#revision += 1;
+  }
+
   setEpoch(epoch: number | string | null): void {
     this.#epoch = epoch;
     this.#revision += 1;

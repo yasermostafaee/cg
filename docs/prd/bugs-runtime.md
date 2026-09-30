@@ -13056,3 +13056,19 @@ output and an unmarked input play on CH 2; a swap to it refused, control: a swap
 lands), `sourcePicker.dom.test.ts`, `takeRefusalLine.test.ts`. **Owed:** `.111` lists `MTA (APASAI)` with
 `ownOutputOf` channel 1; CG's test channel is 2, so there it is offered (the control) — the refusal needs
 `MTA (APASAI-CGTEST2)` listed, which the Playout team offered to add.
+
+## [~] B-299 — A swap (or an UPDATE) to a Playout route the row's channel may not show was ACCEPTED, sent nothing, and left the old picture on air ⟨priority: medium — the console said the swap landed when it had not⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B (found building `B-298`) · `openspec/changes/playout-features/` (§2)
+
+**Found (measured):** on a CH 2 row with `ورودی ۳` (`route://9-12`, channels 1 and 2) on air,
+`swapLiveSource(row, 'l1', 'ورودی ۴')` — a route whose `compatibleChannels` name channel 1 only — answered
+`{ ok: true }`, put nothing on the wire, and the ledger's seat still named `route://9-12`. Contract v1.3 rule 1
+(`ROUTE-PLATES-01`) was kept by the take's resolver and the seating filter, but the binding door a swap and
+an UPDATE pass (`#refuseBindingChange`) asked only the duplicate-input and band questions: for a plate
+already punched the planner never asks the resolver, it resolves the plate from the showable entries alone,
+the new route was not among them, and the change was recorded as landed. **Fix:** the binding door asks
+rule 1 (and `B-298`'s loop) of every NEW or CHANGED binding against the one in force, with the take's own
+clause (`Plate "l1": “ورودی ۴” can't be shown on CH 2.`), before anything is written or sent; an unchanged
+binding is never refused for what became of its entry since (`unbindableChange`'s doctrine). **Tests:**
+`route-plates.integration.test.ts` (`B-299`: the swap refused, nothing sent, the seat unchanged; control: a
+swap to `ورودی ۵` lands; and a mark added after binding never refuses a neighbour's swap — control: the
+marked input bound anew is refused). Each planted out goes red on its own test.

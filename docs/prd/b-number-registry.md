@@ -3114,3 +3114,13 @@ returned nothing, against positive controls on `B-297`, `R-079`, `C-048` and `P-
 each; no stash.
 
 ⇒ **Next free after this entry is `B-299`**, **`D-162`**, **`P-063`**, **`R-080`** and **`C-049`**.
+
+### 2026-09-30 — `PLAYOUT-FEATURES-01` takes `B-299`
+
+- `B-299` — a swap or an UPDATE to a Playout route the row's channel may not show was accepted with
+  nothing sent (found building `B-298`) — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the same sweep as `B-298`'s, on every local branch and `--untracked`, returned
+nothing for `B-299`, against `B-298`'s own heading on `dev` as the positive control; no stash.
+
+⇒ **Next free after this entry is `B-300`**, **`D-162`**, **`P-063`**, **`R-080`** and **`C-049`**.

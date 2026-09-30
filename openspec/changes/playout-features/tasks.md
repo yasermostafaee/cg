@@ -22,6 +22,7 @@ Every item is FULL LANE (the path to air, the wire, IPC schemas, refusal conditi
 ## 2. B — `ownOutputOf` (`B-298`)
 
 - [x] 2.1 Parse and join; the one predicate; picker title; bridge refusal (take, switch, swap)
+- [x] 2.1b `B-299` (found on the way): the binding door asks rule 1 and the loop of NEW bindings only
 - [ ] 2.2 Tests; gate; pushed; CI read
 
 ## 3. C — the playlist output as a box source (`R-075`)

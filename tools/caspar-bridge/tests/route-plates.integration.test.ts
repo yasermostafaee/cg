@@ -965,3 +965,61 @@ describe('PLAYOUT-FEATURES-01 B (B-298) — `ownOutputOf`: refused on its own ch
     expect((await sentSince(from)).some((l) => l.includes('[NDI] "STUDIO-PC (Cam 1)"'))).toBe(true);
   });
 });
+
+// ── `B-299` — the binding door asks rule 1 of a NEW binding, and only of a new one ─────────────
+
+describe('B-299 — a swap to a route this channel may not show is refused; an unchanged binding is never refused for what became of its entry', () => {
+  it('🔴 a swap to “ورودی ۴” (channel 1 only) on CH 2 is refused with rule 1’s clause and NOTHING is sent — control: a swap to “ورودی ۵” (CH 2) lands', async () => {
+    const provider = new LocalPlayoutSources({ inputs: INPUTS });
+    provider.setAvailable('li-input4', true);
+    const { r, mark, sentSince } = await boot({
+      assignments: bind('single', { l1: INPUT_3 }),
+      provider,
+    });
+    await take(r, 'single');
+    const from = await mark();
+    const refused = await r.swapLiveSource(ROW, 'l1', INPUT_4);
+    expect(refused).toMatchObject({
+      ok: false,
+      reason: 'source-not-showable',
+      message: 'Plate "l1": “ورودی ۴” can\'t be shown on CH 2.',
+    });
+    expect(await sentSince(from)).toEqual([]);
+    // Nothing was recorded either: the seat still names the route it had.
+    const seat = (r.liveLayers().get(ROW) ?? []).find((rec) => rec.sourceId === 'l1');
+    expect(seat?.producer).toBe('"route://9-12"');
+    // CONTROL — a route that names CH 2 swaps in.
+    expect((await r.swapLiveSource(ROW, 'l1', INPUT_5)).ok).toBe(true);
+    expect(await sentSince(from)).toContain('LOADBG 2-60 "route://9-14"');
+  });
+
+  it('🔴 `B-298` — a mark added AFTER a plate was bound never refuses a change to its NEIGHBOUR — control: binding the marked input anew is refused', async () => {
+    const studioOnce = inputSourceId('li-studio1');
+    const provider = new LocalPlayoutSources({ inputs: INPUTS });
+    const { r, sources, mark, sentSince } = await boot({
+      assignments: bind('duo', { l1: studioOnce, l2: MULTICAST }),
+      provider,
+    });
+    await take(r, 'duo');
+    // The Playout now marks Studio 1 as CH 2's own output.
+    provider.setInputs(
+      INPUTS.map((i) =>
+        i.id === 'li-studio1'
+          ? { ...i, ownOutputOf: { casparHost: '127.0.0.1', casparChannel: 2 } }
+          : i,
+      ),
+    );
+    await sources.refresh(0);
+    expect(sources.catalog().sources.find((s) => s.id === studioOnce)?.ownOutputOf).toBe(2);
+    const from = await mark();
+    // The neighbour's swap lands: l1's binding is unchanged, so its new mark is not asked of it.
+    expect((await r.swapLiveSource(ROW, 'l2', INPUT_3)).ok).toBe(true);
+    expect(await sentSince(from)).toContain(`LOADBG 2-${String(layerOf(r, 'l2'))} "route://9-12"`);
+    // CONTROL — binding the marked input ANEW is refused: l1 moves off it, and back is a new binding.
+    expect((await r.swapLiveSource(ROW, 'l1', INPUT_5)).ok).toBe(true);
+    expect(await r.swapLiveSource(ROW, 'l1', studioOnce)).toMatchObject({
+      ok: false,
+      reason: 'source-own-output',
+    });
+  });
+});

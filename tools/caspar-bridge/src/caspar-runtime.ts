@@ -115,6 +115,8 @@ import {
   sourceLoopsOn,
   ownOutputWords,
   SOURCE_OWN_OUTPUT_CODE,
+  // `B-299` — the binding door names a source this channel may not show by rule 1's clause.
+  notShowableWords,
   unbindableChange,
   redactUrlCredentials,
   // `MEDIA-PLATES-01` — a clip's playback settings, through the ONE reader.
@@ -194,7 +196,10 @@ import {
   type NormalizedRect,
 } from './live-layers.js';
 import { AuditWriter, readRecentEntries } from '@cg/audit';
-import { resolvePlateAssignments } from './live-plate-assignment.js';
+import {
+  LIVE_PLATE_SOURCE_NOT_SHOWABLE,
+  resolvePlateAssignments,
+} from './live-plate-assignment.js';
 import { amcpLineRefusal } from './amcp-guard.js';
 import {
   ROUTE_EPOCH_READ_MS,
@@ -6987,19 +6992,50 @@ export class CasparRuntime {
       return { reason: 'live-source-duplicate', message: seatCollisionMessage(collision) };
     }
     /*
-      🔴 `PLAYOUT-FEATURES-01` B (`B-298`) — A BINDING TO THIS CHANNEL'S OWN OUTPUT WOULD LOOP. Refused
-      HERE, from the prospective maps, before anything is written or sent: the take's resolver names it
-      for a plate it must resolve, but a swap or an UPDATE of a plate already punched never reaches that
-      question — the planner resolves such a plate from the seatable entries alone, and the looping one
-      is not among them. The same clause as the take's.
+      🔴 `PLAYOUT-FEATURES-01` B (`B-298`) and `B-299` — A NEW BINDING THIS ROW'S CHANNEL MAY NOT SHOW: the
+      channel's own output (it would loop), or a Playout route whose `compatibleChannels` do not name the
+      channel (contract v1.3 rule 1). Refused HERE, from the prospective maps, before anything is written
+      or sent: the take's resolver names both for a plate it must resolve, but a swap or an UPDATE of a
+      plate already punched never reaches that question — the planner resolves such a plate from the
+      showable entries alone, the new one is not among them, and the swap was ACCEPTED with nothing sent
+      and the old picture left on air (`B-299`, measured). The same clauses as the take's.
+
+      ⚠ Only a binding that is NEW or CHANGED against the one in force is asked: an unchanged binding is
+      never refused for what became of its entry since (`unbindableChange`'s doctrine), so an UPDATE of a
+      row's texts is not blocked by a mark the Playout added to its input after it was bound.
     */
+    const inForce = resolveLookBindings({
+      templateId,
+      carrier,
+      assignments: this.#assignmentsFor(itemId, templateId, 'pinned', slot.channel).assignments,
+      channel: slot.channel,
+      catalog: this.#sourceCatalog,
+      bindings: this.#lookSourceBindings.get(itemId),
+      overrides: this.#sourceOverrides.get(itemId),
+      argumentOf: (source) => this.#builder.sourceArgument(source.producer),
+    });
+    const frameKey = (frame: {
+      lookId: string | undefined;
+      plateId: string;
+      source: { id: string };
+    }) => `${frame.lookId ?? ''}\u001f${frame.plateId}\u001f${frame.source.id}`;
+    const held = new Set(inForce.frames.map(frameKey));
     for (const frame of prospective.frames) {
-      if (!sourceLoopsOn(frame.source, slot.channel)) continue;
-      const words = ownOutputWords(frame.source.name, slot.channel);
-      return {
-        reason: SOURCE_OWN_OUTPUT_CODE,
-        message: `Plate "${frame.plateId}": “${words.name}”${words.rest}`,
-      };
+      if (held.has(frameKey(frame))) continue;
+      if (sourceLoopsOn(frame.source, slot.channel)) {
+        const words = ownOutputWords(frame.source.name, slot.channel);
+        return {
+          reason: SOURCE_OWN_OUTPUT_CODE,
+          message: `Plate "${frame.plateId}": “${words.name}”${words.rest}`,
+        };
+      }
+      if (!sourceShowableOn(frame.source, slot.channel)) {
+        const words = notShowableWords(frame.source.name, slot.channel);
+        return {
+          reason: LIVE_PLATE_SOURCE_NOT_SHOWABLE,
+          message: `Plate "${frame.plateId}": “${words.name}”${words.rest}`,
+        };
+      }
     }
 
     /*

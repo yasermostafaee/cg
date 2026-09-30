@@ -76,3 +76,9 @@ plate on it.
    `#planLiveSeating`, and `#refuseBindingChange` — the door a swap and an UPDATE pass. The last was needed:
    for a plate already on air the planner never asks the resolver, and a swap to a looping input was
    accepted (`ok: true`) with nothing sent. Measuring that found the same hole for rule 1 — `B-299`.
+4. **`B-299` — the binding door asks rule 1 too, and both questions only of a NEW or CHANGED binding.** A swap
+   to a route the channel may not show was likewise answered `ok: true` with nothing sent and the old seat
+   kept (measured). Both refusals now sit in `#refuseBindingChange`, asked of every prospective frame that is
+   not already in force (`(look, plate, source)` compared with the maps in force), with the take's clauses.
+   An unchanged binding is never refused for a mark or a list change that came after it — so an UPDATE of a
+   row's texts is not blocked by the Playout marking its input later.
