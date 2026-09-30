@@ -10,7 +10,13 @@
 ; Silent:     CG-Bridge_<v>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.0.0.1]
 ;               [/AMCPPORT=5250] [/OSCPORT=6251] [/CONTROLPORT=5280] [/TEMPLATEPORT=7911]
 ;               [/BRIDGEADDRESS=<ip>]
+;             A value runs to the next space; a value in double quotes may hold one.
 ; Uninstall:  "%ProgramFiles%\CG Bridge\uninstall.exe" /S _?=%ProgramFiles%\CG Bridge
+;             _?= makes the uninstaller finish before it exits (its exit code is then the
+;             uninstall's). It must be LAST and NOT quoted, spaces and all - NSIS's own rule; a
+;             quoted _?= is not seen, and the uninstaller copies itself away and exits 0 at once
+;             while the copy works on (run 36703284775). It cannot delete itself this way: the
+;             caller removes uninstall.exe and the folder afterwards.
 ; Exit codes: 0 done; 1 cancelled by the user (interactive only); 2 failed (install.log says why).
 ;
 ; The rules it keeps (the Playout team's, docs/integration/playout/CG-BRIDGE-FOR-PLAYOUT.md):
@@ -110,9 +116,10 @@ FunctionEnd
   Call un.RunLogged
 !macroend
 
-; Our service only, by its own name; absent is fine. Waits (30 s) until it has stopped, so no file
-; the service holds is replaced under it.
-!define STOP_SERVICE `powershell.exe -NoProfile -NonInteractive -Command "$$s = Get-Service -Name ${SERVICE} -ErrorAction SilentlyContinue; if ($$s -and $$s.Status -ne 'Stopped') { Stop-Service -Name ${SERVICE} -Force; $$s.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) }"`
+; Our service only, by its own name; absent is fine (exit 0 - a first install logged "exit 1" here
+; for a service that was simply not there yet). Waits (30 s) until it has stopped, so no file the
+; service holds is replaced under it; a stop that does not finish is exit 1.
+!define STOP_SERVICE `powershell.exe -NoProfile -NonInteractive -Command "$$ErrorActionPreference = 'Stop'; $$s = Get-Service -Name ${SERVICE} -ErrorAction SilentlyContinue; if ($$null -eq $$s) { exit 0 }; if ($$s.Status -ne 'Stopped') { Stop-Service -Name ${SERVICE} -Force; $$s.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30)) }; exit 0"`
 
 !define START_SERVICE `powershell.exe -NoProfile -NonInteractive -Command "Start-Service -Name ${SERVICE}; (Get-Service -Name ${SERVICE}).WaitForStatus('Running', [TimeSpan]::FromSeconds(30))"`
 
@@ -130,13 +137,17 @@ Function .onInit
   StrCpy $Warnings ""
   ${GetParameters} $Args
   ClearErrors
-  ${GetOptions} $Args "/PLAYOUT=" $Playout
-  ${GetOptions} $Args "/AMCPHOST=" $AmcpHost
-  ${GetOptions} $Args "/AMCPPORT=" $AmcpPort
-  ${GetOptions} $Args "/OSCPORT=" $OscPort
-  ${GetOptions} $Args "/CONTROLPORT=" $ControlPort
-  ${GetOptions} $Args "/TEMPLATEPORT=" $TemplatePort
-  ${GetOptions} $Args "/BRIDGEADDRESS=" $BridgeAddress
+  ; GetOptions ends a value at its option's FIRST CHARACTER. Spelled "/PLAYOUT=", that is "/", and
+  ; "/PLAYOUT=http://127.0.0.1:8080" came back "http:" - the first clean-Windows smoke wrote that
+  ; address to the configuration (run 36703284775). Spelled " /PLAYOUT=" over " $Args", the value
+  ; runs to the next SPACE: an address, a host and a port never hold one, and a quoted value may.
+  ${GetOptions} " $Args" " /PLAYOUT=" $Playout
+  ${GetOptions} " $Args" " /AMCPHOST=" $AmcpHost
+  ${GetOptions} " $Args" " /AMCPPORT=" $AmcpPort
+  ${GetOptions} " $Args" " /OSCPORT=" $OscPort
+  ${GetOptions} " $Args" " /CONTROLPORT=" $ControlPort
+  ${GetOptions} " $Args" " /TEMPLATEPORT=" $TemplatePort
+  ${GetOptions} " $Args" " /BRIDGEADDRESS=" $BridgeAddress
   ClearErrors
 FunctionEnd
 

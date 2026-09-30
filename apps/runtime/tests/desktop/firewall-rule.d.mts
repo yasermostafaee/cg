@@ -5,7 +5,8 @@ export declare function ruleProblems(
   expected: {
     readonly name: string;
     readonly protocol: 'UDP' | 'TCP';
-    readonly port: string;
+    /** One spelling, or every spelling `netsh` may print for the same ports. */
+    readonly port: string | readonly string[];
     readonly program: string;
   },
 ): string[];

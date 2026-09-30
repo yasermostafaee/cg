@@ -6,8 +6,9 @@
  * carries the first two, so a rule on the wrong port, the wrong protocol, blocking, disabled or
  * outbound passed. This reads the fields `netsh` prints for each rule and checks each one.
  *
- * Pure and dependency-free: the smoke runs it on the clean runner (sparse checkout of this folder),
- * and `tests/installerFirewallRule.test.ts` proves it refuses each wrong field.
+ * Pure and dependency-free: both clean-runner smokes run it (a sparse checkout of this file — CG
+ * Bridge's `tools/bridge-installer/smoke.mjs` too, `CENTRAL-BRIDGE-01`), and
+ * `tests/installerFirewallRule.test.ts` proves it refuses each wrong field.
  *
  * `netsh` prints its field names in the system's display language; the runner is `en-US`.
  */
@@ -34,6 +35,10 @@ export function parseRules(text) {
  * What is wrong with the rule named `expected.name`, as one line each — `[]` when there is exactly
  * one, it is enabled, inbound, allowing, on every profile, for `expected.protocol` on
  * `expected.port`, and for `expected.program` alone.
+ *
+ * `expected.port` is one spelling, or every spelling `netsh` may print for the same ports: a rule
+ * added for `6251,6252` may read back as `6251-6252`. A list is a set of spellings of ONE value,
+ * never a looser port — anything outside it is still refused.
  */
 export function ruleProblems(text, expected) {
   const rules = parseRules(text).filter((rule) => rule['Rule Name'] === expected.name);
@@ -51,7 +56,8 @@ export function ruleProblems(text, expected) {
   want('Direction', 'In');
   want('Action', 'Allow');
   want('Protocol', expected.protocol);
-  want('LocalPort', expected.port);
+  const ports = Array.isArray(expected.port) ? expected.port : [expected.port];
+  want('LocalPort', ports.join('" or "'), (got) => ports.includes(got));
   want('Program', expected.program, (a, b) => a.toLowerCase() === b.toLowerCase());
   want('Profiles', 'Domain,Private,Public');
   return problems;

@@ -6,11 +6,16 @@ import { parseRules, ruleProblems } from './desktop/firewall-rule.mjs';
  * prints, so a rule whose NAME says "UDP 6250" but whose port, protocol, direction or action does
  * not is refused. The old check only asked whether the text contained `6250`, `UDP` and the path —
  * and the name alone carries the first two.
+ *
+ * `CENTRAL-BRIDGE-01` — the rule judged here is CG Bridge's own OSC rule (UDP 6251 and 6252, for
+ * `cg-bridge.exe`): CG Control opens no port any more, and UDP 6250 is the Playout engine's, never
+ * ours (rule 7). Its two ports may read back from `netsh` in either spelling, so the smoke names both.
  */
 
-const PROGRAM = 'C:\\Program Files\\CG Control\\cg-bridge.exe';
-const NAME = 'CG Control - OSC from CasparCG (UDP 6250)';
-const EXPECTED = { name: NAME, protocol: 'UDP', port: '6250', program: PROGRAM } as const;
+const PROGRAM = 'C:\\Program Files\\CG Bridge\\cg-bridge.exe';
+const NAME = 'CG Bridge - OSC from CasparCG';
+const SPELLINGS = ['6251-6252', '6251,6252'] as const;
+const EXPECTED = { name: NAME, protocol: 'UDP', port: SPELLINGS, program: PROGRAM } as const;
 
 /** `netsh advfirewall firewall show rule name=… verbose`, as an en-US Windows prints it. */
 function netsh(fields: Partial<Record<string, string>> = {}, name = NAME): string {
@@ -23,7 +28,7 @@ function netsh(fields: Partial<Record<string, string>> = {}, name = NAME): strin
     LocalIP: 'Any',
     RemoteIP: 'Any',
     Protocol: 'UDP',
-    LocalPort: '6250',
+    LocalPort: '6251-6252',
     RemotePort: 'Any',
     'Edge traversal': 'No',
     Program: PROGRAM,
@@ -42,15 +47,26 @@ function netsh(fields: Partial<Record<string, string>> = {}, name = NAME): strin
 }
 
 describe('CLIENT-TEST-RELEASE-01 B2 — a firewall rule is judged by its fields', () => {
-  it('the rule the installer adds passes', () => {
+  it('the rule the installer adds passes, in either spelling of its two ports', () => {
     expect(parseRules(netsh())).toHaveLength(1);
     expect(ruleProblems(`${netsh()}Ok.\r\n`, EXPECTED)).toEqual([]);
+    expect(ruleProblems(netsh({ LocalPort: '6251,6252' }), EXPECTED)).toEqual([]);
   });
 
-  it('CONTROL — the NAME alone no longer satisfies it: a rule named "UDP 6250" on 6251 is refused', () => {
-    expect(ruleProblems(netsh({ LocalPort: '6251' }), EXPECTED)).toEqual([
+  it('CONTROL — the NAME alone never satisfies it: a rule named "UDP 6250" on 6251 is refused', () => {
+    const named = 'CG Control - OSC from CasparCG (UDP 6250)';
+    const expected = { name: named, protocol: 'UDP', port: '6250', program: PROGRAM } as const;
+    expect(ruleProblems(netsh({ LocalPort: '6251' }, named), expected)).toEqual([
       'LocalPort is "6251", not "6250"',
     ]);
+  });
+
+  it('a list is spellings of ONE value, never a looser port: any other port is refused', () => {
+    for (const port of ['6250', '6251', '6250-6252']) {
+      expect(ruleProblems(netsh({ LocalPort: port }), EXPECTED)).toEqual([
+        `LocalPort is "${port}", not "6251-6252" or "6251,6252"`,
+      ]);
+    }
   });
 
   it.each([
