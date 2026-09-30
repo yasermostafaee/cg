@@ -3681,16 +3681,40 @@ export class CasparRuntime {
    * rows (a skip by its retained slot, a migration by the row it came from; a row naming no
    * channel goes with any dismissal). Changes nothing on the wire and nothing on the stack;
    * `ok: false` when nothing was left to dismiss.
+   *
+   * 🔴 `CENTRAL-BRIDGE-01` (D4) — `holds` is the dismissing principal's channels (`null`: every
+   * channel). A console is told only its own channels' rows, so a dismissal it makes reaches only
+   * those: a row on a channel it does not hold stays for the console that does.
    */
-  dismissRestoreReport(part: 'skipped' | 'migrated', channel?: number): { ok: boolean } {
+  dismissRestoreReport(
+    part: 'skipped' | 'migrated',
+    channel?: number,
+    holds: ((channel: number) => boolean) | null = null,
+  ): { ok: boolean } {
     const report = this.#restoreReport;
     if (report === null) return { ok: false };
-    const kept = (rowChannel: number | undefined): boolean =>
-      channel !== undefined && rowChannel !== undefined && rowChannel !== channel;
+    // A row stays when the dismissal names another channel, or when the dismisser is not told it
+    // (`restoreReportFor`'s rule: a skip by its slot, a migration by either end). A row naming no
+    // channel is told to everyone, so it goes with any dismissal.
+    const otherChannel = (rowChannel: number): boolean =>
+      channel !== undefined && rowChannel !== channel;
+    const unseen = (...rowChannels: number[]): boolean =>
+      holds !== null && !rowChannels.some(holds);
     const next: StackRestoreReport =
       part === 'skipped'
-        ? { ...report, skipped: report.skipped.filter((s) => kept(s.slot?.channel)) }
-        : { ...report, migrated: report.migrated.filter((m) => kept(m.from.channel)) };
+        ? {
+            ...report,
+            skipped: report.skipped.filter(
+              (s) =>
+                s.slot !== undefined && (otherChannel(s.slot.channel) || unseen(s.slot.channel)),
+            ),
+          }
+        : {
+            ...report,
+            migrated: report.migrated.filter(
+              (m) => otherChannel(m.from.channel) || unseen(m.from.channel, m.to.channel),
+            ),
+          };
     if (next[part].length === report[part].length) return { ok: false };
     this.#restoreReport = next.skipped.length === 0 && next.migrated.length === 0 ? null : next;
     this.restoreReportChanged.emit(this.#restoreReport);
@@ -11364,6 +11388,9 @@ export class CasparRuntime {
           : {}),
       })),
       seatsDropped: dropped.length,
+      // `CENTRAL-BRIDGE-01` (D4) — each seat's channel, so a console told only its own channels
+      // is told only its own seats.
+      seatChannels: dropped.map((d) => d.record.slot.channel),
       newConnection,
     };
     this.#emptiedAir = notice;
@@ -11584,11 +11611,33 @@ export class CasparRuntime {
    * Dismiss the notice without restoring anything. Bridge-side so two browsers cannot
    * disagree about whether the console is still reporting empty air. Changes nothing on the
    * wire: the rows stay on the stack, idle, and a take puts any of them back.
+   *
+   * 🔴 `CENTRAL-BRIDGE-01` (D4) — `holds` is the dismissing principal's channels (`null`: every
+   * channel). A console is told only its own channels' rows and seats, so its dismissal reaches
+   * only those: what stays is the rest of the notice, for the console that holds it.
    */
-  dismissEmptiedAir(): { ok: boolean } {
-    if (this.#emptiedAir === null) return { ok: false };
-    this.#emptiedAir = null;
-    this.emptiedAirChanged.emit(null);
+  dismissEmptiedAir(holds: ((channel: number) => boolean) | null = null): { ok: boolean } {
+    const notice = this.#emptiedAir;
+    if (notice === null) return { ok: false };
+    if (holds === null) {
+      this.#emptiedAir = null;
+      this.emptiedAirChanged.emit(null);
+      return { ok: true };
+    }
+    const rows = notice.rows.filter((r) => r.slot !== undefined && !holds(r.slot.channel));
+    if (rows.length === notice.rows.length) return { ok: false };
+    const seatChannels = notice.seatChannels?.filter((c) => !holds(c));
+    this.#emptiedAir =
+      rows.length === 0
+        ? null
+        : {
+            ...notice,
+            rows,
+            ...(seatChannels !== undefined
+              ? { seatChannels, seatsDropped: seatChannels.length }
+              : {}),
+          };
+    this.emptiedAirChanged.emit(this.#emptiedAir);
     return { ok: true };
   }
 

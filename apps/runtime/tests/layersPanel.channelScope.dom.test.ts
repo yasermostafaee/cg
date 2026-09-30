@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
-import { fillBridgeStub } from './support/authStub.js';
+import { authStub, fillBridgeStub, signedInStub } from './support/authStub.js';
+import type { AuthSessionState } from '../src/shared/runtime-bridge.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -54,10 +55,13 @@ const SLOTS: FixedSlotState[] = [99, 98, 97, 59].map((layer) => ({
 interface Scene {
   readonly items?: readonly StackItemState[];
   readonly skips?: readonly RestoreSkip[];
+  /** Who is signed in — absent is auth OFF, what every spec above this line means. */
+  readonly auth?: AuthSessionState;
 }
 
 function stubBridge(scene: Scene = {}): void {
   const stub = {
+    ...(scene.auth !== undefined ? { auth: authStub(scene.auth) } : {}),
     link: {
       status: () => 'live',
       onStatusChanged: () => () => undefined,
@@ -218,4 +222,28 @@ it('h control — a row the admin NAMED keeps its name; only its # is the layer'
   const named = row(el, 98);
   expect(named?.querySelector('[data-row-body]')?.textContent).toBe('CLOCK');
   expect(named?.getAttribute('data-row-number')).toBe('98');
+});
+
+/*
+  🔴 `CENTRAL-BRIDGE-01` (D4) — CG Bridge tells a console none of a channel its sign-in does not
+  hold, so the bank's channel shown READ ONLY for that console has nothing to draw rows from: its
+  rows would all read EMPTY, whatever is on its air. The panel says the fact instead.
+*/
+it('D4 — a channel the sign-in does not hold shows the fact, and no rows at all', async () => {
+  // Signed in for channel 1 only; the station's bank is channel 2, shown READ ONLY.
+  stubBridge({ auth: signedInStub('Sara', [1]) });
+  const el = await renderPanel();
+  const fact = el.querySelector('[data-layers-not-held]');
+  expect(fact?.textContent).toBe('This channel is not in your sign-in.');
+  expect(
+    el.querySelector('[data-layer]'),
+    'an EMPTY row was drawn for air it was not told',
+  ).toBeNull();
+});
+
+it('D4 control — a sign-in that holds the channel sees its rows, and no such fact', async () => {
+  stubBridge({ auth: signedInStub('Sara', [2]) });
+  const el = await renderPanel();
+  expect(el.querySelector('[data-layers-not-held]')).toBeNull();
+  expect(row(el, 99)).not.toBeNull();
 });

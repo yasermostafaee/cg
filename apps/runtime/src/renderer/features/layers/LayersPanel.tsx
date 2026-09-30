@@ -352,7 +352,15 @@ export function LayersPanel({
     [scopeChannel],
   );
   // `CHANNEL-SOURCES-01` — the channel whose own Source defaults a row with no slot or binding reads.
-  const { selected: selectedChannel } = useSelectedChannel();
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D4) — CG Bridge tells a console only the channels its sign-in holds
+    (`channel-scope.ts`). A channel shown READ ONLY because the sign-in does not include it
+    (`R-066` bullet 3: shown, never hidden) therefore has no state here at all, and its rows would
+    read EMPTY — a claim about another operator's air this console was never told. So it says the
+    fact instead of drawing rows. A viewer whose sign-in DOES include the channel is told its state
+    and sees its rows, read-only by role.
+  */
+  const { selected: selectedChannel, canOperateSelected: selectedHeld } = useSelectedChannel();
   const defaultsChannel = viewChannel ?? selectedChannel;
   const { slots, ready: slotsReady, failed: slotsFailed } = useFixedSlotsState();
   /*
@@ -1440,7 +1448,12 @@ export function LayersPanel({
         say whose playout it meant — they are simply nested at the right levels.
       */}
       <TabPanel activeId={activeTab}>
-        {activeTab === 'layers' ? (
+        {!selectedHeld ? (
+          // `CENTRAL-BRIDGE-01` (D4) — see `selectedHeld`: a fact, in place of every tab's rows.
+          <div style={styles.empty} role="status" data-layers-not-held="">
+            This channel is not in your sign-in.
+          </div>
+        ) : activeTab === 'layers' ? (
           !listReady ? (
             /*
               §3 — WAITING, said in a way that cannot be read as EMPTY.

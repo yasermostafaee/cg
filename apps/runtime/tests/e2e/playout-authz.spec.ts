@@ -225,6 +225,14 @@ test('🔴 a VIEWER gets a console with no verbs, and one sentence saying why', 
   const strip = page.getByRole('tablist', { name: 'Channels' });
   await expect(strip.getByRole('tab')).toHaveCount(1);
   await expect(strip.getByRole('tab').first()).toContainText('READ ONLY');
+
+  /*
+    🔴 `CENTRAL-BRIDGE-01` (D4) — CG Bridge tells this console none of a channel its sign-in does
+    not hold, so the READ ONLY channel is shown with the FACT rather than with rows that would all
+    read EMPTY over air it was never told about.
+  */
+  const layers = page.getByRole('region', { name: 'Layers' });
+  await expect(layers.getByText('This channel is not in your sign-in.')).toBeVisible();
 });
 
 test('🔴 an OPERATOR on the same station keeps every verb — the positive control', async ({
@@ -250,6 +258,10 @@ test('🔴 an OPERATOR on the same station keeps every verb — the positive con
   // …and the granted channel is NOT marked.
   const strip = page.getByRole('tablist', { name: 'Channels' });
   await expect(strip.getByRole('tab').first()).not.toContainText('READ ONLY');
+  // `CENTRAL-BRIDGE-01` (D4) — CONTROL: the held channel carries no "not in your sign-in" fact.
+  await expect(
+    page.getByRole('region', { name: 'Layers' }).getByText('This channel is not in your sign-in.'),
+  ).toHaveCount(0);
 });
 
 /*

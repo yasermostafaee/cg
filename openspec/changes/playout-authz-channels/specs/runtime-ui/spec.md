@@ -16,8 +16,17 @@ missing from the strip cannot be told apart from a station that does not have it
 > such a channel. And since `CHANNEL-AUTHORITY-01` a channel the principal is granted but the
 > station does NOT declare is not on the strip at all — the scenario below says so.
 
-A read-only channel SHALL remain selectable, because `read` is a real permission and a principal
-is entitled to watch a channel they may not drive.
+A read-only channel SHALL remain selectable, and its view SHALL say that the channel is not in the
+sign-in in place of its rows.
+
+> 🔴 **AMENDED by `CENTRAL-BRIDGE-01` (2026-09-30), in place because this delta is not archived.**
+> This read _"because `read` is a real permission and a principal is entitled to watch a channel
+> they may not drive."_ One CG Bridge now serves every console on the station and tells each only
+> the channels its sign-in holds (`central-bridge` D4 — the prompt's _"a token without channel 2 →
+> … none of its state"_), so a console is told nothing of a channel shown read-only here, and rows
+> drawn from that nothing would read EMPTY over another operator's air. The TAB stays — not hidden,
+> for the reason above — and states the fact. A principal whose sign-in holds a channel but whose
+> ROLE is `viewer` is still told it, and watches it read-only (the next requirement).
 
 The console SHALL NOT re-derive the permission verdict. The permitted channels SHALL be the ones
 the bridge computed with the shared predicate and published on `auth.state`, so that a control
@@ -35,7 +44,8 @@ and no channel SHALL be marked read-only.
 #### Scenario: A read-only tab is a tab, not a disabled control
 
 - **WHEN** a channel is shown read-only
-- **THEN** it renders as a selectable tab and is not disabled
+- **THEN** it renders as a selectable tab and is not disabled, and selecting it shows that the
+  channel is not in the sign-in rather than rows
 
 #### Scenario: Authentication off narrows nothing
 

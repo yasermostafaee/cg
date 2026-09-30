@@ -112,7 +112,24 @@
       (reads refused after expiry — control: the same reads before; a still-valid colleague console as
       the instrument that nothing on air changed, and the expired socket pushed nothing),
       `auth-revocation`.
-- [ ] 4.2 Per-socket channel scope over every channel-scoped publish and read route, with a coverage test.
+- [x] 4.2 Per-socket channel scope over every channel-scoped publish and read route, with a coverage test.
+      `channel-scope.ts` classifies all 85 routes and all 27 runtime publishes (scoped with a
+      projection · station-wide · per-socket · intent); `wirePublishes`, the PGM push and the read
+      answer go through it with the socket's scope (`socketScope`: `grantsChannel`; `null` for auth
+      OFF and a `*` grant); unclassified tells a scoped socket nothing. As built, the banks, channel
+      settings, template lists and source assignments are station-wide CONFIGURATION, not D4's first
+      list — the survey showed a narrowed bank set turns a channel's bulk verbs station-wide and a
+      whole-set write drops other channels (design.md D4). The restart notice carries each dropped
+      seat's channel (`seatChannels`) so its count narrows too; both dismissals reach only what the
+      dismisser was told; the Layers view says `This channel is not in your sign-in.` for a READ ONLY
+      channel instead of EMPTY rows (`playout-authz-channels` delta amended in place). Tests:
+      `channel-scope` (coverage both ways, read≠intent, every scoped projection on a schema-valid
+      two-channel fixture, fail-closed; planted: a demotion and a leaky projection both caught),
+      `channel-scope.integration` (three consoles on a real two-channel authed bridge: reads, pushes,
+      the restart notice and its scoped dismissal; planted: the scope switched off — both red),
+      `own-stack` (the scoped restore-report dismissal, both halves), runtime
+      `layersPanel.channelScope.dom` (the fact — control: a held channel's rows; shown red first),
+      e2e `playout-authz` (the viewer's fact — control: the operator's view has none).
 - [x] 4.3 `bridge.capabilities.bridgeVersion`; the console's `major.minor` check — one line, no command.
       `releaseLine` / `sameReleaseLine` / `versionMismatchRefusal` live once in `@cg/shared-ipc`; the
       bridge answers its own manifest's version or the CLI's (the bundle's inlined one); the console

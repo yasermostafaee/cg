@@ -171,6 +171,21 @@ server list, delimiters, the source catalogue, the lock) passes unchanged. One m
 coverage test asserts every publish channel and every read route is classified, the way `B-247` and
 `B-074` guard their lists. `"*"` holds every channel.
 
+**As built (4.2), and where it differs from the list above:** the banks, channel settings, the per-channel
+template lists and the source assignments are told WHOLE, as configuration. A survey of the console
+before building showed why each would break if narrowed: `multiChannel = banks.length > 1` decides whether
+a bulk verb carries its channel, so a console told one bank would send Clear All with no channel; the Layers
+set-banks and the source set-assignments writes are built from what the console holds, so a narrowed read
+would drop the other channels on write; and none of them is what is on another channel's air. What IS
+narrowed is everything that says what is on a channel, plus the audit rows (`channel-scope.ts`, whose header
+lists it). Three consequences, each handled rather than left: the restart notice now carries each dropped
+seat's channel (`seatChannels`), so its seat count narrows with its rows; a dismissal of the notice or of the
+restore report reaches only what the dismissing console was told (the console offers DISMISS on the part it
+holds, and the bridge keeps the rest for the console that holds it); and a channel shown READ ONLY because the
+sign-in does not hold it — `R-066` bullet 3's tab, kept — says `This channel is not in your sign-in.` where
+its rows would otherwise read EMPTY. A console's own IndexedDB file attachments for rows it can no longer see
+are pruned by its housekeeping as for any removed row; they are that browser's, never the bridge's.
+
 ### D5 — one store, on the bridge
 
 The bridge persists its stack (`bridge-stack.json`, the `RetainedStackItem` shape the console used to

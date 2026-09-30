@@ -178,6 +178,14 @@ import {
   type RetainedStackItem,
 } from '@cg/shared-schema';
 import { loadPersistedStack, savePersistedStack } from './stack-store.js';
+import {
+  PUBLISH_SCOPE,
+  ROUTE_SCOPE,
+  scopePayload,
+  TELL_NOTHING,
+  type Holds,
+  type ScopeContext,
+} from './channel-scope.js';
 import { currentAuthSession, runAsActor } from './actor-context.js';
 import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
 import { startBankBringIn } from './bank-bring-in.js';
@@ -1084,6 +1092,42 @@ export const AUTH_REQUIRED_START_FAILURE =
 export function mayBeTold(state: AuthGateState): boolean {
   return state === 'off' || state === 'signed-in';
 }
+
+/**
+ * 🔴 `CENTRAL-BRIDGE-01` (D4) — **WHICH CHANNELS THIS SOCKET IS TOLD ABOUT** (`channel-scope.ts`).
+ * `null` is every channel: auth OFF (byte-identical, as every auth-off door is) and a `*` grant.
+ * Otherwise the principal's grant through the ONE predicate the request gate asks
+ * (`grantsChannel` over `configuredCasparHosts`, golden rule 6), so what a console may be told and
+ * what it may press are the same judgement. A socket with no principal is told nothing —
+ * {@link mayBeTold} already keeps every push and read from it; answering "no channel" here too
+ * means a slip there still leaks nothing.
+ */
+export function socketScope(
+  session: AuthSession | null,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
+): Holds | null {
+  if (playoutAuth === null) return null;
+  const principal = session?.token?.principal ?? null;
+  if (principal === null) return () => false;
+  const grant = principal.channels;
+  if (grant === '*') return null;
+  const hosts = configuredCasparHosts(runtime.config());
+  return (channel) => grantsChannel(grant, hosts, channel);
+}
+
+/** What a projection may ask the runtime (`channel-scope.ts`). */
+function scopeContext(runtime: CasparRuntime): ScopeContext {
+  return { channelsForItem: (itemId) => runtime.channelsForItem(itemId) };
+}
+
+/**
+ * The answer a scoped socket gets on a route `channel-scope.ts` does not classify — which its
+ * coverage test keeps from ever happening. Said rather than silently dropped: a request with no
+ * answer would hang its caller.
+ */
+export const UNCLASSIFIED_ANSWER_REFUSAL =
+  'CG Bridge has not been told whether this answer belongs to your channels, so it was not sent.';
 
 /**
  * ⭐ **THE ONE PLACE A SOCKET'S AUTH STATE IS DECIDED.** Golden rule 6: every door — the
@@ -2171,6 +2215,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     setupPhase,
     // `CENTRAL-BRIDGE-01` — this bridge's release, told to every console at connect.
     ...(bridgeVersion !== null ? { bridgeVersion } : {}),
+    // `CENTRAL-BRIDGE-01` (D4) — the acting principal's channels, through the actor context.
+    actorScope: () => socketScope(currentAuthSession(), playoutAuth, runtime),
     playoutSources,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
@@ -2274,6 +2320,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
 
       ⚠ Auth OFF returns `true` always, so not one byte of today's behaviour moves.
     */
+    // `CENTRAL-BRIDGE-01` (D4) — the channels THIS socket is told about, read at each push.
+    const scopeOfSocket = (): Holds | null => socketScope(session, playoutAuth, runtime);
     const unsubscribers = wirePublishes(
       socket,
       runtime,
@@ -2281,6 +2329,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       () => mayBeTold(authGateState(session, playoutAuth)),
       // § 3(a) — THIS socket's principal, through the one composition `auth.state` answers with.
       () => authStateFor(session, authGateState(session, playoutAuth), auth.mode, runtime),
+      scopeOfSocket,
     );
     /*
       🔴 `R-062` gap 2 — THIS socket's discovery answer, pushed when an input to it moves: the
@@ -2318,10 +2367,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       */
       pgmReturn.subscribe((status) => {
         if (!mayBeTold(authGateState(session, playoutAuth))) return;
+        // `CENTRAL-BRIDGE-01` (D4) — through the same table as every other push.
+        const told = scopePayload(
+          PUBLISH_SCOPE,
+          PgmReturnStatusChangedChannel.name,
+          PgmReturnStatusChangedChannel.payload.parse(status),
+          scopeOfSocket(),
+          scopeContext(runtime),
+        );
+        if (told === TELL_NOTHING) return;
         send(socket, {
           type: 'publish',
           channel: PgmReturnStatusChangedChannel.name,
-          payload: PgmReturnStatusChangedChannel.payload.parse(status),
+          payload: told,
         });
       }),
     );
@@ -2743,7 +2801,23 @@ async function handleMessage(
       send(socket, errorResponse(frame.id, `invalid response for ${frame.channel}`));
       return;
     }
-    const response: WsResponseFrame = { type: 'response', id: frame.id, payload: parsedRes.data };
+    /*
+      🔴 `CENTRAL-BRIDGE-01` (D4) — the answer is what THIS socket may be told: a read of what is
+      on a channel is narrowed to the channels its sign-in holds (`channel-scope.ts`). The scope
+      is read now, after the handler, so a sign-in landing meanwhile is the one judged.
+    */
+    const told = scopePayload(
+      ROUTE_SCOPE,
+      route.channel.name,
+      parsedRes.data,
+      socketScope(session, playoutAuth, runtime),
+      scopeContext(runtime),
+    );
+    if (told === TELL_NOTHING) {
+      send(socket, errorResponse(frame.id, UNCLASSIFIED_ANSWER_REFUSAL));
+      return;
+    }
+    const response: WsResponseFrame = { type: 'response', id: frame.id, payload: told };
     send(socket, response);
   } catch (err) {
     send(socket, errorResponse(frame.id, err instanceof Error ? err.message : 'handler error'));
@@ -2972,12 +3046,22 @@ export function wirePublishes(
    * whole reason this channel exists.
    */
   authState: (() => AuthState) | null = null,
+  /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D4) — **THE CHANNELS THIS SOCKET IS TOLD ABOUT**, read at PUSH time
+   * for `deliver`'s reason (a sign-in or a new token moves it on the same socket). Every push goes
+   * through `channel-scope.ts`'s table. Defaults to every channel — auth OFF, and the `B-247`
+   * guard's two-argument call.
+   */
+  scope: () => Holds | null = () => null,
 ): (() => void)[] {
+  const ctx = scopeContext(backing);
   const push = (channel: AnyPublishChannel, payload: unknown): void => {
     if (!deliver()) return;
     const parsed = channel.payload.safeParse(payload);
-    if (parsed.success)
-      send(socket, { type: 'publish', channel: channel.name, payload: parsed.data });
+    if (!parsed.success) return;
+    const told = scopePayload(PUBLISH_SCOPE, channel.name, parsed.data, scope(), ctx);
+    if (told === TELL_NOTHING) return;
+    send(socket, { type: 'publish', channel: channel.name, payload: told });
   };
   const pushAuthState = (): void => {
     if (authState === null) return;
@@ -3114,6 +3198,12 @@ export function buildRoutes(
     oscPort?: number;
     /** `CENTRAL-BRIDGE-01` — the release this bridge is, for `bridge.capabilities` (`0.10.0`). */
     bridgeVersion?: string;
+    /**
+     * `CENTRAL-BRIDGE-01` (D4) — the ACTING principal's channels (`null`: every channel), read
+     * inside a handler through the actor context. A dismissal reaches only what its console was
+     * told. Absent — auth OFF, and the route-coverage guard — is every channel.
+     */
+    actorScope?: () => Holds | null;
     fixedLayersPath?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
@@ -3178,6 +3268,7 @@ export function buildRoutes(
   const { mode: authMode, playout: playoutUrls } = paths.auth ?? AUTH_OFF;
   const authState = paths.authState ?? ((): AuthGateState => 'off');
   const releaseBearer = paths.releaseBearer ?? ((): void => undefined);
+  const actorScope = paths.actorScope ?? ((): Holds | null => null);
   const stationChannels =
     paths.stationChannels ??
     ((session: AuthSession | null): StationChannels =>
@@ -3547,8 +3638,9 @@ export function buildRoutes(
       StackRestoreReportDismissChannel,
       'operator',
       'operator',
+      // `CENTRAL-BRIDGE-01` (D4) — it reaches only the rows this console was told.
       (r: { part: 'skipped' | 'migrated'; channel?: number }) =>
-        b.dismissRestoreReport(r.part, r.channel),
+        b.dismissRestoreReport(r.part, r.channel, actorScope()),
     ),
 
     route(ConnectionsConfigChannel, 'read', 'read', () => b.config()),
@@ -3593,7 +3685,10 @@ export function buildRoutes(
     route(EmptiedAirRestoreChannel, 'operator', 'operator', (r: { itemIds: string[] }) =>
       b.restoreEmptiedAir(r.itemIds),
     ),
-    route(EmptiedAirDismissChannel, 'operator', 'operator', () => b.dismissEmptiedAir()),
+    // `CENTRAL-BRIDGE-01` (D4) — a dismissal reaches only the rows and seats this console was told.
+    route(EmptiedAirDismissChannel, 'operator', 'operator', () =>
+      b.dismissEmptiedAir(actorScope()),
+    ),
 
     /*
       `C-016` — the programme return's STATE per watched channel. A read: it says whether the

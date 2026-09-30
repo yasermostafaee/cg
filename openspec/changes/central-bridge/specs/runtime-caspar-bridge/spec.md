@@ -170,6 +170,42 @@ routes what the page calls, and reports without refusing.
 - **WHEN** a bridge answers without `bridgeVersion` **THEN** the console reads it as a release older than
   `0.10` and sends nothing
 
+### Requirement: A console SHALL be told only the channels its sign-in holds
+
+CG Bridge SHALL tell each socket only the state of the channels its principal's grant holds, judged by
+the predicate the request gate asks (`grantsChannel` over the configured hosts). Every push and every
+read of what is ON a channel — the stack, the per-slot state, the live-layer ledger and its media clock,
+the playout layers, orphans, layers cleared outside, owned occupancy, the restart notice (its rows and its
+seats), the restore report, strays, rehearse, the programme return and the audit rows — SHALL be narrowed
+to the entries on held channels, and an entry naming no channel SHALL be told to every console.
+Configuration and the station's own health — the banks, channel settings, the template library, the
+source catalogue and assignments, delimiters, the server list and its health, the lock and the pending
+update — SHALL be told whole, because a console needs all of it to draw and scope its own channel. One
+table SHALL classify every route and every publish channel; a test SHALL fail on an unclassified or a
+stale entry; and an unclassified one SHALL tell a scoped socket nothing. A dismissal of the restart notice
+or of the restore report SHALL reach only what its console was told. A channel shown READ ONLY because
+the sign-in does not hold it SHALL say so in place of its rows. With authentication off, and for a `*`
+grant, nothing SHALL be narrowed.
+
+#### Scenario: Each console is told its own channels
+
+- **WHEN** a graphic is on air on channel 1 and on channel 2, and consoles signed in for channel 1, for
+  channel 2 and for both read the stack and the per-slot state and are pushed their changes **THEN** the
+  channel-1 console is told only channel 1's and the channel-2 console only channel 2's — control: the
+  console holding both is told both, and every console reads both banks
+
+#### Scenario: A dismissal reaches only the dismisser's rows
+
+- **WHEN** the core restarts under rows on channels 1 and 2 and the channel-1 console dismisses the
+  restart notice **THEN** channel 2's row stays in the notice for the channel-2 console, and nothing goes
+  back on air on either channel
+
+#### Scenario: A channel the sign-in does not hold
+
+- **WHEN** a console shows the bank's channel READ ONLY because its sign-in does not hold it **THEN** the
+  Layers view says `This channel is not in your sign-in.` and draws no rows — control: a sign-in holding
+  the channel sees its rows
+
 ### Requirement: An audit row SHALL name the console machine beside the user
 
 Every audited action a console caused SHALL record, beside the actor, the console machine it came from

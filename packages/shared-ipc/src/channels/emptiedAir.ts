@@ -94,6 +94,14 @@ export const EmptiedAirNoticeSchema = z.object({
    */
   seatsDropped: z.number().int().nonnegative(),
   /**
+   * 🔴 `CENTRAL-BRIDGE-01` (D4) — the CHANNEL of each seat counted in `seatsDropped`, in no
+   * particular order. One CG Bridge tells each console only the channels its sign-in holds, and a
+   * bare count cannot be narrowed: a console on channel 1 would be told channel 2's guests. With
+   * it the bridge recounts `seatsDropped` for the channels a console is told. OPTIONAL: a notice
+   * raised before it existed carries none, and is then told as it stands.
+   */
+  seatChannels: z.array(z.number().int().positive()).optional(),
+  /**
    * The AMCP connection was NEW, rather than the same connection with its OSC recovered.
    * A server restart necessarily kills the socket, so `false` here means the layers emptied
    * WITHOUT the connection dropping — which a restart cannot explain and a `CLEAR` from

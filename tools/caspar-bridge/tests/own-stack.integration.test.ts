@@ -264,7 +264,13 @@ it('the report never carries the BENIGN skip, and a dismissal NAMING a channel l
   expect(b.runtime.dismissRestoreReport('skipped', 1), 'nothing left on channel 1').toEqual({
     ok: false,
   });
-  // A dismissal naming none takes the rest.
+  // `CENTRAL-BRIDGE-01` (D4) — a dismissal by a console told only channel 1 names no channel and
+  // still reaches only what it was told: channel 2's row stays for channel 2's console.
+  expect(b.runtime.dismissRestoreReport('skipped', undefined, (c) => c === 1)).toEqual({
+    ok: false,
+  });
+  expect(skippedIds(), 'a channel-1 console cleared channel 2’s row').toEqual(['on-2']);
+  // A dismissal naming none, by a console holding every channel, takes the rest.
   expect(b.runtime.dismissRestoreReport('skipped')).toEqual({ ok: true });
   expect(b.runtime.restoreReport()).toBeNull();
 
@@ -285,6 +291,16 @@ it('the report never carries the BENIGN skip, and a dismissal NAMING a channel l
     ['on-3', 'unknown-template'],
   ]);
   expect(skippedIds()).toEqual(['on-3']);
+
+  // `CENTRAL-BRIDGE-01` (D4) — the scoped dismissal's positive half: a channel-2 console cannot
+  // reach channel 1's row, and a channel-1 console's bare dismissal takes it.
+  expect(b.runtime.dismissRestoreReport('skipped', undefined, (c) => c === 2)).toEqual({
+    ok: false,
+  });
+  expect(b.runtime.dismissRestoreReport('skipped', undefined, (c) => c === 1)).toEqual({
+    ok: true,
+  });
+  expect(b.runtime.restoreReport()).toBeNull();
 });
 
 it('an unusable stack file is said and started empty — the file is left for the next change to replace', async () => {
