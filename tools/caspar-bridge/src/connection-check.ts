@@ -7,13 +7,20 @@ import net from 'node:net';
 import os from 'node:os';
 import {
   AMCP_TRUST_WINDOW_MS,
+  BRIDGE_NEEDS_ADMIN_LINE,
   CONNECTION_CHECK_CONNECT_MS,
   CONNECTION_CHECK_LINE_MS,
+  cgNotLicensedReason,
   connectionCheckSubject,
+  isServerReachable,
+  orderCheckLines,
+  type BridgeSessionState,
   type ConnectionCheckId,
   type ConnectionCheckLine,
   type ConnectionCheckRequest,
   type ConnectionCheckResult,
+  type PlayoutLicense,
+  type ServerHealth,
 } from '@cg/shared-ipc';
 import { playoutEndpointsFor } from './playout-config.js';
 import { pinnedIPv4, plainAgentFor } from './playout-http.js';
@@ -450,7 +457,180 @@ export async function runConnectionCheck(
   const lines = all.filter(
     (l) => !(noIpv4 && (l.id === 'amcp' || l.id === 'api' || l.id === 'cors')),
   );
-  return { lines, localAddress: (await casparRoute)?.address ?? null };
+  // `R-081` — in the order things happen (`CONNECTION_CHECK_GROUPS`), never the order probed.
+  return { lines: orderCheckLines(lines), localAddress: (await casparRoute)?.address ?? null };
+}
+
+/**
+ * 🔴 `R-081` (`CONSOLE-POLISH-01` §6) — **WHAT CG BRIDGE ITSELF KNOWS, AS CHECK LINES.** The probes
+ * above judge LINKS; these four read STATE CG Bridge already holds, so a station admin sees, in the
+ * check's one list, what needs a signed-in session: CG Bridge's own Playout session, CasparCG's OSC,
+ * the CG license and the channels the asker's sign-in holds.
+ *
+ * Each line WAITS — neutral, never a failure — while what it needs has not happened, and says what it
+ * waits for. The OSC line reads its OWN axis (golden rule 8): silence there means "no confirmation",
+ * a warning, and never speaks for AMCP, whose own line judges it.
+ *
+ * Pure: the route gathers the state and this words it.
+ */
+export interface StationState {
+  /** CG Bridge has a Playout (auth on). Without one there is no session, license or channel list. */
+  readonly playout: boolean;
+  /** CG Bridge's own Playout session (`bridgeSession.state`). */
+  readonly session: BridgeSessionState;
+  /** The primary server's health as last read. */
+  readonly primary: Pick<ServerHealth, 'state' | 'oscFreshAt'> | null;
+  /** The OSC port this station's primary sends to. */
+  readonly oscPort: number;
+  /** The CG license as CG Bridge last read it; `null` — none read. */
+  readonly license: PlayoutLicense | null;
+  /**
+   * How many of the Playout's channels the ASKING console's sign-in holds: a count; `null` — the
+   * Playout's list has not been read; `'no-sign-in'` — the asker has not signed in.
+   */
+  readonly channels: number | null | 'no-sign-in';
+}
+
+/** A Playout's own words inside an English line: a first-strong isolate, so a Persian sentence keeps its order. */
+const FSI = String.fromCodePoint(0x2068);
+const PDI = String.fromCodePoint(0x2069);
+const isolated = (text: string): string => `${FSI}${text}${PDI}`;
+
+export function stationStateLines(s: StationState): ConnectionCheckLine[] {
+  const lines: ConnectionCheckLine[] = [];
+  const subject = (id: ConnectionCheckId): string => connectionCheckSubject(id, '', '');
+  const sessionUp = s.session.state === 'signed-in';
+
+  if (s.playout) {
+    // CG Bridge's own Playout session (`CENTRAL-BRIDGE-01` D7).
+    switch (s.session.state) {
+      case 'signed-in':
+        lines.push({
+          id: 'bridge-session',
+          status: 'pass',
+          text:
+            s.session.name !== undefined
+              ? `CG Bridge is signed in to the Playout as ${isolated(s.session.name)}.`
+              : 'CG Bridge is signed in to the Playout.',
+        });
+        break;
+      case 'waiting':
+        lines.push({
+          id: 'bridge-session',
+          status: 'wait',
+          text: `${subject('bridge-session')}: waiting for the Playout to answer.`,
+        });
+        break;
+      case 'needs-admin':
+        lines.push({ id: 'bridge-session', status: 'wait', text: `${BRIDGE_NEEDS_ADMIN_LINE}.` });
+        break;
+      case 'refused':
+        lines.push({
+          id: 'bridge-session',
+          status: 'fail',
+          text: `CG Bridge: ${isolated(s.session.message ?? 'the Playout refused its sign-in')}`,
+        });
+        break;
+      case 'off':
+        break;
+    }
+  }
+
+  // OSC — its own axis. AMCP not up: nothing to hear yet. Up and silent: no confirmation, a warning.
+  if (s.primary === null || !isServerReachable(s.primary.state)) {
+    lines.push({ id: 'osc', status: 'wait', text: `${subject('osc')}: waiting for CasparCG.` });
+  } else if (s.primary.state === 'healthy' && s.primary.oscFreshAt !== undefined) {
+    lines.push({
+      id: 'osc',
+      status: 'pass',
+      text: `CasparCG's OSC arrives on port ${String(s.oscPort)}.`,
+    });
+  } else {
+    lines.push({
+      id: 'osc',
+      status: 'warn',
+      text: `No OSC from CasparCG on port ${String(s.oscPort)}: what is on air cannot be confirmed.`,
+    });
+  }
+
+  if (s.playout) {
+    // The CG license (`PLAYOUT-FEATURES-01` D). Nothing unread is ever a reason to refuse.
+    const license = s.license;
+    if (license === null) {
+      lines.push(
+        sessionUp
+          ? {
+              id: 'license',
+              status: 'skip',
+              text: `${subject('license')}: this Playout publishes none.`,
+            }
+          : s.session.state === 'off'
+            ? // A bridge with no session of its own reads with a console's: nothing to wait FOR by name.
+              { id: 'license', status: 'wait', text: `${subject('license')}: not read yet.` }
+            : {
+                id: 'license',
+                status: 'wait',
+                text: `${subject('license')}: waiting for CG Bridge's sign-in.`,
+              },
+      );
+    } else if (!license.licensed) {
+      const message = license.message ?? null;
+      lines.push({
+        id: 'license',
+        status: 'fail',
+        text: message !== null ? isolated(message) : cgNotLicensedReason(),
+      });
+    } else {
+      const max = license.maxChannels ?? null;
+      const cap = max !== null ? ` for ${String(max)} channel${max === 1 ? '' : 's'}` : '';
+      const expires = license.expiresAt ?? null;
+      const until = expires !== null ? `, until ${expires}` : '';
+      const grace = license.graceUntil ?? null;
+      lines.push(
+        license.playoutState === 'grace'
+          ? {
+              id: 'license',
+              status: 'warn',
+              text:
+                `CG Control is licensed${cap}; the Playout's own license is in grace` +
+                (grace !== null ? ` until ${grace}.` : '.'),
+            }
+          : { id: 'license', status: 'pass', text: `CG Control is licensed${cap}${until}.` },
+      );
+    }
+
+    // The channels this sign-in holds.
+    if (s.channels === 'no-sign-in') {
+      lines.push({
+        id: 'channels',
+        status: 'wait',
+        text: `${subject('channels')}: waiting for sign-in.`,
+      });
+    } else if (s.channels === null) {
+      lines.push({ id: 'channels', status: 'wait', text: `${subject('channels')}: not read yet.` });
+    } else if (s.channels === 0) {
+      lines.push({
+        id: 'channels',
+        status: 'fail',
+        text: 'The Playout lists no channel for this sign-in.',
+      });
+    } else {
+      lines.push({
+        id: 'channels',
+        status: 'pass',
+        text: `The Playout lists ${String(s.channels)} channel${s.channels === 1 ? '' : 's'} for this sign-in.`,
+      });
+    }
+  }
+  return lines;
+}
+
+/** `R-081` — a check's answer with CG Bridge's own lines merged in, in the one order. */
+export function withStationLines(
+  result: ConnectionCheckResult,
+  state: StationState,
+): ConnectionCheckResult {
+  return { ...result, lines: orderCheckLines([...result.lines, ...stationStateLines(state)]) };
 }
 
 /**

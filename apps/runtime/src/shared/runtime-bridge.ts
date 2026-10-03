@@ -153,6 +153,11 @@ export interface AuthCapabilities {
    * `null` once it is set up, and always for a bridge that is not an installed station.
    */
   readonly setupPhase: SetupPhase | null;
+  /**
+   * `R-081` — CG Bridge's release as it told this console (`bridge.capabilities`), for the connection
+   * check's Versions line. `null` — a bridge too old to say; absent — not read yet.
+   */
+  readonly bridgeVersion?: string | null;
 }
 
 /**

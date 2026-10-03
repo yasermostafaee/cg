@@ -5,14 +5,16 @@ import {
   DEFAULT_OSC_PORT,
   defaultFixedLayerBank,
   fiveRowVisibility,
+  sameReleaseLine,
+  versionMismatchRefusal,
   type CatalogueChannel,
   type ChannelOccupancy,
-  type ConnectionCheckId,
+  type CheckLineId,
   type ConnectionCheckLine,
   type ConnectionConfig,
   type FixedLayerBank,
 } from '@cg/shared-ipc';
-import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
+import type { AuthSessionState, RuntimeBridge } from '../../../shared/runtime-bridge.js';
 
 /**
  * `DESKTOP-APPS-01` §2E — **WHAT FIRST-RUN WRITES, as plain functions.**
@@ -142,7 +144,7 @@ export function groupByHost(
 }
 
 /** The two links a SIGN-IN needs — the Playout's keys, and its CORS list for this console. */
-const SIGN_IN_LINKS: readonly ConnectionCheckLine['id'][] = ['api', 'cors'];
+const SIGN_IN_LINKS: readonly CheckLineId[] = ['api', 'cors'];
 
 /**
  * 🔴 **CAN A SIGN-IN WORK?** — the two links a sign-in needs, the Playout's keys and its CORS
@@ -173,11 +175,77 @@ export function signInBlocker(lines: readonly ShownCheckLine[] | null): ShownChe
 
 /**
  * A line of the connection check as the console shows it: the bridge's line, or — while a check
- * runs — `checking`, which is the console's own and never on the wire.
+ * runs — `checking`, which is the console's own and never on the wire. `R-081` — or a line the
+ * console adds from what only it knows ({@link consoleCheckLines}).
  */
-export type ShownCheckLine = Omit<ConnectionCheckLine, 'status'> & {
+export type ShownCheckLine = Omit<ConnectionCheckLine, 'status' | 'id'> & {
+  readonly id: CheckLineId;
   readonly status: ConnectionCheckLine['status'] | 'checking';
 };
+
+/** A name inside an English line: a first-strong isolate, so a Persian name keeps its order. */
+const isolated = (text: string): string =>
+  `${String.fromCodePoint(0x2068)}${text}${String.fromCodePoint(0x2069)}`;
+
+/** What only this console knows, for {@link consoleCheckLines}. */
+export interface ConsoleCheckFacts {
+  /** Where this console found CG Bridge — the address it dialled (`host:port`); `null` — not known. */
+  readonly bridgeAddress: string | null;
+  /** CG Bridge's release as it told this console; `null` — too old to say; absent — not read yet. */
+  readonly bridgeVersion?: string | null | undefined;
+  /** This console's own release. */
+  readonly consoleVersion: string;
+  /** This console's sign-in. */
+  readonly auth: AuthSessionState;
+}
+
+/**
+ * 🔴 `R-081` (`CONSOLE-POLISH-01` §6) — **THE CHECK'S LINES THAT ONLY THE CONSOLE CAN WRITE**: where
+ * it found CG Bridge (`R-080`: "CG Bridge found at host:port"), CG Bridge's release against its own
+ * (the ONE comparison, `sameReleaseLine`, and its one sentence), and its own sign-in. Never on the
+ * wire; grouped with the bridge's lines by `CONNECTION_CHECK_GROUPS`. A fact the console does not
+ * have yet is left out rather than guessed.
+ */
+export function consoleCheckLines(facts: ConsoleCheckFacts): ShownCheckLine[] {
+  const lines: ShownCheckLine[] = [];
+  if (facts.bridgeAddress !== null) {
+    lines.push({
+      id: 'bridge',
+      status: 'pass',
+      text: `CG Bridge found at ${facts.bridgeAddress}.`,
+    });
+  }
+  if (facts.bridgeVersion !== undefined) {
+    lines.push(
+      sameReleaseLine(facts.consoleVersion, facts.bridgeVersion)
+        ? {
+            id: 'bridge-version',
+            status: 'pass',
+            text: `CG Bridge ${facts.bridgeVersion ?? ''} · this console ${facts.consoleVersion}.`,
+          }
+        : {
+            id: 'bridge-version',
+            status: 'fail',
+            text: versionMismatchRefusal(facts.consoleVersion, facts.bridgeVersion),
+          },
+    );
+  }
+  const auth = facts.auth;
+  if (auth.kind === 'signed-in') {
+    lines.push({
+      id: 'signin',
+      status: 'pass',
+      text: `This console is signed in as ${isolated(auth.principal.name)}.`,
+    });
+  } else if (auth.kind === 'signed-out' || auth.kind === 'expired') {
+    lines.push({
+      id: 'signin',
+      status: 'wait',
+      text: "This console's sign-in: not signed in yet.",
+    });
+  }
+  return lines;
+}
 
 /**
  * 🔴 `CHECK-RERUN-01` A — **A CHECK STARTS CLEAN.** The lines the moment Check is pressed: every
@@ -208,14 +276,14 @@ export function checkingLines(address: string): readonly ShownCheckLine[] {
  * a waiting line waits for changes — updates those lines in place and leaves every other verdict
  * exactly where it was, so nothing flashes to "checking" that nobody asked to see again.
  */
-export function waitingIds(lines: readonly ShownCheckLine[]): ReadonlySet<ConnectionCheckId> {
+export function waitingIds(lines: readonly ShownCheckLine[]): ReadonlySet<CheckLineId> {
   return new Set(lines.filter((l) => l.status === 'wait').map((l) => l.id));
 }
 
 /** Those lines, as their subjects, checking; every other line untouched. */
 export function markChecking(
   lines: readonly ShownCheckLine[],
-  ids: ReadonlySet<ConnectionCheckId>,
+  ids: ReadonlySet<CheckLineId>,
   address: string,
 ): readonly ShownCheckLine[] {
   const subjects = checkingLines(address);
@@ -227,7 +295,7 @@ export function markChecking(
 /** Those lines replaced by the new run's; every other line keeps the verdict it had. */
 export function updateOnly(
   lines: readonly ShownCheckLine[],
-  ids: ReadonlySet<ConnectionCheckId>,
+  ids: ReadonlySet<CheckLineId>,
   fresh: readonly ShownCheckLine[],
 ): readonly ShownCheckLine[] {
   return lines.map((line) =>

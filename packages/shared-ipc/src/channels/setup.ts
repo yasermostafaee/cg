@@ -150,7 +150,12 @@ export function normalisePlayoutAddress(typed: string): string | null {
   return `${withScheme.slice(0, hostEnd)}:${String(PLAYOUT_API_PORT)}${withScheme.slice(start + authority.length)}`;
 }
 
-/** The seven links the connection check reads, in the order it reads them. */
+/**
+ * The lines CG Bridge answers the connection check with. The first seven probe a link; the last four
+ * (`R-081`, `CONSOLE-POLISH-01` §6) READ CG Bridge's own state — its Playout session, CasparCG's OSC,
+ * the CG license and the channels the asker's sign-in holds — and are answered only for this
+ * station's own Playout. Their ORDER on screen is {@link CONNECTION_CHECK_GROUPS}'s, not this list's.
+ */
 export const CONNECTION_CHECK_IDS = [
   'proxy',
   'route',
@@ -159,9 +164,65 @@ export const CONNECTION_CHECK_IDS = [
   'cors',
   'ports',
   'topology',
+  'bridge-session',
+  'osc',
+  'license',
+  'channels',
 ] as const;
 export const ConnectionCheckIdSchema = z.enum(CONNECTION_CHECK_IDS);
 export type ConnectionCheckId = z.infer<typeof ConnectionCheckIdSchema>;
+
+/**
+ * `R-081` — the lines a CONSOLE adds to the check from what only it knows, never on the wire: where it
+ * found CG Bridge (the address it dialled), CG Bridge's release against its own, and its own sign-in.
+ */
+export const CONSOLE_CHECK_IDS = ['bridge', 'bridge-version', 'signin'] as const;
+export type ConsoleCheckId = (typeof CONSOLE_CHECK_IDS)[number];
+/** Any line of the check as a console shows it. */
+export type CheckLineId = ConnectionCheckId | ConsoleCheckId;
+
+/**
+ * 🔴 `R-081` (`CONSOLE-POLISH-01` §6) — **THE CHECK READS IN THE ORDER THINGS HAPPEN**, in four
+ * visible groups, so the sign-in reads as the GATE between what needs nothing and what needs a
+ * signed-in session — not as a middle item (the owner's first-run, 2026-09-30: the "waiting for
+ * sign-in" line sat third, between two that need nothing).
+ *
+ *   1. **Reachable** — nothing needed: the path (VPN or proxy, the route), the Playout's API, CG Bridge
+ *      where this console found it, and this station's ports;
+ *   2. **Versions** — CG Bridge's release against this console's (the Playout publishes no build
+ *      number to CG; when it does, it joins here);
+ *   3. **Sign-in** — whether this console CAN sign in, this console's own sign-in, then CG Bridge's
+ *      own Playout session;
+ *   4. **After sign-in** — what needs a signed-in session: CasparCG through CG Bridge, OSC, the CG
+ *      license, the channels; and where the Playout and CasparCG run.
+ *
+ * ONE constant: the bridge orders its answer by it and the console groups by it (golden rule 6).
+ */
+export const CONNECTION_CHECK_GROUPS = [
+  { id: 'reach', title: 'Reachable', lines: ['proxy', 'route', 'api', 'bridge', 'ports'] },
+  { id: 'versions', title: 'Versions', lines: ['bridge-version'] },
+  { id: 'sign-in', title: 'Sign-in', lines: ['cors', 'signin', 'bridge-session'] },
+  {
+    id: 'session',
+    title: 'After sign-in',
+    lines: ['amcp', 'osc', 'license', 'channels', 'topology'],
+  },
+] as const satisfies readonly {
+  readonly id: string;
+  readonly title: string;
+  readonly lines: readonly CheckLineId[];
+}[];
+
+const CHECK_ORDER: readonly CheckLineId[] = CONNECTION_CHECK_GROUPS.flatMap((g) => g.lines);
+
+/** Lines in {@link CONNECTION_CHECK_GROUPS}' order; a line it does not name keeps its place at the end. */
+export function orderCheckLines<T extends { readonly id: string }>(lines: readonly T[]): T[] {
+  const rank = (id: string): number => {
+    const at = CHECK_ORDER.indexOf(id as CheckLineId);
+    return at === -1 ? CHECK_ORDER.length : at;
+  };
+  return [...lines].sort((a, b) => rank(a.id) - rank(b.id));
+}
 
 /**
  * One line of the connection check: pass, fail, or — for the topology, which is advice rather
@@ -207,6 +268,14 @@ export function connectionCheckSubject(id: ConnectionCheckId, host: string, port
       return "This station's ports";
     case 'topology':
       return 'Where the Playout and CasparCG run';
+    case 'bridge-session':
+      return "CG Bridge's own sign-in";
+    case 'osc':
+      return 'OSC from CasparCG';
+    case 'license':
+      return 'CG license';
+    case 'channels':
+      return "The Playout's channels";
   }
 }
 

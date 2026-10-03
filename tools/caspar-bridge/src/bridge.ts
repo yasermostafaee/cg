@@ -244,6 +244,7 @@ import {
   probeRoute,
   realProbes,
   runConnectionCheck,
+  withStationLines,
   type CheckOptions,
   type CheckProbes,
 } from './connection-check.js';
@@ -4474,11 +4475,37 @@ export function buildRoutes(
       🔴 `CENTRAL-BRIDGE-01` — "before any sign-in" includes an EXPIRED or revoked session now: the
       narrowing applies to every socket without a valid principal.
     */
-    route(SetupCheckChannel, 'read', 'read', (r: ConnectionCheckRequest) => {
-      if (!mayBeTold(authState(currentAuthSession())) && !checksThisStation(r)) {
+    route(SetupCheckChannel, 'read', 'read', async (r: ConnectionCheckRequest) => {
+      const ownPlayout = checksThisStation(r);
+      if (!mayBeTold(authState(currentAuthSession())) && !ownPlayout) {
         throw new Error(CHECK_BEFORE_SIGN_IN_REFUSAL);
       }
-      return connectionCheck(r);
+      const result = await connectionCheck(r);
+      /*
+        🔴 `R-081` — **CG BRIDGE'S OWN STATE, IN THE SAME LIST**: its Playout session, OSC, the CG
+        license and the channels the ASKER's sign-in holds. Only for this station's own Playout: a
+        candidate address being typed is checked for reach and sign-in, and CG Bridge's state says
+        nothing about it. (With auth off there is no Playout: OSC alone.)
+      */
+      if (authMode !== 'off' && !ownPlayout) return result;
+      const principal = currentAuthSession()?.token?.principal ?? null;
+      const rows = authMode === 'off' ? null : catalogueRows();
+      const health = b.health();
+      return withStationLines(result, {
+        playout: authMode !== 'off',
+        session: paths.bridgeSession?.state() ?? { state: 'off' },
+        primary: health.primary,
+        oscPort: b.config().servers.A.oscPort,
+        license: paths.license?.() ?? null,
+        channels:
+          principal === null
+            ? 'no-sign-in'
+            : rows === null
+              ? null
+              : rows.filter((row) =>
+                  grantsChannel(principal.channels, [row.casparHost], row.casparChannel),
+                ).length,
+      });
     }),
     route(SetupRouteAddressChannel, 'read', 'read', async (r: { host: string }) => ({
       address: await routeAddress(r.host),

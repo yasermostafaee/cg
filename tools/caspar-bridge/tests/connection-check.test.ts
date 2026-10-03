@@ -3,13 +3,20 @@ import net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   AMCP_TRUST_WINDOW_MS,
-  CONNECTION_CHECK_IDS,
+  BRIDGE_NEEDS_ADMIN_LINE,
+  CONNECTION_CHECK_GROUPS,
   CONNECTION_CHECK_LINE_MS,
   SETUP_CHECK_LET_IN_WAIT_MS,
   SETUP_CHECK_WAIT_MS,
   type ConnectionCheckLine,
 } from '@cg/shared-ipc';
-import { NATIVE_SIGN_IN_LINE, ProbeError } from '../src/connection-check.js';
+import {
+  NATIVE_SIGN_IN_LINE,
+  ProbeError,
+  stationStateLines,
+  withStationLines,
+  type StationState,
+} from '../src/connection-check.js';
 import {
   realProbes,
   runConnectionCheck,
@@ -28,6 +35,12 @@ import {
 
 const ORIGIN = 'http://127.0.0.1:5174';
 const PORTS = { console: 5174, control: 5280, templates: 7911, osc: 6250 };
+/**
+ * `R-081` — the seven PROBED lines in the order things happen (`CONNECTION_CHECK_GROUPS`): what needs
+ * nothing, then whether this console can sign in, then what needs a signed-in session. The four lines
+ * that read CG Bridge's own state are added by the route (`withStationLines`, below).
+ */
+const PROBED_IN_ORDER = ['proxy', 'route', 'api', 'ports', 'cors', 'amcp', 'topology'];
 const closers: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
@@ -299,8 +312,9 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
       },
     );
     const elapsed = Date.now() - started;
-    // Every line, and within the one bound the console's wait is derived from.
-    expect(lines.map((l) => l.id)).toEqual([...CONNECTION_CHECK_IDS]);
+    // Every PROBED line, in the order things happen (`R-081`), within the one bound the console's
+    // wait is derived from.
+    expect(lines.map((l) => l.id)).toEqual(PROBED_IN_ORDER);
     expect(elapsed).toBeLessThan(SETUP_CHECK_WAIT_MS);
     expect(total).toBeLessThanOrEqual(CONNECTION_CHECK_LINE_MS + 500);
     for (const t of timings) expect(t.ms, t.id).toBeLessThanOrEqual(CONNECTION_CHECK_LINE_MS + 500);
@@ -332,7 +346,7 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
       }),
       { ports: PORTS },
     );
-    expect(lines.map((l) => l.id)).toEqual([...CONNECTION_CHECK_IDS]);
+    expect(lines.map((l) => l.id)).toEqual(PROBED_IN_ORDER);
     for (const l of lines) {
       if (l.id === 'proxy') continue; // this host's own VPN state, not the Playout's
       expect(l.status, `${l.id}: ${l.text}`).toBe('pass');
@@ -741,5 +755,134 @@ describe('§2F — the local lines: VPN or proxy, ports, topology', () => {
         text: 'ftp://playout is not a Playout address. Type it as http://host:port.',
       },
     ]);
+  });
+});
+
+describe('🔴 R-081 — CG Bridge’s own state, as check lines, in the order things happen', () => {
+  const FSI = String.fromCodePoint(0x2068);
+  const PDI = String.fromCodePoint(0x2069);
+  const BEFORE_SIGN_IN: StationState = {
+    playout: true,
+    session: { state: 'needs-admin' },
+    primary: { state: 'disconnected' },
+    oscPort: 6251,
+    license: null,
+    channels: 'no-sign-in',
+  };
+  const byId = (lines: readonly ConnectionCheckLine[]): Record<string, ConnectionCheckLine> =>
+    Object.fromEntries(lines.map((l) => [l.id, l]));
+
+  it('before any sign-in every line WAITS — neutral, never a failure — and says what it waits for', () => {
+    const lines = byId(stationStateLines(BEFORE_SIGN_IN));
+    expect(Object.keys(lines).sort()).toEqual(['bridge-session', 'channels', 'license', 'osc']);
+    for (const l of Object.values(lines)) expect(l.status, l.id).toBe('wait');
+    expect(lines['bridge-session']?.text).toBe(`${BRIDGE_NEEDS_ADMIN_LINE}.`);
+    expect(lines['osc']?.text).toBe('OSC from CasparCG: waiting for CasparCG.');
+    expect(lines['license']?.text).toBe("CG license: waiting for CG Bridge's sign-in.");
+    expect(lines['channels']?.text).toBe("The Playout's channels: waiting for sign-in.");
+  });
+
+  it('after the sign-in: the session, OSC, the license with its cap, and the channels this sign-in holds', () => {
+    const lines = byId(
+      stationStateLines({
+        playout: true,
+        session: { state: 'signed-in', name: 'cg-admin' },
+        primary: { state: 'healthy', oscFreshAt: '2026-10-03T10:00:00.000Z' },
+        oscPort: 6251,
+        license: { licensed: true, maxChannels: 2, expiresAt: '2027-01-01' },
+        channels: 2,
+      }),
+    );
+    expect(lines['bridge-session']).toEqual({
+      id: 'bridge-session',
+      status: 'pass',
+      text: `CG Bridge is signed in to the Playout as ${FSI}cg-admin${PDI}.`,
+    });
+    expect(lines['osc']).toEqual({
+      id: 'osc',
+      status: 'pass',
+      text: "CasparCG's OSC arrives on port 6251.",
+    });
+    expect(lines['license']).toEqual({
+      id: 'license',
+      status: 'pass',
+      text: 'CG Control is licensed for 2 channels, until 2027-01-01.',
+    });
+    expect(lines['channels']).toEqual({
+      id: 'channels',
+      status: 'pass',
+      text: 'The Playout lists 2 channels for this sign-in.',
+    });
+  });
+
+  it('golden rule 8 — AMCP up and OSC silent is a WARNING about confirmation, never a failure', () => {
+    const osc = byId(stationStateLines({ ...BEFORE_SIGN_IN, primary: { state: 'degraded' } }))[
+      'osc'
+    ];
+    expect(osc?.status).toBe('warn');
+    expect(osc?.text).toBe(
+      'No OSC from CasparCG on port 6251: what is on air cannot be confirmed.',
+    );
+  });
+
+  it('the Playout’s own refusals are its words, isolated; an unlicensed Playout fails the license line', () => {
+    const message = 'لایسنسِ CG در این Playout نیست.';
+    const lines = byId(
+      stationStateLines({
+        ...BEFORE_SIGN_IN,
+        session: { state: 'refused', message },
+        license: { licensed: false, message },
+        channels: 0,
+      }),
+    );
+    expect(lines['bridge-session']?.status).toBe('fail');
+    expect(lines['bridge-session']?.text).toBe(`CG Bridge: ${FSI}${message}${PDI}`);
+    expect(lines['license']).toEqual({
+      id: 'license',
+      status: 'fail',
+      text: `${FSI}${message}${PDI}`,
+    });
+    expect(lines['channels']?.status).toBe('fail');
+  });
+
+  it('CONTROL — with no Playout (auth off) only OSC is read; and a signed-in Playout with no license read says it publishes none', () => {
+    expect(
+      stationStateLines({ ...BEFORE_SIGN_IN, playout: false, session: { state: 'off' } }).map(
+        (l) => l.id,
+      ),
+    ).toEqual(['osc']);
+    const license = byId(stationStateLines({ ...BEFORE_SIGN_IN, session: { state: 'signed-in' } }))[
+      'license'
+    ];
+    expect(license).toEqual({
+      id: 'license',
+      status: 'skip',
+      text: 'CG license: this Playout publishes none.',
+    });
+    // A bridge with no session of its own (a development bridge) waits for nothing by name.
+    const sessionless = byId(stationStateLines({ ...BEFORE_SIGN_IN, session: { state: 'off' } }));
+    expect(sessionless['bridge-session']).toBeUndefined();
+    expect(sessionless['license']).toEqual({
+      id: 'license',
+      status: 'wait',
+      text: 'CG license: not read yet.',
+    });
+  });
+
+  it('merged with the probed lines, the check reads in the four groups’ order', () => {
+    const probed = PROBED_IN_ORDER.map(
+      (id): ConnectionCheckLine => ({
+        id: id as ConnectionCheckLine['id'],
+        status: 'pass',
+        text: id,
+      }),
+    ).reverse();
+    const merged = withStationLines({ lines: probed, localAddress: null }, BEFORE_SIGN_IN);
+    const order: readonly string[] = CONNECTION_CHECK_GROUPS.flatMap((g) => g.lines);
+    const ids = merged.lines.map((l) => l.id);
+    expect(ids).toEqual([...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b)));
+    // The sign-in reads as the gate: everything that needs nothing comes before it, the rest after.
+    expect(ids.indexOf('cors')).toBeGreaterThan(ids.indexOf('ports'));
+    expect(ids.indexOf('amcp')).toBeGreaterThan(ids.indexOf('bridge-session'));
   });
 });

@@ -1344,6 +1344,14 @@ export function StationSetupDialog({
                     mayChange={holdsStationAdmin}
                     // `CENTRAL-BRIDGE-01` (D8) — where this console reaches CG Bridge, and an admin's override.
                     showBridge
+                    /*
+                      🔴 `R-081` — **FIRST-RUN'S CHECK, RUN AGAIN HERE.** The same four groups, and for a
+                      station admin it RUNS when this pane opens, so the check is on screen without
+                      looking for it: the owner could not find it again after his first install. CHECK
+                      runs it again; anyone else presses CHECK, as before.
+                    */
+                    grouped
+                    checkOnOpen={holdsStationAdmin}
                   />
                 </div>
               </section>

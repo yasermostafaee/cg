@@ -1,3 +1,56 @@
+## MODIFIED Requirements
+
+### Requirement: A connection check that runs again starts clean
+
+The console SHALL clear every line of the connection check the moment a check is pressed — and when
+first-run checks by itself with nothing yet shown — showing each line's subject in a neutral
+checking state and no verdict until that check's own reply arrives (`CHECK-RERUN-01`); `R-081` —
+every line, the console's own lines among them. One check SHALL run at a time: no check SHALL start
+while another runs, so a sign-in during a check SHALL read that check's reply rather than start its
+own, and a reply SHALL always belong to the check on screen. A check SHALL run when CHECK is pressed;
+by itself, the console SHALL check once when a `station-admin` signs in during first-run with nothing
+yet shown, once when a sign-in form opens with nothing shown (`DELTA-MULTI-CHANNEL-01-B` B2), and —
+`R-081` — once when a station admin opens Station setup's Servers pane with nothing shown; and it
+SHALL re-run at most ONCE while a line still waits (`DELTA-MULTI-CHANNEL-01-A` A2). That re-run SHALL
+touch only the waiting lines — each its subject, checking, in place, while every other line keeps its
+verdict — and SHALL ask the bridge to hold the AMCP line until the Playout lets this machine in or
+names the approval. Nothing else SHALL start a check. While a check runs, CHECK SHALL stay disabled
+and the address read-only. A line not checked (`skip`) and a line checking SHALL wear the quiet inks,
+never the error ink, and the surface SHALL carry no explanatory prose.
+
+#### Scenario: A re-check
+
+- **WHEN** a check has finished and CHECK is pressed again **THEN** every line shows its subject,
+  checking, and no pass or fail mark until the new reply arrives **AND** the new reply then fills
+  the lines in
+- **WHEN** the bridge does not answer the re-check **THEN** no line is left checking and none of
+  the last run's lines is shown
+
+#### Scenario: A sign-in during a check
+
+- **WHEN** a station-admin signs in while a pressed check is still running **THEN** no second check
+  starts **AND** that check's reply is what the sign-in reads
+- **WHEN** the console opens already signed in **THEN** it checks once
+
+#### Scenario: The check does not loop
+
+- **WHEN** a check shows lines waiting for sign-in and a station-admin signs in **THEN** the check
+  runs once more by itself, the waiting lines alone checking and every other line keeping its
+  verdict, and asks the bridge to hold the AMCP line **AND** its reply fills in those lines only, and
+  the check runs no more by itself — twice in all
+- **WHEN** CHECK is then pressed **THEN** the check runs, starting clean
+- **WHEN** no station-admin signs in **THEN** nothing runs by itself
+
+#### Scenario: Station setup runs it for an admin
+
+- **WHEN** a station admin opens Station setup's Servers pane **THEN** the check runs once, by
+  itself **AND** for anyone else it runs only when CHECK is pressed
+
+#### Scenario: Neutral is not red
+
+- **WHEN** a line is not checked or checking **THEN** it is drawn in a quiet ink with its own mark
+  **AND** a failed line is still drawn in the error ink
+
 ## ADDED Requirements
 
 ### Requirement: The Layers badge SHALL count current row errors only, list them, and let each be dismissed

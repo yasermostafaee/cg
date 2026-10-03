@@ -965,6 +965,8 @@ export class WebSocketRuntime implements RuntimeBridge {
         contractVersion: caps.authContractVersion ?? null,
         // `DESKTOP-APPS-01` — an installed station still in first-run says so here.
         setupPhase: caps.setup ?? null,
+        // `R-081` — CG Bridge's release, for the connection check's Versions line.
+        bridgeVersion: caps.bridgeVersion ?? null,
       });
       const routed = new Set(channels);
       const missing = ipcChannels

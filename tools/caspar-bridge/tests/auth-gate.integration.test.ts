@@ -252,6 +252,16 @@ describe('DELTA-MULTI-CHANNEL-01-B B1 — the check answers before any sign-in, 
     expect(lines.find((l) => l.id === 'api')?.status).toBe('fail');
     expect(lines.find((l) => l.id === 'api')?.text).toContain('127.0.0.1');
     expect(lines.find((l) => l.id === 'cors')?.status).toBe('skip');
+    /*
+      🔴 `R-081` — this station's OWN Playout, so the answer carries CG Bridge's own state too, and
+      before any sign-in what needs one WAITS — never a failure: OSC, the license, the channels.
+    */
+    for (const id of ['osc', 'license', 'channels']) {
+      expect(lines.find((l) => l.id === id)?.status, id).toBe('wait');
+    }
+    expect(lines.find((l) => l.id === 'channels')?.text).toBe(
+      "The Playout's channels: waiting for sign-in.",
+    );
 
     // CONTROL — the door is the check's alone: a station command on the same socket is refused.
     const take = await client.ask('t', 'stack.take', { itemId: 'nope' });
@@ -295,6 +305,10 @@ describe('DELTA-MULTI-CHANNEL-01-B B1 — the check answers before any sign-in, 
       origin: CONSOLE,
     });
     expect(typed.error, 'with auth OFF the check was refused').toBeUndefined();
+    // `R-081` — with no Playout there is no session, license or channel list to read: OSC alone.
+    const ids = (typed.payload as ConnectionCheckResult).lines.map((l) => l.id);
+    expect(ids).toContain('osc');
+    for (const id of ['bridge-session', 'license', 'channels']) expect(ids).not.toContain(id);
   });
 });
 

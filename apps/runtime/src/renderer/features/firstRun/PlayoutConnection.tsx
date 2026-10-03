@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { normaliseBridgeAddress } from '@cg/shared-ipc';
+import { normaliseBridgeAddress, orderCheckLines, type CheckLineId } from '@cg/shared-ipc';
+import { APP_VERSION } from '../../appVersion.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
+import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
 import {
   checkingLines,
+  consoleCheckLines,
   markChecking,
   normalisePlayoutAddress,
   signInCanWork,
@@ -41,6 +45,20 @@ const styles = {
   error: { fontSize: cssVars['--r-text-sm'], color: cssVars['--r-caution-text'], lineHeight: 1.6 },
 } as const;
 
+/** `R-081` — a console line's subject while a check runs, as the bridge's lines show theirs. */
+function consoleSubject(id: CheckLineId): string {
+  switch (id) {
+    case 'bridge':
+      return 'CG Bridge';
+    case 'bridge-version':
+      return "CG Bridge's release";
+    case 'signin':
+      return "This console's sign-in";
+    default:
+      return id;
+  }
+}
+
 export function PlayoutConnection({
   origin,
   startEditing,
@@ -52,6 +70,7 @@ export function PlayoutConnection({
   recheck = 0,
   lineFilter,
   showBridge = false,
+  grouped = false,
 }: {
   /** The configured Playout's origin, or `null` when this station has none. */
   origin: string | null;
@@ -85,7 +104,15 @@ export function PlayoutConnection({
   lineFilter?: (lines: readonly ShownCheckLine[]) => readonly ShownCheckLine[];
   /** `CENTRAL-BRIDGE-01` (D8) — Station setup: where this console reaches CG Bridge, too. */
   showBridge?: boolean;
+  /**
+   * 🔴 `R-081` — the WHOLE check, in its four groups, with the lines only this console can write
+   * (where it found CG Bridge, CG Bridge's release against its own, its own sign-in). First-run and
+   * Station setup; never a compact surface that shows one deciding line.
+   */
+  grouped?: boolean;
 }): JSX.Element {
+  const auth = useAuthSession();
+  const capabilities = useAuthCapabilities();
   const canWrite = mayChange && window.cg.setup.canSetPlayoutAddress();
   const [editing, setEditing] = useState(startEditing);
   const [address, setAddress] = useState(origin ?? '');
@@ -333,9 +360,30 @@ export function PlayoutConnection({
           </span>
         </div>
       )}
-      {lines !== null && (
-        <ConnectionCheckList lines={lineFilter === undefined ? lines : lineFilter(lines)} />
-      )}
+      {lines !== null &&
+        (grouped ? (
+          <ConnectionCheckList
+            grouped
+            lines={orderCheckLines([
+              ...lines,
+              // `CHECK-RERUN-01` — a running check starts clean: the console's lines too.
+              ...consoleCheckLines({
+                bridgeAddress: window.cg.link.bridgeAddress?.() ?? null,
+                ...(capabilities?.bridgeVersion !== undefined
+                  ? { bridgeVersion: capabilities.bridgeVersion }
+                  : {}),
+                consoleVersion: APP_VERSION,
+                auth,
+              }).map((line) =>
+                busy === 'checking'
+                  ? { ...line, status: 'checking' as const, text: consoleSubject(line.id) }
+                  : line,
+              ),
+            ])}
+          />
+        ) : (
+          <ConnectionCheckList lines={lineFilter === undefined ? lines : lineFilter(lines)} />
+        ))}
       {editing && lines !== null && signInCanWork(lines) && canWrite && (
         <div style={styles.row}>
           <Button

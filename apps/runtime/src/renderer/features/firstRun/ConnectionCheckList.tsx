@@ -8,6 +8,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { CONNECTION_CHECK_GROUPS } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -54,6 +55,16 @@ const ICON: Record<ShownCheckLine['status'], LucideIcon> = {
 };
 
 const styles = {
+  groups: { display: 'flex', flexDirection: 'column' as const, gap: 12 },
+  // `R-081` — a group's head: the step heads' grammar, one rank quieter.
+  groupHead: {
+    margin: '0 0 6px',
+    fontSize: cssVars['--r-text-xs'],
+    fontWeight: 600,
+    color: colors.textMuted,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+  },
   list: {
     listStyle: 'none',
     margin: 0,
@@ -91,11 +102,72 @@ const styles = {
   },
 } as const;
 
-export function ConnectionCheckList({ lines }: { lines: readonly ShownCheckLine[] }): JSX.Element {
+/**
+ * 🔴 `R-081` (`CONSOLE-POLISH-01` §6) — **GROUPED, IN THE ORDER THINGS HAPPEN.** With `grouped`, the
+ * lines are shown under the four headings of `CONNECTION_CHECK_GROUPS` — Reachable, Versions,
+ * Sign-in, After sign-in — so the sign-in reads as the gate between what needs nothing and what needs
+ * a signed-in session. A group with no line is not shown. Without `grouped` (a compact surface that
+ * shows the ONE deciding line, the sign-in gate) the lines are one plain list, as before.
+ */
+export function ConnectionCheckList({
+  lines,
+  grouped = false,
+}: {
+  lines: readonly ShownCheckLine[];
+  grouped?: boolean | undefined;
+}): JSX.Element {
   const still = usePrefersReducedMotion();
   const checking = lines.some((l) => l.status === 'checking');
+  if (grouped) {
+    return (
+      <div style={styles.groups} aria-label="Connection check" aria-busy={checking} role="group">
+        {CONNECTION_CHECK_GROUPS.map((group) => {
+          // In the group's own order, whatever order the lines arrived in.
+          const mine = (group.lines as readonly string[]).flatMap((id) =>
+            lines.filter((l) => l.id === id),
+          );
+          if (mine.length === 0) return null;
+          return (
+            // A GROUP, not a landmark: four sections per check would crowd the page's regions.
+            <div key={group.id} role="group" aria-label={group.title} data-check-group={group.id}>
+              <h4 style={styles.groupHead}>{group.title}</h4>
+              <CheckLines lines={mine} still={still} />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <ul style={styles.list} aria-label="Connection check" aria-busy={checking}>
+      <CheckLineItems lines={lines} still={still} />
+    </ul>
+  );
+}
+
+function CheckLines({
+  lines,
+  still,
+}: {
+  lines: readonly ShownCheckLine[];
+  still: boolean;
+}): JSX.Element {
+  return (
+    <ul style={styles.list}>
+      <CheckLineItems lines={lines} still={still} />
+    </ul>
+  );
+}
+
+function CheckLineItems({
+  lines,
+  still,
+}: {
+  lines: readonly ShownCheckLine[];
+  still: boolean;
+}): JSX.Element {
+  return (
+    <>
       {lines.map((line) => (
         <li key={line.id} style={styles.line} data-check={line.id} data-status={line.status}>
           <span
@@ -134,6 +206,6 @@ export function ConnectionCheckList({ lines }: { lines: readonly ShownCheckLine[
           )}
         </li>
       ))}
-    </ul>
+    </>
   );
 }

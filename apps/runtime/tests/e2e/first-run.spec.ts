@@ -183,6 +183,33 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   await expect(amcpLine).toHaveText('CasparCG on 127.0.0.1: waiting for sign-in.');
   // …and it really was refused — the mock turned this machine away (the instrument is live).
   expect(amcp?.refusedConnections ?? 0).toBeGreaterThan(0);
+  /*
+    🔴 `R-081` — **THE CHECK READS IN THE ORDER THINGS HAPPEN**, in four headed groups, so the
+    sign-in reads as the gate (the owner's first-run, 2026-09-30: "waiting for sign-in" sat third).
+    The line that waits for a sign-in is in the LAST group, after the sign-in; and `R-080` — the
+    console says where it found CG Bridge, in the first.
+  */
+  await expect(check.locator('[data-check-group]')).toHaveCount(4);
+  expect(
+    await check
+      .locator('[data-check-group]')
+      .evaluateAll((groups) => groups.map((g) => g.getAttribute('aria-label'))),
+  ).toEqual(['Reachable', 'Versions', 'Sign-in', 'After sign-in']);
+  await expect(check.locator('[data-check-group="reach"] [data-check="bridge"]')).toHaveText(
+    `CG Bridge found at 127.0.0.1:${String(port)}.`,
+  );
+  await expect(
+    check.locator('[data-check-group="versions"] [data-check="bridge-version"]'),
+  ).toHaveAttribute('data-status', 'pass');
+  await expect(check.locator('[data-check-group="session"] [data-check="amcp"]')).toHaveCount(1);
+  // Before any sign-in, what needs one WAITS — neutral, never a failure.
+  for (const id of ['amcp', 'license', 'channels']) {
+    await expect(
+      check.locator(`[data-check-group="session"] [data-check="${id}"]`),
+      `${id} before any sign-in`,
+    ).toHaveAttribute('data-status', 'wait');
+  }
+  await expect(check.locator('[data-check="signin"]')).toHaveAttribute('data-status', 'wait');
   await shot('1-playout-and-check');
   // No issuer was typed or stored: it is learned from the station admin's sign-in, below.
   expect(
@@ -214,6 +241,11 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   await expect(amcpLine).toHaveAttribute('data-status', 'pass', { timeout: 30_000 });
   await expect(amcpLine).toContainText('answered VERSION: 2.3.2');
   expect(fake.trustedSources).toEqual(['127.0.0.1']);
+  // R-081 — this console's own sign-in, in the Sign-in group, now passes.
+  await expect(check.locator('[data-check-group="sign-in"] [data-check="signin"]')).toHaveAttribute(
+    'data-status',
+    'pass',
+  );
   await shot('2b-signed-in-amcp-ok');
   // ── 3 · …and only then the Playout's channels, in this account's grant ─────
   const programme = firstRun.getByRole('checkbox', { name: /آپاسای/ });
@@ -268,6 +300,22 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   expect(stationFile('bridge-connection.json')).toMatchObject({
     servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
   });
+
+  /*
+    🔴 `R-081` — **THE SAME CHECK, RUN AGAIN FROM STATION SETUP.** The owner could not find it again
+    after his first install. A station admin opening Station setup → Servers now meets first-run's
+    check, in the same four groups, already running — no button to find first.
+  */
+  await page.getByRole('button', { name: 'Open Station setup' }).click();
+  const setup = page.getByRole('dialog', { name: /Station setup/ });
+  await setup.getByRole('tab', { name: /Servers/ }).click();
+  const again = setup.getByRole('region', { name: 'Playout' });
+  await expect(again.locator('[data-check-group]')).toHaveCount(4, { timeout: 20_000 });
+  await expect(again.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {
+    timeout: 20_000,
+  });
+  await expect(again.locator('[data-check="signin"]')).toHaveAttribute('data-status', 'pass');
+  await shot('4-station-setup-check');
 });
 
 /**
@@ -359,9 +407,24 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
   });
 
   // A — pressed again: every line at once to its subject, checking; no verdict of the last run.
+  // `R-081` — EVERY line: the seven probed, CG Bridge's own state, and the console's own lines (it
+  // was a count of seven, the whole check before the check grew).
   await checkButton.click();
-  await expect(lines).toHaveCount(7);
-  for (const id of ['proxy', 'route', 'amcp', 'api', 'cors', 'ports', 'topology']) {
+  for (const id of [
+    'proxy',
+    'route',
+    'amcp',
+    'api',
+    'cors',
+    'ports',
+    'topology',
+    'osc',
+    'license',
+    'channels',
+    'bridge',
+    'bridge-version',
+    'signin',
+  ]) {
     await expect(check.locator(`[data-check="${id}"]`)).toHaveAttribute('data-status', 'checking');
   }
   await expect(check.locator('[data-check]:not([data-status="checking"])')).toHaveCount(0);

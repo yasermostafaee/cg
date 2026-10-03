@@ -198,6 +198,8 @@ function PlayoutStep({
         origin={origin}
         startEditing={phase === 'target'}
         mayChange
+        // `R-081` — the whole check, in its four groups, in the order things happen.
+        grouped
         judgeNow={judgeNow}
         onJudged={onJudged}
         checkOnOpen={checkOnOpen}
