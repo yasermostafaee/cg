@@ -67,7 +67,7 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 5.1 The Loads check before they create; a refused Load leaves nothing
 - [x] 5.2 Restored slotless error items dropped at start, logged
 - [x] 5.3 The badge counts row errors (`isRowError`); its list; `stack.dismiss-error`
-- [ ] 5.4 Tests (bridge integration, reconciler, dom, e2e `row-errors.spec`); gate; pushed `e88240ad` +
+- [x] 5.4 Tests (bridge integration, reconciler, dom, e2e `row-errors.spec`); gate; pushed `e88240ad` +
       `45ec300b`. CI RED — PR <https://github.com/yasermostafaee/cg/actions/runs/37134392265>: its
       `E2E (Playwright)` RAN (runtime 319 passed, 1 failed; designer 293) and `retention-honesty.spec.ts:252`
       (B-107) failed, because its errored row was a refused Load's leftover, which B-301 removed (the
@@ -81,19 +81,36 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 6.2 The picker listens while open (`templates.changed` re-reads its channel; `templateActs.ts`
       decides "another console" from this console's own marked removals); the removed-on-another-console
       line; a Load refused `unknown-template` within 10 s of such a removal reads it
-- [ ] 6.3 Tests: bridge (`template-persistence`), WebSocket round-trip, dom (`templatePicker.followsBridge`,
+- [x] 6.3 Tests: bridge (`template-persistence`), WebSocket round-trip, dom (`templatePicker.followsBridge`,
       `layerRow.loadRemovedElsewhere`; both ablations go red), e2e `two-consoles.spec` §1 (2/2 locally);
-      gate; pushed; CI read
+      gate 99/99 uncached; pushed `4ed7e807` (with `bd072187`); CI COMPLETED green, jobs RUN — PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37136440487> (`E2E (Playwright)` RAN: runtime
+      325 passed — `retention-honesty.spec.ts:252` and `two-consoles.spec.ts:287` among them — designer
+      293), Desktop <https://github.com/yasermostafaee/cg/actions/runs/37136440473> (Installers,
+      Installer smoke, CG Bridge smoke)
 
 ## 7. `R-083` — the paged audit
 
-- [ ] 7.1 `@cg/audit`: rotation, retention, the backwards page reader, `auditMatches`
-- [ ] 7.2 `audit.page`, `audit.appended`; scoped; mock parity
-- [ ] 7.3 The LOG dialog: paged, virtualised, bridge-side filters and search, live rows
-- [ ] 7.4 `logs.zip` carries the audit files
-- [ ] 7.5 Tests (50,000 rows < 1 s, ≤ 100 rendered; paging; a filter; live); gate; pushed; CI read
-- [ ] 7.6 `playout-auth-reload.spec.ts:170` polls the audit file (it read once; red once under four local
-      workers, green alone 2/2)
+- [x] 7.1 `@cg/audit`: rotation (local midnight, 20 MB, named by the first row), retention (90 days,
+      200 MB), the backwards page reader (one handle per file; a rotation mid-read re-reads the list);
+      `auditMatches` in `@cg/shared-ipc` with the row naming moved there (design decision 6)
+- [x] 7.2 `audit.page` (the grant applied before the page is cut), `audit.appended` (scoped per row);
+      `channel-scope` census fixtures; mock parity. `auth.sign-out` now clears its session BEFORE its row
+      is recorded: the row's push asked the leaving socket's auth state, which re-noted the bearer the
+      route had just released (`station-channels-discovery` caught a Playout read on behalf of nobody;
+      the push ablated, it passed)
+- [x] 7.3 The LOG dialog: paged, virtualised (`useVirtualWindow`), bridge-side filters (Channel added)
+      and search, live rows; the count is the rows held
+- [x] 7.4 `logs.zip` carries every kept audit file under `audit/`
+- [ ] 7.5 Tests: `@cg/audit` `page.test` (50,000 rows: first page < 250 ms; paging; a filter; a rotation
+      between pages; rotation and retention), bridge `audit-page.integration` (a scoped console's full
+      page; the search by a row's alias; the push scoped), `http-tickets` (the zip), dom
+      `auditPanel.paging` + the seven `auditPanel.*` specs moved to pages, e2e `audit-paging.spec`
+      (50,000 rows: first rows 158 ms after the press, 18 rows in the document; the next page at the
+      end; a filter; a live row at the top — 12/12 with the audit and row-error specs); gate; pushed;
+      CI read
+- [x] 7.6 `playout-auth-reload.spec.ts:170` polls the record, and reads every file of it (it read once;
+      red once under four local workers, green alone 2/2)
 
 ## 8. Close
 

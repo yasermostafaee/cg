@@ -7,6 +7,7 @@ import type { AuditEntry } from '@cg/shared-schema';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 import { fillBridgeStub } from './support/authStub.js';
+import { auditPageOf } from './support/auditPage.js';
 
 /**
  * 🔴 `RUNTIME-REDESIGN-01` — DELETION GUARD ITEM 27: THE AUDIT LOG'S WHO.
@@ -70,10 +71,11 @@ afterEach(async () => {
 });
 
 function stubBridge(entries: AuditEntry[]): {
-  recentCalls: { actor?: string; action?: string }[];
+  requests: ReturnType<typeof auditPageOf>['requests'];
   written: string[];
 } {
-  const recentCalls: { actor?: string; action?: string }[] = [];
+  // `CONSOLE-POLISH-01` (`R-083`) — the Log reads pages, filtered on the bridge.
+  const { page, requests } = auditPageOf(entries);
   const written: string[] = [];
   let operatorName = 'desk 2';
   const stub = {
@@ -81,13 +83,8 @@ function stubBridge(entries: AuditEntry[]): {
       // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
       canDownloadLogs: () => false,
       downloadLogs: () => Promise.resolve({ accepted: false }),
-      recent: (req: { actor?: string; action?: string }) => {
-        recentCalls.push(req);
-        const actor = req.actor;
-        return Promise.resolve(
-          actor === undefined ? entries : entries.filter((e) => e.actor === actor),
-        );
-      },
+      page,
+      onAppended: () => () => undefined,
       health: () =>
         Promise.resolve({
           configured: true,
@@ -105,7 +102,7 @@ function stubBridge(entries: AuditEntry[]): {
     fixedLayers: { config: () => Promise.resolve(null) },
   };
   (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
-  return { recentCalls, written };
+  return { requests, written };
 }
 
 async function render(): Promise<void> {
@@ -209,8 +206,8 @@ describe('guard item 27 — the actor COLUMN the reference does not draw', () =>
     its title, and the actor FILTER below — the record is still filtered by who acted, and
     under proven identity that question finally has a trustworthy answer.
   */
-  it('the actor FILTER still narrows the tail on the bridge, by the same column', async () => {
-    const { recentCalls } = stubBridge([DESK_2, NOBODY]);
+  it('the actor FILTER still narrows the record on the bridge, by the same column', async () => {
+    const { requests } = stubBridge([DESK_2, NOBODY]);
     await render();
     expect(rows()).toHaveLength(2);
     const filter = dialog().querySelector<HTMLInputElement>('#audit-actor');
@@ -220,7 +217,7 @@ describe('guard item 27 — the actor COLUMN the reference does not draw', () =>
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(recentCalls.at(-1)?.actor).toBe('desk 2');
+    expect(requests.at(-1)?.filter?.actor).toBe('desk 2');
     expect(rows().map((r) => r.getAttribute('data-audit-row'))).toHaveLength(1);
     expect(rows()[0]?.querySelector('[data-audit-actor]')?.textContent).toBe('desk 2');
   });

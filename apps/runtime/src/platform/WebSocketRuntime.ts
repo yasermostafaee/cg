@@ -1,6 +1,8 @@
-import type { RetainedAirState, StackItemState } from '@cg/shared-schema';
+import type { AuditEntry, RetainedAirState, StackItemState } from '@cg/shared-schema';
 import {
   AuditHealthChannel,
+  AuditAppendedChannel,
+  AuditPageChannel,
   AuditRecentChannel,
   ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
@@ -517,6 +519,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #templatesSubs = new Subs<TemplateInfo[]>();
   // `CONSOLE-POLISH-01` (`B-300`) — who changed the catalogue.
   readonly #templatesActedSubs = new Subs<TemplateAct>();
+  // `CONSOLE-POLISH-01` (`R-083`) — each audit row as CG Bridge records it.
+  readonly #auditAppendedSubs = new Subs<AuditEntry>();
   // R-028 part B — the declared playout layers' occupancy push.
   readonly #playoutSubs = new Subs<PlayoutLayerState[]>();
   // B-145 (2.8) — the bridge-owned Live Source ledger push.
@@ -1366,6 +1370,12 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#templatesActedSubs.emit(p.data);
         break;
       }
+      // `CONSOLE-POLISH-01` (`R-083`) — a row CG Bridge has just recorded.
+      case AuditAppendedChannel.name: {
+        const p = AuditAppendedChannel.payload.safeParse(payload);
+        if (p.success) this.#auditAppendedSubs.emit(p.data);
+        break;
+      }
       case PlayoutLayersStateChangedChannel.name: {
         const p = PlayoutLayersStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#playoutSubs.emit(p.data);
@@ -2169,6 +2179,10 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly audit = {
     recent: (req: ChannelRequest<typeof AuditRecentChannel>) =>
       this.#invoke(AuditRecentChannel, req),
+    // `CONSOLE-POLISH-01` (`R-083`) — the Log, a page at a time, and the rows recorded since.
+    page: (req: ChannelRequest<typeof AuditPageChannel>) => this.#invoke(AuditPageChannel, req),
+    onAppended: (handler: (entry: AuditEntry) => void): Unsubscribe =>
+      this.#auditAppendedSubs.add(handler),
     // B-141 — the positive control the panel reads beside the tail, so an empty
     // list can be reported as a quiet session only when the instrument that
     // produced it is provably live.

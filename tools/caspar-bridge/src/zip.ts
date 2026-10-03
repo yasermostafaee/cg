@@ -140,3 +140,23 @@ export async function entriesUnder(dir: string): Promise<ZipEntry[]> {
   await walk('');
   return entries.sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/**
+ * `CONSOLE-POLISH-01` (`R-083`) — named files from anywhere (the audit record lives outside the log
+ * folder), each under the name given. A file gone since it was listed (rotated away) is skipped.
+ */
+export async function fileEntries(
+  files: readonly { readonly path: string; readonly name: string }[],
+): Promise<ZipEntry[]> {
+  const entries: ZipEntry[] = [];
+  for (const file of files) {
+    try {
+      const data = await fs.promises.readFile(file.path);
+      const mtime = (await fs.promises.stat(file.path)).mtime;
+      entries.push({ name: file.name, data, mtime });
+    } catch {
+      continue;
+    }
+  }
+  return entries;
+}

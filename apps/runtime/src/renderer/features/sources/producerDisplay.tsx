@@ -1,4 +1,4 @@
-import type { SourceCatalog, SourceDefinition } from '@cg/shared-ipc';
+import { commandForDisplay, type SourceCatalog, type SourceDefinition } from '@cg/shared-ipc';
 import { SourceLabel } from './SourceLabel.js';
 
 /**
@@ -11,21 +11,12 @@ import { SourceLabel } from './SourceLabel.js';
  * a stream address becomes the SOURCE it belongs to — `SourceLabel`, when the catalogue knows it —
  * or the word `stream` when it does not. `route://…` is not an address of anything outside the
  * server and is left as it is.
+ *
+ * 🔴 `CONSOLE-POLISH-01` (`R-083`) — `producerForDisplay` and `commandForDisplay` MOVED to
+ * `@cg/shared-ipc` (`operator-naming.ts`): the audit's search runs on CG Bridge and matches what a row
+ * SHOWS, so the bridge elides an address exactly as this does. Re-exported here unchanged.
  */
-
-const STREAM_ADDRESS = /"((?!route:)[a-z][a-z0-9+.-]*:\/\/[^"]*)"/gi;
-/** Only a play's PRODUCER can be a stream; a `CG ADD`'s page URL is the bridge's own and stays. */
-const PLAY_LINE = /^\s*(PLAY|LOAD|LOADBG)\s/i;
-
-/** A producer argument as a surface may print it: a stream address reads `stream`. */
-export function producerForDisplay(producer: string): string {
-  return producer.replace(STREAM_ADDRESS, 'stream');
-}
-
-/** A refused AMCP line as a surface may print it: a play's stream address elided. */
-export function commandForDisplay(command: string): string {
-  return PLAY_LINE.test(command) ? command.replace(STREAM_ADDRESS, '"stream"') : command;
-}
+export { commandForDisplay, producerForDisplay } from '@cg/shared-ipc';
 
 /**
  * The catalogue entry a command's producer argument names, found by the argument itself: a stream's

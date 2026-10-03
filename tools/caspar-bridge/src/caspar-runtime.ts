@@ -84,6 +84,13 @@ import {
   type PendingUpdate,
   type TemplateAct,
   templateActNaming,
+  // `CONSOLE-POLISH-01` (`R-083`) — the audit's page, its filter, and the one predicate over both.
+  AUDIT_PAGE_SIZE,
+  auditMatches,
+  templateDisplayName,
+  type AuditCursor,
+  type AuditFilter,
+  type AuditNaming,
   type TemplateInfo,
   type TemplatePageRefusal,
   type ClearedOutsideLayer,
@@ -200,7 +207,14 @@ import {
   type LiveLayerRecord,
   type NormalizedRect,
 } from './live-layers.js';
-import { AuditWriter, readRecentEntries } from '@cg/audit';
+import {
+  AuditWriter,
+  DEFAULT_AUDIT_ROTATION,
+  auditFiles,
+  readAuditPage,
+  readRecentEntries,
+  type AuditFile,
+} from '@cg/audit';
 import {
   LIVE_PLATE_SOURCE_NOT_SHOWABLE,
   resolvePlateAssignments,
@@ -598,6 +612,9 @@ function sourceLabelOf(source: SourceDefinition): LivePlatePlacement['source'] {
     ...(source.media?.fingerprint !== undefined ? { fingerprint: source.media.fingerprint } : {}),
   };
 }
+
+/** `R-083` — the cursor `file` of the in-memory audit tail (a bridge with no record file). */
+const MEMORY_AUDIT_CURSOR = 'memory';
 
 /** The refused seat of a failed apply, in the shape {@link LivePlateApplyResult} carries it. */
 function refusalOf(
@@ -1285,6 +1302,8 @@ export class CasparRuntime {
    * template another console removed names the act from this instead of meeting a raw refusal.
    */
   readonly templatesActed = new Emitter<TemplateAct>();
+  /** `CONSOLE-POLISH-01` (`R-083`) — every row the record takes, as it takes it (`audit.appended`). */
+  readonly auditAppended = new Emitter<AuditEntry>();
   /** R-028 part B — emitted ONLY when the declared playout layers' state changes. */
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
@@ -1987,6 +2006,8 @@ export class CasparRuntime {
    * the take proceeds regardless.
    */
   #audit: AuditEntry[] = [];
+  /** `R-083` — rows recorded since start: the in-memory tail's page cursor counts by it. */
+  #auditSeq = 0;
   #auditWriter: AuditWriter | null = null;
   #auditLogPath: string | null = null;
   #pendingUpdate: PendingUpdate | null = null;
@@ -2273,7 +2294,11 @@ export class CasparRuntime {
     // cannot open must not stop the bridge coming up.
     if (options.auditLogPath !== undefined) {
       this.#auditLogPath = options.auditLogPath;
-      this.#auditWriter = new AuditWriter({ filePath: options.auditLogPath });
+      // `CONSOLE-POLISH-01` (`R-083`) — daily and at 20 MB; 90 days and 200 MB kept.
+      this.#auditWriter = new AuditWriter({
+        filePath: options.auditLogPath,
+        rotation: DEFAULT_AUDIT_ROTATION,
+      });
     }
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
     // `undefined` is MEANINGFUL here (derive from the observed mode per switch), so this
@@ -14093,6 +14118,9 @@ export class CasparRuntime {
     // before the first flush.
     this.#audit.unshift(row);
     if (this.#audit.length > 500) this.#audit.length = 500;
+    this.#auditSeq += 1;
+    // `R-083` — an open Log shows it at once (scoped per console by its channel).
+    this.auditAppended.emit(row);
     if (this.#auditWriter === null) return;
     void this.#auditWriter.append(row).catch(() => {
       // Swallowed DELIBERATELY. The writer has already recorded the failure in
@@ -14141,6 +14169,62 @@ export class CasparRuntime {
     if (action !== undefined) rows = rows.filter((r) => r.action === action);
     if (actor !== undefined) rows = rows.filter((r) => r.actor === actor);
     return rows.slice(0, limit);
+  }
+
+  /**
+   * 🔴 `CONSOLE-POLISH-01` (`R-083`) — **ONE PAGE OF THE RECORD**, newest first: up to
+   * {@link AUDIT_PAGE_SIZE} rows before `cursor` that pass `filter` (`auditMatches`, worded as the
+   * console words a row: this station's banks and its template list) AND `visible` (the asking
+   * console's channel grant). Both are asked of every row BEFORE the page is cut, so a scoped console
+   * gets a full page of what it may see — `audit.recent` scoped after its limit.
+   *
+   * With no record file (no `--audit-log-path`), the in-memory tail is paged, its cursor counting rows
+   * since start so a row recorded between two pages shifts nothing.
+   */
+  async auditPage(
+    cursor: AuditCursor | undefined,
+    filter: AuditFilter,
+    visible: (entry: AuditEntry) => boolean,
+  ): Promise<{ entries: AuditEntry[]; next: AuditCursor | null }> {
+    const naming: AuditNaming = {
+      bank: this.fixedLayerBanks(),
+      templateLabel: (templateId) => {
+        const template = this.#templates.getAny(templateId);
+        return template === null ? null : templateDisplayName(template);
+      },
+    };
+    const accept = (entry: AuditEntry): boolean =>
+      visible(entry) && auditMatches(entry, filter, naming);
+    if (this.#auditLogPath !== null && cursor?.file !== MEMORY_AUDIT_CURSOR) {
+      try {
+        return await readAuditPage({
+          filePath: this.#auditLogPath,
+          ...(cursor !== undefined ? { cursor } : {}),
+          limit: AUDIT_PAGE_SIZE,
+          accept,
+        });
+      } catch {
+        // A read failure is reported through `auditHealth`; the in-memory tail still answers.
+      }
+    }
+    // The tail is newest first: row `i` is the `(#auditSeq - 1 - i)`th recorded.
+    const before = cursor?.file === MEMORY_AUDIT_CURSOR ? cursor.before : this.#auditSeq;
+    const entries: AuditEntry[] = [];
+    let i = Math.max(0, this.#auditSeq - before);
+    for (; i < this.#audit.length && entries.length < AUDIT_PAGE_SIZE; i++) {
+      const entry = this.#audit[i];
+      if (entry !== undefined && accept(entry)) entries.push(entry);
+    }
+    return {
+      entries,
+      next:
+        i < this.#audit.length ? { file: MEMORY_AUDIT_CURSOR, before: this.#auditSeq - i } : null,
+    };
+  }
+
+  /** `R-083` — every kept file of the record, newest first, for the logs download; none without one. */
+  async auditFiles(): Promise<AuditFile[]> {
+    return this.#auditLogPath === null ? [] : auditFiles(this.#auditLogPath);
   }
 
   /** R-034 — the station's split delimiters (disk-persisted, shared by every browser). */

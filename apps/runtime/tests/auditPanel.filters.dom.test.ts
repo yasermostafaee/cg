@@ -8,13 +8,18 @@ import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 import { fillBridgeStub } from './support/authStub.js';
+import { auditPageOf } from './support/auditPage.js';
 
 /**
  * `RUNTIME-REDESIGN-01` Phase 8 — what the audit log took from `03-audit-log.html` beyond
  * its look: a search over what the rows SHOW, a `Result` filter over the schema's outcomes,
- * the footer's `N of M events` count, and `Reset filters`. Each is a narrowing of the tail
- * the bridge already answered; none is a second source of truth (`audit.recent` is still
- * asked by action and actor, and only by those).
+ * the footer's count, and `Reset filters`.
+ *
+ * 🔴 `CONSOLE-POLISH-01` (`R-083`) — ~~each a narrowing of the tail the bridge already answered~~:
+ * every filter and the search are now ASKED OF CG Bridge (`audit.page`), which applies them before it
+ * cuts a page. The stub pages through the same `auditMatches`, worded against this spec's bank and
+ * template, so what the search finds here is what the bridge's finds. The count is the rows held
+ * (`N events`, `N+ events` while older ones are left) — there is no fetched tail to be `of`.
  *
  * `B-141`'s rule survives every one of them: a filter that empties the list says "no audit
  * entries match this filter", never "nothing happened".
@@ -73,13 +78,15 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-function stubBridge(entries: AuditEntry[]): void {
+function stubBridge(entries: AuditEntry[]): ReturnType<typeof auditPageOf>['requests'] {
+  const { page, requests } = auditPageOf(entries, { bank: BANK, templates: [THREE_FRAMES] });
   const stub = {
     audit: {
       // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
       canDownloadLogs: () => false,
       downloadLogs: () => Promise.resolve({ accepted: false }),
-      recent: () => Promise.resolve(entries),
+      page,
+      onAppended: () => () => undefined,
       health: () =>
         Promise.resolve({
           configured: true,
@@ -91,9 +98,10 @@ function stubBridge(entries: AuditEntry[]): void {
       setOperatorName: () => undefined,
     },
     templates: { list: () => Promise.resolve([THREE_FRAMES]) },
-    fixedLayers: { config: () => Promise.resolve(BANK) },
+    fixedLayers: { config: () => Promise.resolve(BANK), banks: () => Promise.resolve([BANK]) },
   };
   (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
+  return requests;
 }
 
 async function render(): Promise<void> {
@@ -124,6 +132,7 @@ const dialog = (): HTMLElement => {
 const rows = (): HTMLElement[] => [...dialog().querySelectorAll<HTMLElement>('[data-audit-row]')];
 const count = (): string => dialog().querySelector('[data-audit-count]')?.textContent ?? '';
 
+/** The search is asked of the bridge once the box has been still a moment (`R-083`). */
 async function type(selector: string, value: string): Promise<void> {
   const el = dialog().querySelector<HTMLInputElement>(selector);
   if (el === null) throw new Error(`no ${selector}`);
@@ -131,8 +140,9 @@ async function type(selector: string, value: string): Promise<void> {
   await act(async () => {
     setter?.call(el, value);
     el.dispatchEvent(new Event('input', { bubbles: true }));
-    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 300));
   });
+  await settle();
 }
 
 async function select(selector: string, value: string): Promise<void> {
@@ -143,26 +153,37 @@ async function select(selector: string, value: string): Promise<void> {
     el.dispatchEvent(new Event('change', { bubbles: true }));
     await Promise.resolve();
   });
+  await settle();
 }
 
-describe('§8 — the reference’s filters over the tail the bridge answered', () => {
-  it('counts what is shown of what was fetched, and offers Reset only while narrowing', async () => {
-    stubBridge([OK_ON_BED_1, REFUSED_ON_98]);
+/** Let a page the bridge was asked for land. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+}
+
+describe('§8 — the reference’s filters, asked of CG Bridge (`R-083`)', () => {
+  it('counts the rows held, asks the bridge for the Result, and offers Reset only while narrowing', async () => {
+    const requests = stubBridge([OK_ON_BED_1, REFUSED_ON_98]);
     await render();
-    expect(count()).toBe('2 of 2 events');
+    expect(count()).toBe('2 events');
     expect(dialog().querySelector('[data-audit-reset]')).toBeNull();
     await select('#audit-result', 'failed');
+    // ASKED of the bridge — not a narrowing of rows already held.
+    expect(requests.at(-1)?.filter).toEqual({ outcome: 'failed' });
     expect(rows()).toHaveLength(1);
     expect(rows()[0]?.querySelector('[data-audit-outcome]')?.textContent).toBe('failed');
-    expect(count()).toBe('1 of 2 events');
+    expect(count()).toBe('1 event');
     const reset = dialog().querySelector<HTMLButtonElement>('[data-audit-reset]');
     expect(reset).not.toBeNull();
     await act(async () => {
       reset?.click();
       await Promise.resolve();
     });
+    await settle();
     expect(rows()).toHaveLength(2);
-    expect(count()).toBe('2 of 2 events');
+    expect(count()).toBe('2 events');
     expect(dialog().querySelector('[data-audit-reset]')).toBeNull();
   });
 
@@ -178,10 +199,11 @@ describe('§8 — the reference’s filters over the tail the bridge answered', 
   });
 
   it('the search reads what the row SHOWS — the row’s name, the code, the refused line', async () => {
-    stubBridge([OK_ON_BED_1, REFUSED_ON_98]);
+    const requests = stubBridge([OK_ON_BED_1, REFUSED_ON_98]);
     await render();
     // The alias the operator sees, not a field the row keeps to itself.
     await type('input[type="search"]', 'زیرنویس');
+    expect(requests.at(-1)?.filter?.search).toBe('زیرنویس');
     expect(rows()).toHaveLength(1);
     expect(rows()[0]?.querySelector('[data-audit-names]')?.textContent).toContain('زیرنویس اصلی');
     await type('input[type="search"]', 'amcp-404');
@@ -198,7 +220,7 @@ describe('§8 — the reference’s filters over the tail the bridge answered', 
     expect(rows()).toHaveLength(0);
     expect(dialog().textContent).toContain('No audit entries match this filter.');
     expect(dialog().textContent).not.toContain('No audit entries yet.');
-    expect(count()).toBe('0 of 1 events');
+    expect(count()).toBe('0 events');
   });
 
   it('golden rule 11 — the coordinate stays in the entry, beside the name, and the code under the outcome', async () => {

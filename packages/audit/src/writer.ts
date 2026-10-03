@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
+import { firstRowTs, rotatedFiles, rotatedPath, stampOf, tsOfStamp } from './files.js';
 
 /**
  * NDJSON audit log writer per Phase 2 §6 / Phase 5 §10.
@@ -27,14 +28,16 @@ import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
  * it and a warning that outlives its truth is worse than none (B-141,
  * FORENSIC-LITE):
  *
- *   - **No rotation.** The file grows without bound.
+ *   - ~~**No rotation.** The file grows without bound.~~ 🔴 `CONSOLE-POLISH-01` (`R-083`):
+ *     with `rotation` set (CG Bridge always sets it), the file rotates at local midnight and at
+ *     `maxBytes`, each rotated file named by its first row's time (`files.ts`).
  *   - **No UNC fallback.** An unreachable network path fails every append and is
  *     reported; nothing is written to a local file instead.
- *   - **No retention policy.** Nothing is ever pruned or expired.
+ *   - ~~**No retention policy.** Nothing is ever pruned or expired.~~ `R-083`: rotated files whose
+ *     last row is older than `retainDays`, and the oldest beyond `retainBytes` in all, are deleted.
  *
- * All three are DEFERRED by owner decision, not overlooked. The record's job in
- * this form is to answer, the next day, who did what, to which item, and whether
- * the server accepted it.
+ * The record's job is to answer, the next day — or weeks later, which is why retention is 90 days —
+ * who did what, to which item, and whether the server accepted it.
  *
  * The writer also rejects entries that fail the Zod schema — it's an
  * append-only forensic record, not a place to silently swallow drift.
@@ -55,6 +58,40 @@ export interface AuditWriterOptions {
    * assertion has to read.
    */
   beforeWrite?: (line: string) => void;
+  /** `R-083` — rotate and retain; absent, the one file grows (a test's, or a tool's). */
+  rotation?: AuditRotation;
+}
+
+/** `R-083` — when the record starts a new file, and how much of it is kept. */
+export interface AuditRotation {
+  /** A row that would take the current file past this many bytes starts a new file. */
+  readonly maxBytes: number;
+  /** A row on a later LOCAL day than the current file's first row starts a new file. */
+  readonly daily: boolean;
+  /** Rotated files whose last row is older than this many days are deleted. */
+  readonly retainDays: number;
+  /** The most every kept file may hold in all, the current one included; the oldest go first. */
+  readonly retainBytes: number;
+}
+
+/**
+ * 🔴 `CONSOLE-POLISH-01` (`R-083`) — CG Bridge's rotation: daily and at 20 MB; 90 days and at most
+ * 200 MB kept (about 600,000 rows). An incident is often looked at weeks later; 200 MB is a fraction
+ * of the 512 MB the logs download may carry, beside the service's own logs.
+ */
+export const DEFAULT_AUDIT_ROTATION: AuditRotation = {
+  maxBytes: 20 * 1024 * 1024,
+  daily: true,
+  retainDays: 90,
+  retainBytes: 200 * 1024 * 1024,
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The LOCAL calendar day of an ISO stamp (the station's midnight, not UTC's). */
+function localDay(ts: string): string {
+  const d = new Date(ts);
+  return `${String(d.getFullYear())}-${String(d.getMonth())}-${String(d.getDate())}`;
 }
 
 export interface AuditWriterEvents {
@@ -88,6 +125,9 @@ export class AuditWriter extends EventEmitter<AuditWriterEvents> {
    * rejection, and the chain always continues.
    */
   private tail: Promise<void> = Promise.resolve();
+  /** `R-083` — the current file's first row's time and its size, read when it is opened. */
+  private currentFirstTs: string | null = null;
+  private currentBytes = 0;
   private writes = 0;
   private writeErrors = 0;
   private _lastError: Error | null = null;
@@ -128,9 +168,13 @@ export class AuditWriter extends EventEmitter<AuditWriterEvents> {
   /** One queued write, with its bookkeeping. Never called concurrently with itself. */
   private async writeLine(line: string, entry: AuditEntry): Promise<AuditEntry> {
     try {
-      const handle = await this.openHandle();
+      let handle = await this.openHandle();
+      const bytes = Buffer.byteLength(line);
+      if (this.mustRotate(entry.ts, bytes)) handle = await this.rotate(entry.ts, bytes);
       this.options.beforeWrite?.(line);
       await handle.write(line);
+      this.currentBytes += bytes;
+      this.currentFirstTs ??= entry.ts;
       this.writes++;
       this.emit('appended', entry);
       return entry;
@@ -189,13 +233,110 @@ export class AuditWriter extends EventEmitter<AuditWriterEvents> {
     if (this.handle !== null) return this.handle;
     if (this.opening !== null) return this.opening;
     this.opening = (async (): Promise<fs.promises.FileHandle> => {
-      await fs.promises.mkdir(path.dirname(this.options.filePath), { recursive: true });
-      const h = await fs.promises.open(this.options.filePath, 'a');
-      this.handle = h;
-      this.opening = null;
-      return h;
+      try {
+        await fs.promises.mkdir(path.dirname(this.options.filePath), { recursive: true });
+        const h = await fs.promises.open(this.options.filePath, 'a');
+        if (this.options.rotation !== undefined) {
+          // `R-083` — what the file already holds decides its next rotation.
+          this.currentBytes = (await h.stat()).size;
+          this.currentFirstTs =
+            this.currentBytes > 0 ? await firstRowTs(this.options.filePath) : null;
+        }
+        this.handle = h;
+        return h;
+      } finally {
+        this.opening = null;
+      }
     })();
     return this.opening;
+  }
+
+  /** `R-083` — does the row about to be written start a new file? Never for an empty one. */
+  private mustRotate(ts: string, bytes: number): boolean {
+    const rotation = this.options.rotation;
+    if (rotation === undefined || this.currentBytes === 0) return false;
+    if (this.currentBytes + bytes > rotation.maxBytes) return true;
+    return (
+      rotation.daily &&
+      this.currentFirstTs !== null &&
+      localDay(this.currentFirstTs) !== localDay(ts)
+    );
+  }
+
+  /**
+   * `R-083` — close the current file, give it its first row's name, delete what retention no longer
+   * keeps, and open a fresh current file.
+   *
+   * ⚠ **The rows come before the rotation.** A rename that fails (a reader holding the file on a
+   * platform that refuses) leaves the rows appending to the one file: a record that grows past its
+   * size is a smaller failure than a record that stops. Retention failing is likewise only reported
+   * by the files still being there.
+   */
+  private async rotate(ts: string, incoming: number): Promise<fs.promises.FileHandle> {
+    const handle = this.handle;
+    this.handle = null;
+    await handle?.close();
+    try {
+      const target = await this.freeRotatedPath(stampOf(this.currentFirstTs ?? ts));
+      await fs.promises.rename(this.options.filePath, target);
+      this.currentFirstTs = null;
+      this.currentBytes = 0;
+    } catch {
+      // Kept appending to the current file; see above.
+    }
+    await this.prune(ts, incoming).catch(noop);
+    return this.openHandle();
+  }
+
+  /** A rotated name not already taken: the stamp, else the stamp with `-1`, `-2`… */
+  private async freeRotatedPath(stamp: string): Promise<string> {
+    for (let n = 0; ; n++) {
+      const candidate = rotatedPath(
+        this.options.filePath,
+        n === 0 ? stamp : `${stamp}-${String(n)}`,
+      );
+      const taken = await fs.promises.stat(candidate).then(
+        () => true,
+        () => false,
+      );
+      if (!taken) return candidate;
+    }
+  }
+
+  /**
+   * `R-083` — retention. A rotated file ENDS where the next one starts (its successor's first row, or
+   * the current file's — `ts` right after a rotation): one whose end is more than `retainDays` before
+   * `ts` is deleted; then, oldest first, files go until every kept file — the current one included,
+   * with the `incoming` row about to be written to it — holds at most `retainBytes`.
+   */
+  private async prune(ts: string, incoming: number): Promise<void> {
+    const rotation = this.options.rotation;
+    if (rotation === undefined) return;
+    const now = Date.parse(ts);
+    const files = await rotatedFiles(this.options.filePath);
+    const kept: { path: string; size: number }[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file === undefined) continue;
+      const nextStamp = files[i + 1]?.stamp;
+      const endTs =
+        nextStamp === undefined ? (this.currentFirstTs ?? ts) : (tsOfStamp(nextStamp) ?? ts);
+      if (now - Date.parse(endTs) > rotation.retainDays * DAY_MS) {
+        await fs.promises.unlink(file.path).catch(noop);
+        continue;
+      }
+      const size = await fs.promises.stat(file.path).then(
+        (s) => s.size,
+        () => 0,
+      );
+      kept.push({ path: file.path, size });
+    }
+    let total = this.currentBytes + incoming + kept.reduce((sum, f) => sum + f.size, 0);
+    for (const file of kept) {
+      if (total <= rotation.retainBytes) break;
+      await fs.promises.unlink(file.path).catch(noop);
+      total -= file.size;
+    }
   }
 }
 

@@ -250,6 +250,8 @@ const FIXTURES: Readonly<Record<string, unknown>> = {
   'station.strays-changed': STRAYS,
   'station.strays': STRAYS,
   'audit.recent': AUDIT,
+  // `CONSOLE-POLISH-01` (`R-083`) — a page: its rows, and a cursor that names no channel.
+  'audit.page': { entries: AUDIT, next: { file: '2026-09-30T10-00-00.000Z', before: 4096 } },
   // `PLAYOUT-FEATURES-01` E — the Playout's meter readings, one list per read of its stream.
   'meters.changed': [
     { kind: 'audio', channel: 1, dbfs: [-18.2, -18.6] },
@@ -284,7 +286,8 @@ function scopedNames(table: Readonly<Record<string, ScopeEntry>>): string[] {
   return Object.entries(table)
     .filter(([, e]) => e.kind === 'scoped')
     .map(([n]) => n)
-    .filter((n) => n !== ipc.LivePlateReleasedChannel.name); // no channel field: its own test
+    .filter((n) => n !== ipc.LivePlateReleasedChannel.name) // no channel field: its own test
+    .filter((n) => n !== ipc.AuditAppendedChannel.name); // ONE row, one channel: its own test
 }
 
 describe('CENTRAL-BRIDGE-01 (D4) — a channel-1 console is told nothing of channel 2', () => {
@@ -327,6 +330,21 @@ describe('CENTRAL-BRIDGE-01 (D4) — a channel-1 console is told nothing of chan
       });
     }
   }
+
+  it('`R-083` — a pushed audit row is told where its channel is held, and a row on no channel to all', () => {
+    expect(PUBLISH_SCOPE[ipc.AuditAppendedChannel.name]?.kind).toBe('scoped');
+    const [onOne, onTwo, refusedOnTwo, noChannel] = AUDIT;
+    const tell = (e: AuditEntry | undefined): unknown =>
+      scopePayload(PUBLISH_SCOPE, ipc.AuditAppendedChannel.name, e, HOLDS_ONE, NO_ITEMS);
+    expect(tell(onOne)).toBe(onOne);
+    expect(tell(onTwo)).toBe(TELL_NOTHING);
+    expect(tell(refusedOnTwo)).toBe(TELL_NOTHING);
+    expect(tell(noChannel)).toBe(noChannel);
+    // Unscoped: every row.
+    expect(scopePayload(PUBLISH_SCOPE, ipc.AuditAppendedChannel.name, onTwo, null, NO_ITEMS)).toBe(
+      onTwo,
+    );
+  });
 
   it('a row on NO channel is told to every console; the station-wide seats are recounted', () => {
     const stack = scopePayload(ROUTE_SCOPE, 'stack.snapshot', STACK, HOLDS_ONE, NO_ITEMS);

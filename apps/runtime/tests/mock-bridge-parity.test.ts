@@ -314,7 +314,8 @@ const BRIDGE_SURFACE: {
     */
     // `FIELD-FIXES-01` G — and the log-folder door the native menu held until it was removed.
     // `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs are downloaded now; the folder is on another machine.
-    audit: ['recent', 'health', 'canDownloadLogs', 'downloadLogs'],
+    // `CONSOLE-POLISH-01` (`R-083`) — `page` and `onAppended`: the Log a page at a time, and live.
+    audit: ['recent', 'page', 'onAppended', 'health', 'canDownloadLogs', 'downloadLogs'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     /**
      * R-022 — REHEARSE belongs in this guard for exactly the reason

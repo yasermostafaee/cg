@@ -73,7 +73,21 @@ describe('CG Bridge’s logs, downloaded', () => {
     const logsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-logs-'));
     dirs.push(logsDir);
     fs.writeFileSync(path.join(logsDir, 'amcp.log'), 'CG 1-80 PLAY\r\n');
-    const { handle, playout } = await bridge({ logsDir });
+    /*
+      `CONSOLE-POLISH-01` (`R-083`) — the audit lives outside the log folder (`.cg-runtime`), and it
+      rotates: the zip carries the current file AND every kept rotated one.
+    */
+    const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-state-'));
+    dirs.push(stateDir);
+    const auditLogPath = path.join(stateDir, 'bridge-audit.ndjson');
+    const row = (ts: string): string =>
+      `${JSON.stringify({ ts, actor: 'Sara', action: 'take', outcome: 'ok' })}\n`;
+    fs.writeFileSync(
+      path.join(stateDir, 'bridge-audit.2026-09-30T08-00-00.000Z.ndjson'),
+      row('2026-09-30T08:00:00.000Z'),
+    );
+    fs.writeFileSync(auditLogPath, row('2026-10-01T08:00:00.000Z'));
+    const { handle, playout } = await bridge({ logsDir, auditLogPath });
 
     const operator = await openClient(handle);
     await operator.authenticate('a', (await playout.issueToken({ user: 'operator' })).token);
@@ -101,6 +115,11 @@ describe('CG Bridge’s logs, downloaded', () => {
       0x04034b50,
     );
     expect(bytes.includes(Buffer.from('amcp.log'))).toBe(true);
+    // `R-083` — every kept audit file, under `audit/`.
+    expect(bytes.includes(Buffer.from('audit/bridge-audit.ndjson'))).toBe(true);
+    expect(bytes.includes(Buffer.from('audit/bridge-audit.2026-09-30T08-00-00.000Z.ndjson'))).toBe(
+      true,
+    );
     // Once.
     expect((await fetch(at(handle.port, ticketed))).status).toBe(403);
   });

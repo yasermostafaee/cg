@@ -23,6 +23,7 @@ import type {
   StationStraysChannel,
   StationTakeOffAirChannel,
   AuditHealthChannel,
+  AuditPageChannel,
   AuditRecentChannel,
   AuthMode,
   PlayoutPrincipal,
@@ -122,7 +123,7 @@ import type {
   SourcesSetMediaPlaybackChannel,
   StackMediaPlateTransportChannel,
 } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import type { AuditEntry, StackItemState } from '@cg/shared-schema';
 import type { PvwPage } from './pvwPage.js';
 
 export interface AppInfo {
@@ -881,6 +882,16 @@ export interface RuntimeBridge {
     recent(
       req: ChannelRequest<typeof AuditRecentChannel>,
     ): Promise<ChannelResponse<typeof AuditRecentChannel>>;
+    /**
+     * 🔴 `CONSOLE-POLISH-01` (`R-083`) — the Log, a page at a time: up to 100 rows newest first,
+     * before `req.cursor`, that pass `req.filter` and this console's channel grant, both applied by
+     * CG Bridge before the page is cut. `next` is `null` when nothing older is left.
+     */
+    page(
+      req: ChannelRequest<typeof AuditPageChannel>,
+    ): Promise<ChannelResponse<typeof AuditPageChannel>>;
+    /** `R-083` — every row CG Bridge records from now on that this console may be told. */
+    onAppended(handler: (entry: AuditEntry) => void): Unsubscribe;
     /**
      * B-141 — is the instrument LIVE? Read alongside `recent` so an empty tail can
      * be reported as "quiet" only when a configured, non-failing writer is what

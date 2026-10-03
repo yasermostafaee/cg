@@ -76,7 +76,9 @@ function stubBridge(health: Health, entries: AuditEntry[] = []): void {
       // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
       canDownloadLogs: () => false,
       downloadLogs: () => Promise.resolve({ accepted: false }),
-      recent: () => Promise.resolve(entries),
+      // `R-083` — the Log reads pages.
+      page: () => Promise.resolve({ entries, next: null }),
+      onAppended: () => () => undefined,
       health: () => Promise.resolve(health),
       operatorName: () => operatorName,
       setOperatorName: (name: string) => {

@@ -1,14 +1,19 @@
 import * as fs from 'node:fs';
 import * as http from 'node:http';
+import * as path from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { bridgeHealth, HEALTH_PATH, type BridgeHealth, type HealthProblem } from './health.js';
 import { HttpTickets, type TicketGrant } from './http-tickets.js';
 import { checkReservedPorts, type BridgePort } from './reserved-ports.js';
-import { entriesUnder, zipEntries } from './zip.js';
+import { entriesUnder, fileEntries, MAX_ZIP_INPUT, zipEntries } from './zip.js';
 import {
   AppInfoChannel,
+  AuditAppendedChannel,
   AuditHealthChannel,
+  AuditPageChannel,
   AuditRecentChannel,
+  type AuditCursor,
+  type AuditFilter,
   AUTH_NO_TOKEN,
   AUTH_REQUIRED_REFUSAL,
   AuthStateChangedChannel,
@@ -201,6 +206,7 @@ import {
 } from '@cg/shared-schema';
 import { loadPersistedStack, savePersistedStack } from './stack-store.js';
 import {
+  auditRowTold,
   PUBLISH_SCOPE,
   ROUTE_SCOPE,
   scopePayload,
@@ -2610,8 +2616,28 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         res.end('forbidden');
         return;
       }
-      void entriesUnder(logsDir)
-        .then((entries) => zipEntries(entries))
+      /*
+        🔴 `CONSOLE-POLISH-01` (`R-083`) — and the AUDIT, every kept file of it, under `audit/`: the
+        record lives in `.cg-runtime`, not in `logs\`, so the download used to leave it out — and now
+        that it rotates, a download that gave only the current file would give one day of it.
+      */
+      void Promise.all([
+        entriesUnder(logsDir),
+        runtime
+          .auditFiles()
+          .then((files) =>
+            fileEntries(
+              files.map((f) => ({ path: f.path, name: `audit/${path.basename(f.path)}` })),
+            ),
+          ),
+      ])
+        .then(([logs, audit]) => {
+          const all = [...logs, ...audit];
+          if (all.reduce((sum, e) => sum + e.data.length, 0) > MAX_ZIP_INPUT) {
+            throw new Error(`the logs are larger than ${String(MAX_ZIP_INPUT)} bytes`);
+          }
+          return zipEntries(all);
+        })
         .then((zip) => {
           const stamp = new Date().toISOString().replace(/[:.]/g, '-');
           res.writeHead(200, {
@@ -3642,6 +3668,8 @@ export function wirePublishes(
     backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
     // `CONSOLE-POLISH-01` (`B-300`) — who imported, re-imported or removed which template.
     backing.templatesActed.subscribe((a) => push(TemplatesActedChannel, a)),
+    // `CONSOLE-POLISH-01` (`R-083`) — a row just recorded, to the consoles its channel allows.
+    backing.auditAppended.subscribe((e) => push(AuditAppendedChannel, e)),
     // R-028 part B — the declared playout layers' occupancy.
     backing.playoutStateChanged.subscribe((s) => push(PlayoutLayersStateChangedChannel, s)),
     // B-145 (2.8) — the ledger, projected through the SAME projectLiveLayers the
@@ -3993,6 +4021,14 @@ export function buildRoutes(
       // The bridge must stop calling the Playout with a token whose operator has left.
       const raw = session?.token?.rawToken;
       if (raw !== undefined) releaseBearer(raw);
+      /*
+        🔴 `CONSOLE-POLISH-01` (`R-083`) — CLEARED BEFORE THE ROW IS RECORDED. Recording a row now
+        PUBLISHES it (`audit.appended`), and a publish asks each socket's auth state — which keeps a
+        live principal's bearer fresh (`authGateState`). Recorded first, the row's own push re-noted the
+        token this route had just released, and CG Bridge read the Playout on behalf of nobody. The row
+        names the leaver from `leaving`, captured above, so nothing it says depends on the session.
+      */
+      session?.clear();
       if (leaving !== null) {
         b.recordIdentityEvent({
           action: 'sign-out',
@@ -4000,7 +4036,6 @@ export function buildRoutes(
           actorSub: leaving.sub,
         });
       }
-      session?.clear();
       return { ok: true as const };
     }),
     route(AppInfoChannel, 'read', 'read', () => ({
@@ -4416,6 +4451,20 @@ export function buildRoutes(
       (r: { limit?: number; action?: never; actor?: string }) =>
         b.auditRecent(r.limit, r.action, r.actor),
     ),
+    /*
+      🔴 `CONSOLE-POLISH-01` (`R-083`) — the Log, a page at a time. The asking console's channel grant
+      is applied BY THE READ, before the page is cut (`audit.recent` scoped after its limit, so a
+      scoped console could be handed fewer rows than exist); the route's projection asks the same
+      predicate again, as every read's does.
+    */
+    route(AuditPageChannel, 'read', 'read', (r: { cursor?: AuditCursor; filter?: AuditFilter }) => {
+      const holds = actorScope();
+      return b.auditPage(
+        r.cursor,
+        r.filter ?? {},
+        holds === null ? (): boolean => true : (e): boolean => auditRowTold(e, holds),
+      );
+    }),
     // B-141 — the POSITIVE CONTROL for the panel's empty state. Without it "no
     // entries" and "no writer" and "the writer is failing" are one indistinguishable
     // sentence, and the operator reads the third as the first.

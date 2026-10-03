@@ -127,7 +127,9 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
         // `CENTRAL-BRIDGE-01` — CG Bridge's logs, one zip: offered only while the link is up.
         canDownloadLogs: () => false,
         downloadLogs: () => Promise.resolve({ accepted: false }),
-        recent: () => Promise.resolve([]),
+        // `R-083` — the Log reads pages.
+        page: () => Promise.resolve({ entries: [], next: null }),
+        onAppended: () => () => undefined,
         health: () => Promise.resolve({ path: null, writable: false, lastError: null }),
         // `B-141` — the panel reads the acting console's self-declared name on open.
         operatorName: () => '',

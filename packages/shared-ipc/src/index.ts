@@ -104,3 +104,7 @@ export * from './channels/bridgeSession.js';
 export * from './channels/license.js';
 export * from './channels/meters.js';
 export * from './channels/bridgeHttp.js';
+// `CONSOLE-POLISH-01` (`R-083`) — the words a row shows, and the one audit filter predicate: the
+// console and CG Bridge word and search a row alike.
+export * from './operator-naming.js';
+export * from './audit-match.js';

@@ -306,8 +306,8 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
   await expect(log.locator('#audit-operator')).toHaveCount(0);
   await expect(log.locator('[data-audit-caveat]')).toHaveCount(0);
 
-  // THE FOOTER — the count, then Close.
-  await expect(log.locator('[data-audit-count]')).toHaveText(/^\d+ of \d+ events$/);
+  // THE FOOTER — the count, then Close. (`R-083`: the rows held, `N events` / `N+ events`.)
+  await expect(log.locator('[data-audit-count]')).toHaveText(/^\d+\+? events?$/);
   await log.getByRole('button', { name: 'Close' }).last().click();
   await expect(log).toHaveCount(0);
 });
@@ -340,7 +340,7 @@ test('`MODAL-TRUTH-01` §3.1 — an EMPTY audit log keeps its footer on the fram
   const log = page.getByRole('dialog', { name: 'Audit log' });
   await expect(log).toBeVisible();
   // The record really is empty — the condition this test is about.
-  await expect(log.locator('[data-audit-count]')).toHaveText('0 of 0 events');
+  await expect(log.locator('[data-audit-count]')).toHaveText('0 events');
 
   const geometry = await log.evaluate((el) => {
     const body = el.querySelector('[data-modal-body]');

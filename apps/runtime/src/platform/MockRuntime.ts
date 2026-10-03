@@ -93,6 +93,13 @@ import {
   TAKE_ON_AIR_CODE,
   templateActNaming,
   videoModeRaster,
+  // `CONSOLE-POLISH-01` (`R-083`) parity — the page, and the one predicate the bridge pages with.
+  AUDIT_PAGE_SIZE,
+  auditMatches,
+  templateDisplayName,
+  type AuditCursor,
+  type AuditFilter,
+  type AuditNaming,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
 import { configuredHosts, isLoopbackHost } from '../shared/loopback.js';
@@ -256,6 +263,9 @@ function writeStored(key: string, value: unknown): void {
  * server said something.
  */
 const MOCK_CHANNEL = 1;
+
+/** `R-083` parity — the mock's page cursor `file`: its record is the in-memory list. */
+const MOCK_AUDIT_CURSOR = 'memory';
 const MOCK_VIDEO_MODE = '1080i5000';
 
 /**
@@ -329,6 +339,8 @@ export class MockRuntime {
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
   // `CONSOLE-POLISH-01` (`B-300`) parity — who changed it, one per accepted import or removal.
   readonly templatesActed = new Emitter<TemplateAct>();
+  // `CONSOLE-POLISH-01` (`R-083`) parity — each audit row as it is recorded.
+  readonly auditAppended = new Emitter<AuditEntry>();
   // R-028 part B — the declared playout layers' occupancy.
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   // B-145 (2.8) parity — the bridge's OWN Live Source ledger, pushed on change.
@@ -398,6 +410,8 @@ export class MockRuntime {
   #lock: LockState = { engaged: false };
   #lockHash: string | null = null;
   #audit: AuditEntry[] = [];
+  /** `R-083` parity — rows recorded since start: the page cursor counts by it. */
+  #auditSeq = 0;
   #pendingUpdate: PendingUpdate | null = null;
   // R-009 — the offline mock has no real server, so no orphans, EXCEPT a
   // test-only seed (CG_E2E_ORPHAN) so Playwright can drive the visible flow.
@@ -559,7 +573,7 @@ export class MockRuntime {
     // `SELF-STOP-24` parity — the ADD that builds a page carries its take token.
     this.#mintTakeToken(itemId);
     this.#settleSlotObservation(itemId, 'producer');
-    this.#audit.unshift(auditEntry('load', this.#auditItem(itemId, templateId)));
+    this.#record(auditEntry('load', this.#auditItem(itemId, templateId)));
     this.#emitStack();
     return { accepted: true };
   }
@@ -589,7 +603,7 @@ export class MockRuntime {
     */
     const wireRefusal = takeNextWireRefusal();
     if (wireRefusal !== null) {
-      this.#audit.unshift(
+      this.#record(
         auditEntry('take', {
           ...this.#auditItem(itemId, item.templateId),
           outcome: 'failed',
@@ -620,7 +634,7 @@ export class MockRuntime {
     // `FIELD-FIXES-01` B parity — the take that lands withdraws the row's refusal line.
     this.#retireTakeRefusal(itemId);
     this.#transition(itemId, 'playing', true);
-    this.#audit.unshift(auditEntry('take', this.#auditItem(itemId, item.templateId)));
+    this.#record(auditEntry('take', this.#auditItem(itemId, item.templateId)));
     // 🔴 SESSION BP parity — THE TAKE PINS LEVEL 2. A row that is on air does not change its
     // picture because somebody edited configuration, and the take is the only writer.
     // Deliberately a SET rather than set-if-absent: a re-take re-freezes, which is the
@@ -714,7 +728,7 @@ export class MockRuntime {
     // `pending` that used to block setPosition for the item's whole life).
     if (!this.#loaded.has(itemId)) {
       this.#patch(itemId, { fields: merged, pending: false });
-      this.#audit.unshift(auditEntry('update', this.#auditItem(itemId, item.templateId)));
+      this.#record(auditEntry('update', this.#auditItem(itemId, item.templateId)));
       this.#emitStack();
       return { accepted: true };
     }
@@ -725,7 +739,7 @@ export class MockRuntime {
       status: wasOnAir ? 'updating' : item.status,
       pending: wasOnAir,
     });
-    this.#audit.unshift(auditEntry('update', this.#auditItem(itemId, item.templateId)));
+    this.#record(auditEntry('update', this.#auditItem(itemId, item.templateId)));
     // B-044 contract: `updating` is transient — it settles to the item's
     // underlying on-air state on the (simulated) ack, never resting.
     if (wasOnAir) this.#settle(itemId, 'on-air');
@@ -743,7 +757,7 @@ export class MockRuntime {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };
     this.#transition(itemId, 'exiting', true);
-    this.#audit.unshift(auditEntry('stop', this.#auditItem(itemId, item.templateId)));
+    this.#record(auditEntry('stop', this.#auditItem(itemId, item.templateId)));
     // C-015 parity — `#stopItemImpl` awaits `teardownLiveLayers`, so the plates come
     // down WITH the graphic even though the template producer survives below.
     this.#releaseLivePlates(itemId);
@@ -764,7 +778,7 @@ export class MockRuntime {
   next(itemId: string): { accepted: boolean; errorCode?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
-    this.#audit.unshift(auditEntry('next', this.#auditItem(itemId, item.templateId)));
+    this.#record(auditEntry('next', this.#auditItem(itemId, item.templateId)));
     return { accepted: true };
   }
 
@@ -801,7 +815,7 @@ export class MockRuntime {
     // commits without a wire send and a later take re-ADDs.
     this.#loaded.delete(itemId);
     this.#settleSlotObservation(itemId, 'empty');
-    this.#audit.unshift(auditEntry('out', this.#auditItem(itemId, item.templateId)));
+    this.#record(auditEntry('out', this.#auditItem(itemId, item.templateId)));
     // C-015 parity — `#outImpl` takes the live layers down FIRST, then the graphic.
     this.#releaseLivePlates(itemId);
     // SESSION BP parity — and level 2 thaws: an assignment edit now lands at the next take,
@@ -844,8 +858,7 @@ export class MockRuntime {
       return { accepted: false, errorCode: REMOVE_ON_AIR_CODE };
     }
     this.#stack = this.#stack.filter((i) => i.itemId !== itemId);
-    if (item !== null)
-      this.#audit.unshift(auditEntry('remove', this.#auditItem(itemId, item.templateId)));
+    if (item !== null) this.#record(auditEntry('remove', this.#auditItem(itemId, item.templateId)));
     // SESSION BP parity — the frozen level 2 dies with the item, so a re-used itemId never
     // inherits a retired show's assignment.
     this.#frozenAssignments.delete(itemId);
@@ -1242,7 +1255,7 @@ export class MockRuntime {
       seed.sourceId === undefined
         ? undefined
         : this.sourceCatalog().sources.find((s) => s.id === seed.sourceId)?.name;
-    this.#audit.unshift(
+    this.#record(
       auditEntry('media-transport', {
         ...this.#auditItem(itemId, item.templateId),
         media: { name: name ?? plateId, transport: action, plateId },
@@ -1293,7 +1306,7 @@ export class MockRuntime {
         });
       }
     }
-    this.#audit.unshift(
+    this.#record(
       auditEntry('set-media-playback', {
         media: { name: base.name, loop: playback.loop, whenHidden: playback.whenHidden },
       }),
@@ -1372,7 +1385,7 @@ export class MockRuntime {
       return { ok: false, removed: 0, errorCode: REMOVE_ON_AIR_CODE };
     }
     for (const item of scope) {
-      this.#audit.unshift(auditEntry('remove', this.#auditItem(item.itemId, item.templateId)));
+      this.#record(auditEntry('remove', this.#auditItem(item.itemId, item.templateId)));
       // B-056 parity — every item's removal resolves its warning.
       this.#resolveOwnedOccupancy(item.itemId);
     }
@@ -1882,7 +1895,7 @@ export class MockRuntime {
     }
     this.#config = config;
     this.#health = this.#healthFor(config);
-    this.#audit.unshift(auditEntry('reconnect', { server: 'primary' }));
+    this.#record(auditEntry('reconnect', { server: 'primary' }));
     this.configChanged.emit(config);
     this.healthChanged.emit(this.#health);
     return {
@@ -1986,9 +1999,7 @@ export class MockRuntime {
         to: newPrimary,
       },
     };
-    this.#audit.unshift(
-      auditEntry('failover', { server: newPrimary === 'A' ? 'primary' : 'backup' }),
-    );
+    this.#record(auditEntry('failover', { server: newPrimary === 'A' ? 'primary' : 'backup' }));
     this.healthChanged.emit(this.#health);
     return { ok: true, newPrimary };
   }
@@ -2156,7 +2167,7 @@ export class MockRuntime {
   async engage(pin: string): Promise<{ ok: boolean }> {
     this.#lockHash = await sha256Hex(pin);
     this.#lock = { engaged: true, reason: 'operator', engagedAt: new Date().toISOString() };
-    this.#audit.unshift(auditEntry('lock-engage', {}));
+    this.#record(auditEntry('lock-engage', {}));
     this.lockChanged.emit(this.#lock);
     return { ok: true };
   }
@@ -2166,7 +2177,7 @@ export class MockRuntime {
     if (this.#lockHash !== (await sha256Hex(pin))) return { ok: false, reason: 'pin-mismatch' };
     this.#lock = { engaged: false };
     this.#lockHash = null;
-    this.#audit.unshift(auditEntry('lock-release', {}));
+    this.#record(auditEntry('lock-release', {}));
     this.lockChanged.emit(this.#lock);
     return { ok: true };
   }
@@ -2351,6 +2362,42 @@ export class MockRuntime {
     if (action !== undefined) rows = rows.filter((r) => r.action === action);
     if (actor !== undefined) rows = rows.filter((r) => r.actor === actor);
     return rows.slice(0, limit);
+  }
+
+  /** `R-083` parity — every row is recorded here, newest first, and told to an open Log. */
+  #record(entry: AuditEntry): void {
+    this.#audit.unshift(entry);
+    this.#auditSeq += 1;
+    this.auditAppended.emit(entry);
+  }
+
+  /**
+   * `CONSOLE-POLISH-01` (`R-083`) parity — the Log a page at a time, through the SAME predicate the
+   * bridge pages with (`auditMatches`), worded against the mock's own bank and template list. The
+   * cursor counts rows since start, so a row recorded between two pages shifts nothing.
+   */
+  auditPage(
+    cursor: AuditCursor | undefined,
+    filter: AuditFilter,
+  ): { entries: AuditEntry[]; next: AuditCursor | null } {
+    const naming: AuditNaming = {
+      bank: this.fixedLayerBanks(),
+      templateLabel: (templateId) => {
+        const template = this.templateGet(templateId);
+        return template === null ? null : templateDisplayName(template);
+      },
+    };
+    const before = cursor?.file === MOCK_AUDIT_CURSOR ? cursor.before : this.#auditSeq;
+    const entries: AuditEntry[] = [];
+    let i = Math.max(0, this.#auditSeq - before);
+    for (; i < this.#audit.length && entries.length < AUDIT_PAGE_SIZE; i++) {
+      const entry = this.#audit[i];
+      if (entry !== undefined && auditMatches(entry, filter, naming)) entries.push(entry);
+    }
+    return {
+      entries,
+      next: i < this.#audit.length ? { file: MOCK_AUDIT_CURSOR, before: this.#auditSeq - i } : null,
+    };
   }
 
   // ── settings ────────────────────────────────────────────────────────

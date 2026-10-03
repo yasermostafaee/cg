@@ -539,7 +539,8 @@ red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not d
       `Refresh`), `12px 16px` head at 12 px, `15px 16px` cells at 13 px, the item cell's strong
       line over small lines with **`on c-l` from `entry.slot`** (golden rule 11 ⭐ — the log entry
       keeps the layer number; the row did not before), the outcome as a tag in the 2A inks, the
-      code beneath it, `N of M events` and `Reset filters` in the footer. `B-210`'s band, `B-211`'s
+      code beneath it, `N of M events` (since `R-083`: `N events`, `N+ events`) and `Reset filters`
+      in the footer. `B-210`'s band, `B-211`'s
       on-row ids and `B-141`'s four empty states unchanged; `View event`, the per-row date, `Date`
       and `Follow` ARGUED (§15.3). `auditPanel.filters.dom.test.ts` (5).
 - [x] 8.3 ✅ **A1 APPLIED — the picker STAYS, small, beside the actor column; the caveat did not

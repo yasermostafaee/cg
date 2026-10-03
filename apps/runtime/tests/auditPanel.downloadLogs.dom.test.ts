@@ -46,7 +46,9 @@ function stubBridge(
         downloads.count += 1;
         return Promise.resolve({ accepted: true });
       },
-      recent: () => Promise.resolve([]),
+      // `R-083` — the Log reads pages.
+      page: () => Promise.resolve({ entries: [], next: null }),
+      onAppended: () => () => undefined,
       health: () =>
         Promise.resolve({
           configured: true,

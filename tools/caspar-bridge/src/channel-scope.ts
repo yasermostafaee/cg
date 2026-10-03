@@ -1,5 +1,7 @@
 import type { AuditEntry, StackItemState } from '@cg/shared-schema';
 import {
+  AuditAppendedChannel,
+  AuditPageChannel,
   AuditRecentChannel,
   EmptiedAirNoticeChangedChannel,
   EmptiedAirNoticeChannel,
@@ -160,7 +162,29 @@ export function straysFor(strays: readonly StationStray[], holds: Holds): Statio
  * Rows about neither (an import, a sign-in) are the station's, and every console reads them.
  */
 export function auditFor(rows: readonly AuditEntry[], holds: Holds): AuditEntry[] {
-  return rows.filter((e) => told(holds, e.slot?.channel) && told(holds, e.refused?.casparChannel));
+  return rows.filter((e) => auditRowTold(e, holds));
+}
+
+/**
+ * 🔴 `CONSOLE-POLISH-01` (`R-083`) — ONE audit row: by its layer's channel and the channel a refusal
+ * was about. The one predicate `auditFor`, the paged read (which asks it BEFORE a page is cut, so a
+ * scoped console's page is a full page of what it may see) and the live push all ask.
+ */
+export function auditRowTold(entry: AuditEntry, holds: Holds): boolean {
+  return told(holds, entry.slot?.channel) && told(holds, entry.refused?.casparChannel);
+}
+
+/** `R-083` — a page: its rows by {@link auditRowTold}; the cursor is no row and is kept. */
+export function auditPageFor<P extends { readonly entries: readonly AuditEntry[] }>(
+  page: P,
+  holds: Holds,
+): P {
+  return { ...page, entries: auditFor(page.entries, holds) };
+}
+
+/** `R-083` — a pushed row, told only where {@link auditRowTold} says. */
+export function auditRowFor(entry: AuditEntry, holds: Holds): AuditEntry | typeof TELL_NOTHING {
+  return auditRowTold(entry, holds) ? entry : TELL_NOTHING;
 }
 
 /**
@@ -182,6 +206,8 @@ const RESTORE_REPORT = scoped<StackRestoreReport | null>(restoreReportFor);
 const EMPTIED_AIR = scoped<EmptiedAirNotice | null>(emptiedAirFor);
 const STRAYS = scoped<readonly StationStray[]>(straysFor);
 const AUDIT = scoped<readonly AuditEntry[]>(auditFor);
+const AUDIT_PAGE = scoped<{ readonly entries: readonly AuditEntry[] }>(auditPageFor);
+const AUDIT_ROW = scoped<AuditEntry>(auditRowFor);
 const PLATE_RELEASED = scoped<LivePlateReleaseState>(plateReleaseFor);
 /**
  * `PLAYOUT-FEATURES-01` E — the meter readings on channels the socket holds, and NOTHING — not an empty list,
@@ -219,6 +245,8 @@ export const PUBLISH_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   [PgmReturnStatusChangedChannel.name]: ROWS,
   // `PLAYOUT-FEATURES-01` E — the Playout's meters, per reading, by its channel.
   'meters.changed': READINGS,
+  // `CONSOLE-POLISH-01` (`R-083`) — a row just recorded, by its channel, as the page reads it.
+  [AuditAppendedChannel.name]: AUDIT_ROW,
   [StationStraysChangedChannel.name]: STRAYS,
   // Computed for this socket's principal already.
   'auth.state-changed': PER_SOCKET,
@@ -260,6 +288,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   [PgmReturnStatusChannel.name]: ROWS,
   [StationStraysChannel.name]: STRAYS,
   [AuditRecentChannel.name]: AUDIT,
+  // `R-083` — filtered by the grant before the page is cut; projected again, as every read is.
+  [AuditPageChannel.name]: AUDIT_PAGE,
   // ── reads computed for this socket already ──
   'auth.state': PER_SOCKET,
   'channels.list': PER_SOCKET,

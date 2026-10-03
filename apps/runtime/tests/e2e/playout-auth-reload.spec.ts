@@ -145,14 +145,30 @@ async function startStation(): Promise<Station> {
   return { bridgeUrl: url, auditPath };
 }
 
-/** Every audit row written so far. The RECORD, read from disk — not the panel's view of it. */
+/**
+ * Every audit row written so far. The RECORD, read from disk — not the panel's view of it.
+ *
+ * `CONSOLE-POLISH-01` (`R-083`) — the record ROTATES now (at local midnight, at 20 MB), so it is every
+ * file of it: the current one and each `<name>.<first row>.ndjson` beside it. A run that crosses
+ * midnight would otherwise count only the rows after it.
+ */
 function auditRows(auditPath: string): { action: string; actor?: string; actorSub?: string }[] {
-  if (!fs.existsSync(auditPath)) return [];
-  return fs
-    .readFileSync(auditPath, 'utf8')
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as { action: string; actor?: string; actorSub?: string });
+  const dir = path.dirname(auditPath);
+  if (!fs.existsSync(dir)) return [];
+  const base = path.basename(auditPath, '.ndjson');
+  const files = fs
+    .readdirSync(dir)
+    .filter(
+      (name) =>
+        name === `${base}.ndjson` || (name.startsWith(`${base}.`) && name.endsWith('.ndjson')),
+    );
+  return files.flatMap((name) =>
+    fs
+      .readFileSync(path.join(dir, name), 'utf8')
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { action: string; actor?: string; actorSub?: string }),
+  );
 }
 
 test.afterEach(async () => {
@@ -185,10 +201,16 @@ test('🔴 DELTA B — five RELOADS of the real page write ONE sign-in row', asy
   await expect(username).toHaveCount(0, { timeout: 20_000 });
   await expect(page.getByLabel('Sign-in state')).toContainText(FAKE_OPERATOR.name);
 
-  expect(
-    auditRows(station.auditPath).filter((r) => r.action === 'sign-in'),
-    'the one real sign-in was not recorded — the instrument is dead',
-  ).toHaveLength(1);
+  /*
+    `CONSOLE-POLISH-01` (task 7.6) — POLLED. The record's append is fire-and-forget by contract
+    (`B-141`: a write must never hold the act back), so the row lands a moment after the pill does;
+    one read raced it and went red once under four local workers.
+  */
+  await expect
+    .poll(() => auditRows(station.auditPath).filter((r) => r.action === 'sign-in').length, {
+      message: 'the one real sign-in was not recorded — the instrument is dead',
+    })
+    .toBe(1);
 
   for (let reload = 1; reload <= 5; reload += 1) {
     await page.reload();

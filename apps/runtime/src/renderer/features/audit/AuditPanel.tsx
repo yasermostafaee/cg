@@ -1,7 +1,16 @@
-import { Fragment, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
-import { holdsPermissionClass, type FixedLayerBank, type TemplateInfo } from '@cg/shared-ipc';
+import {
+  auditMatches,
+  holdsPermissionClass,
+  type AuditCursor,
+  type AuditFilter,
+  type AuditNaming,
+  type FixedLayerBank,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
+import { useVirtualWindow } from '../../ui/useVirtualWindow.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -37,10 +46,9 @@ type ActionFilter = (typeof ACTION_OPTIONS)[number];
 
 /**
  * `RUNTIME-REDESIGN-01` Phase 8 — the reference's `Result` filter, derived the same way
- * from the schema's outcome set (`ok · failed · timeout`). Applied HERE, over the fetched
- * tail, because `audit.recent` filters by action and actor only and this phase adds no
- * request field: the tail is at most 200 rows, and a client-side narrowing of a list the
- * bridge already answered is not a second source of truth.
+ * from the schema's outcome set (`ok · failed · timeout`). ~~Applied HERE, over the fetched
+ * tail~~ — 🔴 `CONSOLE-POLISH-01` (`R-083`): applied by CG Bridge with every other filter and the
+ * search, before a page is cut (`audit.page`), so a page is a page of matching rows.
  */
 const OUTCOME_OPTIONS = ['all', ...AuditEntrySchema.shape.outcome.options] as const;
 
@@ -55,16 +63,68 @@ type OutcomeFilter = (typeof OUTCOME_OPTIONS)[number];
  */
 const READ_FAILED_TEXT = 'The audit record could not be read — the bridge did not answer.';
 
+/** `R-083` — how long the search box is still before CG Bridge is asked. */
+const SEARCH_SETTLE_MS = 250;
+/** `R-083` — a row's height until it is measured (one line of names over one of ids). */
+const ROW_ESTIMATE_PX = 56;
+/** `R-083` — the next page is asked for when the rows in view come this close to the last held. */
+const NEAR_END_ROWS = 10;
+/** `R-083` — how far down a pushed row is looked for before it is added (a page may hold it). */
+const LIVE_DUPLICATE_WINDOW = 200;
+
+/** `R-083` — what one row records, as one string: equal for the same row however it arrived. */
+function rowIdentity(e: AuditEntry): string {
+  return [
+    e.ts,
+    e.actor,
+    e.action,
+    e.outcome,
+    e.itemId ?? '',
+    e.templateId ?? '',
+    e.errorCode ?? '',
+    e.slot === undefined ? '' : `${String(e.slot.channel)}-${String(e.slot.layer)}`,
+  ].join('|');
+}
+
+/** `R-083` — the footer's count of the rows held: `1 event`, `12 events`, `100+ events`. */
+function eventCount(held: number, more: boolean): string {
+  return more ? `${String(held)}+ events` : `${String(held)} ${held === 1 ? 'event' : 'events'}`;
+}
+
+/** `R-083` — the channels the station declares, in order, for the Channel filter. */
+function channelsOf(bank: readonly FixedLayerBank[] | null): number[] {
+  return [...new Set((bank ?? []).map((b) => b.channel))].sort((a, b) => a - b);
+}
+
+function sameRow(a: AuditEntry, b: AuditEntry): boolean {
+  return rowIdentity(a) === rowIdentity(b);
+}
+
+/** A stable key per row: its identity, numbered where two rows record the same thing. */
+function rowKeys(entries: readonly AuditEntry[]): string[] {
+  const seen = new Map<string, number>();
+  return entries.map((e) => {
+    const id = rowIdentity(e);
+    const n = seen.get(id) ?? 0;
+    seen.set(id, n + 1);
+    return n === 0 ? id : `${id}#${String(n)}`;
+  });
+}
+
 /** B-141 — the bridge's own answer to "is this instrument live?" (`audit.health`). */
 type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
 
 /**
- * AuditPanel — modal showing the tail of the audit NDJSON file
- * (Phase 8 §11 / M8.5). Filters apply server-side via `audit.recent`.
+ * AuditPanel — modal showing the audit NDJSON record (Phase 8 §11 / M8.5).
  *
- * No live-tail in v1: the operator clicks "Refresh" to re-fetch.
- * A push channel would add minimal value — audit volume is low and
- * the panel is opened for forensic review, not continuous monitoring.
+ * ~~Filters apply server-side via `audit.recent`. No live-tail in v1: the operator clicks
+ * "Refresh" to re-fetch.~~ 🔴 `CONSOLE-POLISH-01` (`R-083`) — the owner's record is long, and a
+ * 200-row tail rendered whole is not a Log. It is read from CG Bridge a PAGE at a time
+ * (`audit.page`: 100 rows, newest first, the filters, the search and the channel grant applied
+ * there, before the page is cut); the next page is asked for as the list nears its end; only the
+ * rows in view are in the document (`useVirtualWindow`); and a row recorded while the dialog is open
+ * arrives at the top (`audit.appended`), kept only if it passes the same `auditMatches` the bridge
+ * pages with. Refresh reads the first page again.
  *
  * `B-210` / `B-211` — it reads the record in the operator's terms (see
  * `auditFormat.ts`): local time to the second, the date only where it changes,
@@ -122,7 +182,21 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [actionFilter, setActionFilter] = useState<ActionFilter>('all');
   const [actorFilter, setActorFilter] = useState<string>('');
   const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
+  // `R-083` — the channel a row is about; `0` is every channel.
+  const [channelFilter, setChannelFilter] = useState<number>(0);
   const [query, setQuery] = useState<string>('');
+  /*
+    `R-083` — the search CG Bridge is asked for, settled a moment after the last keystroke: each ask
+    may read back through the record, and a keystroke is not a question.
+  */
+  const [search, setSearch] = useState<string>('');
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim()), SEARCH_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
+  /** `R-083` — where the next page starts; `null` — nothing older is left. */
+  const [next, setNext] = useState<AuditCursor | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   /*
     B-141 follow-up — this console's own name. Browser-local, so it is read from the
     bridge surface once per opening rather than subscribed: another TAB on the same
@@ -140,22 +214,43 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   // `MULTI-CHANNEL-01` — every declared bank: an entry is named from its own channel's bank.
   const [bank, setBank] = useState<readonly FixedLayerBank[] | null>(null);
 
+  /*
+    🔴 `R-083` — WHAT THE BRIDGE IS ASKED FOR: every filter and the settled search, each only when it
+    narrows. One object, so the first page, the next page and a pushed row are all judged by the same
+    question.
+  */
+  const filter = useMemo((): AuditFilter => {
+    const f: AuditFilter = {};
+    if (actionFilter !== 'all') f.action = actionFilter;
+    if (outcomeFilter !== 'all') f.outcome = outcomeFilter;
+    const actor = actorFilter.trim();
+    if (actor !== '') f.actor = actor;
+    if (channelFilter > 0) f.channel = channelFilter;
+    if (search !== '') f.search = search;
+    return f;
+  }, [actionFilter, outcomeFilter, actorFilter, channelFilter, search]);
+  // The latest ask: a page answered for an earlier one is dropped, never shown under the new filter.
+  const asked = useRef(0);
+
   async function refresh(): Promise<{ accepted: boolean; message?: string }> {
-    const req: { limit: number; action?: AuditEntry['action']; actor?: string } = { limit: 200 };
-    if (actionFilter !== 'all') req.action = actionFilter;
-    const trimmedActor = actorFilter.trim();
-    if (trimmedActor !== '') req.actor = trimmedActor;
+    asked.current += 1;
+    const ask = asked.current;
     try {
       // Both, together, every time: a health reading from before the entries were
       // fetched could report a writer that has failed since, and the operator would
       // read a failing instrument's silence as quiet.
-      const [next, nextHealth, list, nextBank] = await Promise.all([
-        window.cg.audit.recent(req),
+      const [page, nextHealth, list, nextBank] = await Promise.all([
+        window.cg.audit.page({ filter }),
         window.cg.audit.health(),
         window.cg.templates.list(),
         window.cg.fixedLayers.banks(),
       ]);
-      setEntries(next);
+      if (ask !== asked.current) return { accepted: true };
+      setEntries(page.entries);
+      setNext(page.next);
+      // A first page starts at the top: a list left scrolled to where the last one ended shows the
+      // middle of the new one.
+      if (tableRef.current !== null) tableRef.current.scrollTop = 0;
       setHealth(nextHealth);
       setTemplates(new Map(list.map((t) => [t.templateId, t])));
       setBank(nextBank);
@@ -177,6 +272,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         rows already on screen, and blanking them would replace one wrong statement with
         another.
       */
+      if (ask !== asked.current) return { accepted: true };
       setRead({ kind: 'failed', detail: err instanceof Error ? err.message : String(err) });
       return { accepted: false, message: READ_FAILED_TEXT };
     }
@@ -186,9 +282,52 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     if (!open) return;
     void refresh();
     // `refresh` is intentionally not in deps — recreating it on every
-    // render would cause an infinite re-fetch loop. Filter state IS in
-    // deps so changing a filter triggers exactly one refetch.
-  }, [open, actionFilter, actorFilter]);
+    // render would cause an infinite re-fetch loop. The FILTER is in deps,
+    // so a narrowing reads the first page again, once.
+  }, [open, filter]);
+
+  /** `R-083` — the page after the rows held; asked once at a time, for the filter in force. */
+  const loadMore = useCallback(async (): Promise<void> => {
+    if (next === null || loadingMore) return;
+    const ask = asked.current;
+    setLoadingMore(true);
+    try {
+      const page = await window.cg.audit.page({ cursor: next, filter });
+      if (ask !== asked.current) return;
+      setEntries((held) => [...held, ...page.entries]);
+      setNext(page.next);
+    } catch {
+      // The rows held stay true; the next scroll to the end asks again.
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [next, loadingMore, filter]);
+
+  /*
+    🔴 `R-083` — A ROW RECORDED WHILE THE DIALOG IS OPEN ARRIVES AT THE TOP, if a page would have held
+    it: the same `auditMatches` CG Bridge pages with, worded against the names this dialog holds. Read
+    through refs so the subscription is made once per opening, not once per keystroke.
+  */
+  const naming = useMemo(
+    (): AuditNaming => ({
+      bank,
+      templateLabel: (templateId) => templateName(templateId, templates),
+    }),
+    [bank, templates],
+  );
+  const live = useRef({ filter, naming });
+  live.current = { filter, naming };
+  useEffect(() => {
+    if (!open) return undefined;
+    return window.cg.audit.onAppended((entry) => {
+      if (!auditMatches(entry, live.current.filter, live.current.naming)) return;
+      setEntries((held) =>
+        held.slice(0, LIVE_DUPLICATE_WINDOW).some((e) => sameRow(e, entry))
+          ? held
+          : [entry, ...held],
+      );
+    });
+  }, [open]);
 
   /*
     `MODAL-TRUTH-01` — a CLOSED panel forgets what it read, so the next opening starts from
@@ -199,50 +338,41 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   useEffect(() => {
     if (open) return;
     setEntries([]);
+    setNext(null);
     setHealth(null);
     setRead({ kind: 'reading' });
   }, [open]);
 
+  /*
+    🔴 `R-083` — ONLY THE ROWS IN VIEW ARE IN THE DOCUMENT. The table is the scroller; each row is
+    keyed by what it records (a row pushed to the top keeps its own key and its measured height), and
+    the next page is asked for as the window nears the last rows held.
+  */
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const rowsRef = useRef<HTMLDivElement | null>(null);
+  const keys = useMemo(() => rowKeys(entries), [entries]);
+  const view = useVirtualWindow({
+    active: open,
+    scroller: tableRef,
+    list: rowsRef,
+    keys,
+    estimate: ROW_ESTIMATE_PX,
+  });
+  useEffect(() => {
+    if (open && read.kind === 'ready' && view.end >= entries.length - NEAR_END_ROWS) {
+      void loadMore();
+    }
+  }, [open, read.kind, view.end, entries.length, loadMore]);
+
   if (!open) return null;
 
-  /*
-    The client-side half of the filters (see `OUTCOME_OPTIONS`): the outcome select and the
-    search, over the tail the bridge answered. The search reads what the ROW SHOWS — the
-    names the operator sees, the ids, the actor, the action, the code and the refused line
-    — so a hit is something visible, never a field the row keeps to itself.
-  */
-  const q = query.trim().toLocaleLowerCase();
-  const shown = entries.filter((e) => {
-    if (outcomeFilter !== 'all' && e.outcome !== outcomeFilter) return false;
-    if (q === '') return true;
-    const place = placeName(e.slot, bank);
-    const template = templateName(e.templateId, templates);
-    return [
-      place,
-      template,
-      e.actor,
-      e.action,
-      e.outcome,
-      e.itemId,
-      e.templateId,
-      e.errorCode,
-      // What the row SHOWS — a stream's address is not on it (§1.E), so it is not a hit either.
-      e.command === undefined ? undefined : commandForDisplay(e.command),
-      // `R3` — the timing clause is ON the row, and this file's rule is that a hit is
-      // something VISIBLE. Searching "until stop" has to find the rows that say it.
-      timingClause(e.timing),
-    ]
-      .filter((v): v is string => typeof v === 'string' && v !== '')
-      .join(' ')
-      .toLocaleLowerCase()
-      .includes(q);
-  });
-  const filtered =
-    actionFilter !== 'all' || actorFilter.trim() !== '' || outcomeFilter !== 'all' || q !== '';
+  const shown = entries;
+  const filtered = Object.keys(filter).length > 0 || query.trim() !== '';
   const resetFilters = (): void => {
     setActionFilter('all');
     setActorFilter('');
     setOutcomeFilter('all');
+    setChannelFilter(0);
     setQuery('');
   };
 
@@ -320,9 +450,14 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
               conditions get a label each — state facts, three words at most, in the place
               the count would be, because a footer that empties reads as a missing element.
             */}
+            {/*
+              🔴 `R-083` — `N of M events` counted what was shown of a fetched tail; there is no
+              tail now, only pages. The count is the rows held, with `+` while older ones are
+              left to read — a fact about the list, not a total of the record.
+            */}
             {read.kind === 'ready' ? (
-              <span data-audit-count={String(shown.length)}>
-                {String(shown.length)} of {String(entries.length)} events
+              <span data-audit-count={String(shown.length)} data-audit-more={String(next !== null)}>
+                {eventCount(shown.length, next !== null)}
               </span>
             ) : (
               /*
@@ -391,6 +526,25 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             ))}
           </select>
         </div>
+        {/* `R-083` — the channel a row is about, from the channels this station declares. */}
+        {channelsOf(bank).length > 0 && (
+          <div className="cg-audit-field">
+            <label htmlFor="audit-channel">Channel</label>
+            <select
+              id="audit-channel"
+              className="cg-field"
+              value={String(channelFilter)}
+              onChange={(e) => setChannelFilter(Number(e.target.value))}
+            >
+              <option value="0">All channels</option>
+              {channelsOf(bank).map((c) => (
+                <option key={c} value={String(c)}>
+                  CH {String(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="cg-audit-field">
           <label htmlFor="audit-actor">Actor</label>
           <input
@@ -457,7 +611,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         bar names who is signed in, once, on the axis that measures it — this panel shows the
         RECORD, and the record now speaks for itself.
       */}
-      <div className="cg-audit-table" data-audit-table="">
+      <div className="cg-audit-table" data-audit-table="" ref={tableRef}>
         <div className="cg-audit-head" data-audit-head="">
           {/* `B-210` — local wall-clock time; the record's UTC stamp is the cell's title. */}
           <span title="This console's local time, to the second. Hover a time for the record's own UTC stamp.">
@@ -480,25 +634,36 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         {shown.length === 0 ? (
           <EmptyState health={health} filtered={filtered} read={read} />
         ) : (
-          shown.map((e, idx) => {
-            /*
-              `B-210` — the date band, where the LOCAL date changes down the list.
-              Computed from the same parts the row renders, so the band and the row can
-              never disagree about which day a 01:00 entry belongs to.
-            */
-            const parts = auditTimeParts(e.ts);
-            const previous = idx > 0 ? auditTimeParts(shown[idx - 1]?.ts ?? '').date : null;
-            return (
-              <Fragment key={idx}>
-                {parts.date !== '' && parts.date !== previous ? (
-                  <div className="cg-audit-date" data-audit-date={parts.date} role="presentation">
-                    {parts.date}
-                  </div>
-                ) : null}
-                <Row entry={e} time={parts} templates={templates} bank={bank} />
-              </Fragment>
-            );
-          })
+          /*
+            🔴 `R-083` — the rows IN VIEW, between two spacers that keep the space of the rest, so
+            the scrollbar stays a true reading of how much is held.
+          */
+          <div ref={rowsRef} data-audit-rows="" data-audit-held={String(shown.length)}>
+            <div aria-hidden="true" style={{ height: view.padTop }} />
+            {shown.slice(view.start, view.end).map((e, offset) => {
+              const idx = view.start + offset;
+              /*
+                `B-210` — the date band, where the LOCAL date changes down the list.
+                Computed from the same parts the row renders, so the band and the row can
+                never disagree about which day a 01:00 entry belongs to. The day before is the
+                previous row HELD, not the previous row rendered.
+              */
+              const parts = auditTimeParts(e.ts);
+              const previous = idx > 0 ? auditTimeParts(shown[idx - 1]?.ts ?? '').date : null;
+              const key = keys[idx] ?? String(idx);
+              return (
+                <div key={key} ref={view.measureRef(key)}>
+                  {parts.date !== '' && parts.date !== previous ? (
+                    <div className="cg-audit-date" data-audit-date={parts.date} role="presentation">
+                      {parts.date}
+                    </div>
+                  ) : null}
+                  <Row entry={e} time={parts} templates={templates} bank={bank} />
+                </div>
+              );
+            })}
+            <div aria-hidden="true" style={{ height: view.padBottom }} />
+          </div>
         )}
       </div>
     </Modal>

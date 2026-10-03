@@ -127,13 +127,21 @@ for channel 1 at `127.0.0.1`, so they dial `127.0.0.1:9250`. CI runs one worker;
    (`Eye`/`EyeOff`), its accessible name `Show password`/`Hide password`. One `SignInCard` (`ui/`) gives the
    three screens the mark, the product name, the version and the card. The Persian message keeps its
    isolate and reads right to left by decision 3.
-6. **Paging keeps one filter predicate (`R-083`).** `auditMatches(entry, filter)` lives in `@cg/audit` and
-   is asked by the bridge's reader and by the console for pushed rows. The reader walks files newest first,
-   reading each BACKWARDS in 64 KB chunks and stopping at the page — the first page reads the file's tail.
-   A cursor names a file by the timestamp of its FIRST row (rotated files are named by it), so a rotation
-   between two pages never loses a cursor. Rotation at local midnight and at 20 MB; retention 90 days and
-   200 MB in all, oldest first — an incident is often looked at weeks later, and 200 MB is about 600,000
-   rows. `audit.recent` stays for its callers.
+6. **Paging keeps one filter predicate (`R-083`).** `auditMatches(entry, filter, naming)` is asked by the
+   bridge's reader and by the console for pushed rows. ~~It lives in `@cg/audit`~~ — built in
+   `@cg/shared-ipc` instead, because the console runs it too and `@cg/audit` imports `node:fs`. Its search
+   reads what a row SHOWS, so the naming that words a row (`placeName`, `displayLabel`, `cleanFileName`,
+   `templateDisplayName`, `commandForDisplay`, `timingClause`) MOVED there from the console's renderer,
+   unchanged, and is re-exported from its old homes: CG Bridge words a row exactly as the console does.
+   The reader walks files newest first, reading each BACKWARDS in 64 KB chunks and stopping at the page —
+   the first page reads the file's tail. A cursor names a file by the timestamp of its FIRST row (rotated
+   files are named by it), so a rotation between two pages never loses a cursor; a rotation DURING a read
+   is caught by reading each file through one handle and checking the current file's first row through it
+   (a stale list is read again). Rotation at local midnight and at 20 MB; retention 90 days and 200 MB in
+   all, the row being written included, oldest first — an incident is often looked at weeks later, and
+   200 MB is about 600,000 rows. `audit.recent` stays for its callers. The dialog holds the pages it read,
+   renders the rows in view (`ui/useVirtualWindow.ts`, measured row heights), asks for the next page near
+   the end, and counts what it holds (`N events`, `N+ events`).
 7. **`B-305`: an address, not a port.** `pgm-return.spec`'s subject IS the rule port, so it keeps 9250 and
    moves its station and its fake feed to `127.0.0.3` (a loopback address of its own, as `dev-station.spec`
    uses `127.0.0.2`). No CLI flag is added for a test.

@@ -2146,6 +2146,11 @@ never jsdom. "Palette" means the same ROLE, whose value Phase 2 moved.
 | footer        | 72 px `16px 26px`: `12 of 12 events` 12 px muted · `Follow new events` · `Reset filters` 13 px link · `Close` 39 quiet                          | the primitive's footer: **`N of M events` 12 px muted · `Reset filters` 13 px (while narrowing)** · `Close`                                                              | **FIXED** (count, reset); ARGUED: `Follow new events` — no live tail by design (`Refresh` is the door); `Close` is the cancel role                                                                 |
 | empty         | `55px 20px` centred `No events match these filters` + `Reset filters`                                                                           | `B-141`'s four sentences, unchanged; `Reset filters` in the footer                                                                                                       | ARGUED: the four empty states are a guard the reference cannot draw; a filter that empties the list still says "match this filter"                                                                 |
 
+⚠ **SUPERSEDED IN PART by `CONSOLE-POLISH-01` (`R-083`, 2026-10-03).** The audit log's footer now
+counts the rows HELD (`N events`, `N+ events` while older ones are left): it reads CG Bridge a page
+at a time (`audit.page`), with every filter and the search applied there. "No live tail by design"
+no longer holds either: a row recorded while the log is open arrives at the top (`audit.appended`).
+
 **What the owner will see change on screen:** LOAD opens a wider picker with a search box and
 three kind chips over a list of rows, each a thumbnail, a name and a small meta line with amber
 chips where a reason applies, `Delete from station` at the right, a dashed "Drop a .vcg package

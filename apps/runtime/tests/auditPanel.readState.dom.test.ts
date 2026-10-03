@@ -64,14 +64,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-/** `recent` and `health` are the two the panel's own condition turns on; the rest answer. */
-function stubBridge(audit: {
-  recent: () => Promise<unknown>;
-  health: () => Promise<unknown>;
-}): void {
+/** `page` and `health` are the two the panel's own condition turns on (`R-083`: the Log reads pages). */
+function stubBridge(audit: { page: () => Promise<unknown>; health: () => Promise<unknown> }): void {
   const stub = {
     audit: {
       ...audit,
+      onAppended: () => () => undefined,
       operatorName: () => '',
       setOperatorName: () => undefined,
       // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
@@ -121,7 +119,7 @@ const readLabel = (): string | null =>
 describe('MODAL-TRUTH-01 §3.2 — the counter claims no number before the read settles', () => {
   it('MID-FLIGHT — no count is claimed, and the body and the footer agree', async () => {
     stubBridge({
-      recent: () => new Promise<never>(() => undefined),
+      page: () => new Promise<never>(() => undefined),
       health: () => new Promise<never>(() => undefined),
     });
     await render();
@@ -134,10 +132,13 @@ describe('MODAL-TRUTH-01 §3.2 — the counter claims no number before the read 
   });
 
   it('SETTLED AND EMPTY — the count appears, and the body has stopped saying it is reading', async () => {
-    stubBridge({ recent: () => Promise.resolve([]), health: () => Promise.resolve(HEALTHY) });
+    stubBridge({
+      page: () => Promise.resolve({ entries: [], next: null }),
+      health: () => Promise.resolve(HEALTHY),
+    });
     await render();
 
-    expect(count()).toBe('0 of 0 events');
+    expect(count()).toBe('0 events');
     expect(text()).not.toContain('Reading the audit record');
     // `B-141`'s narrowest branch is untouched: a live writer that read nothing.
     expect(text()).toContain('No audit entries yet.');
@@ -147,7 +148,7 @@ describe('MODAL-TRUTH-01 §3.2 — the counter claims no number before the read 
 describe('MODAL-TRUTH-01 §3.3 — a record that cannot be read says so', () => {
   it('UNREACHABLE — the failure is stated, `Reading…` is gone, and no count is claimed', async () => {
     stubBridge({
-      recent: () => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:7999')),
+      page: () => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:7999')),
       health: () => Promise.reject(new Error('connect ECONNREFUSED 127.0.0.1:7999')),
     });
     await render();
@@ -163,7 +164,7 @@ describe('MODAL-TRUTH-01 §3.3 — a record that cannot be read says so', () => 
 
   it('UNREACHABLE — it does not claim the station was quiet', async () => {
     stubBridge({
-      recent: () => Promise.reject(new Error('socket hang up')),
+      page: () => Promise.reject(new Error('socket hang up')),
       health: () => Promise.reject(new Error('socket hang up')),
     });
     await render();
@@ -177,7 +178,7 @@ describe('MODAL-TRUTH-01 §3.3 — a record that cannot be read says so', () => 
     let failing = true;
     const pending = (): Promise<never> => new Promise<never>(() => undefined);
     stubBridge({
-      recent: () => (failing ? Promise.reject(new Error('socket hang up')) : pending()),
+      page: () => (failing ? Promise.reject(new Error('socket hang up')) : pending()),
       health: () => (failing ? Promise.reject(new Error('socket hang up')) : pending()),
     });
     await render();

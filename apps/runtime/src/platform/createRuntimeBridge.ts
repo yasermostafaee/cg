@@ -448,6 +448,9 @@ export function createMockBridge(): RuntimeBridge {
 
     audit: {
       recent: (req) => Promise.resolve(mock.auditRecent(req.limit, req.action, req.actor)),
+      // `CONSOLE-POLISH-01` (`R-083`) — the page and the rows since, through the same predicate.
+      page: (req) => Promise.resolve(mock.auditPage(req.cursor, req.filter ?? {})),
+      onAppended: (handler) => mock.auditAppended.subscribe(handler),
       health: () => Promise.resolve(mock.auditHealth()),
       // `FIELD-FIXES-01` G — the simulation is not CG Control: no log folder to open.
       // `CENTRAL-BRIDGE-01` — test mode has no CG Bridge, so no logs to download.

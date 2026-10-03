@@ -202,6 +202,8 @@ describe('C-038 — the census: every route, classified', () => {
       'air.emptied',
       'app.info',
       'audit.health',
+      // `CONSOLE-POLISH-01` (`R-083`) — the Log a page at a time: a read, scoped by the grant.
+      'audit.page',
       'audit.recent',
       /*
         `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's answer to a failed sign-in, for the LOG. It

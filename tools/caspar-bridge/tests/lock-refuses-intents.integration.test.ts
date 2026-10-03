@@ -272,6 +272,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'air.emptied',
         'app.info',
         'audit.health',
+        // `CONSOLE-POLISH-01` (`R-083`) — the Log a page at a time: a read, open behind the lock.
+        'audit.page',
         'audit.recent',
         /*
           `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's answer to a failed sign-in, into the LOG.

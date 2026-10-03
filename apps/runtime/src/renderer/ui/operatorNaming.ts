@@ -1,10 +1,9 @@
 import {
   bankInSet,
-  bankSetSize,
-  defaultLayerAlias,
   isFixedBankLayer,
-  layerAlias,
+  placeName,
   type BankSet,
+  type NameableSlot,
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import { templateDisplayName } from '../features/library/templateName.js';
@@ -58,49 +57,12 @@ export function shortId(id: string): string {
   return `${match[1] ?? ''}${match[2] ?? ''}…`;
 }
 
-/**
- * The minimum a caller must know about a layer to have it named. Structural rather than
- * a named wire type on purpose: the audit entry's slot carries a `server` too and the
- * emptied-air row's does not, and neither fact changes what this returns.
- */
-export interface NameableSlot {
-  channel: number;
-  layer: number;
-}
-
-/**
- * What the operator calls the layer a record names.
- *
- * A layer inside the declared bank is the ROW the operator sees — its configured alias,
- * else the default `Layer N` / `Bed N`, through the SAME two functions the layer table
- * uses (never a second spelling of the naming rule). A layer outside every bank is named
- * as CasparCG names it, with the fact that it is not a row said out loud: the two items
- * on layers 60 and 61 on 2026-09-04 were exactly that, and every surface that called them
- * "stack items" sent the operator to look for rows that did not exist.
- */
-export function placeName<S extends NameableSlot>(
-  /*
-    GENERIC over the slot rather than typed as `NameableSlot` flat, so a caller may pass
-    a richer slot — the audit entry's carries a `server` — without TypeScript's
-    excess-property check rejecting the literal. `S` is inferred from what is handed in;
-    nothing here reads a field beyond the two named above.
-  */
-  slot: S | undefined,
-  /**
-   * `MULTI-CHANNEL-01` — one bank, the station's list, or none. A row is named from the bank
-   * of ITS channel (`bankInSet`); with one bank the answer is exactly what it was.
-   */
-  bank: BankSet,
-): string | null {
-  if (slot === undefined) return null;
-  const own = bankInSet(bank, slot.channel);
-  if (own !== null && isFixedBankLayer(own, slot.channel, slot.layer)) {
-    return layerAlias(own, slot.layer) ?? defaultLayerAlias(own, slot.layer);
-  }
-  // The channel is left out only where it cannot be mistaken: ONE declared bank, on this channel.
-  const channel = bankSetSize(bank) <= 1 && own !== null ? '' : `${String(slot.channel)}-`;
-  return `layer ${channel}${String(slot.layer)} (not a row)`;
-}
+/*
+  🔴 `CONSOLE-POLISH-01` (`R-083`) — `placeName` (and its `NameableSlot`) MOVED to `@cg/shared-ipc`
+  (`operator-naming.ts`): CG Bridge searches the audit by what a row shows, so it names a layer exactly
+  as this console does. Re-exported here unchanged — one implementation, every reader's path kept.
+*/
+export { placeName, type NameableSlot } from '@cg/shared-ipc';
 
 /**
  * 🔴 `CHANNEL-TEMPLATES-01` — **WHERE A TEMPLATE'S NAME IS READ**: as a channel lists it (each
