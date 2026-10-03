@@ -4,8 +4,10 @@ import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Checkbox } from '../../ui/Checkbox.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { PasswordInput } from '../../ui/PasswordInput.js';
+import { SignInCard } from '../../ui/SignInCard.js';
 import { TextInput } from '../../ui/TextInput.js';
-import { IsolatedName } from '../../ui/OperatorNames.js';
+import { directionOf, IsolatedName } from '../../ui/OperatorNames.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { PlayoutSignInError } from '../../../platform/playoutSession.js';
@@ -52,34 +54,11 @@ import {
  * an operator surface). The Playout's names are data and go through {@link IsolatedName}.
  */
 const styles = {
-  scrim: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: cssVars['--r-lock-scrim'],
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1002,
-    color: colors.text,
-  },
-  card: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: cssVars['--r-radius-lg'],
-    width: 640,
-    maxWidth: 'calc(100vw - 32px)',
-    maxHeight: 'calc(100vh - 32px)',
-    overflowY: 'auto' as const,
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-  body: {
-    padding: cssVars['--r-lock-card-pad'],
+  steps: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 20,
   },
-  title: { margin: 0, fontSize: cssVars['--r-lock-title-fs'], fontWeight: 650, lineHeight: 1.4 },
   step: { display: 'flex', flexDirection: 'column' as const, gap: 10 },
   stepHead: {
     margin: 0,
@@ -144,49 +123,52 @@ export function FirstRunScreen({
 
   const signedIn = phase === 'channel' && auth.kind === 'signed-in';
   const origin = playoutOriginOf(signInUrl);
+  /*
+    🔴 `R-082` — **ONE SIGN-IN LOOK** (`SignInCard`, wide, on the first-run ground above the sign-in
+    gate's): the splash's ground, the APASAI mark and the product name over the title, the version at
+    the foot. The ground is the gates' one scrim, declared once in `controls.css`.
+  */
   return (
-    <div
-      style={styles.scrim}
-      role="dialog"
-      aria-label="Set up CG Control"
-      aria-modal="true"
-      data-first-run={phase}
+    <SignInCard
+      label="Set up CG Control"
+      ground="first-run"
+      title="Set up"
+      wide
+      cardRef={cardRef}
+      data={{ 'data-first-run': phase }}
     >
-      <div ref={cardRef} style={styles.card}>
-        <div style={styles.body}>
-          <h2 style={styles.title}>Set up CG Control</h2>
-          <PlayoutStep
-            phase={phase}
-            origin={origin}
-            judgeNow={signedIn}
-            onJudged={() => {
-              setAmcpJudged(true);
+      <div style={styles.steps}>
+        <PlayoutStep
+          phase={phase}
+          origin={origin}
+          judgeNow={signedIn}
+          onJudged={() => {
+            setAmcpJudged(true);
+          }}
+          // B2 — the sign-in below needs a verdict before anybody types: one check on open.
+          checkOnOpen={phase === 'channel' && auth.kind !== 'signed-in'}
+          onLines={setCheckLines}
+          recheck={recheck}
+        />
+        {phase === 'channel' && auth.kind !== 'signed-in' && (
+          <SignInStep
+            reason={auth.kind === 'signed-out' ? auth.reason : undefined}
+            lines={checkLines}
+            onPlayoutSilent={() => {
+              setRecheck((n) => n + 1);
             }}
-            // B2 — the sign-in below needs a verdict before anybody types: one check on open.
-            checkOnOpen={phase === 'channel' && auth.kind !== 'signed-in'}
-            onLines={setCheckLines}
-            recheck={recheck}
           />
-          {phase === 'channel' && auth.kind !== 'signed-in' && (
-            <SignInStep
-              reason={auth.kind === 'signed-out' ? auth.reason : undefined}
-              lines={checkLines}
-              onPlayoutSilent={() => {
-                setRecheck((n) => n + 1);
-              }}
-            />
-          )}
-          {signedIn && amcpJudged && (
-            <ChannelStep
-              playoutHost={hostOf(origin)}
-              onDone={() => {
-                setDone(true);
-              }}
-            />
-          )}
-        </div>
+        )}
+        {signedIn && amcpJudged && (
+          <ChannelStep
+            playoutHost={hostOf(origin)}
+            onDone={() => {
+              setDone(true);
+            }}
+          />
+        )}
       </div>
-    </div>
+    </SignInCard>
   );
 }
 
@@ -318,13 +300,11 @@ function SignInStep({
           Password
         </label>
         <div style={styles.grow}>
-          <TextInput
+          <PasswordInput
             id="cg-first-run-pass"
-            type="password"
             value={password}
             onChange={setPassword}
             autoComplete="current-password"
-            dir="ltr"
             disabled={locked}
             // B2 — only a wrong username or password marks the field.
             invalid={shown?.marksField === true}
@@ -335,7 +315,12 @@ function SignInStep({
         </div>
       </div>
       {shown !== null && (
-        <div style={styles.error} role="status">
+        <div
+          style={styles.error}
+          role="status"
+          // `R-082` — the Playout's own words take their own direction: Persian reads right to left.
+          dir={shown.fromPlayout === true ? directionOf(shown.text) : undefined}
+        >
           {/* A4 — the Playout's own words sit in their own isolate (golden rule 11). */}
           {shown.fromPlayout === true ? <bdi>{shown.text}</bdi> : shown.text}
         </div>

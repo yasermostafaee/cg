@@ -11,6 +11,8 @@ import { useLicense } from '../../hooks/useLicense.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
+import { PasswordInput } from '../../ui/PasswordInput.js';
+import { AppVersionLine, SignInBrand } from '../../ui/SignInCard.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { cssVars, NOTICE_PX } from '../../theme.js';
 import { signInFailureLine, signInMessage } from '../auth/signInMessages.js';
@@ -183,6 +185,9 @@ function BridgeSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
       setBusy(false);
     }
   };
+  const onEnter = (e: { key: string }): void => {
+    if (e.key === 'Enter') void submit();
+  };
 
   return (
     <Modal
@@ -205,6 +210,14 @@ function BridgeSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
         </>
       }
     >
+      {/*
+        🔴 `R-082` — **ONE SIGN-IN LOOK.** A `Modal` over the working console (the modal contract: a
+        dialog with a way out is the primitive's), carrying the sign-in surfaces' brand and version —
+        the mark and the product name above the fields, this build's version under them — a show
+        control on the password, and Enter from EITHER field (it used to submit from the password
+        alone).
+      */}
+      <SignInBrand />
       <label htmlFor="cg-bridge-signin-user" style={styles.field}>
         Account
         <TextInput
@@ -216,25 +229,23 @@ function BridgeSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
           dir="ltr"
           disabled={busy}
           aria-label="Account"
+          onKeyDown={onEnter}
         />
       </label>
       <label htmlFor="cg-bridge-signin-pass" style={styles.field}>
         Password
-        <TextInput
+        <PasswordInput
           id="cg-bridge-signin-pass"
-          type="password"
           value={password}
           onChange={setPassword}
           autoComplete="off"
-          dir="ltr"
           disabled={busy}
           invalid={error?.marksField === true}
           aria-label="Password"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-          }}
+          onKeyDown={onEnter}
         />
       </label>
+      <AppVersionLine />
     </Modal>
   );
 }

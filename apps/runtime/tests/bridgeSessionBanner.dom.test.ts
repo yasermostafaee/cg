@@ -179,6 +179,34 @@ describe('CENTRAL-BRIDGE-01 5.1 — a station admin signs the bridge in, once', 
     expect(openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass')?.value).toBe('');
   });
 
+  it('🔴 R-082 — one sign-in look: the brand and the version; Enter in EITHER field signs in; the password has a show control', async () => {
+    const { signIn } = await mount({ state: 'needs-admin' }, ADMIN);
+    await act(async () => {
+      openButton()?.click();
+    });
+    const dialog = openDialog();
+    expect(dialog?.querySelector('[data-signin-brand]')?.textContent?.trim()).toBe('CG Control');
+    expect(dialog?.querySelector('[data-app-version]')?.textContent).toMatch(
+      /^Version \d+\.\d+\.\d+/,
+    );
+    const password = dialog?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass');
+    const account = dialog?.querySelector<HTMLInputElement>('#cg-bridge-signin-user');
+    if (password === null || password === undefined || account === null || account === undefined)
+      throw new Error('no fields');
+    expect(
+      dialog?.querySelector('button[aria-label="Show password"]'),
+      'the password has no show control',
+    ).not.toBeNull();
+    await type(password, PASSWORD);
+    // Enter from the ACCOUNT field — it used to submit from the password alone.
+    await act(async () => {
+      account.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(signIn).toHaveBeenCalledWith({ username: 'cg-admin', password: PASSWORD });
+  });
+
   it('A4 — a `cg_not_licensed` refusal shows the Playout’s own message, and marks no field', async () => {
     const message = 'لایسنسِ Playout منقضی شده است.';
     await mount({ state: 'needs-admin' }, ADMIN, () =>

@@ -412,29 +412,13 @@ describe('the census is DERIVED from the tree, not from a list somebody maintain
       // (`B-229`), which is the half that was wrongly withheld with them.
       'lock/LockOverlay.tsx',
       /*
-        🔴 `R-066` — **THE SIGN-IN GATE, and it is here for the SAME REASON as the lock
-        screen rather than for a new one.** This census is what asked the question, by going
-        red on the commit that added it.
-
-        A `Modal` has three ways out — ✕, Escape and the backdrop — and a gate with a way out
-        is not a gate. Until the operator signs in, the bridge refuses every intent (PANIC
-        included) with one sentence and nothing reaches CasparCG; a console that let the
-        scrim be dismissed would put them in front of a surface whose controls all refuse,
-        with nothing on screen saying why. It shares the focus trap, which is the half
-        `B-229` proved must NOT travel with the exits.
-
-        ⚠ Two hand-rolled scrims is the most this app may have, and they are the two GATES.
-        A third would need an argument of its own, which is what this list exists to force.
+        🔴 `R-082` — **THE TWO GATES NO LONGER HAND-ROLL ONE, so they are no longer listed.** The
+        sign-in gate (`auth/SignInOverlay.tsx`, `R-066`) and first-run (`firstRun/FirstRunScreen.tsx`,
+        the sign-in gate in its first-run form) keep their reason — a `Modal` has three ways out and
+        a gate with a way out is not a gate — but since the one sign-in look they share ONE ground,
+        `ui/SignInCard`'s `.cg-signin-ground`, declared once in `controls.css`. A feature module that
+        declares a scrim of its own again is an offender here, which is the stricter census.
       */
-      'auth/SignInOverlay.tsx',
-      /*
-        `DESKTOP-APPS-01` — **FIRST-RUN, and its argument is that it is the SIGN-IN GATE in its
-        first-run form, not a third gate.** `App.tsx` renders one or the other, never both: while
-        an installed station is in first-run, its second step IS the sign-in. It has no way out
-        for the sign-in gate's reason, one step earlier — a station with no Playout and no channel
-        has nothing behind the scrim that works, and every control there refuses.
-      */
-      'firstRun/FirstRunScreen.tsx',
     ]);
 
     const offenders = walk(featuresDir)

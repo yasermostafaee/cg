@@ -2,6 +2,37 @@ import type { ReactNode } from 'react';
 import type { OperatorRowName } from './operatorNaming.js';
 
 /**
+ * The code points of the right-to-left LETTERS: Hebrew, Arabic (with Persian), Syriac, Thaana, NKo
+ * and the presentation forms. The Arabic-Indic and Persian DIGITS are left out on purpose — a digit
+ * is a number, not a letter, and `۱` alone does not make a name Persian.
+ */
+const RTL_LETTERS: readonly (readonly [number, number])[] = [
+  [0x0590, 0x05ff],
+  [0x0606, 0x065f],
+  [0x066e, 0x06ef],
+  [0x06fa, 0x08ff],
+  [0xfb1d, 0xfdff],
+  [0xfe70, 0xfefc],
+];
+
+/**
+ * 🔴 `B-303` / `R-082` — **A NAME'S OWN DIRECTION: right to left when it holds a right-to-left letter.**
+ *
+ * `dir="auto"` (and `<bdi>`'s default) takes the FIRST strong letter, so `NDI کانالِ ۱ (APASAI)` —
+ * a Persian name that starts with a Latin word — was laid out left to right, and read `NDI ۱ کانال
+ * (APASAI)` (the owner's screenshot, 2026-09-30). The Playout shows its names right to left; a name
+ * with any Persian in it is a Persian name, and is laid out that way. A name with none — `Studio 1`,
+ * `MTA (APASAI)` — stays left to right, so its trailing parenthesis is never thrown to the front.
+ */
+export function directionOf(text: string): 'rtl' | 'ltr' {
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (RTL_LETTERS.some(([lo, hi]) => cp >= lo && cp <= hi)) return 'rtl';
+  }
+  return 'ltr';
+}
+
+/**
  * 🔴 **THE NAMES, EACH IN ITS OWN BIDI ISOLATE.**
  *
  * `operatorRowName` decides WHAT to say; this decides how to put it on a line without the

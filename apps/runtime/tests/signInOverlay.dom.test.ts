@@ -248,11 +248,13 @@ describe('R-066 §1 — the sign-in appears when the bridge says so, and not oth
       'the gate must be a dialog so assistive tech announces it as one',
     ).not.toBeNull();
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
-    // Two controls and no way past: CHECK (B2) and SIGN IN. A ✕ or a Cancel would be a way out.
-    expect([...h.el.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
-      'Check',
-      'Sign in',
-    ]);
+    // Three controls and no way past: CHECK (B2), the password's show control (`R-082`) and SIGN IN.
+    // A ✕ or a Cancel would be a way out. Read by accessible name: the show control is an icon.
+    expect(
+      [...h.el.querySelectorAll('button')].map(
+        (b) => b.getAttribute('aria-label') ?? b.textContent,
+      ),
+    ).toEqual(['Check', 'Show password', 'Sign in']);
   });
 
   it('SIGNED IN renders nothing — the same instance, after a real transition', async () => {
@@ -280,7 +282,16 @@ describe('DELTA-MULTI-CHANNEL-01-B B3 — one interface language, and the shared
     const card = h.el.querySelector('[role="dialog"] > div');
     expect(card?.getAttribute('dir'), 'the card still declares a Persian direction').toBeNull();
     expect(h.text()).toContain('Sign in');
-    expect(h.text()).toContain('The broadcast continues.');
+    /*
+      🔴 `R-082` — pinned as an ABSENCE, the direction it regresses in: the gate's explanatory line
+      ("The broadcast continues. Until you sign in, this console sends nothing.") went with the one
+      sign-in look — an operator surface carries no explanatory prose. The product name and the
+      version are what the card says about itself.
+    */
+    expect(h.text()).not.toContain('The broadcast continues');
+    expect(h.text()).not.toContain('this console sends nothing');
+    expect(h.el.querySelector('[data-signin-brand]')?.textContent?.trim()).toBe('CG Control');
+    expect(h.el.querySelector('[data-app-version]')?.textContent).toMatch(/^Version \d+\.\d+\.\d+/);
     expect(/[؀-ۿ]/.test(h.text()), 'a Persian word of ours is still on the gate').toBe(false);
   });
 

@@ -33,8 +33,13 @@ async function asCgControl(page: Page, dialed: string[]): Promise<void> {
       const response = await route.fetch({ url: `${base}${url.pathname}${url.search}` });
       await route.fulfill({ response });
     } catch (err) {
-      // The page closed with this request in flight — the test is over. Anything else is real.
-      if (!/has been closed/.test(String(err))) throw err;
+      /*
+        The page closed — or Connect RELOADED it — with this request in flight: the request belongs
+        to a page that is gone. Playwright says it two ways (`has been closed`; `Fetch response has
+        been disposed`, met once in four local runs on 2026-10-03, at the reload). Anything else is
+        real.
+      */
+      if (!/has been closed|has been disposed/.test(String(err))) throw err;
     }
   });
   await page.route(EXAMPLE_HTTP, (route) => route.abort('connectionrefused'));
@@ -102,6 +107,46 @@ test('🔴 a fresh CG Control asks ONE question; given the Playout, it connects 
     timeout: 20_000,
   });
   expect(await page.evaluate((key) => localStorage.getItem(key), STATION_KEY)).toBeNull();
+});
+
+test('🔴 R-080 + R-082 — the question says CG Bridge may stay empty, on the one sign-in card: the mark, the name, the version', async ({
+  page,
+}) => {
+  const dialed: string[] = [];
+  await asCgControl(page, dialed);
+  const gate = page.locator('[data-playout-address-gate]');
+  const card = gate.getByRole('dialog', { name: 'Set up CG Control' });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+
+  // R-080 — empty, `Found automatically`, and ONE hint line under the field.
+  const bridge = gate.getByLabel('CG Bridge address');
+  await expect(bridge).toHaveValue('');
+  await expect(bridge).toHaveAttribute('placeholder', 'Found automatically');
+  const hint = gate.locator('[data-bridge-address-hint]');
+  await expect(hint).toHaveText('Leave empty unless CG Bridge runs on a separate server.');
+  const [fieldBox, hintBox] = [await bridge.boundingBox(), await hint.boundingBox()];
+  if (fieldBox === null || hintBox === null) throw new Error('the field and its hint need a box');
+  expect(hintBox.y, 'the hint sits UNDER its field').toBeGreaterThanOrEqual(
+    fieldBox.y + fieldBox.height,
+  );
+
+  /*
+    R-082 — measured in a real engine (golden rule 12c): the APASAI mark is DRAWN (a box, not an
+    empty span), its bars are relit for the dark ground from the splash's token, and the card says
+    the product and this build's version. The ground is the splash's.
+  */
+  const mark = card.locator('[data-apasai-mark] svg');
+  const markBox = await mark.boundingBox();
+  expect(markBox?.height ?? 0, 'the mark is drawn').toBeGreaterThan(20);
+  const bars = await card
+    .locator('[data-apasai-mark] .apasai-bars')
+    .evaluate((g) => getComputedStyle(g).fill);
+  expect(bars).toBe('rgb(238, 243, 249)'); // --r-splash-logo-bars
+  await expect(card.locator('[data-signin-brand]')).toContainText('CG Control');
+  await expect(card.locator('[data-app-version]')).toHaveText(/^Version \d+\.\d+\.\d+/);
+  const ground = await gate.evaluate((g) => getComputedStyle(g).backgroundColor);
+  expect(ground).toBe('rgb(26, 33, 45)'); // --r-splash-bg
+  expect(dialed).toEqual([]);
 });
 
 test('a separate server: CG Bridge’s own address, typed beside the Playout’s, is where the console connects', async ({

@@ -7831,3 +7831,142 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-muted);
   font-size: var(--r-text-sm);
 }
+
+/* ── `R-082` — ONE SIGN-IN LOOK (`SignInCard`, `PasswordInput`, `ApasaiMark`) ────────────────────
+   The splash's ground, mark and wordmark, from the `--r-splash-*` tokens the splash mirrors. The
+   ground is the two gates' ONE scrim (the modal census allows exactly those two); CG Control's
+   first question takes it as a page. */
+.cg-signin-ground {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: var(--r-space-3);
+  overflow-y: auto;
+  background: var(--r-splash-bg);
+  color: var(--r-text);
+  font-family: inherit;
+}
+.cg-signin-ground--gate {
+  z-index: 1001;
+}
+/* First-run sits above the sign-in gate: `App.tsx` renders one or the other, never both. */
+.cg-signin-ground--first-run {
+  z-index: 1002;
+}
+.cg-signin-ground--page {
+  position: static;
+  min-height: 100vh;
+}
+.cg-signin-card {
+  display: flex;
+  flex-direction: column;
+  width: var(--r-lock-card-w);
+  max-width: 100%;
+  margin: auto;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--r-surface);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-lg);
+  box-shadow: var(--r-shadow-menu);
+}
+.cg-signin-card--wide {
+  width: 640px;
+}
+.cg-signin-card__body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--r-lock-card-pad);
+}
+.cg-signin-card__title {
+  margin: 0 0 var(--r-space-3);
+  font-size: var(--r-lock-title-fs);
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: center;
+}
+.cg-signin-card__foot {
+  padding: 16px 24px;
+  border-top: 1px solid var(--r-border);
+  background: var(--r-surface-raised);
+}
+.cg-signin-card__foot > .cg-btn {
+  width: 100%;
+}
+.cg-signin-version {
+  padding: var(--r-space-2) var(--r-space-3);
+  color: var(--r-splash-ink-dim);
+  font-size: var(--r-text-xs);
+  letter-spacing: 0.05em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.cg-signin-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.cg-signin-brand__product {
+  color: var(--r-splash-ink);
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.cg-signin-brand__product b {
+  font-weight: 650;
+}
+.cg-apasai-mark {
+  display: block;
+  line-height: 0;
+}
+.cg-apasai-mark svg {
+  display: block;
+  height: 36px;
+  width: auto;
+}
+/* Relit for the dark ground, as the splash relights it; the ARC is never touched. */
+.cg-apasai-mark .apasai-bars {
+  fill: var(--r-splash-logo-bars);
+}
+.cg-apasai-mark .apasai-swoosh {
+  fill: var(--r-splash-logo-swoosh);
+}
+
+/* The password field's show/hide control sits inside the field's own edge. */
+.cg-password {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.cg-password > .cg-field {
+  flex: 1;
+  min-width: 0;
+  padding-right: 36px;
+}
+.cg-password__toggle.cg-btn--icon {
+  position: absolute;
+  right: 4px;
+  min-width: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+  color: var(--r-text-muted);
+}
+.cg-password__toggle.cg-btn--icon:hover:not(:disabled) {
+  background: var(--r-surface-raised);
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--r-text);
+}

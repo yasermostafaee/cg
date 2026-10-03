@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import { LogIn } from 'lucide-react';
-import { colors, cssVars, LOCK_PX } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
-import { Icon } from '../../ui/Icon.js';
+import { PasswordInput } from '../../ui/PasswordInput.js';
+import { SignInCard } from '../../ui/SignInCard.js';
 import { TextInput } from '../../ui/TextInput.js';
-import { IsolatedName } from '../../ui/OperatorNames.js';
+import { directionOf, IsolatedName } from '../../ui/OperatorNames.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
@@ -72,57 +72,9 @@ import { signInFailureLine } from './signInMessages.js';
  * system's rule for an operator surface, and this is the surface an operator meets first.
  */
 const styles = {
-  /*
-    `LockOverlay`'s scrim, one z-index above it. The two are the app's only full-window gates
-    and they use the same ink so that meeting either reads as the same kind of stop.
-  */
-  scrim: {
-    position: 'fixed' as const,
-    inset: 0,
-    background: cssVars['--r-lock-scrim'],
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1001,
-    fontFamily: 'inherit',
-    color: colors.text,
-  },
-  card: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: cssVars['--r-radius-lg'],
-    width: cssVars['--r-lock-card-w'],
-    maxWidth: 'calc(100vw - 32px)',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflow: 'hidden',
-  },
-  body: {
-    padding: cssVars['--r-lock-card-pad'],
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'stretch',
-  },
-  iconBox: {
-    width: cssVars['--r-lock-icon-box'],
-    height: cssVars['--r-lock-icon-box'],
-    margin: '0 auto 20px',
-    display: 'grid',
-    placeItems: 'center',
-    background: cssVars['--r-accent-fill'],
-    border: `1px solid ${colors.border}`,
-    borderRadius: cssVars['--r-lock-icon-radius'],
-    color: cssVars['--r-accent'],
-  },
-  title: {
-    margin: '0 0 8px',
-    fontSize: cssVars['--r-lock-title-fs'],
-    fontWeight: 650,
-    lineHeight: 1.4,
-    textAlign: 'center' as const,
-  },
+  // The one state fact the card states: whose session ended (never an explanation).
   sub: {
-    margin: '0 0 20px',
+    margin: '0 0 16px',
     color: colors.textMuted,
     fontSize: cssVars['--r-lock-copy-fs'],
     textAlign: 'center' as const,
@@ -142,11 +94,6 @@ const styles = {
     minHeight: '1.25rem',
     marginTop: 4,
     lineHeight: 1.6,
-  },
-  foot: {
-    padding: '16px 24px',
-    borderTop: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
   },
   check: { marginBottom: 16 },
 } as const;
@@ -250,109 +197,109 @@ export function SignInOverlay(): JSX.Element | null {
     }
   };
 
+  /*
+    🔴 `R-082` — **ONE SIGN-IN LOOK** (`SignInCard`): the splash's ground, the APASAI mark and the
+    product name, the version at the foot. The sentence that explained the gate ("The broadcast
+    continues. Until you sign in, this console sends nothing.") went with it — an operator surface
+    carries no explanatory prose. The one STATE FACT stays: whose session ended.
+  */
   return (
-    <div style={styles.scrim} role="dialog" aria-label="Playout sign-in" aria-modal="true">
-      <div ref={cardRef} style={styles.card}>
-        <div style={styles.body}>
-          <div style={styles.iconBox}>
-            <Icon icon={LogIn} size={LOCK_PX.iconGlyph} />
-          </div>
-          <h2 style={styles.title}>Sign in</h2>
-          {/*
-            Two facts and no third. The first line is true in both states — the stack is on
-            air and this console is not driving it — and the expired case adds WHOSE session
-            ended, because that is the fact an operator needs in order to know nothing is
-            wrong with the station.
-          */}
-          <p style={styles.sub}>
-            The broadcast continues. Until you sign in, this console sends nothing.
-            {auth.kind === 'expired' && (
-              <>
-                <br />
-                The session of <IsolatedName>{auth.name}</IsolatedName> has ended.
-              </>
-            )}
-          </p>
+    <SignInCard
+      label="Playout sign-in"
+      ground="gate"
+      title="Sign in"
+      cardRef={cardRef}
+      footer={
+        // The one way through. No ✕, no Cancel — there is nothing behind this to go back to.
+        <Button
+          variant="primary"
+          className="cg-gate-submit"
+          disabled={locked || username === '' || password === ''}
+          onClick={() => void submit()}
+        >
+          {busy ? 'Signing in…' : 'Sign in'}
+        </Button>
+      }
+    >
+      {auth.kind === 'expired' && (
+        <p style={styles.sub} data-session-ended="">
+          The session of <IsolatedName>{auth.name}</IsolatedName> has ended.
+        </p>
+      )}
 
-          {/* B2 — the check, on the gate: the Playout, CHECK, and the one line that decides. */}
-          <div style={styles.check} data-sign-in-check="">
-            <PlayoutConnection
-              origin={playoutOriginOf(capabilities?.signInUrl ?? null)}
-              startEditing={false}
-              mayChange={false}
-              checkOnOpen
-              onLines={setLines}
-              recheck={recheck}
-              lineFilter={decidingLine}
-            />
-          </div>
+      {/* B2 — the check, on the gate: the Playout, CHECK, and the one line that decides. */}
+      <div style={styles.check} data-sign-in-check="">
+        <PlayoutConnection
+          origin={playoutOriginOf(capabilities?.signInUrl ?? null)}
+          startEditing={false}
+          mayChange={false}
+          checkOnOpen
+          onLines={setLines}
+          recheck={recheck}
+          lineFilter={decidingLine}
+        />
+      </div>
 
-          <label htmlFor="cg-signin-user" style={styles.label}>
-            Username
-          </label>
-          <div style={styles.field}>
-            <TextInput
-              id="cg-signin-user"
-              value={username}
-              onChange={setUsername}
-              autoComplete="username"
-              // The username is a machine account name (`cg-op1`), not prose: LTR is a
-              // statement about the CONTENT, which is what the primitive's header asks for.
-              dir="ltr"
-              disabled={locked}
-              aria-label="Username"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void submit();
-              }}
-            />
-          </div>
+      <label htmlFor="cg-signin-user" style={styles.label}>
+        Username
+      </label>
+      <div style={styles.field}>
+        <TextInput
+          id="cg-signin-user"
+          value={username}
+          onChange={setUsername}
+          autoComplete="username"
+          // The username is a machine account name (`cg-op1`), not prose: LTR is a
+          // statement about the CONTENT, which is what the primitive's header asks for.
+          dir="ltr"
+          disabled={locked}
+          aria-label="Username"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+          }}
+        />
+      </div>
 
-          <label htmlFor="cg-signin-pass" style={styles.label}>
-            Password
-          </label>
-          <div style={styles.field}>
-            <TextInput
-              id="cg-signin-pass"
-              type="password"
-              value={password}
-              onChange={setPassword}
-              autoComplete="current-password"
-              dir="ltr"
-              disabled={locked}
-              ref={passwordRef}
-              // B2 — only a wrong username or password marks the field.
-              invalid={message?.marksField === true}
-              aria-label="Password"
-              aria-describedby="cg-signin-error"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void submit();
-              }}
-            />
-          </div>
+      <label htmlFor="cg-signin-pass" style={styles.label}>
+        Password
+      </label>
+      <div style={styles.field}>
+        <PasswordInput
+          id="cg-signin-pass"
+          value={password}
+          onChange={setPassword}
+          autoComplete="current-password"
+          disabled={locked}
+          ref={passwordRef}
+          // B2 — only a wrong username or password marks the field.
+          invalid={message?.marksField === true}
+          aria-label="Password"
+          aria-describedby="cg-signin-error"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+          }}
+        />
+      </div>
 
-          {/*
+      {/*
             `role="status"` and not `alert`: the sentence appears where the operator is already
             looking, immediately under the field they just used, and an assertive announcement
             on every mistyped password is noise. It keeps its height when empty so the card
             does not jump under the pointer as the message arrives.
           */}
-          <div id="cg-signin-error" style={styles.error} role="status">
-            {/* A4 — the Playout's own words sit in their own isolate (golden rule 11). */}
-            {message?.fromPlayout === true ? <bdi>{message.text}</bdi> : message?.text}
-          </div>
-        </div>
-        {/* The one way through. No ✕, no Cancel — there is nothing behind this to go back to. */}
-        <div style={styles.foot}>
-          <Button
-            variant="primary"
-            className="cg-gate-submit"
-            disabled={locked || username === '' || password === ''}
-            onClick={() => void submit()}
-          >
-            {busy ? 'Signing in…' : 'Sign in'}
-          </Button>
-        </div>
+      {/*
+            A4 — the Playout's own words sit in their own isolate (golden rule 11). `R-082` — and the
+            line takes THEIR direction: a Persian refusal (`cg_not_licensed`) reads, and aligns, right
+            to left, as the Playout sent it.
+          */}
+      <div
+        id="cg-signin-error"
+        style={styles.error}
+        role="status"
+        dir={message?.fromPlayout === true ? directionOf(message.text) : undefined}
+      >
+        {message?.fromPlayout === true ? <bdi>{message.text}</bdi> : message?.text}
       </div>
-    </div>
+    </SignInCard>
   );
 }

@@ -7,6 +7,7 @@ import {
 } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { SignInCard } from '../../ui/SignInCard.js';
 import { TextInput } from '../../ui/TextInput.js';
 
 /**
@@ -34,30 +35,6 @@ import { TextInput } from '../../ui/TextInput.js';
  * no full-window scrim (`modalMessageRegion.dom.test.ts` allows two, the two gates over the app).
  */
 const styles = {
-  page: {
-    minHeight: '100vh',
-    background: colors.background,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: colors.text,
-  },
-  card: {
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderRadius: cssVars['--r-radius-lg'],
-    width: cssVars['--r-lock-card-w'],
-    maxWidth: 'calc(100vw - 32px)',
-    padding: cssVars['--r-lock-card-pad'],
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-  title: {
-    margin: '0 0 20px',
-    fontSize: cssVars['--r-lock-title-fs'],
-    fontWeight: 650,
-    textAlign: 'center' as const,
-  },
   label: {
     fontSize: cssVars['--r-text-sm'],
     fontWeight: 500,
@@ -82,7 +59,7 @@ const styles = {
     color: cssVars['--r-caution-text'],
     fontSize: cssVars['--r-text-sm'],
     minHeight: '1.25rem',
-    margin: '6px 0 14px',
+    margin: '6px 0 0',
   },
 } as const;
 
@@ -131,60 +108,69 @@ export function PlayoutAddressGate({
     if (e.key === 'Enter' && typed.trim() !== '') connect();
   };
 
+  /*
+    🔴 `R-082` — **ONE SIGN-IN LOOK** (`SignInCard`, as a PAGE): the splash's ground, the APASAI mark
+    and the product name over the title, the version at the foot — the first thing CG Control shows
+    after its splash, so the two read as one product.
+  */
   return (
-    <div style={styles.page} data-playout-address-gate="">
-      <div style={styles.card} role="dialog" aria-label="Set up CG Control" aria-modal="true">
-        <h2 style={styles.title}>Set up CG Control</h2>
-        <label htmlFor="cg-playout-address" style={styles.label}>
-          Playout address
-        </label>
-        <TextInput
-          id="cg-playout-address"
-          value={typed}
-          onChange={(value) => {
-            setTyped(value);
-            setError(null);
-          }}
-          // An address is not prose: LTR is a statement about the CONTENT.
-          dir="ltr"
-          autoComplete="off"
-          aria-label="Playout address"
-          aria-describedby="cg-playout-address-error"
-          onKeyDown={onEnter}
-        />
-        <label htmlFor="cg-bridge-address" style={styles.labelAfter}>
-          CG Bridge address
-        </label>
-        {/*
+    <SignInCard
+      label="Set up CG Control"
+      ground="page"
+      title="Set up"
+      groundData={{ 'data-playout-address-gate': '' }}
+      footer={
+        <Button variant="primary" disabled={typed.trim() === ''} onClick={connect}>
+          Connect
+        </Button>
+      }
+    >
+      <label htmlFor="cg-playout-address" style={styles.label}>
+        Playout address
+      </label>
+      <TextInput
+        id="cg-playout-address"
+        value={typed}
+        onChange={(value) => {
+          setTyped(value);
+          setError(null);
+        }}
+        // An address is not prose: LTR is a statement about the CONTENT.
+        dir="ltr"
+        autoComplete="off"
+        aria-label="Playout address"
+        aria-describedby="cg-playout-address-error"
+        onKeyDown={onEnter}
+      />
+      <label htmlFor="cg-bridge-address" style={styles.labelAfter}>
+        CG Bridge address
+      </label>
+      {/*
           🔴 `R-080` — **EMPTY IS THE ANSWER FOR MOST STATIONS, AND THE FIELD SAYS SO.** The owner's run of
           `0.10.0` (2026-09-30): nothing told him this field may be left empty — CG Bridge is found on
           the Playout's host, port 5280, by itself. The placeholder says it, and ONE hint line (the
           owner's own allowance for a setup form, `CONSOLE-POLISH-01` §5) says when to type anything.
         */}
-        <TextInput
-          id="cg-bridge-address"
-          value={bridgeTyped}
-          onChange={(value) => {
-            setBridgeTyped(value);
-            setError(null);
-          }}
-          dir="ltr"
-          autoComplete="off"
-          placeholder={BRIDGE_ADDRESS_PLACEHOLDER}
-          aria-label="CG Bridge address"
-          aria-describedby="cg-bridge-address-hint cg-playout-address-error"
-          onKeyDown={onEnter}
-        />
-        <div id="cg-bridge-address-hint" style={styles.hint} data-bridge-address-hint="">
-          {BRIDGE_ADDRESS_HINT}
-        </div>
-        <div id="cg-playout-address-error" style={styles.error} role="status">
-          {error}
-        </div>
-        <Button variant="primary" disabled={typed.trim() === ''} onClick={connect}>
-          Connect
-        </Button>
+      <TextInput
+        id="cg-bridge-address"
+        value={bridgeTyped}
+        onChange={(value) => {
+          setBridgeTyped(value);
+          setError(null);
+        }}
+        dir="ltr"
+        autoComplete="off"
+        placeholder={BRIDGE_ADDRESS_PLACEHOLDER}
+        aria-label="CG Bridge address"
+        aria-describedby="cg-bridge-address-hint cg-playout-address-error"
+        onKeyDown={onEnter}
+      />
+      <div id="cg-bridge-address-hint" style={styles.hint} data-bridge-address-hint="">
+        {BRIDGE_ADDRESS_HINT}
       </div>
-    </div>
+      <div id="cg-playout-address-error" style={styles.error} role="status">
+        {error}
+      </div>
+    </SignInCard>
   );
 }
