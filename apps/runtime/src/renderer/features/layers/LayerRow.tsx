@@ -20,6 +20,7 @@ import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
+import { recentRemovalElsewhere } from '../library/templateActs.js';
 import { isOnAir } from '../stack/onAir.js';
 import { loadTemplateOntoFixedSlot } from '../fixedLayers/fixedSlotLoad.js';
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
@@ -558,8 +559,18 @@ export function LayerRow({
       */
       if (res.accepted) {
         reportCommandSuccess(`${rowName} loaded · ${displayLabel(chosen) ?? chosen.templateId}`);
+        return res;
       }
-      return res;
+      /*
+        🔴 `CONSOLE-POLISH-01` (`B-300`) — a Load that was on its way when another console removed the
+        template is refused `unknown-template`, and that code's sentence ("re-import it") is about a
+        different situation. Within `REMEMBERED_MS` of such a removal the refusal says what happened.
+      */
+      const elsewhere =
+        res.errorCode === 'unknown-template'
+          ? recentRemovalElsewhere(chosen.templateId, slot.channel)
+          : null;
+      return elsewhere === null ? res : { ...res, message: elsewhere };
     },
     /**
      * The post-CLEAR re-ADD: put the row's OWN bound template back, no picking.

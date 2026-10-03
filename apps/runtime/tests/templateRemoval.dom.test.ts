@@ -123,6 +123,9 @@ function installBridge(): void {
         if (removeResult.ok) registry = registry.filter((t) => t.templateId !== req.templateId);
         return Promise.resolve(removeResult);
       },
+      // `B-300` — an open picker follows CG Bridge's list.
+      onChanged: () => () => undefined,
+      onActed: () => () => undefined,
     },
     sources: {
       config: () => Promise.resolve({ sources: [] }),

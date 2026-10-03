@@ -714,6 +714,39 @@ export const TemplatesChangedChannel = definePublishChannel(
 );
 
 /**
+ * 🔴 `B-300` (`CONSOLE-POLISH-01` §1) — **WHO DID WHAT TO THE TEMPLATE LIST.** `templates.changed` says
+ * the list changed and names no one, so a console whose picker was open could not say why its chosen
+ * template vanished — it met the raw `unknown-template` refusal on Load instead (the owner's own-PC
+ * run, 2026-09-30, two consoles on one CG Bridge). Published beside `templates.changed` after an
+ * import, a re-import or a removal CG Bridge ACCEPTED (a refused act publishes nothing), to every
+ * console, with the acting user as the audit names them. `name` and `sourceFileName` are the
+ * template's raw naming facts: a console names it by its one rule (`displayLabel`), never the id.
+ * `channel` — the channel the act was on; `null` — a request that named none (every channel).
+ */
+export const TemplateActSchema = z.object({
+  act: z.enum(['import', 'reimport', 'remove']),
+  templateId: IdSchema,
+  name: z.string().optional(),
+  sourceFileName: z.string().optional(),
+  channel: z.number().int().positive().nullable(),
+  actor: z.string().min(1),
+});
+export type TemplateAct = z.infer<typeof TemplateActSchema>;
+
+export const TemplatesActedChannel = definePublishChannel('templates.acted', TemplateActSchema);
+
+/** `B-300` — a template as a {@link TemplateAct} names it: its id, and the names an operator knows. */
+export function templateActNaming(
+  template: TemplateInfo,
+): Pick<TemplateAct, 'templateId' | 'name' | 'sourceFileName'> {
+  return {
+    templateId: template.templateId,
+    ...(template.name !== undefined ? { name: template.name } : {}),
+    ...(template.sourceFileName !== undefined ? { sourceFileName: template.sourceFileName } : {}),
+  };
+}
+
+/**
  * 🔴 `PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — **DOES THIS TEMPLATE GET PASS CONTROLS?**
  *
  * ── THE RULE ──────────────────────────────────────────────────────────────────────────────

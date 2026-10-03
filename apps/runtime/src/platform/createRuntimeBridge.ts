@@ -436,6 +436,8 @@ export function createMockBridge(): RuntimeBridge {
       remove: (req) => Promise.resolve(mock.templateRemove(req.templateId, req.channel)),
       // R-028 (o1) — the catalogue push, mirrored by the mock's own emitter.
       onChanged: (handler) => mock.templatesChanged.subscribe(handler),
+      // `CONSOLE-POLISH-01` (`B-300`) — who changed it, mirrored by the mock's own emitter.
+      onActed: (handler) => mock.templatesActed.subscribe(handler),
       // R-022 — the mock retains no rendered page (it accepts and ignores `html`
       // at import, per the note above), and test mode has no bridge to ask, so it
       // honestly holds none: `RELEASE-091-01` §1's `unreachable`. The rehearsal panel

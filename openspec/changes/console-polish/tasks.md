@@ -67,13 +67,23 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 5.1 The Loads check before they create; a refused Load leaves nothing
 - [x] 5.2 Restored slotless error items dropped at start, logged
 - [x] 5.3 The badge counts row errors (`isRowError`); its list; `stack.dismiss-error`
-- [ ] 5.4 Tests (bridge integration, reconciler, dom, e2e `row-errors.spec`); gate; pushed; CI read
+- [ ] 5.4 Tests (bridge integration, reconciler, dom, e2e `row-errors.spec`); gate; pushed `e88240ad` +
+      `45ec300b`. CI RED — PR <https://github.com/yasermostafaee/cg/actions/runs/37134392265>: its
+      `E2E (Playwright)` RAN (runtime 319 passed, 1 failed; designer 293) and `retention-honesty.spec.ts:252`
+      (B-107) failed, because its errored row was a refused Load's leftover, which B-301 removed (the
+      sweep missed this spec). Desktop <https://github.com/yasermostafaee/cg/actions/runs/37134392283>
+      green. Fixed `bd072187` (the errored row is a refused take on its layer; 5/5 locally); CI: see 6.3
 
 ## 6. `B-300` — the open picker follows the bridge
 
-- [ ] 6.1 `templates.acted`; the bridge publishes it; scope classified
-- [ ] 6.2 The picker listens; the removed-on-another-console line; the Load refusal's wording
-- [ ] 6.3 Two consoles on one bridge e2e; gate; pushed; CI read
+- [x] 6.1 `templates.acted`; the bridge publishes it; scope classified (`STATION_WIDE`, as
+      `templates.changed`); the mock publishes it too
+- [x] 6.2 The picker listens while open (`templates.changed` re-reads its channel; `templateActs.ts`
+      decides "another console" from this console's own marked removals); the removed-on-another-console
+      line; a Load refused `unknown-template` within 10 s of such a removal reads it
+- [ ] 6.3 Tests: bridge (`template-persistence`), WebSocket round-trip, dom (`templatePicker.followsBridge`,
+      `layerRow.loadRemovedElsewhere`; both ablations go red), e2e `two-consoles.spec` §1 (2/2 locally);
+      gate; pushed; CI read
 
 ## 7. `R-083` — the paged audit
 

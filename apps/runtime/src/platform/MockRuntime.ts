@@ -23,6 +23,7 @@ import type {
   PlayoutLayerState,
   LiveLayerState,
   LivePlateReleaseState,
+  TemplateAct,
   TemplateInfo,
   DelimiterOption,
   Rehearsal,
@@ -90,6 +91,7 @@ import {
   SourceCatalogSchema,
   CONSOLE_ACTOR,
   TAKE_ON_AIR_CODE,
+  templateActNaming,
   videoModeRaster,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
@@ -325,6 +327,8 @@ export class MockRuntime {
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
   // R-028 (o1) parity — the bridge pushes the full catalogue on every change.
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
+  // `CONSOLE-POLISH-01` (`B-300`) parity — who changed it, one per accepted import or removal.
+  readonly templatesActed = new Emitter<TemplateAct>();
   // R-028 part B — the declared playout layers' occupancy.
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   // B-145 (2.8) parity — the bridge's OWN Live Source ledger, pushed on change.
@@ -2201,6 +2205,7 @@ export class MockRuntime {
     const templateId = template.templateId;
     const targets = channel !== undefined ? [channel] : this.#declaredTemplateChannels();
     const lists = this.#lists();
+    const wasListed = targets.some((c) => lists.get(c)?.has(templateId) === true);
     for (const c of targets) {
       let list = lists.get(c);
       if (list === undefined) {
@@ -2211,6 +2216,12 @@ export class MockRuntime {
     }
     // R-028 (o1) parity — the catalogue push every browser converges on.
     this.templatesChanged.emit(this.templateList());
+    this.templatesActed.emit({
+      act: wasListed ? 'reimport' : 'import',
+      ...templateActNaming(template),
+      channel: channel ?? null,
+      actor: CONSOLE_ACTOR,
+    });
     this.fixedStateChanged.emit(this.fixedLayersState());
     return { registered: targets.length > 0, templateId };
   }
@@ -2267,9 +2278,16 @@ export class MockRuntime {
       };
     }
 
+    const removed = targets.map((c) => lists.get(c)?.get(templateId)).find((t) => t !== undefined);
     for (const c of targets) lists.get(c)?.delete(templateId);
     // R-028 (o1) parity — the catalogue push every browser converges on.
     this.templatesChanged.emit(this.templateList());
+    this.templatesActed.emit({
+      act: 'remove',
+      ...(removed === undefined ? { templateId } : templateActNaming(removed)),
+      channel: channel ?? null,
+      actor: CONSOLE_ACTOR,
+    });
     return { ok: true };
   }
 

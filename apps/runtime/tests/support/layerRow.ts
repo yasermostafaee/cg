@@ -153,7 +153,12 @@ export function stubBridge(link: Link, reach: Reachability = 'both-up'): RowStub
       out: stubs.out,
       remove: stubs.remove,
     },
-    templates: { list: stubs.list, onChanged: () => () => undefined },
+    templates: {
+      list: stubs.list,
+      onChanged: () => () => undefined,
+      // `B-300` — an open picker listens for who changed the list.
+      onActed: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof cg }).cg = fillBridgeStub(cg);
   return stubs;

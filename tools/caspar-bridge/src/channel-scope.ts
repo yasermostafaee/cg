@@ -231,6 +231,8 @@ export const PUBLISH_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'fixedLayers.config-changed': STATION_WIDE,
   'fixedLayers.banks-changed': STATION_WIDE,
   'templates.changed': STATION_WIDE,
+  // `CONSOLE-POLISH-01` (`B-300`) — who changed it: as wide as the catalogue it names.
+  'templates.acted': STATION_WIDE,
   'delimiters.changed': STATION_WIDE,
   'channelSettings.changed': STATION_WIDE,
   'sources.config-changed': STATION_WIDE,

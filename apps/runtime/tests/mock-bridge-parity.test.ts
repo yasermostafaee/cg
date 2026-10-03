@@ -297,7 +297,8 @@ const BRIDGE_SURFACE: {
     // falls back to its `LibraryStore` only when the bridge cannot be reached; the mock answers
     // `unreachable` (it retains no rendered page), so the rehearsal panel shows its one-line
     // reason. It replaced R-022's `html`, a read of this browser's copy alone.
-    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'page'],
+    // `CONSOLE-POLISH-01` (`B-300`) — `onActed`: who changed the catalogue.
+    templates: ['get', 'list', 'import', 'remove', 'onChanged', 'onActed', 'page'],
     /*
       🔴 `OPERATOR-NAME-SWEEP-01` — **`operatorName` / `setOperatorName` LEFT THIS LIST, and
       this guard is the reason the removal is safe.**

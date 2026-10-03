@@ -110,6 +110,13 @@ const TWO_BOX: TemplateInfo = {
   },
 };
 const LOGO: TemplateInfo = { templateId: 'logo', templateType: 'logo', fields: [] };
+/** `B-300` — the template A removes while B has it chosen: a Persian name, and an id nobody reads. */
+const NEWS_LOWER: TemplateInfo = {
+  templateId: 'news-lower',
+  name: 'زیرنویس خبر',
+  templateType: 'lower-third',
+  fields: [],
+};
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سلام</body></html>';
 
 function freeUdpPort(): Promise<number> {
@@ -266,6 +273,81 @@ test('🔴 §5 — A takes a multi-box page, B sees it ON AIR within a second; B
     await expect(row(a, 80)).toContainText('ON AIR');
     await expect(row(b, 80)).toContainText('ON AIR');
     expect(mock?.layerState({ channel: 1, layer: 80 })?.onAir).toBe(true);
+  } finally {
+    await other.close();
+  }
+});
+
+/**
+ * 🔴 `CONSOLE-POLISH-01` §1 (`B-300`) — the prompt's test: _"two consoles, delete on A, B drops it
+ * within 1 s; control: B's other templates unchanged, and a take from B of a listed template works."_
+ * B's picker has the template CHOSEN when A removes it, so B must also say who removed it, never the
+ * raw refusal or the id; and a Load of it B sends afterwards is refused without leaving a row error.
+ */
+test('🔴 §1 — A removes a template while B’s open picker has it chosen: B drops it within a second and names who; control: B’s other templates stay, and a take from B works', async ({
+  page,
+  browser,
+}) => {
+  const url = await station();
+  bridge?.runtime.templateImport(NEWS_LOWER, HTML, 1);
+  const other = await browser.newContext();
+  try {
+    const a = page;
+    const b = await other.newPage();
+    await signedIn(a, url, FAKE_OPERATOR.username);
+    await signedIn(b, url, FAKE_BOTH_CHANNELS_OPERATOR.username);
+
+    // B opens LOAD on row 81 and chooses the template.
+    await row(b, 81).getByRole('button', { name: 'LOAD' }).click();
+    const picker = b.getByRole('dialog');
+    const choice = (id: string) => picker.locator(`[data-template-id="${id}"]`);
+    await choice('news-lower')
+      .getByRole('button', { name: /^Select / })
+      .click();
+    await expect(picker.locator('[data-template-commit]')).toBeEnabled();
+
+    // ── A removes it from CH 1, through its own bridge client ──
+    expect(
+      await call(a, 'templates', 'remove', { templateId: 'news-lower', channel: 1 }),
+    ).toMatchObject({ ok: true });
+
+    // B: gone within a second, and one line says what and who — never the id, never a refusal.
+    await expect(choice('news-lower')).toHaveCount(0, { timeout: ONE_SECOND });
+    const line = picker.locator('[data-modal-message]');
+    await expect(line).toContainText('was removed on another console by', { timeout: ONE_SECOND });
+    await expect(line).toContainText(NEWS_LOWER.name ?? '');
+    await expect(line).toContainText(FAKE_OPERATOR.name);
+    await expect(line).not.toContainText('news-lower');
+    await expect(picker.locator('[data-template-commit]')).toBeDisabled();
+    // CONTROL — B's other templates are listed as before.
+    await expect(choice('logo')).toHaveCount(1);
+    await expect(choice('two-box')).toHaveCount(1);
+    // A made the act: A's console never reports it as another console's.
+    await expect(a.getByText(/another console/i)).toHaveCount(0);
+
+    // CONTROL — a take from B of a template still listed works: the logo onto row 81, then PLAY.
+    await choice('logo')
+      .getByRole('button', { name: /^Select / })
+      .click();
+    await picker.locator('[data-template-commit]').click();
+    await expect(picker).toHaveCount(0);
+    await row(b, 81).getByRole('button', { name: 'PLAY' }).click();
+    await expect(row(b, 81)).toContainText('ON AIR');
+    await expect(row(a, 81)).toContainText('ON AIR');
+    await expect.poll(() => mock?.layerState({ channel: 1, layer: 81 })?.onAir).toBe(true);
+
+    // A Load of the removed template that B sends anyway is refused, and leaves no row error.
+    expect(
+      await call(b, 'fixedLayers', 'load', {
+        channel: 1,
+        layer: 82,
+        itemId: 'stale-82',
+        templateId: 'news-lower',
+        fields: {},
+      }),
+    ).toMatchObject({ accepted: false, errorCode: 'unknown-template' });
+    await expect(b.locator('[data-layers-tally-error]')).toHaveCount(0);
+    await expect(a.locator('[data-layers-tally-error]')).toHaveCount(0);
   } finally {
     await other.close();
   }

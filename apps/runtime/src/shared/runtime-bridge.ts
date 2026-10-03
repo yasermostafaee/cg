@@ -86,6 +86,7 @@ import type {
   PlayoutLayersStateChannel,
   LiveLayersStateChannel,
   StackNextChannel,
+  TemplateAct,
   TemplateInfo,
   TemplatesGetChannel,
   TemplatesImportChannel,
@@ -781,6 +782,12 @@ export interface RuntimeBridge {
      * surfaces is how operator B's Library re-lists when operator A imports.
      */
     onChanged(handler: (templates: TemplateInfo[]) => void): Unsubscribe;
+    /**
+     * 🔴 `CONSOLE-POLISH-01` (`B-300`) — WHO changed the catalogue: one per accepted import,
+     * re-import or removal, from ANY console, this one included. An open picker reads it to name
+     * a removal another console made instead of letting the next Load meet a raw refusal.
+     */
+    onActed(handler: (act: TemplateAct) => void): Unsubscribe;
     /**
      * 🔴 `RELEASE-091-01` §1 (`B-288`) — **THE PAGE PVW RENDERS**: the one the bridge serves
      * CasparCG for the version `channel` lists (`templates.page`), on any machine and in any

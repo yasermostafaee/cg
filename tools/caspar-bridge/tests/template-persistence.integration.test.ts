@@ -5,7 +5,14 @@ import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
-import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import {
+  CONSOLE_ACTOR,
+  type ConnectionConfig,
+  type TemplateAct,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
+import { runAsActor } from '../src/actor-context.js';
+import type { AuthSession } from '../src/auth-session.js';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
@@ -163,6 +170,43 @@ it('R-028 (o1) — import and removal each publish the FULL catalogue (all brows
   expect(r.templateRemove('tpl-a').ok).toBe(true);
   expect(published).toHaveLength(3);
   expect(published[2]?.map((t) => t.templateId)).toEqual(['tpl-b']);
+});
+
+it('`B-300` — every ACCEPTED import, re-import and removal says who did what, on which channel; a refused one says nothing', async () => {
+  const r = await bootRuntime(templatesDir());
+  const acted: TemplateAct[] = [];
+  r.templatesActed.subscribe((a) => acted.push(a));
+  // A console's request with a verified principal is that person's act.
+  const sara = { token: { principal: { name: 'سارا', sub: 'u-1' } } } as unknown as AuthSession;
+
+  runAsActor(sara, () => r.templateImport(info('tpl-a', 'زیرنویس'), HTML, 1));
+  runAsActor(sara, () =>
+    r.templateImport({ ...info('tpl-a', 'زیرنویس'), sourceFileName: 'news.vcg' }, HTML + ' ', 1),
+  );
+  // A console with no sign-in is a console, not a person.
+  runAsActor(null, () => expect(r.templateRemove('tpl-a', 1).ok).toBe(true));
+  // Refused (nothing to remove): no act.
+  runAsActor(sara, () => expect(r.templateRemove('tpl-a', 1).ok).toBe(false));
+
+  expect(acted).toEqual([
+    { act: 'import', templateId: 'tpl-a', name: 'زیرنویس', channel: 1, actor: 'سارا' },
+    {
+      act: 'reimport',
+      templateId: 'tpl-a',
+      name: 'زیرنویس',
+      sourceFileName: 'news.vcg',
+      channel: 1,
+      actor: 'سارا',
+    },
+    {
+      act: 'remove',
+      templateId: 'tpl-a',
+      name: 'زیرنویس',
+      sourceFileName: 'news.vcg',
+      channel: 1,
+      actor: CONSOLE_ACTOR,
+    },
+  ]);
 });
 
 it('R-028 (3.3) — after a restart, row identity is UNKNOWN honestly: never guessed from the persisted registry', async () => {

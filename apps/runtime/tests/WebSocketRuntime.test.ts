@@ -87,11 +87,18 @@ it('selects live, round-trips a read, and delivers a published delta over the WS
   */
   const lists: string[][] = [];
   runtime.templates.onChanged((list) => lists.push(list.map((t) => t.templateId)));
+  // `B-300` — and who did it, on the same socket.
+  const acts: unknown[] = [];
+  runtime.templates.onActed((a) => acts.push(a));
   await runtime.templates.import({
     template: { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
     html: '<!doctype html><html><body>ws</body></html>',
   });
   await waitFor(() => lists.some((ids) => ids.includes('lower-third')));
+  await waitFor(() => acts.length > 0);
+  expect(acts).toEqual([
+    { act: 'import', templateId: 'lower-third', channel: null, actor: 'console' },
+  ]);
 });
 
 it('on a mid-session drop: goes DISCONNECTED, rejects commands, never falls back to mock', async () => {

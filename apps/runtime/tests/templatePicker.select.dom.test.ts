@@ -94,6 +94,9 @@ function installBridge(assignments: SourceAssignments = { assignments: [] }): vo
     templates: {
       list: () => Promise.resolve([GRAPHIC, BED]),
       remove: () => Promise.resolve({ ok: true }),
+      // `B-300` — an open picker follows CG Bridge's list.
+      onChanged: () => () => undefined,
+      onActed: () => () => undefined,
     },
     sources: {
       config: () => Promise.resolve({ sources: [] }),

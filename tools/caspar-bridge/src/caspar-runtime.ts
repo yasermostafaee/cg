@@ -82,6 +82,8 @@ import {
   type OrphanLayer,
   type OwnedOccupancyWarning,
   type PendingUpdate,
+  type TemplateAct,
+  templateActNaming,
   type TemplateInfo,
   type TemplatePageRefusal,
   type ClearedOutsideLayer,
@@ -1277,6 +1279,12 @@ export class CasparRuntime {
    * so every connected browser converges on the same library.
    */
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
+  /**
+   * 🔴 `CONSOLE-POLISH-01` (`B-300`) — WHO changed the catalogue, beside {@link templatesChanged}'s
+   * WHAT: one per accepted import, re-import or removal. A console whose open picker holds a
+   * template another console removed names the act from this instead of meeting a raw refusal.
+   */
+  readonly templatesActed = new Emitter<TemplateAct>();
   /** R-028 part B — emitted ONLY when the declared playout layers' state changes. */
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   /** R-034 — emitted with the full delimiter list whenever a browser changes it. */
@@ -13660,10 +13668,17 @@ export class CasparRuntime {
   ): { registered: boolean; templateId: string } {
     const templateId = template.templateId;
     const targets: readonly number[] = channel === undefined ? this.#declaredChannels() : [channel];
+    const wasListed = targets.some((c) => this.#templates.hasOn(c, templateId));
     const { changed } = this.#templates.importOn(targets, template, html);
     if (changed.length > 0) {
       // R-028 (o1) — every browser converges on the same catalogue.
       this.templatesChanged.emit(this.#templates.listAll());
+      this.templatesActed.emit({
+        act: wasListed ? 'reimport' : 'import',
+        ...templateActNaming(template),
+        channel: channel ?? null,
+        actor: operatorActor(),
+      });
       // A re-import can change the template's display name — the rows naming it
       // must follow (published through the same change-compare as always).
       this.#publishFixedStateIfChanged();
@@ -13850,11 +13865,22 @@ export class CasparRuntime {
       };
     }
 
+    // `B-300` — the name the operator knew it by, read while it is still listed.
+    const removed =
+      channel === undefined
+        ? this.#templates.getAny(templateId)
+        : this.#templates.getOn(channel, templateId);
     // `CENTRAL-BRIDGE-01` (`B-294`) — no tombstone: R-028 part B kept one so a console's reconnect
     // re-delivery could not bring a removed template back, and a console re-delivers nothing now.
     this.#templates.removeFrom(targets, templateId);
     // R-028 (o1) — every browser converges on the same catalogue.
     this.templatesChanged.emit(this.#templates.listAll());
+    this.templatesActed.emit({
+      act: 'remove',
+      ...(removed === null ? { templateId } : templateActNaming(removed)),
+      channel: channel ?? null,
+      actor: operatorActor(),
+    });
     return { ok: true };
   }
 

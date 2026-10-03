@@ -155,6 +155,7 @@ import {
   SourcesRefreshChannel,
   SourcesSetAssignmentsChannel,
   SourcesSetConfigChannel,
+  TemplatesActedChannel,
   TemplatesChangedChannel,
   TemplatesGetChannel,
   TemplatesPageChannel,
@@ -3639,6 +3640,8 @@ export function wirePublishes(
     backing.fixedStateChanged.subscribe((s) => push(FixedLayersStateChangedChannel, s)),
     // R-028 (o1) — the bridge-owned template catalogue.
     backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
+    // `CONSOLE-POLISH-01` (`B-300`) — who imported, re-imported or removed which template.
+    backing.templatesActed.subscribe((a) => push(TemplatesActedChannel, a)),
     // R-028 part B — the declared playout layers' occupancy.
     backing.playoutStateChanged.subscribe((s) => push(PlayoutLayersStateChangedChannel, s)),
     // B-145 (2.8) — the ledger, projected through the SAME projectLiveLayers the

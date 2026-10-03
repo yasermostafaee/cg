@@ -77,6 +77,9 @@ function installBridge(templates: TemplateInfo[]): void {
     templates: {
       list: () => Promise.resolve(templates),
       remove: () => Promise.resolve({ ok: true }),
+      // `B-300` — an open picker follows CG Bridge's list.
+      onChanged: () => () => undefined,
+      onActed: () => () => undefined,
     },
     sources: {
       config: () => Promise.resolve({ sources: [] }),

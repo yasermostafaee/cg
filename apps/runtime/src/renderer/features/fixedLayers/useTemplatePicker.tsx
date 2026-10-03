@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -42,6 +43,11 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { templateDisplayName } from '../library/templateName.js';
+import {
+  noteOwnRemoval,
+  removedElsewhereLine,
+  subscribeTemplateActs,
+} from '../library/templateActs.js';
 import { Tag } from '../../ui/Tag.js';
 
 /**
@@ -73,8 +79,13 @@ import { Tag } from '../../ui/Tag.js';
  * (open the OS chooser), a DROPPED file, or a dismissal — and the caller owns the
  * import chain exactly as before.
  *
- * The list is pulled at OPEN time rather than subscribed: the dialog is short-lived,
- * so a snapshot taken when it opens is exactly what the operator is choosing from.
+ * ~~The list is pulled at OPEN time rather than subscribed: the dialog is short-lived,
+ * so a snapshot taken when it opens is exactly what the operator is choosing from.~~
+ * 🔴 `CONSOLE-POLISH-01` (`B-300`) — **WRONG ONCE THERE ARE TWO CONSOLES.** The owner removed a
+ * template on A while B's picker was open; B kept listing it and B's Load of it met a raw refusal.
+ * The list is still pulled at open, and then RE-READ on every `templates.changed` for as long as
+ * the dialog is open (only then: this hook is mounted by every row). A removal another console made
+ * of the template chosen here says so in one line, naming who (`templateActs.ts`).
  *
  * 🔴 `CHANNEL-TEMPLATES-01` (the owner, 2026-09-28) — **IT IS THE ROW'S CHANNEL'S LIST.** Each
  * channel has its own template list: the picker shows the destination row's channel's list only,
@@ -492,6 +503,50 @@ export function useTemplatePicker(): {
     [channel],
   );
 
+  /*
+    🔴 `CONSOLE-POLISH-01` (`B-300`) — **WHILE OPEN, THE LIST FOLLOWS CG BRIDGE.** Every
+    `templates.changed` re-reads this channel's list: a template another console imported appears, one
+    it re-imported is the new version (and stays chosen), one it removed goes — and stops being the
+    selection, so `Load` cannot send it. When the removed one WAS the selection, the region says who
+    removed it. Subscribed only while the dialog is open: this hook is mounted by every row.
+  */
+  const open = request !== null;
+  const selectedRef = useRef<TemplateInfo | null>(null);
+  selectedRef.current = selected;
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    const relist = (): void => {
+      window.cg.templates.list(listRequest(channel)).then(
+        (templates) => {
+          if (!alive) return;
+          setRequest((current) => (current === null ? null : { ...current, templates }));
+          setSelected((current) =>
+            current === null
+              ? null
+              : (templates.find((t) => t.templateId === current.templateId) ?? null),
+          );
+        },
+        // An unanswered re-read leaves the list as it was; the next change re-reads again.
+        () => undefined,
+      );
+    };
+    const offChanged = window.cg.templates.onChanged(relist);
+    const offActed = subscribeTemplateActs((act, fromHere) => {
+      if (act.act !== 'remove' || fromHere) return;
+      if (act.channel !== null && act.channel !== channel) return;
+      if (selectedRef.current?.templateId !== act.templateId) return;
+      setSelected(null);
+      setReferences([]);
+      setMessage({ role: 'notice', text: removedElsewhereLine(act) });
+    });
+    return () => {
+      alive = false;
+      offChanged();
+      offActed();
+    };
+  }, [open, channel]);
+
   /**
    * Read how many rows hold each template — the aside's usage line.
    *
@@ -611,12 +666,15 @@ export function useTemplatePicker(): {
       if (!ok) return;
       setMessage(null);
       setReferences([]);
+      // `B-300` — this console's own removal: its publish must never read as another console's.
+      const withdraw = noteOwnRemoval(template.templateId, onChannel);
       try {
         const res = await window.cg.templates.remove({
           templateId: template.templateId,
           ...(onChannel !== undefined && { channel: onChannel }),
         });
         if (!res.ok) {
+          withdraw();
           // IN THE DIALOG, not the toast. The entry is still listed, because it
           // is still there — the two together are the honest report.
           setMessage({
@@ -633,6 +691,7 @@ export function useTemplatePicker(): {
         const templates = await window.cg.templates.list(listRequest(onChannel));
         setRequest((current) => (current === null ? null : { ...current, templates }));
       } catch (err) {
+        withdraw();
         setMessage({
           role: 'refusal',
           text: err instanceof Error ? err.message : 'The template could not be removed.',

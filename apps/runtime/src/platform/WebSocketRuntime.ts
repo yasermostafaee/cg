@@ -65,7 +65,9 @@ import {
   StackStateChangedChannel,
   StackTakeChannel,
   StackUpdateChannel,
+  TemplatesActedChannel,
   TemplatesChangedChannel,
+  type TemplateAct,
   DelimitersChangedChannel,
   DelimitersListChannel,
   DelimitersSetChannel,
@@ -513,6 +515,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #statusSubs = new Subs<BridgeLinkStatus>();
   // R-028 (o1) — the bridge-owned catalogue push.
   readonly #templatesSubs = new Subs<TemplateInfo[]>();
+  // `CONSOLE-POLISH-01` (`B-300`) — who changed the catalogue.
+  readonly #templatesActedSubs = new Subs<TemplateAct>();
   // R-028 part B — the declared playout layers' occupancy push.
   readonly #playoutSubs = new Subs<PlayoutLayerState[]>();
   // B-145 (2.8) — the bridge-owned Live Source ledger push.
@@ -1356,6 +1360,12 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#templatesSubs.emit(p.data);
         break;
       }
+      // `CONSOLE-POLISH-01` (`B-300`) — who changed the catalogue.
+      case TemplatesActedChannel.name: {
+        const p = TemplatesActedChannel.payload.safeParse(payload);
+        if (p.success) this.#templatesActedSubs.emit(p.data);
+        break;
+      }
       case PlayoutLayersStateChangedChannel.name: {
         const p = PlayoutLayersStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#playoutSubs.emit(p.data);
@@ -2152,6 +2162,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     // operator B's Library re-lists the moment operator A imports.
     onChanged: (handler: (templates: TemplateInfo[]) => void): Unsubscribe =>
       this.#templatesSubs.add(handler),
+    onActed: (handler: (act: TemplateAct) => void): Unsubscribe =>
+      this.#templatesActedSubs.add(handler),
   };
 
   readonly audit = {

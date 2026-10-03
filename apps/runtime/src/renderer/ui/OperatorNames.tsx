@@ -33,6 +33,16 @@ export function directionOf(text: string): 'rtl' | 'ltr' {
 }
 
 /**
+ * `B-300` — a name inside a PLAIN-TEXT line (a dialog's message region, which is a string by
+ * contract): the string form of a `<bdi dir>`, isolated in its own {@link directionOf} — a
+ * right-to-left isolate for a name with Persian in it, a left-to-right one otherwise.
+ */
+export function isolateText(text: string): string {
+  const open = String.fromCodePoint(directionOf(text) === 'rtl' ? 0x2067 : 0x2066);
+  return `${open}${text}${String.fromCodePoint(0x2069)}`;
+}
+
+/**
  * 🔴 **THE NAMES, EACH IN ITS OWN BIDI ISOLATE.**
  *
  * `operatorRowName` decides WHAT to say; this decides how to put it on a line without the
