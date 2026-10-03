@@ -103,7 +103,10 @@ was stashed before each push so the gate judged only what was pushed.
       and search, live rows; the count is the rows held
 - [x] 7.4 `logs.zip` carries every kept audit file under `audit/`; a file renamed by a rotation between
       listing and reading is listed and read again (found when the pre-push gate of `2381c1f8` reddened
-      `http-tickets` — its seeded row was from an earlier day, so a sign-in rotated the file mid-download)
+      `http-tickets` — its seeded row was from an earlier day, so a sign-in rotated the file mid-download).
+      Pushed `d73205c2` (with `2381c1f8`); CI COMPLETED green, jobs RUN — PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37143906005> (`E2E (Playwright)` RAN: runtime
+      326 passed, designer 293), Desktop <https://github.com/yasermostafaee/cg/actions/runs/37143906006>
 - [x] 7.5 Tests: `@cg/audit` `page.test` (50,000 rows: first page < 250 ms; paging; a filter; a rotation
       between pages; rotation and retention), bridge `audit-page.integration` (a scoped console's full
       page; the search by a row's alias; the push scoped), `http-tickets` (the zip), dom
