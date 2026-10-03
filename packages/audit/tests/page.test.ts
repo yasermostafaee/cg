@@ -141,6 +141,104 @@ describe('readAuditPage', () => {
   });
 });
 
+describe('readAuditPage — the edges a long record reaches', () => {
+  it('a page that needs many chunks carries a line across each chunk boundary, byte for byte', async () => {
+    const filePath = path.join(await dir(), 'bridge-audit.ndjson');
+    await seed(filePath, 20_000);
+    // Every thousandth row (item-1000 … item-19000): 19 matches spread over the whole ~3 MB file, so
+    // the read crosses many 64 KB chunks and every row that straddles a boundary is joined from two
+    // reads — a wrongly joined row would not parse, and its match would be missing.
+    const page = await readAuditPage({
+      filePath,
+      limit: 100,
+      accept: (e) => (e.itemId ?? '').endsWith('000'),
+    });
+    expect(ids(page.entries)).toEqual(
+      Array.from({ length: 19 }, (_, i) => `item-${String((19 - i) * 1000)}`),
+    );
+    expect(page.next).toBeNull();
+  });
+
+  it('a page that ends at a file’s FIRST row continues in the file before it', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    const older = Date.parse('2026-09-29T09:00:00.000Z');
+    const olderStamp = stampOf(new Date(older).toISOString());
+    const olderLines = Array.from({ length: 50 }, (_, n) => JSON.stringify(row(n, older)));
+    await fs.promises.writeFile(
+      path.join(d, `bridge-audit.${olderStamp}.ndjson`),
+      `${olderLines.join('\n')}\n`,
+    );
+    await seed(filePath, 100);
+    const first = await readAuditPage({ filePath, limit: 100, accept: all });
+    expect(first.entries.at(-1)?.itemId).toBe('item-0');
+    expect(first.next?.file).toBe(olderStamp);
+    const second = await readAuditPage({
+      filePath,
+      cursor: first.next as AuditPageCursor,
+      limit: 100,
+      accept: all,
+    });
+    expect(second.entries).toHaveLength(50);
+    expect(second.entries[0]?.ts).toBe(new Date(older + 49_000).toISOString());
+    expect(second.next).toBeNull();
+  });
+
+  it('a cursor whose file retention deleted continues in the newest file older than it; one older than all is the end', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    const oldest = Date.parse('2026-09-20T09:00:00.000Z');
+    const oldestStamp = stampOf(new Date(oldest).toISOString());
+    await fs.promises.writeFile(
+      path.join(d, `bridge-audit.${oldestStamp}.ndjson`),
+      `${JSON.stringify(row(7, oldest))}\n`,
+    );
+    await seed(filePath, 3);
+    const gone = { file: stampOf('2026-09-25T09:00:00.000Z'), before: 999 };
+    const after = await readAuditPage({ filePath, cursor: gone, limit: 100, accept: all });
+    expect(ids(after.entries)).toEqual(['item-7']);
+    const beforeAll = { file: stampOf('2026-01-01T00:00:00.000Z'), before: 1 };
+    expect(await readAuditPage({ filePath, cursor: beforeAll, limit: 100, accept: all })).toEqual({
+      entries: [],
+      next: null,
+    });
+    // And a page of nothing asks for nothing.
+    expect(await readAuditPage({ filePath, limit: 0, accept: all })).toEqual({
+      entries: [],
+      next: null,
+    });
+  });
+
+  it('a current file whose first line is torn is still read, under a name a cursor can hold', async () => {
+    const filePath = path.join(await dir(), 'bridge-audit.ndjson');
+    await fs.promises.writeFile(
+      filePath,
+      `{"ts":"2026-10-0\n${JSON.stringify(row(1))}\n${JSON.stringify(row(2))}\n`,
+    );
+    const files = await auditFiles(filePath);
+    expect(files.map((f) => f.stamp)).toEqual(['current']);
+    const page = await readAuditPage({ filePath, limit: 1, accept: all });
+    expect(ids(page.entries)).toEqual(['item-2']);
+    const rest = await readAuditPage({
+      filePath,
+      cursor: page.next as AuditPageCursor,
+      limit: 100,
+      accept: all,
+    });
+    expect(ids(rest.entries)).toEqual(['item-1']);
+  });
+
+  it('a first row longer than one read still names its file; a missing folder holds no record; a stray file is no part of it', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    const long = { ...row(0), actor: 'x'.repeat(6000) };
+    await fs.promises.writeFile(filePath, `${JSON.stringify(long)}\n`);
+    await fs.promises.writeFile(path.join(d, 'bridge-audit.backup.ndjson'), 'not a stamp\n');
+    expect((await auditFiles(filePath)).map((f) => f.stamp)).toEqual([stampOf(long.ts)]);
+    expect(await auditFiles(path.join(d, 'no-such-folder', 'bridge-audit.ndjson'))).toEqual([]);
+  });
+});
+
 const ROTATION: AuditRotation = {
   maxBytes: 20 * 1024 * 1024,
   daily: true,
@@ -166,6 +264,24 @@ describe('AuditWriter rotation and retention', () => {
       (await fs.promises.readFile(p, 'utf8')).split('\n').filter((l) => l !== '').length;
     expect(await lines(files[0]?.path ?? '')).toBe(1);
     expect(await lines(files[1]?.path ?? '')).toBe(2);
+  });
+
+  it('a rotated name already taken is not overwritten: the file is named with -1', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    const day1 = row(0, Date.parse('2026-10-01T12:00:00.000Z'));
+    const taken = path.join(d, `bridge-audit.${stampOf(day1.ts)}.ndjson`);
+    await fs.promises.writeFile(taken, `${JSON.stringify(day1)}\n`);
+    const writer = new AuditWriter({ filePath, rotation: ROTATION });
+    await writer.append(day1);
+    await writer.append(row(1, Date.parse('2026-10-03T12:00:00.000Z')));
+    await writer.close();
+    expect((await rotatedFiles(filePath)).map((f) => path.basename(f.path))).toEqual([
+      `bridge-audit.${stampOf(day1.ts)}.ndjson`,
+      `bridge-audit.${stampOf(day1.ts)}-1.ndjson`,
+    ]);
+    // The one that was there is untouched.
+    expect((await fs.promises.readFile(taken, 'utf8')).trim()).toBe(JSON.stringify(day1));
   });
 
   it('rotates at the size limit', async () => {
