@@ -12810,7 +12810,7 @@ every unmount. And `localhost`: the dev station sends a `localhost:5174` page to
 the origin the Playout's CORS list admits. Tests: `dev-station.spec.ts` (through Vite),
 `programPicture.dom.test.ts`, `vite-config.test.ts`, `station-plan.test.ts`.
 
-## [~] B-286 — a backup server is sent the primary's media paths, byte for byte ⟨priority: medium⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` §0.8 · CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` A (`openspec/changes/playout-features/` §4) · owed: a Playout pair on `2.9.1`
+## [x] B-286 — a backup server is sent the primary's media paths, byte for byte ⟨priority: medium⟩ — FILED 2026-09-27 by `PLAYOUT-SOURCES-01` §0.8 · CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` A (§4) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: a Playout pair on `2.9.1`
 
 The bridge builds each AMCP line once, and `RedundancyAdapter.send` mirrors that SAME string to
 server B (`mirror-sync`, the default — `redundancy-adapter.ts:250-253`) or replays the journaled
@@ -13058,7 +13058,7 @@ Bridge ON the Playout machine given the machine's network address as its Playout
 installer's loopback default) rewrites both to that address while it drives `127.0.0.1`, so neither joins —
 an undocumented configuration; both documents say `/S` alone there.
 
-## [~] B-298 — An NDI input that is a channel's own output could be taken on that channel: a feedback loop ⟨priority: medium — nothing tells an operator which NDI name is which channel's output⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B · `openspec/changes/playout-features/` (§2)
+## [x] B-298 — An NDI input that is a channel's own output could be taken on that channel: a feedback loop ⟨priority: medium — nothing tells an operator which NDI name is which channel's output⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) (§2)
 
 **Found:** the Playout lists NDI inputs by the name its NDI finder sees — on `.111`, `MTA (APASAI)` is
 channel 1's own output, and `MTA (APASAI-CGTEST2)` is channel 2's (`PLAYOUT-CG-RESPONSE-ROUTE-ON-DONE-v1.md`
@@ -13079,7 +13079,7 @@ lands), `sourcePicker.dom.test.ts`, `takeRefusalLine.test.ts`. **Owed:** `.111` 
 `ownOutputOf` channel 1; CG's test channel is 2, so there it is offered (the control) — the refusal needs
 `MTA (APASAI-CGTEST2)` listed, which the Playout team offered to add.
 
-## [~] B-299 — A swap (or an UPDATE) to a Playout route the row's channel may not show was ACCEPTED, sent nothing, and left the old picture on air ⟨priority: medium — the console said the swap landed when it had not⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B (found building `B-298`) · `openspec/changes/playout-features/` (§2)
+## [x] B-299 — A swap (or an UPDATE) to a Playout route the row's channel may not show was ACCEPTED, sent nothing, and left the old picture on air ⟨priority: medium — the console said the swap landed when it had not⟩ — FILED AND CLOSED IN CODE 2026-09-30 by `PLAYOUT-FEATURES-01` B (found building `B-298`) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) (§2)
 
 **Found (measured):** on a CH 2 row with `ورودی ۳` (`route://9-12`, channels 1 and 2) on air,
 `swapLiveSource(row, 'l1', 'ورودی ۴')` — a route whose `compatibleChannels` name channel 1 only — answered

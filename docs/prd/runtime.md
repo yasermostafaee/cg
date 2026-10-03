@@ -4198,7 +4198,7 @@ channel empty (the old list stays dormant); template audit rows name no channel;
 still local-wins (`B-085`); a browser's record from before the change re-delivers only as a restore (never
 a replacement), and not at all once a channel has removed it.
 
-## [~] R-075 — The Playout's running playlist as a plate source ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.1 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §1 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` C in `openspec/changes/playout-features/` (§3) · owed: `2.9.2` on `.111`
+## [x] R-075 — The Playout's running playlist as a plate source ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.1 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §1 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` C (§3) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
 
 **What.** A channel's running playlist appears inside a CG box — a squeeze-back or an L-shaped look —
 with our graphics around it. It comes from the Playout as a D10 input (for example a `route` to the
@@ -4231,7 +4231,7 @@ tick error that clears the box with no `epoch` change is caught by `B-292`'s sil
 `sourcePicker.dom.test.ts`, `playlistAudioLock.dom.test.ts`, e2e `playlist-output.spec.ts`. **Owed:** `2.9.2`
 on `.111`, where both channels' L is 5.
 
-## [~] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` E in `openspec/changes/playout-features/` (§5) · owed: `2.9.2` on `.111`
+## [x] R-076 — PGM audio in CG Control, in sync with the PGM picture, with a VU meter ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.2 · ANSWERED by `PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §2 (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` E (§5) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
 
 **What.** The programme's sound in CG Control, in sync with the PGM monitor's picture, and a VU meter
 like the Playout's own. It REUSES the Playout's way of syncing audio and its level source — no second
@@ -4258,7 +4258,7 @@ only in a narrower browser. Tests: `pgm-audio.test.ts`, `playout-meters.integrat
 `pgmAudioPlayer.test.ts`, `meterScale.test.ts`, `programMeter.dom.test.ts`, e2e `programme-sound.spec.ts`.
 **Owed:** `2.9.2` on `.111` (the meters endpoint), and a listen on the plant.
 
-## [~] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · ANSWERED by `PLAYOUT-CG-RESPONSE-LICENSE-v1.md` (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` D in `openspec/changes/playout-features/` (§1) · owed: `2.9.2` on `.111`
+## [x] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · ANSWERED by `PLAYOUT-CG-RESPONSE-LICENSE-v1.md` (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` D (§1) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
 
 **What.** CG Control works with a Playout only if that Playout's license includes CG Control. The
 Playout is the only license authority: it refuses an unlicensed CG Control at the `cg-admin` sign-in
