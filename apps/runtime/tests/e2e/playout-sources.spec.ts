@@ -111,6 +111,21 @@ test('the picker hangs from its field, over the dialog — not a second modal �
   await expect(panel.getByRole('tab', { name: 'Inputs 7' })).toBeVisible();
   await expect(panel.getByRole('tab', { name: 'Media 124' })).toBeVisible();
 
+  /*
+    🔴 `B-302` — THE TABS START WHERE THE ROWS START. The owner's screenshot (2026-09-30): `Inputs 0` sat
+    flush against the panel's left edge. Measured here because jsdom has no layout (golden rule 12c): the
+    first tab's box (a tab has no inline padding of its own, so its box IS its text) against the panel's
+    edge, and against where a row's content starts (its box plus its own padding).
+  */
+  const firstTab = await panel.getByRole('tab', { name: 'Inputs 7' }).boundingBox();
+  const row = panel.locator('[data-picker-input="in-studio-1"]');
+  const rowBox = await row.boundingBox();
+  const rowPad = await row.evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+  if (firstTab === null || rowBox === null) throw new Error('the tab and the row must have a box');
+  const tabInset = firstTab.x - panelBox.x;
+  expect(tabInset, 'the tab is inset from the panel edge').toBeGreaterThanOrEqual(8);
+  expect(Math.abs(tabInset - (rowBox.x + rowPad - panelBox.x))).toBeLessThanOrEqual(1.5);
+
   // 🔴 Escape closes the PICKER — the dialog under it survives, and focus is back on the field.
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
