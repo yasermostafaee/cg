@@ -2994,15 +2994,19 @@ export class CasparRuntime {
   ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
-    const seq = this.#nextSeq();
-    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
+    /*
+      🔴 `B-301` — **A REFUSED LOAD CREATES NOTHING.** The intent used to be applied HERE, before the
+      checks, so every refusal below left a stack item behind — in `error`, with no layer: no row shows
+      it, no OSC settles it, it was saved and restored, and the Layers badge counted it forever (the
+      owner's `2 in error`, 2026-09-30). The checks now run first and the intent is applied only on the
+      way into `#loadOnto`; a refusal is answered and audited exactly as before, and changes nothing.
+    */
 
     // Reconnect-reconciliation — never blind-ADD a URL the bridge can't serve:
     // an unregistered template is a visible failed load. (Real CasparCG would
     // 202 the ADD without fetching and CEF-load the 404 page — a silent blank
     // on air; the guard is what makes the failure loud.)
     if (!this.#templates.hasAny(templateId)) {
-      this.#reconciler.applyAck(seq, false, 'unknown-template');
       return { accepted: false, errorCode: 'unknown-template' };
     }
 
@@ -3018,20 +3022,21 @@ export class CasparRuntime {
       // Library's Load toast can say it.
       const foreignBlocked = err instanceof OutOfLayersError && err.quarantinedInRange > 0;
       const code = foreignBlocked ? 'no-layer-foreign-occupied' : 'no-layer';
-      this.#reconciler.applyAck(seq, false, code);
       return { accepted: false, errorCode: code };
     }
     // `CHANNEL-TEMPLATES-01` — the layer's channel must LIST the template: a row takes its own
     // channel's version, never another channel's. Checked once the channel is known.
     if (!this.#templates.hasOn(slot.channel, templateId)) {
       this.#releaseSlot(slot);
-      this.#reconciler.applyAck(seq, false, 'unknown-template');
       return { accepted: false, errorCode: 'unknown-template' };
     }
 
     // The layer is only known HERE, after allocation — the refusals above it
     // genuinely have no slot to name, and inventing one would be worse than the gap.
     detail.slot = slot;
+    // `B-301` — every check passed: only now does the item exist.
+    const seq = this.#nextSeq();
+    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
     return this.#loadOnto(itemId, templateId, fields, slot, seq);
   }
 
@@ -3079,8 +3084,9 @@ export class CasparRuntime {
   ): Promise<{ accepted: boolean; errorCode?: string }> {
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
-    const seq = this.#nextSeq();
-    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
+    // 🔴 `B-301` — the checks run FIRST and a refusal creates nothing (see `#loadImpl`): the intent is
+    // applied only once every check has passed, on the way into `#loadOnto`. A refused re-load of a
+    // row's OWN item no longer replaces that row's record with a layerless one in `error` either.
 
     // Same guard, same code as `load()`: never blind-ADD a URL we cannot serve.
     // `CHANNEL-TEMPLATES-01` — on THE ROW'S channel: a template another channel lists is not
@@ -3091,11 +3097,9 @@ export class CasparRuntime {
       ? this.#templates.hasOn(slot.channel, templateId)
       : this.#templates.hasAny(templateId);
     if (!listed) {
-      this.#reconciler.applyAck(seq, false, 'unknown-template');
       return { accepted: false, errorCode: 'unknown-template' };
     }
     if (!this.#layers.isFixed(slot)) {
-      this.#reconciler.applyAck(seq, false, 'not-fixed');
       return { accepted: false, errorCode: 'not-fixed' };
     }
     /*
@@ -3126,7 +3130,6 @@ export class CasparRuntime {
       const wanted = info === null ? 'high' : requiredBankFor(info);
       const actual = isLowBankLayer(declaredBank, slot.layer) ? 'low' : 'high';
       if (wanted !== actual) {
-        this.#reconciler.applyAck(seq, false, 'wrong-bank');
         return { accepted: false, errorCode: 'wrong-bank' };
       }
     }
@@ -3181,11 +3184,9 @@ export class CasparRuntime {
      */
     const boundItemId = this.#itemBoundToSlot(slot);
     if (boundItemId !== undefined && boundItemId !== itemId) {
-      this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
     }
     if (boundItemId === itemId && this.#loaded.has(itemId)) {
-      this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
     }
     // Re-binding the SAME item onto its own empty row: drop the stale binding so
@@ -3193,9 +3194,11 @@ export class CasparRuntime {
     // the dynamic pool, so this cannot leak a fixed layer into allocation.
     if (boundItemId === itemId) this.#layers.unbindFixed(slot);
     if (!this.#layers.bindFixed(slot, templateType)) {
-      this.#reconciler.applyAck(seq, false, 'slot-bound');
       return { accepted: false, errorCode: 'slot-bound' };
     }
+    // `B-301` — every check passed: only now does the item exist.
+    const seq = this.#nextSeq();
+    this.#reconciler.applyIntent({ kind: 'load', itemId, templateId, fields }, seq);
     // NOTE: the state is published from `#loadOnto`, once the item→slot map is
     // set. A publish HERE would find only half the binding (the LayerManager's
     // template type, no itemId yet) and so publish `null` — the honest
@@ -3393,6 +3396,20 @@ export class CasparRuntime {
       // surface deliberately says nothing about it.
       if (this.#reconciler.get(item.itemId) !== null) {
         skipped.push({ itemId: item.itemId, reason: 'already-held', ...restoreSkipNaming(item) });
+        continue;
+      }
+      /*
+        🔴 `B-301` — **WHAT A REFUSED LOAD LEFT BEHIND IS NOT BROUGHT BACK.** Before the Loads checked
+        first, every refusal left an item in `error` WITH NO LAYER: no row showed it, nothing could
+        settle it, and the Layers badge counted it — the owner's stored `2 in error`. Such an item
+        holds nothing on air and never did, so it is dropped here, one log line each, and the badge
+        reads 0 after the update. A row in `error` ON A LAYER comes back exactly as before (`B-107`).
+      */
+      if (item.state === 'error' && item.slot === undefined) {
+        process.stderr.write(
+          `[caspar-bridge] restore: dropped ${item.itemId} (template ${item.templateId}) — ` +
+            'a refused Load left it in error with no layer (B-301)\n',
+        );
         continue;
       }
       /*
@@ -12936,6 +12953,26 @@ export class CasparRuntime {
       await this.stopItem(item.itemId);
     }
     return { ok: true, stopped: stoppable.length };
+  }
+
+  /**
+   * 🔴 `B-301` — **DISMISS A ROW'S ERROR** (`stack.dismiss-error`). The reconciler drops the error ack
+   * and the row reads the status it settled to; every console is told through the ordinary state push.
+   * Nothing is sent to CasparCG and nothing about the row's layer, binding or air changes, so it is not
+   * an audited act. Refused `unknown-item` / `not-in-error`, changing nothing.
+   */
+  dismissError(itemId: string): {
+    accepted: boolean;
+    errorCode?: 'not-in-error' | 'unknown-item';
+  } {
+    if (this.#reconciler.get(itemId) === null)
+      return { accepted: false, errorCode: 'unknown-item' };
+    if (this.#reconciler.dismissError(itemId) === null) {
+      return { accepted: false, errorCode: 'not-in-error' };
+    }
+    // The row's one-line refusal is that same error's sentence: dismissed with it.
+    this.#retireTakeRefusal(itemId);
+    return { accepted: true };
   }
 
   async remove(

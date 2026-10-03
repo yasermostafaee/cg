@@ -810,6 +810,24 @@ export class MockRuntime {
     return { accepted: true };
   }
 
+  /**
+   * `B-301` parity — dismiss a row's error (`stack.dismiss-error`). The mock's only error is a take
+   * refused at the wire, from a LOADED row, so the row settles back to `loaded` and its refusal line
+   * is withdrawn with it; refused as the bridge refuses.
+   */
+  dismissError(itemId: string): { accepted: boolean; errorCode?: 'not-in-error' | 'unknown-item' } {
+    const item = this.#find(itemId);
+    if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    if (item.status !== 'error') return { accepted: false, errorCode: 'not-in-error' };
+    this.#stack = this.#stack.map((i) => {
+      if (i.itemId !== itemId) return i;
+      const { takeRefusal: _refusal, errorCode: _code, ...rest } = i;
+      return { ...rest, status: 'loaded' as const, pending: false };
+    });
+    this.#emitStack();
+    return { accepted: true };
+  }
+
   remove(itemId: string): { accepted: boolean; errorCode?: string } {
     const item = this.#find(itemId);
     // `R-017` parity — the mock must REFUSE where the bridge refuses, or a surface built

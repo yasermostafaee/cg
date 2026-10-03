@@ -201,7 +201,7 @@ it('🔴 B-109: a deliberately CLEARed graphic is NOT re-ADDed by a bridge resta
   expect(r2.stackSnapshot()[0]?.slot).toMatchObject(SLOT);
 }, 40_000);
 
-it('🔴 B-107: an ERRORED row is restored as ERRORED, never promoted to loaded', async () => {
+it('🔴 B-107: an ERRORED row is restored as ERRORED on its layer, never promoted to loaded', async () => {
   tracePath = path.join(
     os.tmpdir(),
     `cg-b107-errored-${String(process.pid)}-${String(Date.now())}.ndjson`,
@@ -210,47 +210,25 @@ it('🔴 B-107: an ERRORED row is restored as ERRORED, never promoted to loaded'
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
   const m = mock;
 
-  const r = new CasparRuntime(
-    singleServer(m.amcpPort, oscPort),
-    {},
-    { layerPolicy: TEST_LAYER_POLICY },
-  );
-  runtime = r;
-  r.start();
-  await r.startServing();
-  r.templateImport(TEMPLATE, HTML);
-  await r.whenServerHealthy(HEALTH_MS);
-
   /*
-   * A load that FAILS, with a REGISTERED template — and the second half of that
-   * sentence is load-bearing, not incidental.
-   *
-   * The obvious trigger is `unknown-template`, and it is the WRONG one here: an item
-   * whose template is not registered is skipped by `restore()` on the
-   * unknown-template leg (B-108's territory — the row is genuinely gone), so the test
-   * would pass or fail for a reason that has nothing to do with the retained state.
-   * `not-fixed` gives the same errored row with the template present, so the ONLY
-   * thing deciding the outcome below is the state retention carried.
-   *
-   * B-107's own generality check establishes that this is not a narrowing: every
-   * error code reaches the identical errored state through the same path.
+   * 🔴 `B-301` — **AN ERRORED ROW IS ONE ON A LAYER.** This test used to make its errored row with a
+   * refused Load (`not-fixed`), and a refused Load no longer creates anything (the test below). A
+   * row in `error` now comes from a command refused on a row that holds its layer — a take CasparCG
+   * refused (`amcp-403`). The retained input is written as the browser's retention writes it (the
+   * same schema, the same canonical state), so the ONLY thing deciding the outcome below is the
+   * state retention carried — `B-107`'s point, unchanged: a failure survives a restart.
    */
-  expect(await r.loadFixed({ channel: 1, layer: 99 }, 'ghost', 'lower-third', {})).toEqual({
-    accepted: false,
-    errorCode: 'not-fixed',
-  });
-  await waitFor(() => status(r, 'ghost') === 'error', 5000, 'the failed load reads error');
+  const retained: RetainedStackItem[] = [
+    {
+      itemId: 'ghost',
+      templateId: 'lower-third',
+      fields: {},
+      state: 'error',
+      errorCode: 'amcp-403',
+      slot: SLOT,
+    },
+  ];
 
-  const retained = retain(r);
-  expect(retained.find((i) => i.itemId === 'ghost')).toMatchObject({
-    state: 'error',
-    errorCode: 'not-fixed',
-  });
-
-  await r.stop();
-  runtime = null;
-
-  // ── the bridge restarts. The failure must survive it. ──
   const beforeRestore = (await recvLines(m, tracePath)).length;
   const r2 = new CasparRuntime(
     singleServer(m.amcpPort, oscPort),
@@ -267,11 +245,12 @@ it('🔴 B-107: an ERRORED row is restored as ERRORED, never promoted to loaded'
   expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
   await delay(1500);
 
-  // The row is BACK and still says it failed, with its cause.
+  // The row is BACK, on its layer, and still says it failed, with its cause.
   const row = r2.stackSnapshot().find((i) => i.itemId === 'ghost');
   expect(row?.status).toBe('error');
   expect(row?.status).not.toBe('loaded');
-  expect(row?.errorCode).toBe('not-fixed');
+  expect(row?.errorCode).toBe('amcp-403');
+  expect(row?.slot).toMatchObject(SLOT);
   // It is NOT pending — a settled failure must not spin forever on the operator's row.
   expect(row?.pending).toBe(false);
   // And NOTHING was sent for it: an errored row has no producer to re-seat, so the
@@ -281,32 +260,17 @@ it('🔴 B-107: an ERRORED row is restored as ERRORED, never promoted to loaded'
   expect(after.some((l) => l.startsWith('CLEAR 1-10'))).toBe(false);
 }, 40_000);
 
-it('🔴 LAYER-BANDS-16 — an errored row comes back ERRORED and with NO LAYER, reason intact', async () => {
+it('🔴 B-301 — a refused Load leaves NOTHING, and what one left before is not brought back — control: an errored row on its layer is', async () => {
   /*
-   * 🔴 **THE ROW MUST COME BACK VISIBLY BROKEN, WEARING THE SAME REASON.**
-   *
-   * B-107 above pins the STATE. This pins the other half, which the retirement of
-   * dynamic allocation put in play: that the row comes back carrying NO COORDINATE,
-   * and that coming back with no coordinate does not cost it its error or its cause.
-   *
-   * ── WHAT THE OLD BEHAVIOUR ACTUALLY WAS, recorded so nobody "restores" it ──────
-   *
-   * `#slotForRestore` fell through to `#allocate()`, so an errored row — one that
-   * never had a producer and never will — was handed a DYNAMIC LAYER IT NEVER USED.
-   * The bridge then `assignSlot`'d it, wrote it into `#slots`, and opened OSC
-   * interest on a layer nothing would ever be placed on. That was never a feature:
-   * it was the allocator being the only way `#slotForRestore` knew how to return,
-   * and the layer it invented came out of the dynamic ranges — which, after the
-   * 2026-09-14 re-cut, lie in the span left to the playout server. Re-adding a
-   * fall-through here would put a phantom claim on somebody else's layer.
-   *
-   * ⚠ **A row that returns silently CLEAN is the same loss as one that vanishes** —
-   * the operator never learns it was broken. So `errorCode` is asserted, not just
-   * `status`.
+   * The owner's `2 in error` (2026-09-30): before the Loads checked first, every refused Load left
+   * an item in `error` WITH NO LAYER — no row showed it, nothing could settle it, it was retained
+   * and restored, and the Layers badge counted it on every channel. (`LAYER-BANDS-16`'s own reading
+   * of such a row — "comes back with no layer, its error intact" — was right about the layer; the
+   * row it described exists no longer.)
    */
   tracePath = path.join(
     os.tmpdir(),
-    `cg-errored-nolayer-${String(process.pid)}-${String(Date.now())}.ndjson`,
+    `cg-b301-refused-load-${String(process.pid)}-${String(Date.now())}.ndjson`,
   );
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
@@ -323,25 +287,38 @@ it('🔴 LAYER-BANDS-16 — an errored row comes back ERRORED and with NO LAYER,
   r.templateImport(TEMPLATE, HTML);
   await r.whenServerHealthy(HEALTH_MS);
 
-  // A load that fails with the template REGISTERED — see B-107 above for why the
-  // `unknown-template` trigger would prove something else entirely.
+  // 1 · A refused Load is answered exactly as before, and creates nothing.
   expect(await r.loadFixed({ channel: 1, layer: 99 }, 'ghost', 'lower-third', {})).toEqual({
     accepted: false,
     errorCode: 'not-fixed',
   });
-  await waitFor(() => status(r, 'ghost') === 'error', 5000, 'the failed load reads error');
-
-  const retained = retain(r);
-  const ghost = retained.find((i) => i.itemId === 'ghost');
-  expect(ghost).toMatchObject({ state: 'error', errorCode: 'not-fixed' });
-  // 🔴 THE PRECONDITION THE WHOLE TEST TURNS ON: the row genuinely has no coordinate.
-  // A load that never reached a layer cannot retain one, and that is exactly the
-  // shape the retired allocator used to paper over.
-  expect(ghost?.slot, 'a failed load retains no coordinate').toBeUndefined();
-
+  await delay(200);
+  expect(r.stackSnapshot().find((i) => i.itemId === 'ghost')).toBeUndefined();
+  expect(retain(r)).toEqual([]);
+  // CONTROL — an accepted Load does create its item (the instrument is live).
+  expect((await r.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect(r.stackSnapshot().map((i) => i.itemId)).toEqual(['item1']);
   await r.stop();
   runtime = null;
 
+  // 2 · A retention file from before this change: the leftover, and a real errored row.
+  const retained: RetainedStackItem[] = [
+    {
+      itemId: 'ghost',
+      templateId: 'lower-third',
+      fields: {},
+      state: 'error',
+      errorCode: 'not-fixed',
+    },
+    {
+      itemId: 'row',
+      templateId: 'lower-third',
+      fields: {},
+      state: 'error',
+      errorCode: 'amcp-403',
+      slot: SLOT,
+    },
+  ];
   const beforeRestore = (await recvLines(m, tracePath)).length;
   const r2 = new CasparRuntime(
     singleServer(m.amcpPort, oscPort),
@@ -354,21 +331,17 @@ it('🔴 LAYER-BANDS-16 — an errored row comes back ERRORED and with NO LAYER,
   r2.templateImport(TEMPLATE, HTML);
   await r2.whenServerHealthy(HEALTH_MS);
 
-  // It COMES BACK — not skipped, not dropped.
+  // The leftover is dropped — not restored, not reported: it held nothing and never did.
   expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
   await delay(1500);
-
-  const row = r2.stackSnapshot().find((i) => i.itemId === 'ghost');
-  expect(row, 'the row is on the stack').toBeDefined();
-  // …VISIBLY BROKEN, with the cause it had before the restart.
+  expect(r2.stackSnapshot().find((i) => i.itemId === 'ghost')).toBeUndefined();
+  // CONTROL — the errored row ON ITS LAYER comes back, visibly broken, with its cause.
+  const row = r2.stackSnapshot().find((i) => i.itemId === 'row');
   expect(row?.status).toBe('error');
-  expect(row?.errorCode).toBe('not-fixed');
-  expect(row?.pending).toBe(false);
-  // …and with NO LAYER. This is the assertion the old fall-through could never pass:
-  // it always had a layer to show, because it had just made one up.
-  expect(row?.slot, 'an errored row is restored onto no layer at all').toBeUndefined();
+  expect(row?.errorCode).toBe('amcp-403');
+  expect(row?.slot).toMatchObject(SLOT);
 
-  // Nothing was sent on its behalf, on ANY layer — the wire half of "no layer".
+  // Nothing was sent on either's behalf, on ANY layer.
   const after = (await recvLines(m, tracePath)).slice(beforeRestore);
   expect(after.some((l) => /^CG \d+-\d+ ADD/.test(l))).toBe(false);
   expect(after.some((l) => /^CLEAR \d+-\d+/.test(l))).toBe(false);

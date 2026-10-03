@@ -46,6 +46,7 @@ import {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackDismissErrorChannel,
   StackStopAllChannel,
   StackRestoreReportChangedChannel,
   StackRestoreReportChannel,
@@ -1722,6 +1723,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     out: (req: ChannelRequest<typeof StackOutChannel>) => this.#invoke(StackOutChannel, req),
     remove: (req: ChannelRequest<typeof StackRemoveChannel>) =>
       this.#invoke(StackRemoveChannel, req),
+    dismissError: (req: ChannelRequest<typeof StackDismissErrorChannel>) =>
+      this.#invoke(StackDismissErrorChannel, req),
     setPosition: (req: ChannelRequest<typeof StackSetPositionChannel>) =>
       this.#invoke(StackSetPositionChannel, req),
     swapLiveSource: (req: ChannelRequest<typeof StackSwapLiveSourceChannel>) =>

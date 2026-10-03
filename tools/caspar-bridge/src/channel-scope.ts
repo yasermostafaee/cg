@@ -314,6 +314,8 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'sources.set-config': INTENT,
   'sources.set-media-playback': INTENT,
   'stack.clear-all': INTENT,
+  // `B-301` — dismissing a row's error: an operator verb on that row, judged as its removal is.
+  'stack.dismiss-error': INTENT,
   'stack.dismiss-restore-report': INTENT,
   'stack.load': INTENT,
   'stack.media-plate-transport': INTENT,

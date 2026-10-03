@@ -86,9 +86,9 @@ it('CONFIRMED — with the custom range (60–69) reserved, a dynamic stack.load
   // The bridge's OWN reason, not an inference: the fallback range has nowhere
   // left to allocate because every layer in it belongs to playout.
   expect(result).toEqual({ accepted: false, errorCode: 'no-layer' });
-  const item = r.stackSnapshot().find((i) => i.itemId === 'item-1');
-  expect(item?.status).toBe('error');
-  expect(item?.errorCode).toBe('no-layer');
+  // `B-301` — the refusal is ANSWERED (above, with its code) and leaves no item behind: it used to
+  // leave one in `error` with no layer, which no row showed and the Layers badge counted forever.
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')).toBeUndefined();
 });
 
 it('…and the SAME load succeeds with nothing reserved — the reservation is the cause', async () => {

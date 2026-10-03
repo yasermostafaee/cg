@@ -270,14 +270,14 @@ it('EXP-A regression: a post-restart load with an EMPTY registry fails fast (unk
 
   expect(r2.templateHtml('lower-third')).toBeNull();
   const loaded = await r2.load('item2', 'lower-third', { headline: 'جدید' });
-  expect(loaded.accepted).toBe(false);
+  expect(loaded).toEqual({ accepted: false, errorCode: 'unknown-template' });
 
   // Give the 40 Hz OSC ticks time — before the fix, the orphan's producer
   // report routed to item2 and displayed a false ON AIR over the failed ack.
+  // `B-301` — and since the Loads check first, a refused Load creates no item at all: there is
+  // nothing for the orphan's reports to route to, ON AIR or otherwise.
   await new Promise((r) => setTimeout(r, 200));
-  const item = r2.stackSnapshot().find((i) => i.itemId === 'item2');
-  expect(item?.status).toBe('error');
-  expect(item?.errorCode).toBe('unknown-template');
+  expect(r2.stackSnapshot().find((i) => i.itemId === 'item2')).toBeUndefined();
 
   // The guard sent nothing: the orphan is untouched (still on air).
   expect(mock.layerState(SLOT)?.producer).toBe('html');

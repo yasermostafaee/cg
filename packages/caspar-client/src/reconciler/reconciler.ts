@@ -386,6 +386,21 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
   }
 
   /**
+   * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **AN OPERATOR DISMISSES A ROW'S ERROR.** A failed ack lands
+   * `ackedStatus: 'error'` above the resting status it settled to (`B-070`'s settle: the target it
+   * came from, or `unconfirmed`); dismissing drops that error ack and its code and NOTHING else — no
+   * play evidence, no OSC truth, no intent — so the row reads what is actually known: its settled
+   * status, or OSC's fresh truth. `null` when the item is unknown or not in `error`.
+   */
+  dismissError(itemId: string): StackItemState | null {
+    const rec = this.items.get(itemId);
+    if (rec === undefined || rec.ackedStatus !== 'error') return null;
+    delete rec.ackedStatus;
+    delete rec.errorCode;
+    return this.emitChange(rec);
+  }
+
+  /**
    * B-044 — bounded-timeout expiry for a transient intent. Called by the
    * bridge's per-send timer when no ack arrived within the bound. Only the
    * item's LATEST intent can expire, and only while it is still in flight

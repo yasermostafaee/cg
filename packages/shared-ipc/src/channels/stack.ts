@@ -195,6 +195,22 @@ export const StackRemoveChannel = defineChannel(
 );
 
 /**
+ * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **DISMISS A ROW'S ERROR.** The Layers badge lists the rows in
+ * `error`; each can be dismissed, for every console: the error ack is dropped and the row reads the
+ * status it settled to. Nothing is sent to CasparCG. Refused `not-in-error` for an item that is not
+ * in `error` (already dismissed elsewhere, or fixed), and `unknown-item` for one the bridge does not
+ * hold. Judged as a removal of that row is judged (an operator verb, on the item's channel).
+ */
+export const StackDismissErrorChannel = defineChannel(
+  'stack.dismiss-error',
+  z.object({ itemId: IdSchema }),
+  z.object({
+    accepted: z.boolean(),
+    errorCode: z.enum(['not-in-error', 'unknown-item']).optional(),
+  }),
+);
+
+/**
  * R-011 — the operator's per-item on-air position override. REFUSED
  * (`reason: 'on-air'`) while the item is on air or unsettled — position is
  * fixed once taken (Option A cannot reposition on air without a re-serve

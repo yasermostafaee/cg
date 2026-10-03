@@ -105,12 +105,23 @@ export function onChannel<T extends { slot?: { channel: number } | undefined }>(
   return items.filter((i) => i.slot === undefined || i.slot.channel === channel);
 }
 
+/**
+ * 🔴 `B-301` (`CONSOLE-POLISH-01` §2) — **A ROW ERROR: an item in `error` THAT IS A ROW** — one with a
+ * layer. The ONE predicate the badge counts and lists by (golden rule 6). An item in `error` with no
+ * layer is no row: nothing shows it and nothing can settle it — it is what a refused Load used to leave
+ * behind (the owner's `2 in error`, 2026-09-30), and `onChannel` keeps layerless items in EVERY view,
+ * so one such leftover was counted on every channel. A failed import is never an item at all.
+ */
+export function isRowError(item: Pick<StackItemState, 'status' | 'slot'>): boolean {
+  return item.status === 'error' && item.slot !== undefined;
+}
+
 export function airTally(items: readonly StackItemState[]): AirTally {
   let onAir = 0;
   let inError = 0;
   for (const item of items) {
     if (isOnAirStatus(item)) onAir += 1;
-    else if (item.status === 'error') inError += 1;
+    else if (isRowError(item)) inError += 1;
   }
   return { onAir, inError };
 }

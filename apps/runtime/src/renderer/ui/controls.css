@@ -286,8 +286,12 @@
  * THE IN-ERROR COUNT — `B-213`'s second number, in the second colour, never folded into the
  * first. Same chip geometry as its sibling so the pair reads as a pair; the SEVERITY comes
  * from the error token, never from a hex (§4).
+ *
+ * `B-301` — it is a BUTTON now (it lists the rows in error, each dismissable), so the shared
+ * `Button` is named here beside the chip: the same treatment, outranking `.cg-btn`'s own.
  */
-.cg-layers-subbar__error {
+.cg-layers-subbar__error,
+.cg-btn.cg-layers-subbar__error {
   display: inline-flex;
   align-items: center;
   padding: var(--r-subbar-badge-pad);
@@ -7728,6 +7732,39 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* ── `B-301` — the rows in error, listed from the Layers badge ──────────────────────────────── */
+.cg-row-errors {
+  margin: 0;
+  padding: var(--r-space-2) 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.cg-row-errors__row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--r-space-3);
+  padding: var(--r-space-2) var(--r-space-3);
+}
+.cg-row-errors__row + .cg-row-errors__row {
+  border-top: 1px solid var(--r-border);
+}
+.cg-row-errors__name {
+  min-width: 0;
+  color: var(--r-text);
+  font-weight: var(--r-weight-semibold);
+}
+.cg-row-errors__why {
+  grid-column: 1;
+  min-width: 0;
+  color: var(--r-error-text);
+  font-size: var(--r-text-sm);
+}
+.cg-row-errors__row > .cg-btn {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 
 /* `B-303` — a choice's `Unavailable` keeps the gap `SourceLabel`'s flex row gives its own tag. */

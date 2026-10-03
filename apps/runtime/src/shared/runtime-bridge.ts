@@ -65,6 +65,7 @@ import type {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackDismissErrorChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
@@ -333,6 +334,10 @@ export interface RuntimeBridge {
     remove(
       req: ChannelRequest<typeof StackRemoveChannel>,
     ): Promise<ChannelResponse<typeof StackRemoveChannel>>;
+    /** `B-301` — dismiss a row's error: the row reads the status it settled to, on every console. */
+    dismissError(
+      req: ChannelRequest<typeof StackDismissErrorChannel>,
+    ): Promise<ChannelResponse<typeof StackDismissErrorChannel>>;
     /**
      * R-011 — the operator's per-item on-air position override. Refused
      * (`reason: 'on-air'`) while the item is on air/unsettled — the picker

@@ -216,6 +216,9 @@ const BRIDGE_SURFACE: {
       // `CENTRAL-BRIDGE-01` — the report is the bridge's, dismissed there for every console. The
       // mock has nothing to dismiss and says so (`ok: false`), as the bridge does for an empty half.
       'dismissRestoreReport',
+      // `B-301` — a row's error, dismissed for every console; the mock settles its own (a take
+      // refused at the wire) back to `loaded`, and refuses as the bridge refuses.
+      'dismissError',
     ],
     connections: [
       'config',

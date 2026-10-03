@@ -124,6 +124,7 @@ import {
   StackClearAllChannel,
   StackRemoveAllChannel,
   StackRemoveChannel,
+  StackDismissErrorChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
   StackSetPlateVolumeChannel,
@@ -4048,6 +4049,10 @@ export function buildRoutes(
     route(StackOutChannel, 'operator', 'operator', (r: { itemId: string }) => b.out(r.itemId)),
     route(StackRemoveChannel, 'operator', 'operator', (r: { itemId: string }) =>
       b.remove(r.itemId),
+    ),
+    // `B-301` — dismiss a row's error: judged as its removal is (an operator verb on its channel).
+    route(StackDismissErrorChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.dismissError(r.itemId),
     ),
     // R-011 — the operator's per-item on-air position override.
     route(

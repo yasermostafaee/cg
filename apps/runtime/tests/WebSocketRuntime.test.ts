@@ -2,7 +2,6 @@ import { afterEach, expect, it } from 'vitest';
 import { WebSocket as WsWebSocket } from 'ws';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
 import type { ConnectionConfig } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
 import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import {
   BridgeDisconnectedError,
@@ -80,13 +79,19 @@ it('selects live, round-trips a read, and delivers a published delta over the WS
   expect(Array.isArray(await runtime.stack.snapshot())).toBe(true);
   expect((await runtime.connections.health()).primary.label).toBe('A');
 
-  // Publish delivery: a load makes the Reconciler delta cross the WS as a
-  // `stack.state-changed` publish (no server here, so the item's status settles
-  // to an error after the failed ack — what matters is the publish round-trip).
-  const snapshots: (readonly StackItemState[])[] = [];
-  runtime.stack.onStateChanged((s) => snapshots.push(s));
-  void runtime.stack.load({ itemId: 'a', templateId: 'lower-third', fields: {} });
-  await waitFor(() => snapshots.some((s) => s.some((i) => i.itemId === 'a')));
+  /*
+    Publish delivery: an import crosses the WS as a `templates.changed` publish. (`B-301` — this was
+    a Load the bridge REFUSED, watched for its errored item in `stack.state-changed`; a refused Load
+    leaves no item now, so it publishes nothing, by design. What this test is about is the publish
+    round-trip, and an accepted import is a publish that always happens.)
+  */
+  const lists: string[][] = [];
+  runtime.templates.onChanged((list) => lists.push(list.map((t) => t.templateId)));
+  await runtime.templates.import({
+    template: { templateId: 'lower-third', templateType: 'lower-third', fields: [] },
+    html: '<!doctype html><html><body>ws</body></html>',
+  });
+  await waitFor(() => lists.some((ids) => ids.includes('lower-third')));
 });
 
 it('on a mid-session drop: goes DISCONNECTED, rejects commands, never falls back to mock', async () => {

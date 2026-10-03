@@ -87,6 +87,7 @@ import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftS
 import { appliedPlateSources } from '../inspector/livePlates.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
+import { RowErrorsBadge } from './RowErrorsBadge.js';
 import { onRowFocus } from './rowFocus.js';
 import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
@@ -1767,17 +1768,24 @@ export function LayersPanel({
                   >
                     {tally.onAir} on air
                   </span>
-                  {tally.inError > 0 && (
-                    <span
-                      data-layers-tally-error=""
-                      data-error-tally={String(tally.inError)}
-                      className="cg-layers-subbar__error"
-                      aria-label={`${String(tally.inError)} items in error`}
-                      title={`${String(tally.inError)} in error — rows whose last command CasparCG refused. Nothing is claimed about what those layers show; open the row or the audit log for the code.`}
-                    >
-                      {tally.inError} in error
-                    </span>
-                  )}
+                  {/*
+                    🔴 `B-301` — the ROWS in error (`isRowError`, the predicate `tally` counts by),
+                    listed on a press, each dismissable. Absent with none.
+                  */}
+                  <RowErrorsBadge
+                    items={items}
+                    nameOf={(item) =>
+                      operatorRowName(
+                        {
+                          itemId: item.itemId,
+                          templateId: item.templateId,
+                          ...(item.slot !== undefined ? { slot: item.slot } : {}),
+                        },
+                        bank,
+                        templates,
+                      )
+                    }
+                  />
                   {/*
                     🔴 `N/M rows`, reversing `CONSOLE-MATCH-03`'s ARGUED (d).
 

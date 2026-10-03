@@ -217,6 +217,7 @@ export function createMockBridge(): RuntimeBridge {
       next: (req) => Promise.resolve(mock.next(req.itemId)),
       out: (req) => Promise.resolve(mock.out(req.itemId)),
       remove: (req) => Promise.resolve(mock.remove(req.itemId)),
+      dismissError: (req) => Promise.resolve(mock.dismissError(req.itemId)),
       setPosition: (req) => Promise.resolve(mock.setPosition(req.itemId, req.position)),
       // C-015 (6.5f) — the per-plate audio intent.
       setPlateVolume: (req) =>

@@ -52,6 +52,37 @@ describe('Reconciler — load + take + out lifecycle', () => {
     expect(r.get(itemId(1))).toMatchObject({ status: 'error', errorCode: 'amcp-500' });
   });
 
+  it('🔴 B-301 — dismissing an error drops the error ack and its code, and the row reads the status it settled to', () => {
+    const r = new Reconciler();
+    r.applyIntent(loadIntent(1), 1);
+    r.applyAck(1, true);
+    r.assignSlot(itemId(1), { channel: 1, layer: 90, server: 'primary' });
+    // A take refused on a loaded row: `error` above the resting status it came from (B-070).
+    r.applyIntent({ kind: 'take', itemId: itemId(1) }, 2);
+    r.applyAck(2, false, 'amcp-403');
+    expect(r.get(itemId(1))).toMatchObject({ status: 'error', errorCode: 'amcp-403' });
+
+    const dismissed = r.dismissError(itemId(1));
+    expect(dismissed).not.toBeNull();
+    const after = r.get(itemId(1));
+    expect(after?.status).not.toBe('error');
+    expect(after?.errorCode).toBeUndefined();
+    // The take's claim was given back when it failed: dismissing claims no air.
+    expect(after?.status).not.toBe('on-air');
+    expect(after?.status).not.toBe('playing');
+    expect(after?.slot).toMatchObject({ channel: 1, layer: 90 });
+  });
+
+  it('CONTROL — dismissing an item that is not in error, or unknown, changes nothing and says so', () => {
+    const r = new Reconciler();
+    r.applyIntent(loadIntent(1), 1);
+    r.applyAck(1, true);
+    const before = r.get(itemId(1));
+    expect(r.dismissError(itemId(1))).toBeNull();
+    expect(r.get(itemId(1))).toEqual(before);
+    expect(r.dismissError('nobody')).toBeNull();
+  });
+
   it('out() flips intent to exiting; remove() removes the item', () => {
     const r = new Reconciler();
     r.applyIntent(loadIntent(1), 1);
