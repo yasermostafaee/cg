@@ -253,18 +253,30 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
     page,
   }) => {
     await boot(page);
-    // A load that FAILS, and stays failed: an unregistered template is refused
-    // before any layer is involved, which is B-107's own generality case (the defect
-    // is status-blind, not a pool-exhaustion symptom).
+    /*
+      A row that FAILS, and stays failed: bound to row 70, then taken, and CasparCG refuses the
+      `CG … ADD`. B-107's generality point is unchanged (the defect was status-blind).
+
+      🔴 `CONSOLE-POLISH-01` (`B-301`) — this used to be a `stack.load` of an unregistered template,
+      refused before any layer was involved. That refusal left an item in error WITH NO LAYER, which
+      no row could show or settle and which the Layers badge counted forever — the owner's stuck
+      `2 in error`. A refused Load leaves nothing now, so the errored row is made the way an operator
+      meets one: on its layer.
+    */
+    await bindRow(page, 70, 'failed-row');
+    mock?.setHandler('CG', () => ({ kind: 'err', code: 404, verb: 'CG' }));
     await page.evaluate(() => {
       const w = window as unknown as {
-        cg: { stack: { load: (r: unknown) => Promise<unknown> } };
+        cg: { stack: { take: (r: unknown) => Promise<unknown> } };
       };
-      return w.cg.stack.load({ itemId: 'failed-row', templateId: 'not-registered', fields: {} });
+      return w.cg.stack.take({ itemId: 'failed-row' });
     });
     await expect
       .poll(async () => (await stack(page)).find((i) => i.itemId === 'failed-row')?.status)
       .toBe('error');
+    const before = (await stack(page)).find((i) => i.itemId === 'failed-row');
+    expect(before?.slot?.layer, 'a row error is ON its layer').toBe(70);
+    expect(before?.errorCode).toBeDefined();
 
     await killBridge(page);
 
@@ -275,7 +287,7 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
     const failed = (await stack(page)).find((i) => i.itemId === 'failed-row');
     expect(failed?.status).not.toBe('loaded');
     // …and it still says WHY, so the operator is not left with a bare badge.
-    expect(failed?.errorCode).toBe('unknown-template');
+    expect(failed?.errorCode).toBe(before?.errorCode);
     // Nothing spins: a settled failure is a resting state.
     expect(failed?.pending).toBe(false);
   });
