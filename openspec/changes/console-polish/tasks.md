@@ -149,5 +149,13 @@ one push for the batch.
       the trace moved to it (the `traceFlush` users and the shared-reader users are the same 50);
       `wire-trace.test.ts` holds the positive control (the old reader throws on the torn line, as CI
       saw). The bridge's `test` inputs already hash `tests/**`
-- [ ] 9.4 Gate; pushed; CI read (the e2e job RAN for the `B-306` commit)
+- [x] 9.4 Gate 99/99 uncached; pushed `e7e9f6ad` (the batch). PR run
+      <https://github.com/yasermostafaee/cg/actions/runs/37153905221> green, jobs RUN — but
+      `live-source-swap-names.spec` FLAKED (the row menu closed on a scroll before SOURCE was pressed;
+      passed on retry). Fixed `6be3c61d` (the open is retried until the dialog is up). CI COMPLETED green
+      on the first attempt, jobs RUN, no flaky test — PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37155833136> (`E2E (Playwright)` RAN: runtime
+      327 passed, the swap spec among them; designer 293), Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37155833135> (Installers, Installer smoke, CG
+      Bridge smoke) — its installers are the owner's check build
 - [x] 9.5 The owner's check, step by step, in the report
