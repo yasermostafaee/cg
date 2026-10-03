@@ -14,6 +14,7 @@ import type {
 import type { LiveSourceRect, RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * 🔴 **SESSION BP — THE ROW FREEZES ITS TEMPLATE ASSIGNMENT AT TAKE.**
@@ -98,13 +99,7 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function recvLines(): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(tracePath);
 }
 
 function look(id: string, rects: Record<string, LiveSourceRect>): TemplateLook {

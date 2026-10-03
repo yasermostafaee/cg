@@ -17,6 +17,7 @@ import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { foregroundUnchanged, mayClearAfterRefusal, outcomeOf } from '../src/refusal-cleanup.js';
 import { templateVersionId } from '../src/template-registry.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { readTrace } from './support/wire-trace.js';
 
 /**
  * 🔴 `FIELD-FIXES-01-A` — **A FRESH TAKE AIRS EVERYTHING OR NOTHING, AND A REFUSED `PLAY` NEVER
@@ -186,11 +187,8 @@ function refusing(verb: string): void {
 async function trace(): Promise<{ dir: string; line: string }[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string });
+  // `B-307` — the one reader: complete lines only.
+  return readTrace(tracePath);
 }
 
 const mark = async (): Promise<number> => (await trace()).length;

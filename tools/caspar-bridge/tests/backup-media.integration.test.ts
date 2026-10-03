@@ -25,6 +25,7 @@ import {
 } from './support/fake-playout.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 import { LocalPlayoutSources } from './support/local-playout-sources.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **SERVER B GETS THE BACKUP'S OWN CLIP, FOUND BY FINGERPRINT IN THE
@@ -160,13 +161,7 @@ async function newMock(oscPort: number): Promise<{ mock: MockHandle; trace: stri
 
 async function linesOf(m: MockHandle, trace: string): Promise<string[]> {
   await m.traceFlush();
-  return fs
-    .readFileSync(trace, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return recvLines(trace);
 }
 
 interface Rig {

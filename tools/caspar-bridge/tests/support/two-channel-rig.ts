@@ -11,6 +11,7 @@ import {
 } from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle, type BridgeOptions } from '../../src/index.js';
 import { awaitChannelModeRead, HEALTH_MS, track } from './harness.js';
+import { recvLines } from './wire-trace.js';
 
 /**
  * 🔴 `MULTI-CHANNEL-01` — **A STATION THAT DECLARES TWO CHANNELS, ON A LOOPBACK FAKE THAT SERVES
@@ -149,13 +150,7 @@ export async function twoChannelRig(
   const lines = async (): Promise<string[]> => {
     await mock.traceFlush();
     if (!fs.existsSync(tracePath)) return [];
-    return fs
-      .readFileSync(tracePath, 'utf-8')
-      .split('\n')
-      .filter((l) => l.length > 0)
-      .map((l) => JSON.parse(l) as { dir: string; line: string })
-      .filter((e) => e.dir === 'recv')
-      .map((e) => e.line);
+    return recvLines(tracePath);
   };
   if (opts.awaitBlanket !== false) {
     await waitUntil(async () => {

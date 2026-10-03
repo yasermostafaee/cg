@@ -9,6 +9,7 @@ import type { ConnectionConfig, FixedLayerBank, PlayoutLayerState } from '@cg/sh
 import { createBridge, type BridgeHandle } from '../src/index.js';
 import { HEALTH_MS, track } from './support/harness.js';
 import { openClient } from './support/auth-harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `FOLLOWUPS-01` B (the owner, 2026-09-28) — **NO CONSOLE OR IPC PATH CAN ASK FOR A `CLEAR`
@@ -58,13 +59,7 @@ async function waitFor(cond: () => boolean, what: string, timeoutMs = HEALTH_MS)
 
 async function recvLines(mock: MockHandle, tracePath: string): Promise<string[]> {
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(tracePath);
 }
 
 it('🔴 a CLEAR below 50 is not a valid request on either door — refused at the socket, nothing sent; the same door clears 60', async () => {

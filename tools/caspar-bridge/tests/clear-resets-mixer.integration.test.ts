@@ -8,6 +8,7 @@ import { AmcpTransport, CommandQueue, readBandVolumes } from '@cg/caspar-client'
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `BRIDGE-TRUTH-01` §2 / `B-253` — **`CLEAR` LEAVES THE MIXER; OUR CLEAR NOW TAKES IT WITH IT.**
@@ -84,13 +85,7 @@ async function waitFor(cond: () => Promise<boolean>, what: string): Promise<void
 async function wire(): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return recvLines(tracePath);
 }
 
 function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {

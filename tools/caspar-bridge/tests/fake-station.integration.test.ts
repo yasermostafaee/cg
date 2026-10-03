@@ -12,6 +12,7 @@ import { startFakePgmFeed } from './support/fake-pgm-feed.js';
 import { startFakePlayout, type FakePlayout } from './support/fake-playout.js';
 import { startFakeStation, type FakeStation } from './support/fake-station.js';
 import { FURNITURE, standardBank } from './support/two-channel-rig.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `DELTA-MULTI-CHANNEL-01-A` A1 — **`pnpm dev:station --fake` IS A WHOLE STATION.** The owner ran
@@ -135,13 +136,8 @@ async function linkUp(client: Client): Promise<void> {
 /** Every AMCP line CasparCG's stand-in received, in order. */
 async function received(file: string, caspar: MockHandle): Promise<string[]> {
   await caspar.traceFlush();
-  return fs
-    .readFileSync(file, 'utf8')
-    .split('\n')
-    .filter((l) => l.trim() !== '')
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  // `B-307` — the one reader: complete lines only.
+  return recvLines(file);
 }
 
 /** A write that addresses `channel` — `CLEAR 2-99`, `MIXER 2-60 VOLUME 1`, `CG 2-99 PLAY 0`… */
@@ -187,7 +183,7 @@ describe('A1 — `--fake` is a whole station', () => {
       accepted: true,
     });
     expect((await rt.take('logo-1')).accepted).toBe(true);
-    await waitFor(() => fs.readFileSync(trace, 'utf8').includes('CG 1-99 PLAY 0'), 5000);
+    await waitFor(() => recvLines(trace).some((l) => l.includes('CG 1-99 PLAY 0')), 5000);
     const after = (await received(trace, caspar)).slice(before);
     expect(after.some((l) => l.startsWith('CG 1-99 PLAY'))).toBe(true);
     expect(after.filter((l) => addresses(l, 2))).toEqual([]);

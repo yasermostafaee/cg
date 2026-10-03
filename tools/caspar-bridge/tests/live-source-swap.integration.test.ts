@@ -13,6 +13,7 @@ import type {
 import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * R-048 / C-015 phase 6 (6.9 / 6.9a / 6.9b / 6.9c / 6.9d) — **SWAP ONE PLATE'S
@@ -73,13 +74,7 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function recvLines(): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(tracePath);
 }
 
 const TWO_PLATE_TEMPLATE: TemplateInfo = {

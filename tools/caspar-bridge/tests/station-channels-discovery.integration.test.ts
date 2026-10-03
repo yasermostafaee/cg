@@ -19,6 +19,7 @@ import {
   type FakePlayout,
   type FakeUserKey,
 } from './support/fake-playout.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `R-062` gap 2 / `C-039` — **THE CHANNEL-DISCOVERY CALL, FED FIRST BY THE PLAYOUT'S CATALOGUE.**
@@ -427,13 +428,8 @@ describe('nothing past the list is probed', () => {
     await new Promise((r) => setTimeout(r, 600));
 
     await mock.traceFlush();
-    const lines = fs
-      .readFileSync(tracePath, 'utf-8')
-      .split('\n')
-      .filter((l) => l.length > 0)
-      .map((l) => JSON.parse(l) as { dir: string; line: string })
-      .filter((e) => e.dir === 'recv')
-      .map((e) => e.line);
+    // `B-307` — the one reader: complete lines only.
+    const lines = recvLines(tracePath);
     const addressing = (channel: number): string[] =>
       lines.filter((l) =>
         new RegExp(`^[A-Z][A-Z ]*?\\s${String(channel)}(?:-\\d+)?(?:\\s|$)`).test(l),

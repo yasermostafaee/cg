@@ -16,6 +16,7 @@ import {
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { readTrace } from './support/wire-trace.js';
 
 /**
  * 🔴 `LOOK-SWITCH-01` / `B-273` — **A LOOK SWITCH AIRS ALL OF ITS NEW LOOK OR NONE OF IT, AND EVERY
@@ -264,11 +265,8 @@ interface TraceLine {
 
 async function traceOf(m: MockHandle, trace: string): Promise<TraceLine[]> {
   await m.traceFlush();
-  return fs
-    .readFileSync(trace, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as TraceLine);
+  // `B-307` — the one reader: complete lines only.
+  return readTrace(trace) as TraceLine[];
 }
 
 interface Rig {

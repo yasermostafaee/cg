@@ -29,6 +29,7 @@ import {
 import type { FakePlayout, IssueTokenOptions } from './support/fake-playout.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 import { standardBank } from './support/two-channel-rig.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `B-257` / `B-258` / `B-259` / `B-260` — **THE LOCK COVERS THE ENGAGER'S CHANNELS, AND THE
@@ -144,13 +145,7 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function wire(): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return recvLines(tracePath);
 }
 
 /** An auth-ON bridge in front of a two-channel fake CasparCG, with a live-source template. */

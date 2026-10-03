@@ -15,6 +15,7 @@ import {
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * 🔴 **`RUNTIME-REDESIGN-01` PHASE 10 — THE SIX AIR-SENSITIVE SCENARIOS, END TO END, IN ONE
@@ -246,13 +247,7 @@ async function restartCasparCG(r: CasparRuntime): Promise<void> {
 async function recvLines(): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(tracePath);
 }
 
 /** A baseline the next action's traffic is measured from. */

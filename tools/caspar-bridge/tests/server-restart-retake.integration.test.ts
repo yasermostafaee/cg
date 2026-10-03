@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { TAKE_ON_AIR_CODE, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * B-054 — `#loaded` (producer-existence bookkeeping) must not survive an AMCP
@@ -101,13 +102,7 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   // sleep under CI contention read TRUNCATED traces, which both misses lines
   // and misaligns the offset-based slicing below.
   await m.traceFlush();
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 async function bootRuntime(config: ConnectionConfig): Promise<CasparRuntime> {

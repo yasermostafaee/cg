@@ -21,6 +21,7 @@ import { startFakePlayout, type FakePlayout } from './support/fake-playout.js';
 import { awaitChannelModeRead, HEALTH_MS, track } from './support/harness.js';
 import { LocalPlayoutSources } from './support/local-playout-sources.js';
 import { standardBank } from './support/two-channel-rig.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `PLATE-BAND-01` (the owner, 2026-09-28) — **A STATION LINKED TO THE PLAYOUT SEATS ITS PLATES IN
@@ -167,13 +168,7 @@ async function station(opts: {
   const handle = track(await createBridge(options), (h) => h.close());
   const lines = async (): Promise<string[]> => {
     await mock.traceFlush();
-    return fs
-      .readFileSync(trace, 'utf-8')
-      .split('\n')
-      .filter((l) => l.length > 0)
-      .map((l) => JSON.parse(l) as { dir: string; line: string })
-      .filter((e) => e.dir === 'recv')
-      .map((e) => e.line);
+    return recvLines(trace);
   };
   const r = handle.runtime;
   await r.whenServerHealthy(HEALTH_MS);

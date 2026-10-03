@@ -78,3 +78,20 @@ and at most 200 MB in all, deleting the oldest first. `Download logs` SHALL carr
 #### Scenario: The zip
 
 - **WHEN** a station admin downloads the logs **THEN** the zip carries every kept audit file
+
+### Requirement: Bridge tests SHALL read the AMCP mock's wire trace through one reader of complete lines
+
+The bridge's tests SHALL read `@cg/amcp-mock`'s wire trace through ONE shared reader in their support
+folder that parses only complete lines. A trailing partial line — one the mock is still writing, which
+`traceFlush()` does not cover when it began after the barrier — SHALL be left for the next read, never
+parsed. No test SHALL carry its own copy of the reader.
+
+#### Scenario: A torn last line
+
+- **WHEN** the reader is handed a trace whose last line is half-written **THEN** it returns the complete
+  lines and does not throw — control: the per-test reader it replaced throws `Unterminated string in JSON`
+  on the same text
+
+#### Scenario: The rest of the line arrives
+
+- **WHEN** the mock finishes the line **THEN** the next read returns it whole

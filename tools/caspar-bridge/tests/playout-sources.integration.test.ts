@@ -24,6 +24,7 @@ import { PlayoutSources, SOURCES_POLL_MS } from '../src/playout-sources.js';
 import { FAKE_MEDIA_IDS } from './support/fake-playout.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 import { LocalPlayoutSources } from './support/local-playout-sources.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `PLAYOUT-SOURCES-01` §4 — **A PLATE BOUND TO WHAT THE PLAYOUT OFFERS, TAKEN ON THE WIRE.**
@@ -216,13 +217,7 @@ async function boot(options: BootOptions = {}): Promise<Station> {
 async function recvLines(): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(tracePath);
 }
 
 const layerOf = (r: CasparRuntime, itemId: string, plateId: string): number | undefined =>

@@ -24,6 +24,7 @@ import {
 import { awaitChannelModeRead, HEALTH_MS, track } from './support/harness.js';
 import { expectRefusedWith, openClient, type Client } from './support/auth-harness.js';
 import { startFakePlayout } from './support/fake-playout.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `CHANNEL-AUTHORITY-01` — **THE STATION DECIDES WHAT IT WRITES TO. Every operating door that
@@ -135,13 +136,7 @@ interface Rig {
 /** Every AMCP line the mock RECEIVED, in arrival order. */
 async function recvLines(rig: Rig): Promise<string[]> {
   await rig.mock.traceFlush();
-  return fs
-    .readFileSync(rig.tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(rig.tracePath);
 }
 
 /**

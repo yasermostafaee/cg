@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
 import { HEALTH_MS } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * B-125 — THE BOUND-ROW RACE, asserted on the WIRE.
@@ -86,13 +87,7 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   await m.traceFlush();
   if (!fs.existsSync(file)) return [];
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 async function boot(): Promise<BridgeHandle> {

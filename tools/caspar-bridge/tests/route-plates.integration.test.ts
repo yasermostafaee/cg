@@ -26,6 +26,7 @@ import {
 import { FAKE_INPUTS, type FakeInput } from './support/fake-playout.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 import { LocalPlayoutSources } from './support/local-playout-sources.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `ROUTE-PLATES-01` §2 — **A PLATE SEATED FROM THE PLAYOUT'S HOLDER CHANNEL, BY CONTRACT v1.3.**
@@ -238,13 +239,7 @@ async function newMock(clock: FakeRouteClock, oscPort: number, amcpPort = 0) {
 
 async function linesOf(m: MockHandle, trace: string): Promise<string[]> {
   await m.traceFlush();
-  return fs
-    .readFileSync(trace, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return recvLines(trace);
 }
 
 async function boot(

@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * C-012 — `CG STOP` as a distinct operator action, and the property that makes it
@@ -74,13 +75,7 @@ async function waitFor(cond: () => boolean, timeoutMs: number, what: string): Pr
 
 async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   await m.traceFlush();
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 function status(r: CasparRuntime, itemId: string): string | undefined {

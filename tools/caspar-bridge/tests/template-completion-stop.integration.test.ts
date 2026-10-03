@@ -9,6 +9,7 @@ import { readCgControl, TEMPLATE_COMPLETE_PATH, type AuditEntry } from '@cg/shar
 import { TEMPLATE_ACTOR, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `SELF-STOP-24` §2.3 — **A FINISHED TEMPLATE TAKES ITS OWN ROW OFF AIR, AT THE WIRE.**
@@ -81,13 +82,7 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 async function wire(): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return recvLines(tracePath);
 }
 
 const linesMatching = (lines: readonly string[], re: RegExp): string[] =>

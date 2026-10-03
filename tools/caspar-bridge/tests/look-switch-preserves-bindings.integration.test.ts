@@ -14,6 +14,7 @@ import type {
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 **`RUNTIME-REDESIGN-01` §4 — A LOOK SWITCH PRESERVES THE SOURCE-TO-FRAME RELATIONSHIP.
@@ -244,19 +245,13 @@ it('§4 — a switch away and back sends no PLAY: the relationship is kept, not 
 
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  const mark = fs.readFileSync(tracePath, 'utf-8').split('\n').length;
+  // `B-307` — the one reader: complete lines only, counted and sliced as the lines they are.
+  const mark = recvLines(tracePath).length;
 
   expect((await r.setActiveLook('item-1', 'left')).ok).toBe(true);
 
   await mock.traceFlush();
-  const lines = fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .slice(mark - 1)
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  const lines = recvLines(tracePath).slice(mark);
   expect(lines.filter((l) => /MIXER .* FILL/.test(l)).length, 'the fills moved').toBeGreaterThan(0);
   expect(
     lines.filter((l) => /^PLAY /.test(l)),

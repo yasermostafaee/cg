@@ -36,6 +36,7 @@ import type { FakeMediaItem, FakePlayout, IssueTokenOptions } from './support/fa
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 import { LocalPlayoutSources } from './support/local-playout-sources.js';
 import { standardBank } from './support/two-channel-rig.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `MEDIA-PLATES-01` §4 — **A MEDIA CLIP IN A PLATE: WHAT IT DOES WHEN A LOOK HIDES IT, LOOP, THE
@@ -222,13 +223,7 @@ interface Rig {
 
 async function linesOf(m: MockHandle, trace: string): Promise<string[]> {
   await m.traceFlush();
-  return fs
-    .readFileSync(trace, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return recvLines(trace);
 }
 
 async function boot(

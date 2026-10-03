@@ -19,6 +19,7 @@ import { CasparRuntime } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { awaitChannelModeRead, HEALTH_MS, track } from './support/harness.js';
 import { standardBank, twoChannelRig, writes } from './support/two-channel-rig.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `FIELD-FIXES-01-A` DECISION 2 — **A TAKE OF A ROW ALREADY ON AIR IS REFUSED BY THE BRIDGE, WITH
@@ -147,14 +148,8 @@ const REPLY_MS = 1100;
 async function sent(from: number): Promise<string[]> {
   if (mock === null || tracePath === null) throw new Error('no trace');
   await mock.traceFlush();
-  return fs
-    .readFileSync(tracePath, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line)
-    .slice(from);
+  // `B-307` — the one reader: complete lines only.
+  return recvLines(tracePath).slice(from);
 }
 
 async function bootSlow(): Promise<CasparRuntime> {

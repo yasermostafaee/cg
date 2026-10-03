@@ -14,6 +14,7 @@ import {
 } from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/index.js';
 import { awaitChannelModeRead, HEALTH_MS, track } from './support/harness.js';
+import { recvLines } from './support/wire-trace.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01-D` — **A STATION OPERATES ONE CHANNEL, AND NOTHING IT DOES REACHES ANOTHER.**
@@ -154,13 +155,7 @@ async function rig(
     async lines() {
       await mock.traceFlush();
       if (!fs.existsSync(tracePath)) return [];
-      return fs
-        .readFileSync(tracePath, 'utf-8')
-        .split('\n')
-        .filter((l) => l.length > 0)
-        .map((l) => JSON.parse(l) as { dir: string; line: string })
-        .filter((e) => e.dir === 'recv')
-        .map((e) => e.line);
+      return recvLines(tracePath);
     },
     async foreign(line) {
       if (queue === null) {

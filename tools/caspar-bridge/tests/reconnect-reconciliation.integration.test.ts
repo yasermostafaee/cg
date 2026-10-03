@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
  * Reconnect-reconciliation (Face 2 + the load guard) — a killed bridge leaves
@@ -102,13 +103,7 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
   // sleep under CI contention read TRUNCATED traces, which both misses lines
   // and misaligns the session1Count slicing below.
   await m.traceFlush();
-  return fs
-    .readFileSync(file, 'utf-8')
-    .split('\n')
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: string; line: string })
-    .filter((e) => e.dir === 'recv')
-    .map((e) => e.line);
+  return readWireLines(file);
 }
 
 it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD, and no CLEAR is issued at startup', async () => {
