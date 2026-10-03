@@ -15,8 +15,8 @@ route), `B-300` (a new publish channel), `R-083` (a new IPC channel, a persisted
 ## 1. `B-305` — the 9250 collision
 
 - [x] 1.1 `pgm-return.spec` on its own loopback address, the rule port kept — positive control first: the
-      OLD spec beside `channel-air.spec` and `pvw-from-bridge.spec`, three workers, failed (`the hidden boot
-  state pulls nothing` saw 1 connection); the new one passed the same batch twice (9/9, 9/9)
+      OLD spec beside `channel-air.spec` and `pvw-from-bridge.spec`, three workers, failed (its hidden-boot
+      test saw 1 connection); the new one passed the same batch twice (9/9, 9/9)
 - [ ] 1.2 The three specs in one parallel batch, green; gate; pushed; CI read
 
 ## 2. FAST batch — `B-302`, `R-080`, `R-082`
