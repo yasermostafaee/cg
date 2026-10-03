@@ -99,6 +99,23 @@ describe('CENTRAL-BRIDGE-01 — the Playout-address gate', () => {
     expect(connect(c).disabled).toBe(false);
   });
 
+  it('🔴 R-080 — the CG Bridge field says it may stay empty: `Found automatically`, and ONE hint line', async () => {
+    const c = await render(
+      () => true,
+      () => undefined,
+    );
+    const bridge = input(c, 'cg-bridge-address');
+    expect(bridge.value).toBe('');
+    expect(bridge.getAttribute('placeholder')).toBe('Found automatically');
+    const hint = c.querySelector('[data-bridge-address-hint]');
+    expect(hint?.textContent).toBe('Leave empty unless CG Bridge runs on a separate server.');
+    // The hint describes the field it sits under, and is the only hint on the form.
+    expect(bridge.getAttribute('aria-describedby')?.split(' ')).toContain(hint?.id);
+    expect(c.querySelectorAll('[data-bridge-address-hint]')).toHaveLength(1);
+    // Control: the Playout field carries no placeholder and no hint — it must be typed.
+    expect(input(c, 'cg-playout-address').getAttribute('placeholder')).toBeNull();
+  });
+
   it('🔴 Connect saves the Playout address, normalised — CG Bridge on its host — and starts the console again', async () => {
     const save = vi.fn(() => true);
     const reload = vi.fn();

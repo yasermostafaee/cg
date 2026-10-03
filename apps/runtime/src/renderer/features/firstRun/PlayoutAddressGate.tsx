@@ -71,6 +71,12 @@ const styles = {
     color: colors.textSecondary,
     margin: '14px 0 6px',
   },
+  // `R-080` — the one hint line under the CG Bridge field: the muted ink, one line.
+  hint: {
+    fontSize: cssVars['--r-text-xs'],
+    color: colors.textMuted,
+    marginTop: 6,
+  },
   // A message is ATTENTION, never red (`design.md` §29).
   error: {
     color: cssVars['--r-caution-text'],
@@ -79,6 +85,11 @@ const styles = {
     margin: '6px 0 14px',
   },
 } as const;
+
+/** `R-080` — the CG Bridge field while it is empty: nothing to type, it is found. */
+export const BRIDGE_ADDRESS_PLACEHOLDER = 'Found automatically';
+/** `R-080` — the field's one hint line (`CONSOLE-POLISH-01` §5, the owner's words). */
+export const BRIDGE_ADDRESS_HINT = 'Leave empty unless CG Bridge runs on a separate server.';
 
 /** What the gate saves: this console's station record. */
 export interface GateStation {
@@ -144,6 +155,12 @@ export function PlayoutAddressGate({
         <label htmlFor="cg-bridge-address" style={styles.labelAfter}>
           CG Bridge address
         </label>
+        {/*
+          🔴 `R-080` — **EMPTY IS THE ANSWER FOR MOST STATIONS, AND THE FIELD SAYS SO.** The owner's run of
+          `0.10.0` (2026-09-30): nothing told him this field may be left empty — CG Bridge is found on
+          the Playout's host, port 5280, by itself. The placeholder says it, and ONE hint line (the
+          owner's own allowance for a setup form, `CONSOLE-POLISH-01` §5) says when to type anything.
+        */}
         <TextInput
           id="cg-bridge-address"
           value={bridgeTyped}
@@ -153,10 +170,14 @@ export function PlayoutAddressGate({
           }}
           dir="ltr"
           autoComplete="off"
+          placeholder={BRIDGE_ADDRESS_PLACEHOLDER}
           aria-label="CG Bridge address"
-          aria-describedby="cg-playout-address-error"
+          aria-describedby="cg-bridge-address-hint cg-playout-address-error"
           onKeyDown={onEnter}
         />
+        <div id="cg-bridge-address-hint" style={styles.hint} data-bridge-address-hint="">
+          {BRIDGE_ADDRESS_HINT}
+        </div>
         <div id="cg-playout-address-error" style={styles.error} role="status">
           {error}
         </div>
