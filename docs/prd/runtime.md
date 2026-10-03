@@ -4372,3 +4372,14 @@ every kept audit file. **Why:** the dialog read the whole file on every open. **
 - WHEN the audit holds 50,000 rows THEN the dialog opens in under 1 s with no more than 100 rows rendered
 - WHEN the next page is asked, or a filter set THEN the right rows come back
 - WHEN a row is written while the dialog is open THEN it appears at the top
+
+## [ ] R-084 — Show the Playout build in Versions once the Playout publishes it ⟨priority: low — WAITS for the Playout team⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A3
+
+**What:** the connection check's Versions group shows the Playout's build beside CG Bridge's release and
+this console's. **Why:** `R-081` asked for the Playout build there, and `CONSOLE-POLISH-01` §0.4 found the
+Playout publishes it nowhere CG can read — not in D1–D11, not in the 2.9.2 license answer, and its API
+answers `Server: Kestrel`. **Waits on:** the Playout team publishing the build (the owner asks in his next
+letter). Nothing is built until then. **Acceptance:**
+
+- WHEN the Playout publishes its build THEN the Versions group shows it, read from that source
+- WHEN it does not THEN the Versions group says nothing about it rather than guessing

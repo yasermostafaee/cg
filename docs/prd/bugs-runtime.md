@@ -13159,3 +13159,38 @@ port `127.0.0.1:9250`, and two other specs dial exactly that when they show the 
 `channel-air.spec`'s CLI bridge (no port seam on the CLI) and `pvw-from-bridge.spec`'s in-process bridge.
 **Fix:** `pgm-return.spec` runs its station and its feed on its own loopback address, still on the rule
 port. **Regression test:** the three specs in one parallel batch, green.
+
+## [~] B-306 — The on-air swap dialog labels each plate with its bare id and opens with an explanatory paragraph ⟨priority: medium⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A1 · `openspec/changes/console-polish/`
+
+**Repro:** on an ON AIR row with live plates, open SOURCE. **Expected:** each plate named in the operator's
+words, every source by the Playout's own name in its own direction, labels and values only. **Actual:**
+each plate is labelled with the template author's id (`guest-1`); the dialog opens with a four-line
+paragraph explaining what a substitution does; a plate with no template assignment reads `— none —`.
+**Cause:** the dialog predates golden rule 11's plate wording (`Plate N`, the id on the `title`, as the
+Inspector's Look inputs and the defaults dialog name a plate) and the owner's no-prose rule. **Fix:**
+`Plate N` with the id on the `title`; the paragraph removed; the template's assignment named through the
+choice label every source picker uses (`Template assignment (…)`, `none set`, `Not listed` with the id on
+its `title`, `Unavailable`). What a swap SENDS is unchanged. **Regression test:** a Persian-plus-Latin
+source name reads in logical order with no id in the dialog's text; the paragraph's absence pinned;
+control: the swap sends exactly what it sent.
+
+## [~] B-307 — Bridge tests read the AMCP mock's wire trace whole while it is still being written ⟨priority: medium — it can turn a CI run red⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A2 · `openspec/changes/console-polish/`
+
+**Repro:** CI run 37140336493 (attempt 1): `plate-band.integration.test.ts:174` threw
+`SyntaxError: Unterminated string in JSON`. **Expected:** a trace read during traffic sees whole lines.
+**Actual:** it parsed a half-written last line. **Cause:** `traceFlush()` is a barrier for writes queued
+BEFORE it; a test that polls the trace while CG Bridge is still sending (the boot volume blanket) can read a
+line the mock is still writing. Fifty bridge tests carry their own copy of the reader
+(`readFileSync(trace).split('\n').map(JSON.parse)`). **Fix:** ONE shared reader in the bridge tests'
+support folder that parses only complete lines — a trailing partial line waits for the next read — and
+every copy uses it. Test-only. **Regression test:** handed a half-written last line, the old reader throws
+and the shared one returns the complete lines.
+
+## [ ] B-308 — Some of CG Bridge's sentences name a live plate by its template id ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` (found while fixing `B-306`)
+
+**Repro:** a swap CasparCG refuses reads `CasparCG refused the substitution, so plate "guest-1" is still on
+its previous source.` **Expected:** a plate is named in the operator's words in any sentence an operator
+reads (golden rule 11). **Actual:** twelve sentences in `tools/caspar-bridge/src` write `plate "<id>"`
+(`caspar-runtime.ts`, `live-plate-release.ts`, `live-plate-fit.ts`); some are log lines, some reach a
+console. **Cause:** they predate the plate wording. **Fix:** not built — the sentences are shared by the
+swap, the look switch and the plate release, so it is its own sweep (two axes) of the bridge's wording.
