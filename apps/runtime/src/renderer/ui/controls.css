@@ -7890,7 +7890,7 @@ input[type='checkbox']:disabled:checked {
   text-align: center;
 }
 .cg-signin-card__foot {
-  padding: 16px 24px;
+  padding: var(--r-space-4) var(--r-space-6);
   border-top: 1px solid var(--r-border);
   background: var(--r-surface-raised);
 }
