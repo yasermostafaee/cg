@@ -5,7 +5,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { bridgeHealth, HEALTH_PATH, type BridgeHealth, type HealthProblem } from './health.js';
 import { HttpTickets, type TicketGrant } from './http-tickets.js';
 import { checkReservedPorts, type BridgePort } from './reserved-ports.js';
-import { entriesUnder, fileEntries, MAX_ZIP_INPUT, zipEntries } from './zip.js';
+import { entriesUnder, fileEntries, MAX_ZIP_INPUT, zipEntries, type ZipEntry } from './zip.js';
 import {
   AppInfoChannel,
   AuditAppendedChannel,
@@ -2621,16 +2621,23 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         record lives in `.cg-runtime`, not in `logs\`, so the download used to leave it out — and now
         that it rotates, a download that gave only the current file would give one day of it.
       */
-      void Promise.all([
-        entriesUnder(logsDir),
-        runtime
-          .auditFiles()
-          .then((files) =>
-            fileEntries(
-              files.map((f) => ({ path: f.path, name: `audit/${path.basename(f.path)}` })),
-            ),
-          ),
-      ])
+      /*
+        A rotation between listing the files and reading them renames one away: its rows would be
+        missing from this zip under either name. A file that vanished mid-read means the list is
+        stale, so it is listed and read again (as the paged read does).
+      */
+      const auditEntries = async (): Promise<ZipEntry[]> => {
+        let entries: ZipEntry[] = [];
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const files = await runtime.auditFiles();
+          entries = await fileEntries(
+            files.map((f) => ({ path: f.path, name: `audit/${path.basename(f.path)}` })),
+          );
+          if (entries.length === files.length) break;
+        }
+        return entries;
+      };
+      void Promise.all([entriesUnder(logsDir), auditEntries()])
         .then(([logs, audit]) => {
           const all = [...logs, ...audit];
           if (all.reduce((sum, e) => sum + e.data.length, 0) > MAX_ZIP_INPUT) {

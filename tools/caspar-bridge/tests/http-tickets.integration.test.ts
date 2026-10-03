@@ -86,7 +86,12 @@ describe('CG Bridge’s logs, downloaded', () => {
       path.join(stateDir, 'bridge-audit.2026-09-30T08-00-00.000Z.ndjson'),
       row('2026-09-30T08:00:00.000Z'),
     );
-    fs.writeFileSync(auditLogPath, row('2026-10-01T08:00:00.000Z'));
+    /*
+      The current file's first row is NOW: the sign-ins below append to it, and a first row from an
+      earlier day would rotate it on the first append — its name would then be briefly absent, and the
+      assertion on it a race (no row is lost; the zip carries the renamed file).
+    */
+    fs.writeFileSync(auditLogPath, row(new Date().toISOString()));
     const { handle, playout } = await bridge({ logsDir, auditLogPath });
 
     const operator = await openClient(handle);

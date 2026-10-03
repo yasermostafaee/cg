@@ -101,7 +101,9 @@ was stashed before each push so the gate judged only what was pushed.
       the push ablated, it passed)
 - [x] 7.3 The LOG dialog: paged, virtualised (`useVirtualWindow`), bridge-side filters (Channel added)
       and search, live rows; the count is the rows held
-- [x] 7.4 `logs.zip` carries every kept audit file under `audit/`
+- [x] 7.4 `logs.zip` carries every kept audit file under `audit/`; a file renamed by a rotation between
+      listing and reading is listed and read again (found when the pre-push gate of `2381c1f8` reddened
+      `http-tickets` — its seeded row was from an earlier day, so a sign-in rotated the file mid-download)
 - [x] 7.5 Tests: `@cg/audit` `page.test` (50,000 rows: first page < 250 ms; paging; a filter; a rotation
       between pages; rotation and retention), bridge `audit-page.integration` (a scoped console's full
       page; the search by a row's alias; the push scoped), `http-tickets` (the zip), dom
