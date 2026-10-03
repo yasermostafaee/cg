@@ -3,8 +3,7 @@ import { assignedSourceId, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
-import { SourceLabel } from '../sources/SourceLabel.js';
-import { SourcePicker } from '../sources/SourcePicker.js';
+import { ChoiceLabel, SourcePicker } from '../sources/SourcePicker.js';
 import {
   currentSourceAssignments,
   sourcesVersion,
@@ -38,13 +37,21 @@ import {
  *      (`CHANNEL-SOURCES-01`: defaults belong to a channel);
  *   3. THIS — one row's substitution, on top of both.
  *
- * 🔴 **It does not write back**, and the dialog says so in as many words. An
- * emergency substitution that silently became the permanent configuration would
- * change every other row carrying that template, and nobody would be told.
+ * 🔴 **It does not write back.** An emergency substitution that silently became the permanent
+ * configuration would change every other row carrying that template, and nobody would be told.
+ * ~~…and the dialog says so in as many words.~~ 🔴 `CONSOLE-POLISH-01-A` (`B-306`): the four-line
+ * paragraph that said so is GONE — an operator surface carries labels, values, state facts and
+ * refusals only, and explanation lives in the docs. What the dialog states is the scope in its
+ * title (`…for this row`), each plate's template assignment, and `swapped for this row` where one is.
+ *
+ * 🔴 `B-306` — **A PLATE IS `Plate N`, ITS ID ON THE `title`** (golden rule 11), as the Inspector's
+ * Look inputs and the defaults dialog name it; `plate.sourceId` is the template author's word for a
+ * hole in a layout. Every SOURCE it names goes through the one choice label (`ChoiceLabel`): the
+ * Playout's name in its own direction, `none set`, `Not listed` with the id on its `title`,
+ * `Unavailable`. What a swap SENDS is unchanged.
  */
 
 const styles = {
-  intro: { margin: '0 0 0.9rem', fontSize: '0.8rem', lineHeight: 1.5, color: colors.textMuted },
   row: {
     display: 'grid',
     gridTemplateColumns: 'minmax(6rem, 1fr) minmax(10rem, 1.4fr)',
@@ -110,21 +117,21 @@ export function LiveSourceSwapDialog({
         </ModalAction>
       }
     >
-      <p style={styles.intro}>
-        This changes <strong>this row only</strong>, for this run. The template’s own assignment and
-        the installation’s source list are left exactly as they are, so every other row carrying
-        this template is unaffected — and the substitution never becomes the permanent
-        configuration. Choose <em>Use template assignment</em> to put a plate back.
-      </p>
-      {plates.map((plate) => {
+      {plates.map((plate, i) => {
         const assigned = assignedFor(plate.sourceId);
         const swapped = override[plate.sourceId];
         return (
-          <div key={plate.sourceId} style={styles.row}>
-            <label htmlFor={`swap-${item.itemId}-${plate.sourceId}`} style={styles.plate}>
-              {plate.sourceId}
-              <span style={styles.assigned}>
-                assigned: <SourceLabel sourceId={assigned} fallback="— none —" />
+          <div key={plate.sourceId} style={styles.row} data-swap-plate={plate.sourceId}>
+            <label
+              htmlFor={`swap-${item.itemId}-${plate.sourceId}`}
+              style={styles.plate}
+              title={plate.sourceId}
+            >
+              {`Plate ${String(i + 1)}`}
+              <span style={styles.assigned} data-swap-assigned="">
+                <ChoiceLabel
+                  choice={{ value: '', label: 'Template assignment', names: assigned ?? null }}
+                />
                 {swapped !== undefined && (
                   <span style={styles.overridden}> · swapped for this row</span>
                 )}

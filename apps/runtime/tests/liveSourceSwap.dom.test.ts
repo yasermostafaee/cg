@@ -151,15 +151,55 @@ describe('6.9e — the swap is reachable FROM THE ROW', () => {
   });
 });
 
-describe('6.9 — the dialog states the layering, and commits in ONE more action', () => {
-  it('says the change is to THIS ROW ONLY and does not write back', async () => {
+describe('6.9 — the dialog names each plate’s assignment, and commits in ONE more action', () => {
+  /*
+    🔴 `CONSOLE-POLISH-01-A` (`B-306`) — THE PARAGRAPH IS GONE, AND ITS ABSENCE IS PINNED. It explained
+    the layering in four lines ("This changes this row only, for this run. The template's own
+    assignment and the installation's source list are left exactly as they are…"). An operator
+    surface carries labels, values, state facts and refusals only (the owner's rule); the scope is in
+    the title, and the assignment each plate returns to is named on its own line. This test asserted
+    the paragraph's PRESENCE; it now asserts the absence, which is the direction the rule regresses in.
+  */
+  it('🔴 carries no explanatory paragraph — the scope is in the title, the assignment on each plate', async () => {
     await renderDialog(() => Promise.resolve({ ok: true }));
-    const text = openDialog()?.textContent ?? '';
-    expect(text).toContain('this row only');
-    // The two things it must not silently change, named.
-    expect(text).toMatch(/assignment/i);
-    expect(text).toMatch(/source list|installation/i);
-    expect(text).toMatch(/every other row/i);
+    const dialog = openDialog();
+    const text = dialog?.textContent ?? '';
+    expect(dialog?.querySelector('p')).toBeNull();
+    expect(text).not.toMatch(/this row only|for this run|every other row|permanent configuration/i);
+    expect(text).not.toMatch(/installation’s source list|installation's source list/i);
+    // The facts that stayed: the scope, and the assignment a plate returns to.
+    expect(text).toContain('Live source for this row');
+    expect(text).toContain('Template assignment (Studio A)');
+  });
+
+  it('🔴 a plate is `Plate N`, its id on the label’s title and nowhere in the text (golden rule 11)', async () => {
+    await renderDialog(() => Promise.resolve({ ok: true }));
+    const dialog = openDialog();
+    expect(dialog?.textContent).not.toContain('guest-1');
+    const label = dialog?.querySelector<HTMLLabelElement>('[data-swap-plate="guest-1"] label');
+    expect(label?.firstChild?.textContent).toBe('Plate 1');
+    // RELOCATED, not deleted: an author correlates against it.
+    expect(label?.getAttribute('title')).toBe('guest-1');
+  });
+
+  it('a plate with no assignment, or one naming a source not listed, says so in the shared words', async () => {
+    await renderDialog(() => Promise.resolve({ ok: true }), {}, 1, { assignments: [] });
+    expect(openDialog()?.querySelector('[data-swap-assigned]')?.textContent).toBe(
+      'Template assignment (none set)',
+    );
+    act(() => root?.unmount());
+    host?.remove();
+    clearPortals();
+    __resetSourcesForTest();
+    await renderDialog(() => Promise.resolve({ ok: true }), {}, 1, {
+      assignments: [{ templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-gone' }],
+    });
+    const assigned = openDialog()?.querySelector('[data-swap-assigned]');
+    expect(assigned?.textContent).toContain('Template assignment (Not listed)');
+    expect(assigned?.textContent).toContain('Unavailable');
+    // The unknown id is on the title, never in the text.
+    expect(assigned?.textContent).not.toContain('src-gone');
+    expect(assigned?.querySelector('[title="src-gone"]')).not.toBeNull();
   });
 
   /** `PLAYOUT-SOURCES-01` §2.A — the plate's picker field (the ONE source picker). */
@@ -171,7 +211,7 @@ describe('6.9 — the dialog states the layering, and commits in ONE more action
 
   it('shows the plate, its ASSIGNED source, and offers the sources', async () => {
     await renderDialog(() => Promise.resolve({ ok: true }));
-    expect(openDialog()?.textContent).toContain('guest-1');
+    expect(openDialog()?.textContent).toContain('Plate 1');
     expect(openDialog()?.textContent).toContain('Studio A');
     const panel = await openPicker(field());
     // The call site's own choice is REVERT, not "no source".

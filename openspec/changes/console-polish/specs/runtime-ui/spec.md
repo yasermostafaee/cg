@@ -172,3 +172,28 @@ while the dialog is open SHALL appear at the top when it matches the filters.
 #### Scenario: Live
 
 - **WHEN** a take is made while the dialog is open **THEN** its row appears at the top
+
+### Requirement: The on-air swap dialog SHALL name plates and sources in the operator's words, and carry no paragraph
+
+The on-air swap dialog SHALL label each plate `Plate N` — its place among the template's plates — with the
+plate's id on the label's `title` only, as the Look inputs and the defaults dialog name a plate. Every source
+it names — each plate's template assignment and every choice — SHALL go through the one choice label the
+source pickers use: the Playout's name in its own direction, `none set` for no assignment, `Not listed` with
+the id on its `title` for a source the catalogue does not know, and `Unavailable` for one the Playout no
+longer offers. It SHALL carry no explanatory paragraph: its title states the scope, and each plate states
+the assignment it returns to. What a swap sends SHALL NOT change.
+
+#### Scenario: Names in the operator's words
+
+- **WHEN** the swap dialog opens on an ON AIR row whose plates are assigned a Persian-plus-Latin source
+  **THEN** each plate reads `Plate N`, the source reads in the name's own order, and no plate id appears in
+  the dialog's text
+
+#### Scenario: No paragraph
+
+- **WHEN** the swap dialog opens **THEN** it carries no explanatory paragraph
+
+#### Scenario: The wire is unchanged
+
+- **WHEN** a plate is swapped to another source **THEN** CG Bridge sends exactly the AMCP lines it sent for
+  the same swap before this change

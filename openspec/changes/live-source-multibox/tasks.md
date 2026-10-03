@@ -1588,6 +1588,8 @@ beforehand: 85/85, `0 cached`.
       and added deliberately: an emergency patch the operator cannot undo is its own
       trap. An EMPTY override map is deleted rather than kept, so a row back on its
       assignment never reads as substituted.
+      (⚠ SUPERSEDED by `CONSOLE-POLISH-01-A` `B-306`, 2026-10-04: the paragraph is removed — no prose
+      on an operator surface; the title states the scope and each plate its assignment.)
       **THE LAYERING IS IN THE UI, in the dialog's first paragraph** — this row only,
       the template's assignment untouched, the installation's list untouched, every
       other row carrying the template unaffected — and pinned by a DOM test, because an
