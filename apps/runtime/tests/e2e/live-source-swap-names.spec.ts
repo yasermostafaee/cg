@@ -184,12 +184,24 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
     .toEqual([]);
 
   // ── the row's SOURCE, from its menu ──
-  await row.click({ button: 'right' });
-  // `force`: a live bridge re-renders the row (and its menu) on every push, so the item is never
-  // "stable" to Playwright; the dialog opening below is the proof the press landed.
-  await page.getByRole('menu').getByRole('menuitem', { name: 'SOURCE' }).click({ force: true });
+  /*
+    The menu CLOSES on any scroll or resize, by design (`ContextMenu`: close rather than chase a row
+    that moved — acting on the wrong row is the failure worth designing against). On CI's slower
+    runner something scrolled after the right-click and the menu went — the first run of this spec
+    waited 30 s on an item no longer there (run 37153905221). So the open is RETRIED until the dialog
+    is up: the dialog is this test's subject, and its opening is the proof the press landed. `force`:
+    a live bridge re-renders the row on every push, so the item is never "stable" to Playwright.
+  */
   const dialog = page.getByRole('dialog', { name: /Live source for this row/ });
-  await expect(dialog).toBeVisible();
+  await expect(async () => {
+    if (await dialog.isVisible()) return;
+    await row.click({ button: 'right' });
+    await page
+      .getByRole('menu')
+      .getByRole('menuitem', { name: 'SOURCE' })
+      .click({ force: true, timeout: 2000 });
+    await expect(dialog).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20_000 });
 
   // No paragraph, and no plate id anywhere in what the operator reads.
   await expect(dialog.locator('p')).toHaveCount(0);
