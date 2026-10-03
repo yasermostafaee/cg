@@ -225,7 +225,7 @@ it('🔴 B-107: an ERRORED row is restored as ERRORED on its layer, never promot
       fields: {},
       state: 'error',
       errorCode: 'amcp-403',
-      slot: SLOT,
+      slot: { ...SLOT, server: 'primary' },
     },
   ];
 
@@ -316,7 +316,7 @@ it('🔴 B-301 — a refused Load leaves NOTHING, and what one left before is no
       fields: {},
       state: 'error',
       errorCode: 'amcp-403',
-      slot: SLOT,
+      slot: { ...SLOT, server: 'primary' },
     },
   ];
   const beforeRestore = (await recvLines(m, tracePath)).length;

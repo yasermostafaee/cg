@@ -42,8 +42,8 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 3.1 The direction rule in the naming helpers; the choice label carries its name apart
 - [x] 3.2 The departed default reads `Unavailable`
 - [x] 3.3 dom + e2e (`source-names-bidi.spec` measures each surface's runs); pushed `62b7fe66`; CI COMPLETED
-      green, jobs RUN — PR <https://github.com/yasermostafaee/cg/actions/runs/37129785632> (`E2E
-  (Playwright)` RAN: runtime 322 passed, designer 293), Desktop
+      green, jobs RUN — PR <https://github.com/yasermostafaee/cg/actions/runs/37129785632> (its e2e job
+      RAN: runtime 322 passed, designer 293), Desktop
       <https://github.com/yasermostafaee/cg/actions/runs/37129785734>; after screenshots
       `CONSOLE-POLISH-01-item4-after-*`; the tag's gap `17654bd4`
 
