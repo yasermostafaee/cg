@@ -7730,6 +7730,11 @@ input[type='checkbox']:disabled:checked {
   letter-spacing: 0.04em;
 }
 
+/* `B-303` — a choice's `Unavailable` keeps the gap `SourceLabel`'s flex row gives its own tag. */
+.cg-choice-label > .cg-source-tag {
+  margin-inline-start: var(--r-space-1);
+}
+
 /* ── `SourceLabel` — icon, name, a clip's length, `Unavailable` ──────────────────────── */
 .cg-source-label {
   display: inline-flex;
