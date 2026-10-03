@@ -1,0 +1,80 @@
+## ADDED Requirements
+
+### Requirement: A Load CG Bridge refuses SHALL leave nothing behind
+
+CG Bridge SHALL judge a Load — onto a fixed row or not — before it creates the item: a Load refused
+(`unknown-template`, `not-fixed`, `wrong-bank`, `slot-bound`) SHALL be answered and audited exactly as before,
+and SHALL create no stack item, so nothing is counted, saved or restored for it. At start CG Bridge SHALL drop
+every restored item that has no layer and is in `error` — what a refused Load left before this change — logging
+one line for each and touching nothing on air. A row error SHALL be dismissable (`stack.dismiss-error`), judged
+as a removal of that row is judged: the item's error is cleared and it reads the status it settled to.
+
+#### Scenario: A refused Load
+
+- **WHEN** a console Loads a template the channel does not list **THEN** the Load is refused
+  `unknown-template` and the stack holds no new item — control: a Load of a listed template creates its row's
+  item
+
+#### Scenario: The owner's stored count
+
+- **WHEN** CG Bridge starts on a stack holding two items with no layer in `error` **THEN** neither is restored,
+  and a row item in `error` on a layer is restored as before
+
+#### Scenario: Dismissed
+
+- **WHEN** a row in `error` is dismissed **THEN** every console reads it in its settled status, and nothing is
+  sent to CasparCG
+
+### Requirement: CG Bridge SHALL tell every console who imported, re-imported or removed a template
+
+After an import, a re-import or a removal it accepts, CG Bridge SHALL publish `templates.acted` to every
+console — the act, the template's id and name, the channel (or none), and the acting user as the audit names
+them — alongside `templates.changed`. A refused act SHALL publish nothing.
+
+#### Scenario: A removal is named
+
+- **WHEN** a user removes a template from CH 1 **THEN** every console is told `remove`, that template, CH 1 and
+  that user — control: a removal refused `in-use` tells no one
+
+### Requirement: The connection check SHALL also read CG Bridge's session, OSC, the CG license and the channels
+
+The connection check SHALL answer, beside its lines of reach and sign-in, four lines that read CG Bridge's own
+state: **CG Bridge's Playout session** (signed in as its account; waiting for a station admin; the Playout's
+own refusal as sent), **OSC** (CasparCG's OSC arriving, with when it last did; silent — said as "no
+confirmation", a warning and never a failure, golden rule 8), **the CG license** (licensed, with its cap; the
+Playout's own reason when not; not read on a Playout that publishes none), and **the channels** (how many
+the asking console's sign-in holds). Each line SHALL wait, neutral, until a sign-in can read it, and SHALL say
+what it waits for. Every line SHALL be returned in the one order `CONNECTION_CHECK_GROUPS` gives.
+
+#### Scenario: Before any sign-in
+
+- **WHEN** a console checks before anyone has signed in **THEN** the session, OSC, license and channels lines
+  each wait, and none fails
+
+#### Scenario: After a station admin's sign-in
+
+- **WHEN** a station admin is signed in, CG Bridge holds its session and CasparCG answers with no OSC **THEN**
+  the session line passes, the OSC line warns that nothing confirms what is on air, and the AMCP line passes
+
+### Requirement: CG Bridge SHALL page its audit, rotate it, and push new rows
+
+CG Bridge SHALL answer `audit.page` with up to 100 rows, newest first, and a cursor for the next page, applying
+the request's filters (channel, user, action, result) and its search — and the console's channel grant —
+BEFORE the page is cut. It SHALL read only as far back as the page needs. It SHALL push each new row to every
+console told that row's channel (`audit.appended`). The audit file SHALL rotate at local midnight and at 20 MB,
+each rotated file named by the time of its first row so a cursor survives a rotation, and SHALL keep 90 days
+and at most 200 MB in all, deleting the oldest first. `Download logs` SHALL carry every kept audit file.
+
+#### Scenario: Pages and a filter
+
+- **WHEN** the audit holds 50,000 rows **THEN** the first page is the newest 100, the next page the 100 before
+  them, and a filter by user returns only that user's rows, newest first
+
+#### Scenario: Rotation keeps the cursor and the limit
+
+- **WHEN** the audit rotates between two pages **THEN** the second page continues where the first ended **AND**
+  a rotated file older than 90 days, or past 200 MB in all, is deleted
+
+#### Scenario: The zip
+
+- **WHEN** a station admin downloads the logs **THEN** the zip carries every kept audit file

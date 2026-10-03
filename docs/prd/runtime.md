@@ -4319,3 +4319,56 @@ backup machine, reading the same stores, would take over. **Why.** The Playout t
 `0.10.0` by the owner's scope. If only the bridge dies there is no failover — failover follows the
 primary ENGINE's death, not the bridge's. **Acceptance (sketch):** WHEN the primary machine is lost THEN
 the consoles reconnect to the standby bridge and the on-air record is the same as the primary's was.
+
+## [~] R-080 — CG Control's first question says CG Bridge's address may stay empty, and first-run says where CG Bridge was found ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §5 · `openspec/changes/console-polish/`
+
+**What:** the `CG Bridge address` field reads `Found automatically` while empty, with one hint line under it:
+`Leave empty unless CG Bridge runs on a separate server.` Once connected, first-run's check names where CG
+Bridge was found: `CG Bridge found at <host>:<port>`. **Why:** the owner's own-PC run of `0.10.0`
+(2026-09-30): nothing said the field could be left empty. **Acceptance:**
+
+- WHEN CG Control asks its first question THEN the CG Bridge field is empty with the placeholder and the one
+  hint line
+- WHEN the console has connected THEN first-run's check carries `CG Bridge found at <host>:<port>`
+
+## [~] R-081 — First-run's check reads in the order things happen, grouped, and runs again from Station setup ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §6 · `openspec/changes/console-polish/`
+
+**What:** the check's lines in four visible groups — **Reachable** (the Playout, CG Bridge), **Versions**
+(CG Bridge against this console), **Sign-in** (this console's, then CG Bridge's own session), **After
+sign-in** (CasparCG through CG Bridge, OSC, the CG license, the channels, where things run) — the same list
+in first-run and in Station setup, where a station admin runs it again. **Why:** the owner's run: the
+"waiting for sign-in" line sat in the middle of the list. **Acceptance:**
+
+- WHEN the check is shown THEN its lines are grouped and ordered as above
+- WHEN no one has signed in THEN every line of the last group waits, and none fails for it
+- WHEN a station admin opens Station setup THEN the same check runs again there
+
+**Notes:** the Playout publishes no build number to CG (none in D1–D11, the license read or the API's
+headers, which say `Server: Kestrel`), so the Versions group holds CG Bridge's; the Playout's build joins
+it when the Playout publishes one.
+
+## [~] R-082 — One sign-in look: the Playout sign-in, CG Bridge's sign-in and first-run ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §7 · `openspec/changes/console-polish/`
+
+**What:** one centred card on the dark ground, with the Apasai mark and the product name, the app's
+version at its foot, labelled fields, a show/hide control on every password, Enter submitting from any
+field, and one error line in the message style (a Persian message from the Playout as it is, right to
+left), in the splash's visual language. **Why:** the owner's run of `0.10.0`. **Acceptance:**
+
+- WHEN any of the three is shown THEN it carries the mark, the product name and the version
+- WHEN the password's show control is pressed THEN the password reads as text, and back
+- WHEN Enter is pressed in any field THEN the form submits
+- WHEN the Playout refuses with a Persian message THEN that line reads right to left, as sent
+
+**Notes:** `@cg/splash-kit` holds the splash's timing only; its visual language — the mark, the ground,
+the type — lives in `apps/runtime/index.html` and the `--r-splash-*` tokens.
+
+## [~] R-083 — The audit log is paged from CG Bridge, filtered there, and rotated ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §9 · `openspec/changes/console-polish/`
+
+**What:** the LOG dialog reads the audit 100 rows a page, newest first, with a cursor; the list is
+virtualised; filters (channel, user, action, result) and the search run on CG Bridge; a new row appears at
+the top live. The audit file rotates by day and by size and keeps a set limit; `Download logs` carries
+every kept audit file. **Why:** the dialog read the whole file on every open. **Acceptance:**
+
+- WHEN the audit holds 50,000 rows THEN the dialog opens in under 1 s with no more than 100 rows rendered
+- WHEN the next page is asked, or a filter set THEN the right rows come back
+- WHEN a row is written while the dialog is open THEN it appears at the top

@@ -13094,3 +13094,68 @@ binding is never refused for what became of its entry since (`unbindableChange`'
 `route-plates.integration.test.ts` (`B-299`: the swap refused, nothing sent, the seat unchanged; control: a
 swap to `ورودی ۵` lands; and a mark added after binding never refuses a neighbour's swap — control: the
 marked input bound anew is refused). Each planted out goes red on its own test.
+
+## [~] B-300 — An open template picker did not follow a removal made on another console ⟨priority: high — two consoles on one CG Bridge is the delivered shape⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §1 · `openspec/changes/console-polish/`
+
+**Repro:** two consoles on one CG Bridge, the template picker open on both, on the same channel. Remove a
+template on A. **Expected:** B's open list drops it within a second; had B chosen it, B is told in words that
+it was removed on another console, by whom. **Actual:** B's list kept it until the picker was closed and
+opened again, and a Load of it from B was refused as `That template is not registered with the bridge —
+re-import it.` **Cause (§0):** the picker read `templates.list` once, when it opened
+(`useTemplatePicker.tsx`, "pulled at OPEN time rather than subscribed"), although the bridge already pushes
+`templates.changed` to every console; the push names no one. The Library and Import dialogs the owner named
+are retired (`R-028`, `UI-POLISH-01` C/D): the picker is the only template list. **Regression test:** two
+consoles on one bridge, the picker open on both — A removes, B's list drops it within 1 s; control: B's
+other templates unchanged, and a take from B of one still listed works.
+
+## [~] B-301 — A refused Load left an invisible error item that the Layers badge counted forever ⟨priority: high — the badge said `2 in error` on a station with no error on any row⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §2 · `openspec/changes/console-polish/`
+
+**Repro:** Load, onto a row, a template the bridge no longer lists on that channel (removed on another
+console while this console's picker was open — `B-300`). **Expected:** the Load is refused once, where it
+was asked, with its reason; no row changes and nothing is counted. **Actual:** the refusal toast, and the
+Layers header's `N in error` grew by one per attempt and never cleared, across restarts. **Cause (§0):** the
+bridge's fixed Load created the stack item (`applyIntent`) BEFORE its checks, and each refusal then marked
+that item `error` (`applyAck(…, false)`) — an item with no layer, which no row shows and nothing clears, saved
+to `bridge-stack.json` and restored at start. The badge counted every `error` item in the view, and an item
+with no layer is in every channel's view. A failed `.vcg` import creates no item; the owner's two counted
+errors are two refused Loads. **Regression test:** a broken `.vcg` import fails with its reason and leaves
+the badge at 0; a refused Load leaves the badge at 0; control: a real row error counts, and clears when
+fixed.
+
+## [~] B-302 — The source picker's tabs sat flush against the popover's edge ⟨priority: low⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §3 · `openspec/changes/console-polish/`
+
+**Repro:** open any plate's source field (Look inputs, Source defaults, the on-air swap). **Expected:** the
+`Inputs` / `Media` tabs start where the rows below them start. **Actual:** `Inputs 0` touched the popover's
+left edge. **Cause:** the picker's tab strip is the shared `.cg-tab-strip`, which carries no inline padding;
+every other part of the panel pads itself. **Regression test:** e2e measures the first tab's text against the
+rows' text inset in a real engine.
+
+## [~] B-303 — A Persian source name in the plate field was reordered, and a default the Playout stopped listing was not marked ⟨priority: medium⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §4 · `openspec/changes/console-polish/`
+
+**Repro:** a plate whose Source default is the input `NDI کانالِ ۱ (APASAI)`, on a Playout that no longer lists
+it. **Expected:** the field reads `Default («NDI کانالِ ۱ (APASAI)»)` with the name in the order the Playout
+shows it, and the `Unavailable` mark. **Actual:** `Default (NDI ۱ کانال (APASAI))`, no mark. **Cause:** the
+choice's label was one string (`Default (${name})`), so the name was laid out inside the English line; and a
+name that starts with a Latin letter is laid out left to right even when isolated (`dir=auto` takes the
+first strong letter). The default branch read only the name, never the entry's status. (The prompt's
+`Missing` mark does not exist; the existing mark is `Unavailable`.) **Regression test:** e2e measures the
+name's runs in each place it is drawn; the default reads `Unavailable`.
+
+## [~] B-304 — `first-run.spec.ts:129` failed by a strict-mode race between two copies of one check line ⟨priority: medium — 3/3 red on Windows, one CI flake⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §10.1 · `openspec/changes/console-polish/`
+
+**Repro:** `npx playwright test tests/e2e/first-run.spec.ts` on the dev host. **Expected:** green.
+**Actual:** `strict mode violation: … [data-check="api"] resolved to 2 elements`, at once (a strict-mode
+violation is not retried), and the file's four serial siblings did not run. **Cause:** while the check runs,
+first-run's Sign in section showed the still-`checking` API line as its blocker — the same line, a second
+time — so an unscoped locator met two; in CI the first look usually landed after the check had answered and
+the copy was gone. **Fix:** the Sign in section shows a blocker only once the check has a verdict, and the
+spec reads the check where it lives. **Regression test:** the spec, 3 of 3 locally and in CI.
+
+## [~] B-305 — `pgm-return.spec` and `channel-air.spec` fought over `127.0.0.1:9250` when run together ⟨priority: low — local parallel runs only; CI runs one worker⟩ — FILED 2026-10-03 by `CONSOLE-POLISH-01` (v3) §10.2 · `openspec/changes/console-polish/`
+
+**Repro:** run both specs in one parallel batch. **Expected:** green. **Actual:** `pgm-return.spec.ts:151`
+saw a second reader on its fake feed. **Cause:** `pgm-return.spec` holds a fake programme feed on the rule
+port `127.0.0.1:9250`, and two other specs dial exactly that when they show the monitors —
+`channel-air.spec`'s CLI bridge (no port seam on the CLI) and `pvw-from-bridge.spec`'s in-process bridge.
+**Fix:** `pgm-return.spec` runs its station and its feed on its own loopback address, still on the rule
+port. **Regression test:** the three specs in one parallel batch, green.
