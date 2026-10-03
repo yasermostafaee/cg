@@ -78,7 +78,9 @@ interface Harness {
   press(label: RegExp): Promise<void>;
 }
 
-async function mount(check: ConnectionCheckResult): Promise<Harness> {
+async function mount(
+  check: ConnectionCheckResult | Promise<ConnectionCheckResult>,
+): Promise<Harness> {
   let checkResult = check;
   let signInResult: Error | null = null;
   const checks = vi.fn(() => Promise.resolve(checkResult));
@@ -166,6 +168,28 @@ describe('DELTA-MULTI-CHANNEL-01-B B2 — first-run offers a sign-in only when i
       (b) => b.textContent === 'Check',
     );
     expect(check?.disabled).toBe(false);
+  });
+
+  it('🔴 B-304 — while the check RUNS, the Sign in section repeats nothing: the API line is drawn ONCE; the verdict brings the blocker', async () => {
+    let answer: (r: ConnectionCheckResult) => void = () => undefined;
+    const pending = new Promise<ConnectionCheckResult>((resolve) => {
+      answer = resolve;
+    });
+    const h = await mount(pending);
+    // Checking: the line is in the check, once, and the sign-in names no blocker yet.
+    const apiLines = (): number => h.el.querySelectorAll('[data-check="api"]').length;
+    expect(h.el.querySelector('[data-check="api"]')?.getAttribute('data-status')).toBe('checking');
+    expect(apiLines()).toBe(1);
+    expect(blocker(h)).toBeNull();
+    expect(input(h, 'cg-first-run-pass')?.disabled, 'a sign-in still waits for a verdict').toBe(
+      true,
+    );
+    // The verdict: a failure is named beside the fields (B2), as before.
+    await act(async () => {
+      answer(PLAYOUT_DOWN);
+    });
+    await flush();
+    expect(blocker(h)).toBe('No answer from 192.168.21.111 on port 8080.');
   });
 
   it('CONTROL — the Playout UP: enabled, no line in the way; and a wrong password marks the field, in English', async () => {

@@ -237,7 +237,14 @@ function SignInStep({
     says why in the check's own words. Check stays where it is, above.
   */
   const canWork = lines !== null && signInCanWork(lines);
-  const blocker = canWork ? null : signInBlocker(lines);
+  /*
+    🔴 `B-304` — **A BLOCKER IS A VERDICT.** While the check is still running, the line that would
+    block is `checking` — no verdict yet — and it is already drawn once, in the check above. Repeating
+    it here drew the same line twice (a strict-mode race in `first-run.spec.ts:129`, red 3/3 on the
+    dev host). So the Sign in section names its blocker only once the check has said something.
+  */
+  const verdict = canWork ? null : signInBlocker(lines);
+  const blocker = verdict !== null && verdict.status !== 'checking' ? verdict : null;
 
   const submit = async (): Promise<void> => {
     if (busy || !canWork || username === '' || password === '') return;
