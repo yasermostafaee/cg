@@ -102,17 +102,27 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 7.3 The LOG dialog: paged, virtualised (`useVirtualWindow`), bridge-side filters (Channel added)
       and search, live rows; the count is the rows held
 - [x] 7.4 `logs.zip` carries every kept audit file under `audit/`
-- [ ] 7.5 Tests: `@cg/audit` `page.test` (50,000 rows: first page < 250 ms; paging; a filter; a rotation
+- [x] 7.5 Tests: `@cg/audit` `page.test` (50,000 rows: first page < 250 ms; paging; a filter; a rotation
       between pages; rotation and retention), bridge `audit-page.integration` (a scoped console's full
       page; the search by a row's alias; the push scoped), `http-tickets` (the zip), dom
       `auditPanel.paging` + the seven `auditPanel.*` specs moved to pages, e2e `audit-paging.spec`
       (50,000 rows: first rows 158 ms after the press, 18 rows in the document; the next page at the
-      end; a filter; a live row at the top — 12/12 with the audit and row-error specs); gate; pushed;
-      CI read
+      end; a filter; a live row at the top — 12/12 with the audit and row-error specs). The first push
+      (`d67cd310`) was refused by the gate's coverage floor (`@cg/audit` branches, `@cg/shared-ipc`
+      functions): tests added where the code lives (`ba818c37`), no threshold touched. Gate 99/99
+      uncached; pushed `ba818c37`; CI COMPLETED green, jobs RUN — PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37140336493>: attempt 1's `E2E (Playwright)`
+      RAN (runtime 326 passed, `audit-paging.spec.ts` among them; designer 293); its unit job went red
+      on `plate-band.integration.test.ts:174` (`Unterminated string in JSON` — the test's boot poll read
+      a half-written line of the mock's wire trace; this change sends no AMCP; unfiled), and attempt 2
+      of that job RAN green with it passing. Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37140336485> (Installers, Installer smoke, CG
+      Bridge smoke)
 - [x] 7.6 `playout-auth-reload.spec.ts:170` polls the record, and reads every file of it (it read once;
       red once under four local workers, green alone 2/2)
 
 ## 8. Close
 
-- [ ] 8.1 `pnpm openspec validate --all --strict`; the report
-      `Claude outputs/REPORT-CONSOLE-POLISH-01-v1-<date>.md`
+- [x] 8.1 `pnpm openspec validate --all --strict` (92 passed); the report
+      `Claude outputs/REPORT-CONSOLE-POLISH-01-v1-2026-10-03.md`
+- [ ] 8.2 The owner's own-PC check of each item; then archive (on the owner's word)
