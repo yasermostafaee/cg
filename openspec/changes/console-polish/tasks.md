@@ -131,3 +131,23 @@ was stashed before each push so the gate judged only what was pushed.
 - [x] 8.1 `pnpm openspec validate --all --strict` (92 passed); the report
       `Claude outputs/REPORT-CONSOLE-POLISH-01-v1-2026-10-03.md`
 - [ ] 8.2 The owner's own-PC check of each item; then archive (on the owner's word)
+
+## 9. Delta `CONSOLE-POLISH-01-A` (2026-10-04)
+
+Lanes: A1 FAST (copy and markup; what a swap sends is untouched), A2 test-only, A3 and A4 docs. One gate,
+one push for the batch.
+
+- [x] 9.1 Filed: `B-306` (A1), `B-307` (A2), `R-084` (A3, waits for the Playout team), and `B-308` —
+      found while fixing `B-306`: twelve of CG Bridge's sentences name a plate by its id (filed only)
+- [x] 9.2 `B-306`: the swap dialog's plates read `Plate N` (id on the `title`); each plate's assignment
+      goes through the one choice label (`Template assignment (…)`, `none set`, `Not listed`,
+      `Unavailable`); the paragraph removed, its absence pinned (`liveSourceSwap.dom`); the old sentence
+      swept by string and by component. e2e `live-source-swap-names.spec` (a real bridge and CasparCG):
+      `Plate N`, no id, no paragraph, the names right to left; control: the swap's AMCP lines equal the
+      wire recorded on the unchanged dialog (11 lines). Positive control: the spec fails on the old dialog
+- [x] 9.3 `B-307`: `tests/support/wire-trace.ts` (complete lines only); all 50 bridge tests that read
+      the trace moved to it (the `traceFlush` users and the shared-reader users are the same 50);
+      `wire-trace.test.ts` holds the positive control (the old reader throws on the torn line, as CI
+      saw). The bridge's `test` inputs already hash `tests/**`
+- [ ] 9.4 Gate; pushed; CI read (the e2e job RAN for the `B-306` commit)
+- [x] 9.5 The owner's check, step by step, in the report
