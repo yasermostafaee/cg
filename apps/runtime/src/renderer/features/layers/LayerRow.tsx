@@ -7,6 +7,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
+import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
 import { isContextMenuKey, useContextMenu } from '../../ui/useContextMenu.js';
@@ -964,7 +965,11 @@ export function LayerRow({
           untouched; what changed is where the name's own box ends.
         */}
         <span data-row-body="" title={rowName}>
-          {rowName}
+          {/*
+            `B-303` — a row's name is operator data (`Bed 59`, or a station's own Persian alias): it
+            sits in its own inline isolate, in its own direction, inside the row's LTR box.
+          */}
+          <bdi dir={directionOf(rowName)}>{rowName}</bdi>
           {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
         </span>
         {/*
@@ -1115,7 +1120,8 @@ export function LayerRow({
               is chrome and stays LTR; the NAME alone is isolated.
             */
           >
-            <bdi>{templateLabel}</bdi>
+            {/* `B-303` — the name's OWN direction, not its first letter's. */}
+            <bdi dir={directionOf(templateLabel)}>{templateLabel}</bdi>
             {templateMissing && (
               <span
                 style={

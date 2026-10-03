@@ -66,7 +66,8 @@ export function OperatorNames({ name }: { name: OperatorRowName }): JSX.Element 
       {name.names.map((n, i) => (
         <span key={`${String(i)}:${n}`}>
           {i > 0 ? ' · ' : ''}
-          <bdi>{n}</bdi>
+          {/* `B-303` — each name in ITS OWN direction (`directionOf`), never the first letter's. */}
+          <bdi dir={directionOf(n)}>{n}</bdi>
         </span>
       ))}
     </>
@@ -124,7 +125,13 @@ export function IsolatedName({
 }): JSX.Element {
   return (
     <span className={className} title={title} dir="ltr">
-      <bdi>{children}</bdi>
+      {/*
+        `B-303` — the isolate takes the name's OWN direction ({@link directionOf}) when the name is
+        text; anything else keeps the UA's `dir=auto`. The BOX stays LTR, as above.
+      */}
+      <bdi {...(typeof children === 'string' ? { dir: directionOf(children) } : {})}>
+        {children}
+      </bdi>
     </span>
   );
 }

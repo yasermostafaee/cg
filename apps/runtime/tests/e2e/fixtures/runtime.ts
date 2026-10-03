@@ -1194,6 +1194,34 @@ export async function cssColour(page: Page, declared: string): Promise<string> {
   }, declared);
 }
 
+/**
+ * The x of a sub-range of one element's text, so character ORDER can be measured in a real engine
+ * (`MODAL-CHROME-10` ADDENDUM B §2, and `B-303`). It walks the element's TEXT NODES with a `Range`, so
+ * it measures where the glyphs of `needle` actually land, whatever isolate holds them.
+ *
+ * ⚠ It takes a LOCATOR and not a selector string: an element found by its text uses Playwright's
+ * `:has-text()`, which is not a CSS selector — handing it to `querySelector` throws.
+ */
+export async function textRunX(
+  target: Locator,
+  needle: string,
+): Promise<{ left: number; right: number }> {
+  return target.evaluate((host, want) => {
+    const walk = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    while (walk.nextNode()) {
+      const node = walk.currentNode;
+      const at = (node.textContent ?? '').indexOf(want);
+      if (at === -1) continue;
+      const r = document.createRange();
+      r.setStart(node, at);
+      r.setEnd(node, at + want.length);
+      const box = r.getBoundingClientRect();
+      return { left: +box.left.toFixed(1), right: +box.right.toFixed(1) };
+    }
+    throw new Error(`the element does not contain ${want}`);
+  }, needle);
+}
+
 export async function disableSplash(page: Page): Promise<void> {
   await page.addInitScript(() => {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;

@@ -541,10 +541,6 @@ export function LooksBindingsSection({
               */
               const assigned = defaults.get(plate.sourceId);
               const templateDefault = assigned === undefined || assigned === '' ? null : assigned;
-              const defaultLabel =
-                templateDefault === null
-                  ? 'Default (none set)'
-                  : `Default (${sourceName(templateDefault)})`;
               const value = effectiveLookBinding(item.itemId, look.id, plate.sourceId, applied);
               const dirty = isLookBindingDirty(item.itemId, look.id, plate.sourceId, applied);
               // §2 — level 4 masks level 3, for THIS plate, in EVERY look.
@@ -595,7 +591,14 @@ export function LooksBindingsSection({
                       onChange={(sourceId) =>
                         stageLookBinding(item.itemId, look.id, plate.sourceId, sourceId)
                       }
-                      choices={[{ value: '', label: defaultLabel }]}
+                      /*
+                        🔴 `B-303` — the default's WORDS and the SOURCE it names are kept apart: the
+                        picker draws `Default (` + the name in its own isolate and direction + `)`,
+                        and marks a default the Playout no longer offers `Unavailable` (the owner's
+                        fake Playout, 2026-09-30: D10 empty, the default naming an NDI input). It was
+                        one string, and «NDI کانالِ ۱ (APASAI)» read `NDI ۱ کانال (APASAI)`.
+                      */
+                      choices={[{ value: '', label: 'Default', names: templateDefault }]}
                       channel={item.slot?.channel}
                     />
                     <MediaPlaybackControl sourceId={value !== '' ? value : templateDefault} />

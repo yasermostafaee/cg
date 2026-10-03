@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
+import { directionOf } from '../src/renderer/ui/OperatorNames.js';
 import {
   __resetDraftsForTest,
   buildApplyPayload,
@@ -162,14 +163,30 @@ describe('item 6 — free-text editors delegate direction to the browser', () =>
       const dir = node.getAttribute('dir');
       expect(dir === null || dir === 'auto', `${node.tagName} pins dir=${String(dir)}`).toBe(true);
     }
-    // Nothing anywhere in the panel pins RTL — that direction is never ours to assert.
-    expect(el.querySelectorAll('[dir="rtl"]')).toHaveLength(0);
-    const ltr = el.querySelectorAll('[dir="ltr"]');
-    // …and its own positive control: an empty set would make the loop below say nothing.
-    expect(ltr.length, 'the panel rendered isolated names to measure').toBeGreaterThan(0);
-    for (const node of ltr) {
+    /*
+      🔴 `B-303` (`CONSOLE-POLISH-01` §4) — **A NAME'S ISOLATE NOW CARRIES ITS OWN DIRECTION, and this
+      is where that is asked precisely.** The rule used to be "nothing pins RTL — that direction is
+      never ours to assert", leaving every name to `<bdi>`'s `dir=auto`. The owner's screenshot
+      (2026-09-30) is why it changed: `dir=auto` reads the FIRST strong letter, so a Persian name that
+      starts with a Latin word (`NDI کانالِ ۱ (APASAI)`) was laid out left to right and read out of
+      order. So a literal `dir` is permitted in exactly two places, and nowhere else:
+        - a NAME'S BOX — `IsolatedName`'s LTR wrapper, holding a `<bdi>` and no control; and
+        - a NAME'S ISOLATE — a `<bdi>` whose `dir` is its OWN text's direction (`directionOf`).
+      An editor that pins a direction, or a `dir` on anything else, still goes red here.
+    */
+    const directed = el.querySelectorAll('[dir="ltr"], [dir="rtl"]');
+    // The positive control: an empty set would make the loop below say nothing.
+    expect(directed.length, 'the panel rendered isolated names to measure').toBeGreaterThan(0);
+    for (const node of directed) {
       expect(node.querySelector('input, textarea, select, [contenteditable]')).toBeNull();
-      expect(node.firstElementChild?.tagName, 'a literal LTR box is a name’s box').toBe('BDI');
+      if (node.tagName === 'BDI') {
+        expect(node.getAttribute('dir'), 'an isolate takes its OWN text’s direction').toBe(
+          directionOf(node.textContent ?? ''),
+        );
+      } else {
+        expect(node.getAttribute('dir'), 'a literal box direction is a name’s LTR box').toBe('ltr');
+        expect(node.firstElementChild?.tagName, 'a literal LTR box is a name’s box').toBe('BDI');
+      }
     }
   });
 });

@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { Cable, Check, Film } from 'lucide-react';
 import {
+  INPUT_GONE_REASON,
   isPlaylistOutput,
   ownOutputTitle,
   sourceBindable,
@@ -22,6 +23,7 @@ import {
 import { Button } from '../../ui/Button.js';
 import { ComboField } from '../../ui/ComboField.js';
 import { Icon } from '../../ui/Icon.js';
+import { directionOf } from '../../ui/OperatorNames.js';
 import { Popover } from '../../ui/Popover.js';
 import { TabPanel, TabStrip } from '../../ui/Tabs.js';
 import { Tag } from '../../ui/Tag.js';
@@ -68,8 +70,65 @@ import {
 export interface SourceChoice {
   /** What {@link SourcePickerProps.onChange} receives for it. */
   readonly value: string;
-  /** Its words: `None`, `Default (Studio 1)`, `Use template assignment (Studio 1)`. */
+  /** Its WORDS, and only its words: `None`, `Default`, `Use template assignment`. */
   readonly label: string;
+  /**
+   * 🔴 `B-303` — **THE SOURCE IT NAMES, KEPT APART FROM ITS WORDS.** A catalogue id: the choice reads
+   * `<label> (<name>)`, the name in its own isolate and its own direction ({@link ChoiceLabel}), with
+   * `Unavailable` when the Playout no longer offers it. `null` — it names nothing (`(none set)`).
+   * Absent — the words alone. It used to be one string, `Default (${name})`, so the owner's
+   * `NDI کانالِ ۱ (APASAI)` was laid out inside the English and read `NDI ۱ کانال (APASAI)`.
+   */
+  readonly names?: string | null | undefined;
+}
+
+/** `B-303` — what a choice names when the catalogue does not know its id at all. */
+export const NOT_LISTED = 'Not listed';
+
+/** A choice as plain text — `Default (Studio 1)` — for a fallback, a title or a finder. */
+export function choiceText(choice: SourceChoice): string {
+  if (choice.names === undefined) return choice.label;
+  if (choice.names === null) return `${choice.label} (none set)`;
+  return `${choice.label} (${labelledSource(choice.names)?.name ?? NOT_LISTED})`;
+}
+
+/**
+ * 🔴 `B-303` — **A CHOICE'S WORDS, AND THE NAME APART.** `Default (` and `)` are this console's
+ * English, laid out in the line's own direction; the name between them is the Playout's, in an
+ * inline isolate in ITS direction (`directionOf`), so a Persian name reads right to left whatever
+ * letter it starts with. A source the Playout no longer offers — kept as departed, or not in the
+ * catalogue at all — wears the `Unavailable` tag every bound source wears (`SourceLabel`); one the
+ * catalogue does not know reads `Not listed`, its id on the `title` (golden rule 11).
+ */
+export function ChoiceLabel({ choice }: { choice: SourceChoice }): JSX.Element {
+  if (choice.names === undefined) return <span className="cg-choice-label">{choice.label}</span>;
+  if (choice.names === null) {
+    return <span className="cg-choice-label">{`${choice.label} (none set)`}</span>;
+  }
+  const source = labelledSource(choice.names);
+  const name = source?.name ?? NOT_LISTED;
+  const offered = source !== null && !source.unavailable;
+  return (
+    <span
+      className="cg-choice-label"
+      data-choice-names={choice.names}
+      {...(source === null ? { title: choice.names } : {})}
+    >
+      {`${choice.label} (`}
+      <bdi dir={directionOf(name)} data-choice-name="">
+        {name}
+      </bdi>
+      {')'}
+      {!offered && (
+        <Tag
+          className="cg-source-tag cg-source-tag--unavailable"
+          title={source?.reason ?? INPUT_GONE_REASON}
+        >
+          Unavailable
+        </Tag>
+      )}
+    </span>
+  );
 }
 
 export interface SourcePickerProps {
@@ -156,10 +215,13 @@ export function SourcePicker({
       >
         {choice !== undefined && (value === '' || !known) ? (
           <span className="cg-source-label" data-source-label="choice">
-            {choice.label}
+            <ChoiceLabel choice={choice} />
           </span>
         ) : (
-          <SourceLabel sourceId={value} fallback={choices[0]?.label ?? 'None'} />
+          <SourceLabel
+            sourceId={value}
+            fallback={choices[0] !== undefined ? choiceText(choices[0]) : 'None'}
+          />
         )}
       </ComboField>
       {open && (
@@ -227,7 +289,7 @@ function PickerPanel({
               onClick={() => onPick(c.value)}
             >
               {value === c.value && <Icon icon={Check} size={13} />}
-              {c.label}
+              <ChoiceLabel choice={c} />
             </Button>
           ))}
         </div>
@@ -375,7 +437,10 @@ function InputsTab({
       content: (
         <span className="cg-picker-row">
           <Icon icon={Cable} size={14} />
-          <bdi className="cg-picker-row__name">{source.name}</bdi>
+          {/* `B-303` — the name in its own direction (`directionOf`), as `SourceLabel` draws it. */}
+          <bdi className="cg-picker-row__name" dir={directionOf(source.name)}>
+            {source.name}
+          </bdi>
           {source.status === 'unavailable' && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}
@@ -545,14 +610,18 @@ function mediaRow(
       <span className="cg-picker-media">
         <span className="cg-picker-row">
           <Icon icon={Film} size={14} />
-          <bdi className="cg-picker-row__name">{item.name}</bdi>
+          <bdi className="cg-picker-row__name" dir={directionOf(item.name)}>
+            {item.name}
+          </bdi>
           {item.unavailable === true && (
             <Tag className="cg-source-tag cg-source-tag--unavailable">Unavailable</Tag>
           )}
           {selected && <Icon icon={Check} size={14} />}
         </span>
         <span className="cg-picker-media__facts">
-          {item.folder !== undefined && item.folder !== '' && <bdi>{item.folder}</bdi>}
+          {item.folder !== undefined && item.folder !== '' && (
+            <bdi dir={directionOf(item.folder)}>{item.folder}</bdi>
+          )}
           {facts.map((f, i) => (
             <span key={f}>
               {(i > 0 || (item.folder !== undefined && item.folder !== '')) && ' · '}

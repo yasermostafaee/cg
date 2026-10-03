@@ -7,7 +7,6 @@ import { SourceLabel } from '../sources/SourceLabel.js';
 import { SourcePicker } from '../sources/SourcePicker.js';
 import {
   currentSourceAssignments,
-  currentSourceCatalog,
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
@@ -83,15 +82,12 @@ export function LiveSourceSwapDialog({
 }: LiveSourceSwapDialogProps): React.JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const catalog = currentSourceCatalog();
   const assignments = currentSourceAssignments();
   const plates = template.liveSources?.sources ?? [];
   const override = item.sourceOverride ?? {};
 
   const assignedFor = (plateId: string): string | undefined =>
     assignedSourceId(assignments, channel, template.templateId, plateId) ?? undefined;
-  const nameFor = (sourceId: string | undefined): string =>
-    catalog.sources.find((s) => s.id === sourceId)?.name ?? '— none —';
 
   const change = (plateId: string, value: string): void => {
     setRefusal(null);
@@ -144,7 +140,8 @@ export function LiveSourceSwapDialog({
               aria-label={`Live source for ${plate.sourceId}`}
               value={swapped ?? ''}
               onChange={(sourceId) => change(plate.sourceId, sourceId)}
-              choices={[{ value: '', label: `Use template assignment (${nameFor(assigned)})` }]}
+              // `B-303` — the words and the name kept apart: the name in its own isolate and direction.
+              choices={[{ value: '', label: 'Use template assignment', names: assigned ?? null }]}
               channel={item.slot?.channel}
             />
           </div>

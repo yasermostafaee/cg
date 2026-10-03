@@ -1,5 +1,4 @@
-import { expect, test } from './fixtures/runtime.js';
-import type { Locator } from '@playwright/test';
+import { expect, test, textRunX as runX } from './fixtures/runtime.js';
 
 /**
  * 🔴 `MODAL-CHROME-10` ADDENDUM B — **A NAME'S CHARACTERS ARE ISOLATED; ITS BOX IS NOT.**
@@ -28,28 +27,7 @@ import type { Locator } from '@playwright/test';
  * while having lost its isolation fails §2 and passes §1.
  */
 
-/**
- * The x of a sub-range of one element's text, so character ORDER can be measured.
- *
- * ⚠ It takes a LOCATOR and not a selector string: the element is found by its text, and
- * Playwright's `:has-text()` is not a CSS selector — handing it to `querySelector` throws.
- */
-async function runX(target: Locator, needle: string): Promise<{ left: number; right: number }> {
-  return target.evaluate((host, want) => {
-    const walk = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
-    while (walk.nextNode()) {
-      const node = walk.currentNode;
-      const at = (node.textContent ?? '').indexOf(want);
-      if (at === -1) continue;
-      const r = document.createRange();
-      r.setStart(node, at);
-      r.setEnd(node, at + want.length);
-      const box = r.getBoundingClientRect();
-      return { left: +box.left.toFixed(1), right: +box.right.toFixed(1) };
-    }
-    throw new Error(`the element does not contain ${want}`);
-  }, needle);
-}
+// `textRunX` (the fixtures) — the x of a sub-range of an element's text; `B-303` measures with it too.
 
 test('§1 — a Persian title and an English title start at the same left edge', async ({ app }) => {
   const page = app.page;

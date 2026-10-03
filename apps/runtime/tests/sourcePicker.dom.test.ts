@@ -3,7 +3,12 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ROUTE_NO_LAYER_REASON, type ConsoleMediaItem, type SourceCatalog } from '@cg/shared-ipc';
+import {
+  INPUT_GONE_REASON,
+  ROUTE_NO_LAYER_REASON,
+  type ConsoleMediaItem,
+  type SourceCatalog,
+} from '@cg/shared-ipc';
 import { SourcePicker, type SourceChoice } from '../src/renderer/features/sources/SourcePicker.js';
 import {
   __resetSourcesForTest,
@@ -96,6 +101,17 @@ const CATALOG: SourceCatalog = {
       playlistOf: 2,
       status: 'unavailable',
       reason: 'Unlicensed in the Playout — it clears that channel every minute.',
+    },
+    {
+      // `B-303` — the owner's input, which the Playout stopped listing (kept as departed): a Persian
+      // name that STARTS with a Latin word.
+      id: 'in-ndi-apasai',
+      name: 'NDI کانالِ ۱ (APASAI)',
+      origin: 'input',
+      producer: { kind: 'ndi', source: 'MTA (APASAI)' },
+      status: 'unavailable',
+      departed: true,
+      reason: INPUT_GONE_REASON,
     },
     {
       id: 'md-m-recent',
@@ -232,6 +248,69 @@ describe('closed — it is the select it replaced', () => {
   it('an unavailable binding wears the amber `Unavailable` tag', async () => {
     const field = await render({ value: 'in-down' });
     expect(field.querySelector('.cg-source-tag--unavailable')?.textContent).toBe('Unavailable');
+  });
+});
+
+describe('B-303 — a choice names its source APART from its words, in the name’s own direction', () => {
+  const DEFAULT = (names: string | null): SourceChoice[] => [
+    { value: '', label: 'Default', names },
+  ];
+
+  it('🔴 the owner’s default: the name in its own RTL isolate, `Default (` … `)` outside it, and `Unavailable`', async () => {
+    const field = await render({ choices: DEFAULT('in-ndi-apasai') });
+    const value = field.querySelector('[data-source-label="choice"]');
+    expect(value?.textContent).toBe('Default (NDI کانالِ ۱ (APASAI))Unavailable');
+    const name = value?.querySelector('[data-choice-name]');
+    // The name ALONE is the isolate — the English words are not inside it…
+    expect(name?.tagName).toBe('BDI');
+    expect(name?.textContent).toBe('NDI کانالِ ۱ (APASAI)');
+    // …and it is laid out right to left, though it starts with `N` (dir=auto would say LTR).
+    expect(name?.getAttribute('dir')).toBe('rtl');
+    const tag = value?.querySelector('.cg-source-tag--unavailable');
+    expect(tag?.textContent).toBe('Unavailable');
+    expect(tag?.getAttribute('title')).toBe(INPUT_GONE_REASON);
+
+    // The same choice inside the panel.
+    await openPicker(field);
+    const option = document.querySelector('[data-picker-choice=""] [data-choice-name]');
+    expect(option?.getAttribute('dir')).toBe('rtl');
+    expect(option?.textContent).toBe('NDI کانالِ ۱ (APASAI)');
+    await closePicker();
+  });
+
+  it('CONTROL — a default the Playout still offers carries no tag, and a Latin name stays LTR', async () => {
+    const field = await render({ choices: DEFAULT('in-studio1') });
+    expect(field.textContent).toBe('Default (Studio 1)');
+    expect(field.querySelector('[data-choice-name]')?.getAttribute('dir')).toBe('ltr');
+    expect(field.querySelector('.cg-source-tag--unavailable')).toBeNull();
+  });
+
+  it('a default the catalogue does not know reads `Not listed`, its id on the title — never the id in the text', async () => {
+    const field = await render({ choices: DEFAULT('in-gone-forever') });
+    expect(field.textContent).toBe('Default (Not listed)Unavailable');
+    expect(field.textContent).not.toContain('in-gone-forever');
+    expect(field.querySelector('[data-choice-names]')?.getAttribute('title')).toBe(
+      'in-gone-forever',
+    );
+  });
+
+  it('no default reads `(none set)`; a choice with no source is its words alone', async () => {
+    const none = await render({ choices: DEFAULT(null) });
+    expect(none.textContent).toBe('Default (none set)');
+    act(() => root?.unmount());
+    host?.remove();
+    const plain = await render({ choices: [{ value: '', label: 'None' }] });
+    expect(plain.textContent).toBe('None');
+  });
+
+  it('a picker row’s name takes its own direction too', async () => {
+    const field = await render({});
+    await openPicker(field);
+    const persian = document.querySelector('[data-picker-input="in-newscam"] .cg-picker-row__name');
+    const latin = document.querySelector('[data-picker-input="in-studio1"] .cg-picker-row__name');
+    expect(persian?.getAttribute('dir')).toBe('rtl');
+    expect(latin?.getAttribute('dir')).toBe('ltr');
+    await closePicker();
   });
 });
 

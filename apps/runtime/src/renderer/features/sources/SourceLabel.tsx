@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { Cable, Film } from 'lucide-react';
 import type { SourceDefinition } from '@cg/shared-ipc';
 import { Icon } from '../../ui/Icon.js';
+import { directionOf } from '../../ui/OperatorNames.js';
 import { Tag } from '../../ui/Tag.js';
 import {
   currentSourceCatalog,
@@ -99,7 +100,14 @@ export function SourceLabel({
       {...(source.unavailable ? { 'data-source-unavailable': '' } : {})}
     >
       <Icon icon={media ? Film : Cable} size={14} />
-      <bdi className="cg-source-label__name">{source.name}</bdi>
+      {/*
+        `B-303` — the name in its OWN direction: a name with Persian in it reads right to left, as
+        the Playout shows it, even when it starts with a Latin word (`NDI کانالِ ۱ (APASAI)`). This
+        box sizes to its text, so its direction also puts a cut name's ellipsis at the name's END.
+      */}
+      <bdi className="cg-source-label__name" dir={directionOf(source.name)}>
+        {source.name}
+      </bdi>
       {media && meta && source.durationMs !== undefined && (
         <span className="cg-source-label__meta">{formatMediaDuration(source.durationMs)}</span>
       )}
