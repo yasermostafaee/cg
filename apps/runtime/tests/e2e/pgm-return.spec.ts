@@ -30,6 +30,16 @@ import { disableSplash, expect, test } from './fixtures/runtime.js';
 
 test.describe.configure({ mode: 'serial' });
 
+/*
+  🔴 `B-305` — **THIS FILE'S OWN LOOPBACK ADDRESS, THE RULE PORT KEPT.** Two other specs show the
+  monitors for channel 1 at `127.0.0.1` with no port seam — `channel-air.spec` (a CLI bridge) and
+  `pvw-from-bridge.spec` — so they dial `127.0.0.1:9250`. With this file's fake feed there too, a parallel
+  run handed it a second reader and `a stall is not a reconnect` read 2. The station and its feed live on
+  `127.0.0.3` instead (as `dev-station.spec` keeps to `127.0.0.2`): still port 9250, still no seam, so the
+  port rule is proved through the whole chain — and nothing else on this machine dials here.
+*/
+const STATION_HOST = '127.0.0.3';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 /** The built console — the same `dist` CG Control bundles. */
 const CONSOLE_DIR = path.resolve(here, '../../dist');
@@ -49,10 +59,10 @@ test.afterEach(async () => {
 
 async function startFeed(): Promise<FakePgmFeed> {
   try {
-    feed = await startFakePgmFeed({ port: pgmPort(1) });
+    feed = await startFakePgmFeed({ host: STATION_HOST, port: pgmPort(1) });
   } catch (err) {
     throw new Error(
-      `the fake Playout feed could not take ${String(pgmPort(1))} (channel 1's rule port) — ` +
+      `the fake Playout feed could not take ${STATION_HOST}:${String(pgmPort(1))} (channel 1's rule port) — ` +
         `this runner cannot run the PROGRAM return spec: ${String(err)}`,
     );
   }
@@ -67,7 +77,7 @@ async function startStation(): Promise<string> {
   bridge = await createBridge({
     port: 0,
     connection: {
-      servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
+      servers: { A: { host: STATION_HOST, amcpPort: 1, oscPort: 0 } },
       strategy: 'mirror-sync',
       autoFailoverEnabled: false,
     },
@@ -139,7 +149,7 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     expect(f.openCount()).toBe(1);
     // …and the one request the Playout saw is the exact one, with nothing after it.
     expect(f.connections[0]?.received.toString('latin1')).toBe(
-      'GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n',
+      `GET / HTTP/1.1\r\nHost: ${STATION_HOST}\r\n\r\n`,
     );
 
     // A stall: the picture is hidden and the pane says so — never a frozen frame as if live.
