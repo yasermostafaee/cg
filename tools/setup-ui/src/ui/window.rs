@@ -1029,6 +1029,7 @@ impl App {
                 Some(LRESULT(0))
             }
             WM_DESTROY => {
+                uia::disconnect(self.hwnd);
                 unsafe { PostQuitMessage(0) };
                 Some(LRESULT(0))
             }

@@ -166,6 +166,18 @@ pub fn on_get_object(hwnd: HWND, wparam: WPARAM, lparam: LPARAM) -> Option<LRESU
     Some(unsafe { UiaReturnRawElementProvider(hwnd, wparam, lparam, &root) })
 }
 
+/// The window is going: tell UI Automation, and let go of the root.
+pub fn disconnect(hwnd: HWND) {
+    unsafe {
+        let _ = UiaReturnRawElementProvider(hwnd, WPARAM(0), LPARAM(0), None);
+    }
+    if let Some(root) = ROOT.with(|r| r.borrow_mut().take()) {
+        unsafe {
+            let _ = UiaDisconnectProvider(&root);
+        }
+    }
+}
+
 /// The page changed (queued: raised once the window's state is released).
 pub fn structure_changed(_hwnd: HWND) {
     PENDING.with(|p| p.borrow_mut().push(Pending::Structure));
