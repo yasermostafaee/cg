@@ -44,6 +44,7 @@ import {
   uia,
   until as untilSetup,
 } from './setup-window.mjs';
+import { checkInstalledAppsRow } from '../../../../tools/bridge-installer/installed-apps.mjs';
 
 const args = Object.fromEntries(
   process.argv
@@ -553,6 +554,9 @@ async function phaseInstallClassic() {
   }
   const h = await until('CG Bridge /health', () => health(), 60_000).catch(() => null);
   check(`the classic CG Bridge answers /health as ${OLD}`, h?.version === OLD, JSON.stringify(h));
+  // `RELEASE-0112-01-C` C1 — the `--from` release's own Installed-apps row, exactly as it wrote it.
+  const rows = checkInstalledAppsRow(check, OLD, `classic ${OLD} CG Bridge`);
+  fs.writeFileSync(path.join(OUT, `installed-apps-${OLD}.json`), JSON.stringify(rows, null, 2));
 }
 
 /** CG Control end to end: the first question, the sign-in, channel 2, CG Bridge's sign-in, a take. */
@@ -841,6 +845,12 @@ async function phaseUpgrade() {
     `the upgraded CG Bridge answers /health as ${String(VERSION)}`,
     h !== null,
     JSON.stringify(h),
+  );
+  // `RELEASE-0112-01-C` C1 — after the upgrade from `--from`, still ONE row, now this release's.
+  const appsRows = checkInstalledAppsRow(check, VERSION, `upgraded from ${OLD}`);
+  fs.writeFileSync(
+    path.join(OUT, `installed-apps-upgraded-from-${OLD}.json`),
+    JSON.stringify(appsRows, null, 2),
   );
   const after = serviceConfig();
   check(

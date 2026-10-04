@@ -30,6 +30,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ruleProblems } from '../../apps/runtime/tests/desktop/firewall-rule.mjs';
+import { checkInstalledAppsRow } from './installed-apps.mjs';
 
 const args = Object.fromEntries(
   process.argv
@@ -143,6 +144,8 @@ for (const file of [
 ]) {
   check(`installs ${path.relative(PROGRAM_DIR, file)}`, fs.existsSync(file), file);
 }
+// `RELEASE-0112-01-C` C1 — the Installed-apps row the Playout's engine installer reads, pinned.
+const appsAfterInstall = checkInstalledAppsRow(check, RELEASE, 'after the install');
 
 // ── 2. the service ──────────────────────────────────────────────────────────────────────────
 const running = await until(() => service()?.state === 'Running', 60_000);
@@ -317,6 +320,11 @@ const back = await until(() => service()?.state === 'Running', 60_000);
 check('…and the service is running again', back !== null, JSON.stringify(service()));
 const h2 = await healthy(60_000);
 check('…and answers /health', h2 !== null);
+const appsAfterUpgrade = checkInstalledAppsRow(check, RELEASE, 'after the upgrade');
+fs.writeFileSync(
+  path.join(OUT, 'installed-apps.json'),
+  JSON.stringify({ afterInstall: appsAfterInstall, afterUpgrade: appsAfterUpgrade }, null, 2),
+);
 
 // ── 9. uninstall ────────────────────────────────────────────────────────────────────────────
 // `_?=` LAST and UNQUOTED, spaces and all — NSIS's rule, and the only way the uninstaller finishes
