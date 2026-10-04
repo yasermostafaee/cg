@@ -572,10 +572,28 @@ async function phaseDrive() {
       90_000,
     ).catch(() => false);
     check("first-run asks for a station admin's sign-in", firstRun);
+    // The check runs on open; Sign in is pressable once the Playout has answered it
+    // (`first-run.spec.ts` waits on the same line).
+    const answered = await until(
+      'the check to reach the Playout',
+      () =>
+        page.evaluate(
+          () =>
+            document.querySelector('[data-check="api"]')?.getAttribute('data-status') === 'pass',
+        ),
+      60_000,
+    ).catch(() => false);
+    check('…the check reaches the Playout (its `api` line passes)', answered);
     await page.screenshot(`drive-${mode}-2-first-run.png`);
-    await type(page, '#cg-first-run-user', facts.username);
-    await type(page, '#cg-first-run-pass', facts.password);
-    check('…signed in as the station admin', await press(page, '[data-first-run]', 'Sign in'));
+    check('…the username typed', await type(page, '#cg-first-run-user', facts.username));
+    check('…the password typed', await type(page, '#cg-first-run-pass', facts.password));
+    const pressed = await until(
+      'Sign in to be pressable',
+      () => press(page, '[data-first-run]', 'Sign in'),
+      30_000,
+    ).catch(() => false);
+    if (!pressed) await page.screenshot(`drive-${mode}-2b-sign-in-not-pressable.png`);
+    check('…signed in as the station admin', pressed);
 
     // ── 3 · channel 2 ──
     const row = `.cg-channel-row[data-channel="${String(CHANNEL)}"]`;
