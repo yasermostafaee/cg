@@ -183,6 +183,14 @@ async function boot(
     readonly backupRefusesToken?: boolean;
     /** Every line the lookup logs. */
     readonly log?: string[];
+    /**
+     * `RELEASE-0112-01` (`R-085`) — the backup verifies every bearer against its OWN key, and the lookup
+     * reads with THIS bearer (minted by the test: the backup's own token, or the primary's).
+     */
+    readonly realBearer?: (backup: FakePlayout) => Promise<string>;
+    readonly strategy?: ConnectionConfig['strategy'];
+    /** The backup's library (default {@link BACKUP_MEDIA}). */
+    readonly backupMedia?: readonly FakeMediaItem[];
   } = {},
 ): Promise<Rig> {
   const provider = new LocalPlayoutSources({ media: PRIMARY_MEDIA });
@@ -200,15 +208,17 @@ async function boot(
     expect(await sources.ensureBound(mediaSourceId(m.id))).toEqual({ ok: true });
   }
 
-  const backupPlayout = await startFakePlayout();
+  const backupPlayout = await startFakePlayout({ verifyBearers: options.realBearer !== undefined });
   playouts.push(backupPlayout);
-  backupPlayout.setMedia(BACKUP_MEDIA);
+  backupPlayout.setMedia(options.backupMedia ?? BACKUP_MEDIA);
   backupPlayout.setD11Legacy(options.backupLegacy === true);
   if (options.backupOffline === true) await backupPlayout.goOffline();
   backupPlayout.setRefusesForeignTokens(options.backupRefusesToken === true);
+  const bearer =
+    options.realBearer !== undefined ? await options.realBearer(backupPlayout) : 'bridge-bearer';
   const lookup = new BackupMediaLookup({
     url: () => backupPlayout.mediaUrl,
-    bearer: () => 'bridge-bearer',
+    bearer: () => bearer,
     ...(options.log !== undefined ? { log: (line: string) => options.log?.push(line) } : {}),
   });
   lookups.push(lookup);
@@ -221,7 +231,7 @@ async function boot(
       A: { host: '127.0.0.1', amcpPort: a.mock.amcpPort, oscPort: oscA },
       B: { host: '127.0.0.1', amcpPort: b.mock.amcpPort, oscPort: oscB },
     },
-    strategy: 'mirror-sync',
+    strategy: options.strategy ?? 'mirror-sync',
     autoFailoverEnabled: false,
   };
   const r = new CasparRuntime(
@@ -351,6 +361,88 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
       { plateId: 'l1', name: 'پرومو', reason: 'backup-unread' },
       { plateId: 'l2', name: 'Sting', reason: 'backup-unread' },
     ]);
+  });
+
+  /*
+    🔴 `RELEASE-0112-01` (`R-085`) — the lookup with a REAL bearer, against a backup that verifies every
+    token against its OWN key: the backup's own token finds its own clip; the primary's is `401`.
+  */
+  it('🔴 `R-085` — with the BACKUP’s own token the lookup finds B’s own clip — CONTROL: with the PRIMARY’s token B answers 401 and the box stays empty, naming why', async () => {
+    const own = await boot({
+      realBearer: async (backup) => (await backup.issueToken({ user: 'admin' })).token,
+    });
+    await take(own.r);
+    expect(plays(await own.bLines()).filter((l) => l.includes('promo'))).toEqual([
+      expect.stringContaining('"E:/Backup Library/promo.mp4"'),
+    ]);
+    expect(own.backupPlayout.foreignRefusals).toBe(0);
+
+    // CONTROL — another engine's key signed this token: the backup refuses it.
+    const primary = await startFakePlayout();
+    playouts.push(primary);
+    const log: string[] = [];
+    const crossed = await boot({
+      realBearer: async () => (await primary.issueToken({ user: 'admin' })).token,
+      log,
+    });
+    expect(
+      crossed.backupPlayout.foreignRefusals,
+      'the backup was asked, and refused',
+    ).toBeGreaterThan(0);
+    expect(log).toContain('backup media list answered 401 — kept what was known');
+    await take(crossed.r);
+    expect(plays(await crossed.bLines())).toEqual([]);
+    expect(item0(crossed.r)?.backupNoCopy?.map((e) => e.reason)).toEqual([
+      'backup-unread',
+      'backup-unread',
+    ]);
+  });
+
+  /*
+    🔴 `RELEASE-0112-01` Part C — THE WIRE, LINE FOR LINE. A take and a clear (mirror-sync), and a failover
+    catch-up (journal-replay): server B is sent exactly server A's writes, the backup's own clip path in
+    place of the primary's and nothing else. The same test passes on the code before this change: what
+    reaches server A did not move.
+  */
+  const BOTH_ON_B = [
+    item('b-promo', 'پرومو', 'E:/Backup Library/promo.mp4', fakeFingerprint('m-promo')),
+    item('b-sting', 'Sting', 'E:/Backup Library/sting.mov', fakeFingerprint('m-sting')),
+  ];
+  const LAYER_WRITE = /^(CG|PLAY|LOADBG|LOAD|STOP|CLEAR|MIXER|CALL|PAUSE|RESUME|SWAP)\b/;
+  const toB = (line: string): string =>
+    line
+      .replace('C:/Apasai CIaB/Promo/promo.mp4', 'E:/Backup Library/promo.mp4')
+      .replace('C:/Apasai CIaB/Promo/sting.mov', 'E:/Backup Library/sting.mov');
+
+  it('🔴 a take and a clear send server B exactly server A’s writes, but for the backup’s own clip path', async () => {
+    const { r, aLines, bLines } = await boot({ backupMedia: BOTH_ON_B });
+    const [markA, markB] = [(await aLines()).length, (await bLines()).length];
+    await take(r);
+    expect((await r.out(ROW)).accepted).toBe(true);
+    await delay(300);
+    const writesA = (await aLines()).slice(markA).filter((l) => LAYER_WRITE.test(l));
+    const writesB = (await bLines()).slice(markB).filter((l) => LAYER_WRITE.test(l));
+    expect(writesA.length, 'the instrument saw the take and the clear').toBeGreaterThan(4);
+    expect(writesA.some((l) => l.includes('C:/Apasai CIaB/Promo/promo.mp4'))).toBe(true);
+    expect(writesB).toEqual(writesA.map(toB));
+  });
+
+  it('🔴 a failover catch-up replays server B exactly server A’s writes, but for the backup’s own clip path', async () => {
+    const { r, aLines, bLines } = await boot({
+      backupMedia: BOTH_ON_B,
+      strategy: 'journal-replay',
+    });
+    await take(r);
+    // journal-replay: nothing reached B live — not the boot blanket, not the take.
+    expect((await bLines()).filter((l) => LAYER_WRITE.test(l))).toEqual([]);
+    expect((await r.failover()).ok).toBe(true);
+    await delay(500);
+    // The catch-up replays every retained journal entry — the boot blanket's included — so B's writes
+    // are compared with EVERY write A was sent since boot.
+    const writesA = (await aLines()).filter((l) => LAYER_WRITE.test(l));
+    const writesB = (await bLines()).filter((l) => LAYER_WRITE.test(l));
+    expect(writesA.some((l) => l.includes('C:/Apasai CIaB/Promo/promo.mp4'))).toBe(true);
+    expect(writesB).toEqual(writesA.map(toB));
   });
 
   it('a clip’s transport verb reaches the primary only when B holds nothing of it — control: B’s own clip is paused on B too', async () => {

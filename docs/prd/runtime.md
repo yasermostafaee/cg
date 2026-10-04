@@ -4441,7 +4441,19 @@ own CG license, else `403 cg_not_licensed`; the backup token's `cg_channels` use
 
 **Not built in `0.11.1`; built for `0.11.2`** (`RELEASE-0112-01` Part A — the change's tasks name its tests).
 
-## [ ] R-086 — Sign CG Bridge in as `cg-bridge` (Playout `2.9.3`+) ⟨priority: low — WAITS on the meters answer⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A4
+## [~] R-086 — Sign CG Bridge in as `cg-bridge` (Playout `2.9.4`+) ⟨priority: medium⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A4; BUILT by `RELEASE-0112-01-C` C3 · `openspec/changes/backup-session/` (tasks 2.7, 5.1)
+
+**Answered and built 2026-10-04 (`RELEASE-0112-01-C` C3, `PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §3):** from
+`2.9.4` `/api/cg/meters` serves `cg-bridge` every CG-licensed programme channel, as `cg-admin` (up to `2.9.2`:
+no such account; `2.9.3`: the account, its meters empty). «Sign in CG Bridge…» offers `cg-bridge` for an engine
+whose own `GET /api/v1/system/version` is `2.9.4` or newer, and `cg-admin` otherwise — never `cg-bridge` for
+`2.9.3`; any account typed is accepted (`suggestedBridgeAccount`, per engine — `R-085`). The one in-app line
+names where that account's password is shown (each engine's «تنظیمات ← اتصال به CG Control» → «حسابِ داخلیِ CG
+Bridge»; which engine's page the client shows: [confirm with the Playout team], delta B question 4). A bridge
+signed in as `cg-bridge` is not a station admin: over the network its AMCP waits for that engine admin's
+«تأیید» — the engine line reads `amcp-pending`; over loopback nothing is needed. Tests: the meters flow with
+the `cg-bridge` token on a `2.9.4` fake (control: none on `2.9.3`), and the offer by version
+(`bridge-engines.test.ts`, `bridgeSessionBanner.dom.test.ts`).
 
 **What:** «Sign in CG Bridge…» suggests the account `cg-bridge` when the Playout's version (`R-084`) is at least
 `2.9.3`. **Why:** the Playout team built a CG-only account for the bridge (`PLAYOUT-CG-RESPONSE-0110-111-v1.md`
@@ -4457,8 +4469,9 @@ moment it arrives (`playout-meters.ts` `restart`) — so the meters would be EMP
 floor, the badge `— LUFS`; there is no fallback to a console's token while CG Bridge holds its own. **Also:** D1
 still needs the CG license; and AMCP's automatic acceptance of the first bridge needs `station-admin`, so a
 separate-server CG Bridge signed in as `cg-bridge` waits as pending for the admin's «تأیید» (a loopback CG Bridge
-needs nothing). **Waits on:** the Playout team serving the meters to `cg-bridge` (we ask), or a decision to read
-the meters with another token. **Not built now.**
+needs nothing). ~~**Waits on:** the Playout team serving the meters to `cg-bridge` (we ask), or a decision to read
+the meters with another token. **Not built now.**~~ Answered (`2.9.4`) and built — see the note at the head of
+this item.
 
 ## [~] R-087 — The NOT CONNECTED banner: no way into test mode, and actions drawn for red ⟨priority: medium — before `0.11.2`'s tag⟩ — FILED 2026-10-04 by `RELEASE-0112-01-A` · `openspec/changes/console-polish/` (tasks §12)
 
@@ -4479,3 +4492,16 @@ again`), and nothing on the page names test mode
 
 **Supersedes in part:** `R-006` bullet 3 ("Test mode is an EXPLICIT operator switch") — the switch is gone; the
 mode stays for the test harness.
+
+## [ ] R-088 — A single D2 re-send within 10 s of the first send, for a transport failure ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0112-01-C` C2 · filed only
+
+**What:** when a D2 (refresh) reached the Playout but its answer was lost (a timeout, a dropped connection —
+today's "outcome unknown"), CG Bridge would send the SAME refresh token once more, but only within 10 s of the
+first send, instead of losing the session. **Why:** the Playout team's rule (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md`
+§4): a spent refresh token that comes back within 10 s gets `401` with no other effect; after 10 s the whole
+family is revoked (theft). So a re-send inside the window costs at worst a `401`, and could save a station admin's
+sign-in after a lost reply. **Not built:** `RELEASE-0112-01-C` asked for it to be filed, not added — today every
+unknown outcome means the token is never sent again (`CENTRAL-BRIDGE-01-A`, kept per engine by `R-085`).
+**Acceptance (sketch):** WHEN a D2's answer is lost THEN the token is sent once more only if less than 10 s have
+passed since the first send, and never after; WHEN that second answer is lost too THEN the session is lost as
+today.

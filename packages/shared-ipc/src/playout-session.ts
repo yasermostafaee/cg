@@ -330,24 +330,30 @@ export async function refreshPlayoutToken(
  * treated as theft — its whole family is revoked, and every access token of that USER goes on the
  * D9 list. With every console signed in as one account, one stale refresh signs every console out.
  *
- *   - `spent`   — a `401` (`invalid_refresh_token`): used, revoked, or its account's password
- *                 changed. It is gone; a full sign-in (D1) is the only way on.
- *   - `kept`    — the contract's OTHER refusals (§4.6): `403` (`cg_not_licensed`, `no_cg_access`, a
- *                 disabled account), `423`, `429`. Their §2 says every D2 refusal comes before the
- *                 token is used, so the same token works again once the cause is fixed: keep it, say
- *                 why, ask again on the normal cadence.
+ *   - `spent`   — a `401` (`invalid_refresh_token`): used, OR unknown / expired / revoked, OR its user
+ *                 disabled or deleted (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §4). It is gone; a
+ *                 full sign-in (D1) is the only way on — safe either way.
+ *   - `kept`    — the Playout's table of answers that come BEFORE the token is used (their §4,
+ *                 `RELEASE-0112-01-C` C2): `400` and `415` (malformed), `403` (`cg_not_licensed`,
+ *                 `no_cg_access`), `404` (CG Control switched off on that Playout), `429` (rate
+ *                 limit). The same token works again once the cause is fixed: keep it, say why, ask
+ *                 again on the normal cadence.
  *   - `unknown` — no answer, a timeout, a dropped connection, a `5xx`, a `2xx` that cannot be read,
- *                 a status the contract does not define: the Playout MAY have used it. It is never
- *                 sent again.
+ *                 any status the table does not name: the Playout MAY have used it. It is never sent
+ *                 again. ⚠ `423` is among them: D2 never returns it (it is D1's alone, their §4), so a
+ *                 `423` at D2 is not a refusal we can vouch for.
  *
  * ⚠ `kept` is the DANGEROUS answer to get wrong — a token called kept is sent again a minute later,
- * past the 10 s grace — so it is the contract's named refusals only, never "any 4xx". A status the
- * contract does not name costs an admin sign-in; a wrong `kept` costs every console of the account.
+ * past the 10 s grace — so it is the Playout's named statuses only, never "any 4xx". A status they do
+ * not name costs an admin sign-in; a wrong `kept` costs every console of the account.
  */
 export type RefreshTokenFate = 'spent' | 'kept' | 'unknown';
 
-/** The contract's refusals that come BEFORE a D2 uses its token (§4.6; `2.9.2` §2). */
-const REFUSED_BEFORE_USE: ReadonlySet<number> = new Set([403, 423, 429]);
+/**
+ * The answers that come BEFORE a D2 uses its token — the Playout team's own table
+ * (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §4, which corrected `2.9.2` §2's: a disabled user is `401`).
+ */
+const REFUSED_BEFORE_USE: ReadonlySet<number> = new Set([400, 403, 404, 415, 429]);
 
 export function refreshTokenFate(err: unknown): RefreshTokenFate {
   if (!(err instanceof PlayoutSignInError)) return 'unknown';

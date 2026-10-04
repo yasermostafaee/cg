@@ -1407,6 +1407,8 @@ export class CasparRuntime {
   /** One session per DECLARED server (B-046: B exists only when configured). */
   #sessions: { A: ServerSession; B?: ServerSession };
   #adapter: RedundancyAdapter;
+  /** `B-313` — server B held: another CG Bridge drives its core ({@link holdServerB}). */
+  #serverBHeld = false;
   readonly #reconciler = new Reconciler();
   // R-021 stage 1 — constructed in the constructor so the resolved fixed bank
   // (and the ONE policy object the validator saw) reach the allocator.
@@ -2747,7 +2749,34 @@ export class CasparRuntime {
     this.#mediaStateTimer.unref?.();
 
     this.#sessions.A.start();
-    this.#sessions.B?.start();
+    // `B-313` — a held server B is not connected: nothing at all is sent to its core.
+    if (!this.#serverBHeld) this.#sessions.B?.start();
+  }
+
+  /**
+   * 🔴 `B-313` (`RELEASE-0112-01` Part B) — **HOLD SERVER B: another CG Bridge drives its core.**
+   *
+   * Held, server B's session is STOPPED — not one line reaches that core, not even the handshake's
+   * `OSC SUBSCRIBE` — and the adapter never fails over onto it; released, it connects again. Server A
+   * is never touched. Callable before {@link start} (the bridge holds B until its guard's first answer),
+   * and it outlives a reconfigure: a new server B is held as the old one was until the guard reads it.
+   * Answers once the session has stopped or started.
+   */
+  async holdServerB(held: boolean): Promise<void> {
+    if (this.#serverBHeld === held) return;
+    this.#serverBHeld = held;
+    this.#adapter.setHeld('B', held);
+    const session = this.#sessions.B;
+    if (session !== undefined && this.#started) {
+      if (held) await session.stop();
+      else session.start();
+    }
+    this.healthChanged.emit(this.health());
+  }
+
+  /** `B-313` — is server B held? */
+  serverBHeld(): boolean {
+    return this.#serverBHeld;
   }
 
   /**
@@ -13346,6 +13375,8 @@ export class CasparRuntime {
       initialPrimary: 'A',
       autoFailoverEnabled: next.autoFailoverEnabled,
     });
+    // `B-313` — the hold outlives the rebuild.
+    this.#adapter.setHeld('B', this.#serverBHeld);
     this.#wireAdapter();
     for (const slot of this.#slots.values()) this.#addInterest(slot);
     this.#loaded.clear();
@@ -13408,7 +13439,8 @@ export class CasparRuntime {
 
     // 6. Connect + surface: every client sees the new config and fresh health.
     this.#sessions.A.start();
-    this.#sessions.B?.start();
+    // `B-313` — a held server B stays unconnected until its guard releases it.
+    if (!this.#serverBHeld) this.#sessions.B?.start();
     this.#recordAudit({
       actor: operatorActor(),
       action: 'reconnect',
@@ -14114,7 +14146,12 @@ export class CasparRuntime {
    * admin's. NARROW for `recordIdentityEvent`'s reason, and narrower still: it has no parameter a
    * password or a token could travel in.
    */
-  recordBridgeSignIn(entry: { outcome: 'ok' | 'failed'; errorCode?: string }): void {
+  recordBridgeSignIn(entry: {
+    outcome: 'ok' | 'failed';
+    errorCode?: string;
+    /** `RELEASE-0112-01` — `backup`: CG Bridge signed in on the backup engine (absent: the primary). */
+    server?: 'backup';
+  }): void {
     this.#recordAudit({ action: 'bridge-sign-in', actor: operatorActor(), ...entry });
   }
 

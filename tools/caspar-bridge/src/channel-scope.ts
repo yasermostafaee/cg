@@ -267,6 +267,8 @@ export const PUBLISH_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'sources.assignments-changed': STATION_WIDE,
   // `CENTRAL-BRIDGE-01` (D7) — the bridge's own Playout session: one per bridge.
   'bridgeSession.state-changed': STATION_WIDE,
+  // `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session: the station's, as the one before.
+  'bridgeSession.engines-changed': STATION_WIDE,
   // `PLAYOUT-FEATURES-01` D — one Playout, one CG license.
   'license.state-changed': STATION_WIDE,
 };
@@ -321,6 +323,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'templates.page': STATION_WIDE,
   'update.state': STATION_WIDE,
   'bridgeSession.state': STATION_WIDE,
+  'bridgeSession.engines': STATION_WIDE,
   'license.state': STATION_WIDE,
   // `CENTRAL-BRIDGE-01` §1 A — the logs are no channel's; a `station-admin` asks for them.
   'bridge.logs-ticket': STATION_WIDE,
@@ -373,6 +376,7 @@ export const ROUTE_SCOPE: Readonly<Record<string, ScopeEntry>> = {
   'update.cancel': INTENT,
   'update.request': INTENT,
   'bridgeSession.sign-in': INTENT,
+  'bridgeSession.backup.sign-in': INTENT,
 };
 
 /**

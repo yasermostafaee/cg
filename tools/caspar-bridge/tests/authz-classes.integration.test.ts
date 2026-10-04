@@ -135,7 +135,7 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly twelve routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in, and its logs', () => {
+  it('exactly thirteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, and its logs', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
@@ -147,6 +147,12 @@ describe('C-038 — the census: every route, classified', () => {
         now): what an engineer reads, and what a support call is sent. A station admin's.
       */
       'bridge.logs-ticket',
+      /*
+        `RELEASE-0112-01` (`R-085`) — the same door as `bridgeSession.sign-in`, on the BACKUP engine: a
+        station admin gives CG Bridge the backup engine's own account password, once. It sets the bearer
+        every backup read uses — a station's configuration, argued for on the same rung as the primary's.
+      */
+      'bridgeSession.backup.sign-in',
       /*
         `CENTRAL-BRIDGE-01` (D7, rule 8) — a station admin gives CG Bridge the station account's
         password, once. It sets the bearer every Playout read of the bridge's uses, which is a
@@ -220,6 +226,12 @@ describe('C-038 — the census: every route, classified', () => {
       'auth.sign-out',
       'auth.state',
       'bridge.capabilities',
+      /*
+        `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, as every console says it (the
+        status bar's chips). A read, like `bridgeSession.state` below it: it names states and decides
+        nothing.
+      */
+      'bridgeSession.engines',
       // `CENTRAL-BRIDGE-01` (D7) — whether CG Bridge holds its own Playout session. Every console says it.
       'bridgeSession.state',
       'channelSettings.get',

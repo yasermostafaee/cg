@@ -389,7 +389,8 @@ describe('CENTRAL-BRIDGE-01-A A2 — a refused refresh keeps its token', () => {
     const presented: string[] = [];
     const s = session(p, file, { fetchImpl: recordingFetch(presented), refusedRetryMs: 50 });
     await s.start();
-    expect(s.state()).toEqual({ state: 'refused', message });
+    // `RELEASE-0112-01` — the refusal carries its code: the engine line reads it as "CG not licensed".
+    expect(s.state()).toEqual({ state: 'refused', message, failure: 'cg_not_licensed' });
     // The token is kept, unmarked, unrotated.
     const kept = loadBridgeSession(file).record;
     expect(kept?.refreshToken).toBe(t0);

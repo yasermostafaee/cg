@@ -2,9 +2,13 @@ import { z } from 'zod';
 import {
   BRIDGE_NEEDS_ADMIN_LINE,
   BRIDGE_SESSION_STATES,
+  ENGINE_STATES,
+  engineNeedsAttention,
+  engineStateText,
   isServerReachable,
   type BridgeSessionState,
   type ConnectionHealth,
+  type EngineLine,
   type ServerHealth,
 } from '@cg/shared-ipc';
 
@@ -45,9 +49,32 @@ const ServerRowSchema = z.object({
 });
 
 const ProblemSchema = z.object({
-  code: z.enum(['reserved-port', 'port-refused', 'osc-unbound', 'playout-session']),
+  code: z.enum([
+    'reserved-port',
+    'port-refused',
+    'osc-unbound',
+    'playout-session',
+    // `RELEASE-0112-01` — the backup engine's session, and the guard (`B-313`).
+    'backup-engine',
+    'core-held',
+    'core-shared',
+  ]),
   message: z.string(),
 });
+
+/** `RELEASE-0112-01` (`R-085`) — the backup engine, as `/health` says it; `null` with no server B. */
+const BackupEngineSchema = z
+  .object({
+    /** The backup engine's API address. */
+    address: z.string(),
+    /** CG Bridge's session on the backup engine. */
+    session: z.enum(BRIDGE_SESSION_STATES),
+    /** The backup engine's line, in one word (`ENGINE_STATES`). */
+    state: z.enum(ENGINE_STATES),
+    /** The last good D4 read of the backup engine, with its own token (ISO 8601); `null` = none. */
+    lastReadAt: z.string().nullable(),
+  })
+  .strict();
 
 export const BridgeHealthSchema = z
   .object({
@@ -65,6 +92,12 @@ export const BridgeHealthSchema = z
          */
         state: z.enum(['up', 'degraded', 'down']),
         servers: z.array(ServerRowSchema.strict()),
+        /**
+         * `RELEASE-0112-01` (`B-313`) — the CasparCG channels this bridge DRIVES (its declared
+         * channels); empty for a bridge in first-run. Another CG Bridge reads it: a bridge that drives
+         * nothing holds nobody.
+         */
+        channels: z.array(z.number().int().positive()),
       })
       .strict(),
     playout: z
@@ -75,6 +108,8 @@ export const BridgeHealthSchema = z
         session: z.enum(BRIDGE_SESSION_STATES),
         /** The last good D4 read (ISO 8601); `null` = none yet. */
         lastReadAt: z.string().nullable(),
+        /** `RELEASE-0112-01` — the backup engine; `null` with no server B. */
+        backup: BackupEngineSchema.nullable(),
       })
       .strict(),
     /** Console connections open now, signed in or not. */
@@ -102,6 +137,16 @@ export interface HealthInputs {
   readonly playoutAddress: string | null;
   readonly session: BridgeSessionState;
   readonly lastPlayoutReadAtMs: number | null;
+  /** `RELEASE-0112-01` — the channels this bridge drives (declared). */
+  readonly channels: readonly number[];
+  /** `RELEASE-0112-01` — the backup engine's line and session, or `null` with no server B. */
+  readonly backup: {
+    readonly line: EngineLine;
+    readonly session: BridgeSessionState;
+    readonly lastReadAtMs: number | null;
+  } | null;
+  /** `RELEASE-0112-01` — the primary engine's line (its `core-shared` is a problem). */
+  readonly primaryLine: EngineLine | null;
   readonly consoles: number;
   readonly ports: { readonly control: number; readonly templates: number; readonly osc: number };
   /** Port problems found at start (rule 12) and at bind. */
@@ -148,6 +193,22 @@ export function bridgeHealth(inputs: HealthInputs): BridgeHealth {
       message: `CG Bridge: ${inputs.session.message ?? 'the Playout refuses to renew its session.'}`,
     });
   }
+  // `RELEASE-0112-01` — the backup engine, and the guard (`B-313`), in the engine line's own words.
+  const backupLine = inputs.backup?.line ?? null;
+  if (backupLine !== null && backupLine.state === 'core-held') {
+    problems.push({ code: 'core-held', message: `Backup engine: ${engineStateText(backupLine)}` });
+  } else if (backupLine !== null && engineNeedsAttention(backupLine.state)) {
+    problems.push({
+      code: 'backup-engine',
+      message: `CG Bridge on the backup engine: ${engineStateText(backupLine)}`,
+    });
+  }
+  if (inputs.primaryLine?.state === 'core-shared') {
+    problems.push({
+      code: 'core-shared',
+      message: `Primary engine: ${engineStateText(inputs.primaryLine)}`,
+    });
+  }
 
   const primary = c.primary;
   return {
@@ -159,6 +220,7 @@ export function bridgeHealth(inputs: HealthInputs): BridgeHealth {
       state:
         primary.state === 'healthy' ? 'up' : primary.state === 'degraded' ? 'degraded' : 'down',
       servers: rows,
+      channels: [...inputs.channels],
     },
     playout: {
       address: inputs.playoutAddress,
@@ -167,6 +229,18 @@ export function bridgeHealth(inputs: HealthInputs): BridgeHealth {
         inputs.lastPlayoutReadAtMs === null
           ? null
           : new Date(inputs.lastPlayoutReadAtMs).toISOString(),
+      backup:
+        inputs.backup === null || inputs.backup.line.address === null
+          ? null
+          : {
+              address: inputs.backup.line.address,
+              session: inputs.backup.session.state,
+              state: inputs.backup.line.state,
+              lastReadAt:
+                inputs.backup.lastReadAtMs === null
+                  ? null
+                  : new Date(inputs.backup.lastReadAtMs).toISOString(),
+            },
     },
     consoles: inputs.consoles,
     ports: { ...inputs.ports },

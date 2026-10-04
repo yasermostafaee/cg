@@ -55,10 +55,17 @@ export class PlayoutVersionReader {
   readonly #fetch: typeof fetch;
   readonly #pollMs: number;
   #version: string | null = null;
+  /**
+   * `RELEASE-0112-01` — did the last read get ANY HTTP answer? `true` — the engine's API answers
+   * (whatever it said); `false` — the request itself failed (refused, timed out); `null` — not read yet.
+   * It is how each engine's line says `unreachable` without a token.
+   */
+  #reachable: boolean | null = null;
   #ticker: ReturnType<typeof setInterval> | null = null;
   #inFlight: Promise<void> | null = null;
   #reads = 0;
   readonly #handlers = new Set<(version: string | null) => void>();
+  readonly #reachHandlers = new Set<(reachable: boolean) => void>();
 
   constructor(url: string, options: PlayoutVersionReaderOptions = {}) {
     this.#url = url;
@@ -69,6 +76,19 @@ export class PlayoutVersionReader {
   /** The version as last read, or `null` — not read yet, or not served. Synchronous. */
   version(): string | null {
     return this.#version;
+  }
+
+  /** `RELEASE-0112-01` — the engine's API answered the last read (`null`: not read yet). */
+  reachable(): boolean | null {
+    return this.#reachable;
+  }
+
+  /** Called whenever {@link reachable} CHANGES. Returns an unsubscribe. */
+  onReachChanged(handler: (reachable: boolean) => void): () => void {
+    this.#reachHandlers.add(handler);
+    return () => {
+      this.#reachHandlers.delete(handler);
+    };
   }
 
   /** Version requests actually issued — a cadence test's positive control. */
@@ -111,14 +131,20 @@ export class PlayoutVersionReader {
 
   async #read(): Promise<void> {
     let version: string | null = null;
+    let reachable = false;
     try {
       const res = await this.#fetch(this.#url, {
         method: 'GET',
         signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
       });
+      reachable = true;
       if (res.ok) version = playoutVersionOf(await res.json());
     } catch {
       version = null; // Unreachable, timed out, or not JSON: not served.
+    }
+    if (reachable !== this.#reachable) {
+      this.#reachable = reachable;
+      for (const handler of [...this.#reachHandlers]) handler(reachable);
     }
     if (version === this.#version) return;
     this.#version = version;

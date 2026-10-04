@@ -680,6 +680,24 @@ export function grantedMeterChannels(bearer: string): FakeCgChannels {
   }
 }
 
+/** A bearer's `sub`, read without verifying it; `null` when the token cannot be read. */
+function bearerSub(bearer: string): string | null {
+  try {
+    const sub = decodeJwt(bearer).sub;
+    return typeof sub === 'string' ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Is `version` (`major.minor.patch`) at least the one given? `null` — no. */
+function isAtLeast(version: string | null, major: number, minor: number, patch: number): boolean {
+  const m = version === null ? null : /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (m === null) return false;
+  const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return a !== major ? a > major : b !== minor ? b > minor : c >= patch;
+}
+
 /** The `GET /api/cg/license` body for a preset, over the fake's catalogue (its channels in order). */
 export function fakeLicenseBody(
   preset: FakeLicensePreset,
@@ -760,6 +778,7 @@ export interface FakePlayoutUser {
 
 /** Which fixture user a mint is for. */
 export type FakeUserKey =
+  | 'bridge'
   | 'operator'
   | 'viewer'
   | 'longName'
@@ -916,8 +935,23 @@ export const FAKE_CHANNEL_TWO_ADMIN: FakePlayoutUser = {
   cgChannels: [{ host: '127.0.0.1', channel: 2 }],
 };
 
-/** The eight fixture users, by key. */
+/**
+ * 🔴 `RELEASE-0112-01-C` C3 (`R-086`) — `cg-bridge`, THE PLAYOUT'S CG-ONLY ACCOUNT (`2.9.3`+): role
+ * `viewer`, no command channels (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §3.3). Its meters are empty on `2.9.3`
+ * and carry every programme channel from `2.9.4` (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §3) — the
+ * fake answers by its own version ({@link FakePlayout.setVersion}).
+ */
+export const FAKE_BRIDGE_ACCOUNT: FakePlayoutUser = {
+  username: 'cg-bridge',
+  sub: 'u-9990',
+  name: 'CG Bridge',
+  roles: ['viewer'],
+  cgChannels: [],
+};
+
+/** The nine fixture users, by key. */
 export const FAKE_USERS: Readonly<Record<FakeUserKey, FakePlayoutUser>> = {
+  bridge: FAKE_BRIDGE_ACCOUNT,
   operator: FAKE_OPERATOR,
   viewer: FAKE_VIEWER,
   longName: FAKE_LONG_NAME_USER,
@@ -1202,6 +1236,10 @@ export interface FakePlayout {
    * ES256 key signed none of the primary's tokens (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §2).
    */
   setRefusesForeignTokens(on: boolean): void;
+  /** `RELEASE-0112-01` — this engine's password ({@link FakePlayoutOptions.password}). */
+  readonly password: string;
+  /** `RELEASE-0112-01` — bearer-gated reads refused because the token was not this engine's. LIVE. */
+  readonly foreignRefusals: number;
   /**
    * `PLAYOUT-FEATURES-01` A — D11 as a Playout before `2.9.1` serves it: no `fingerprint` or `source` on any
    * item, and `fingerprint=` ignored (answered as a plain search). Default off (`2.9.1`).
@@ -1414,6 +1452,17 @@ function sendError(res: http.ServerResponse, code: FakePlayoutErrorCode, message
 /** `2.9.2` §8 — a spent refresh token back within this is a lost reply, not a theft. */
 export const FAKE_REFRESH_REUSE_WINDOW_MS = 10_000;
 
+/** `RELEASE-0112-01` — the reads an engine of a pair verifies the bearer of ({@link FakePlayoutOptions.verifyBearers}). */
+const BEARER_GATED: ReadonlySet<string> = new Set([
+  PATHS.revoked,
+  PATHS.channels,
+  PATHS.me,
+  PATHS.inputs,
+  PATHS.media,
+  PATHS.license,
+  PATHS.meters,
+]);
+
 class FakePlayoutServer implements FakePlayout {
   readonly #server = http.createServer();
   /** Every open connection, so an outage can be made to happen NOW rather than eventually. */
@@ -1522,6 +1571,11 @@ class FakePlayoutServer implements FakePlayout {
   #listening = false;
   /** `DEV-LOCAL-CASPAR-01` — awaited before a D11 SEARCH is answered ({@link FakePlayoutOptions}). */
   readonly #beforeMediaSearch: (() => Promise<void>) | undefined;
+  /** `RELEASE-0112-01` — this engine's own password ({@link FakePlayoutOptions.password}). */
+  readonly #password: string;
+  /** `RELEASE-0112-01` — verify every bearer against this engine's own keys. */
+  readonly #verifyBearers: boolean;
+  #foreignRefusals = 0;
 
   constructor(
     active: FakeSigningKey,
@@ -1535,6 +1589,8 @@ class FakePlayoutServer implements FakePlayout {
     this.#now = options.now ?? ((): number => Date.now());
     this.#grants = options.grants ?? {};
     this.#beforeMediaSearch = options.beforeMediaSearch;
+    this.#password = options.password ?? FAKE_PLAYOUT_PASSWORD;
+    this.#verifyBearers = options.verifyBearers === true;
     this.#published = [active];
     this.#active = active;
     this.#unpublished = unpublished;
@@ -1928,6 +1984,14 @@ class FakePlayoutServer implements FakePlayout {
     this.#version = version;
   }
 
+  get password(): string {
+    return this.#password;
+  }
+
+  get foreignRefusals(): number {
+    return this.#foreignRefusals;
+  }
+
   setRefusesForeignTokens(on: boolean): void {
     this.#refusesForeignTokens = on;
   }
@@ -2050,6 +2114,17 @@ class FakePlayoutServer implements FakePlayout {
       await this.#serveRefresh(req, res);
       return;
     }
+    /*
+      🔴 `RELEASE-0112-01` (`R-085`) — AN ENGINE OF A PAIR: every bearer-gated read verifies the token
+      against THIS engine's own published keys, so another engine's token gets `401 invalid_token`, as
+      `PLAYOUT-CG-RESPONSE-0110-111-v1.md` §2 says each real one does. Off by default: the suites that
+      came before mint tokens freely and read with whatever bearer they hold.
+    */
+    if (this.#verifyBearers && BEARER_GATED.has(pathname) && !(await this.#ownBearer(req))) {
+      this.#foreignRefusals += 1;
+      sendError(res, 'invalid_token');
+      return;
+    }
     if (method === 'GET' && pathname === PATHS.revoked) {
       this.#counts.revoked += 1;
       // C8 — D9 alone introduces; judged before the answer, so a caller holding the answer can
@@ -2097,6 +2172,22 @@ class FakePlayoutServer implements FakePlayout {
       return;
     }
     sendError(res, 'not_found');
+  }
+
+  /** `RELEASE-0112-01` — does the request's bearer verify against THIS engine's own keys? */
+  async #ownBearer(req: http.IncomingMessage): Promise<boolean> {
+    const authorization = req.headers.authorization;
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) return false;
+    try {
+      await jwtVerify(
+        authorization.slice('Bearer '.length),
+        createLocalJWKSet({ keys: this.#published.map((k) => k.publicJwk) }),
+        { algorithms: ['ES256'] },
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -2223,7 +2314,15 @@ class FakePlayoutServer implements FakePlayout {
       sendError(res, 'invalid_token');
       return;
     }
-    const granted = grantedMeterChannels(authorization.slice('Bearer '.length));
+    const bearer = authorization.slice('Bearer '.length);
+    /*
+      `RELEASE-0112-01-C` C3 — from `2.9.4` the meters carry `cg-bridge` every CG-licensed programme
+      channel, as `cg-admin` (their §3); before, its empty `cg_channels` gets `: ping` and no data.
+    */
+    const granted =
+      isAtLeast(this.#version, 2, 9, 4) && bearerSub(bearer) === FAKE_BRIDGE_ACCOUNT.sub
+        ? '*'
+        : grantedMeterChannels(bearer);
     const mayRead = (host: string, channel: number): boolean =>
       granted === '*' || granted.some((g) => g.host === host && g.channel === channel);
     res.writeHead(200, {
@@ -2366,7 +2465,7 @@ class FakePlayoutServer implements FakePlayout {
     const key = (Object.keys(FAKE_USERS) as FakeUserKey[]).find(
       (k) => FAKE_USERS[k].username === username,
     );
-    if (key === undefined || password !== FAKE_PLAYOUT_PASSWORD) {
+    if (key === undefined || password !== this.#password) {
       sendError(res, 'invalid_credentials');
       return;
     }
@@ -2524,6 +2623,16 @@ export interface FakePlayoutOptions {
    * (`http://127.0.0.1:8080` by default), so its address does not change between runs.
    */
   readonly port?: number;
+  /**
+   * `RELEASE-0112-01` (`R-085`) — THIS engine's password for every fixture account (each real engine
+   * install has its own random one). Default {@link FAKE_PLAYOUT_PASSWORD}.
+   */
+  readonly password?: string;
+  /**
+   * `RELEASE-0112-01` (`R-085`) — an engine of a PAIR: every bearer-gated read verifies the token against
+   * this engine's own keys, so the other engine's token is `401`. Default off.
+   */
+  readonly verifyBearers?: boolean;
 }
 
 export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {

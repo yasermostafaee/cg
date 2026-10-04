@@ -228,3 +228,61 @@ describe('SseParser — the part of the grammar the Playout uses', () => {
     expect(parser.push(`data: ${'x'.repeat(70_000)}`)).toBe(false);
   });
 });
+
+/**
+ * 🔴 `RELEASE-0112-01-C` C3 (`R-086`) — **CG BRIDGE SIGNED IN AS `cg-bridge`.** From `2.9.4` the Playout's
+ * meters carry `cg-bridge` every CG-licensed programme channel (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md`
+ * §3), so a bridge signed in with that account relays them; on `2.9.3` the account's meters are empty.
+ */
+describe('RELEASE-0112-01-C C3 — CG Bridge signed in as cg-bridge', () => {
+  async function bridgeAccountStation(
+    version: string,
+  ): Promise<{ playout: FakePlayout; both: Client }> {
+    const playout = track(await startFakePlayout(), (p) => p.stop());
+    playout.setVersion(version);
+    const dir = track(fs.mkdtempSync(path.join(os.tmpdir(), 'cg-meters-bridge-')), (d) => {
+      fs.rmSync(d, { recursive: true, force: true });
+    });
+    playout.setMeterLevels(1, LEVELS_1);
+    playout.setMeterLevels(2, LEVELS_2);
+    const rig = await twoChannelRig({
+      bridge: {
+        playout: {
+          auth: 'playout',
+          issuer: playout.issuer,
+          jwksUrl: playout.jwksUrl,
+          tokenUrl: playout.tokenUrl,
+          refreshUrl: playout.refreshUrl,
+          revokedUrl: playout.revokedUrl,
+        },
+        bridgeSessionPath: path.join(dir, 'bridge-session.json'),
+        playoutMetersTuning: { backoffBaseMs: 50, backoffMaxMs: 200, lingerMs: 100 },
+      },
+    });
+    const admin = await signedIn(rig, playout, 'admin');
+    const signIn = await admin.ask(id(), 'bridgeSession.sign-in', {
+      username: 'cg-bridge',
+      password: FAKE_PLAYOUT_PASSWORD,
+    });
+    expect(signIn.payload).toEqual({ ok: true });
+    const both = await signedIn(rig, playout, 'bothChannels');
+    return { playout, both };
+  }
+
+  it('🔴 on a 2.9.4 engine the meters flow with the cg-bridge token — CONTROL: on 2.9.3 its meters carry nothing', async () => {
+    const full = await bridgeAccountStation('2.9.4');
+    await waitUntil(
+      () => Promise.resolve(new Set(readings(full.both).map((r) => r.channel)).size === 2),
+      'readings for both channels through the cg-bridge token',
+    );
+    expect(full.playout.meterRequests.every((r) => r.bearer)).toBe(true);
+
+    const empty = await bridgeAccountStation('2.9.3');
+    await waitUntil(
+      () => Promise.resolve(empty.playout.meterStreams >= 1),
+      'the stream open on the 2.9.3 engine',
+    );
+    await new Promise((r) => setTimeout(r, 600));
+    expect(readings(empty.both)).toEqual([]);
+  }, 60_000);
+});

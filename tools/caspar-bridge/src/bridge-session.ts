@@ -55,6 +55,12 @@ const RecordSchema = z.object({
    * `tokenId` names the token (a hash, not the token) for the log.
    */
   refreshInFlight: z.object({ tokenId: z.string().min(1), since: z.string().min(1) }).optional(),
+  /**
+   * 🔴 `RELEASE-0112-01` (`R-085`) — the ENGINE this session belongs to (its API address), for a session
+   * bound to one ({@link BridgeSessionOptions.address}: the backup engine's). A record for another
+   * address is never used: its token is never sent to an engine that did not issue it.
+   */
+  address: z.string().min(1).optional(),
 });
 
 export type BridgeSessionRecord = z.infer<typeof RecordSchema>;
@@ -113,8 +119,15 @@ export type VerifyAccess = (
 ) => Promise<{ ok: true; name: string; sub: string } | { ok: false; reason: string }>;
 
 export interface BridgeSessionOptions {
-  /** `bridge-session.json`. */
+  /** `bridge-session.json` (the primary engine's), or `bridge-session-backup.json` (the backup's). */
   readonly file: string;
+  /**
+   * 🔴 `RELEASE-0112-01` (`R-085`) — the engine this session is bound to. Given, every record saved
+   * names it, and a saved record that names ANOTHER engine (or none) is treated as no session — so a
+   * token is never sent to an engine that did not issue it (server B moved to another machine). Absent
+   * (the primary engine's session, as before this release): records are read and written as they were.
+   */
+  readonly address?: string;
   /** D1 and D2. */
   readonly tokenUrl: string;
   readonly refreshUrl: string;
@@ -159,6 +172,8 @@ export class BridgeSession {
   #record: BridgeSessionRecord | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #disposed = false;
+  /** `RELEASE-0112-01` — the last sign-in's failure code (`cg_not_licensed`, `unreachable` …), or `null`. */
+  #lastSignInFailure: SignInFailure | null = null;
   /** One operation at a time: a sign-in and a refresh never interleave, and never run twice at once. */
   #chain: Promise<unknown> = Promise.resolve();
   readonly #listeners = new Set<(state: BridgeSessionState) => void>();
@@ -176,6 +191,14 @@ export class BridgeSession {
   onChanged(handler: (state: BridgeSessionState) => void): () => void {
     this.#listeners.add(handler);
     return () => this.#listeners.delete(handler);
+  }
+
+  /**
+   * `RELEASE-0112-01` — the code the last station-admin sign-in failed with, or `null` (none tried, or
+   * the last one took). It is what says "CG not licensed on this engine" before any token exists.
+   */
+  lastSignInFailure(): SignInFailure | null {
+    return this.#lastSignInFailure;
   }
 
   /** The bearer for the bridge's own Playout reads: only while held and not past `exp`. */
@@ -198,6 +221,16 @@ export class BridgeSession {
       }
       if (record === null) {
         this.#set({ state: 'needs-admin' });
+        return;
+      }
+      const bound = this.#opts.address;
+      if (bound !== undefined && record.address !== bound) {
+        // `R-085` — a token is never sent to an engine that did not issue it.
+        this.#set({ state: 'needs-admin' });
+        this.#log(
+          `the saved session belongs to ${record.address ?? 'no named engine'}, not ${bound}; ` +
+            'its token is never sent here — CG Bridge needs a station admin to sign in',
+        );
         return;
       }
       if (record.refreshInFlight !== undefined) {
@@ -231,13 +264,16 @@ export class BridgeSession {
       } catch (err) {
         const failure = err instanceof PlayoutSignInError ? err.code : 'unexpected';
         const message = err instanceof PlayoutSignInError ? err.playoutMessage : null;
+        this.#lastSignInFailure = failure;
         return {
           ok: false,
           failure,
           ...(failure === 'cg_not_licensed' && message !== null ? { message } : {}),
         };
       }
-      return this.#adopt(tokens);
+      const adopted = await this.#adopt(tokens);
+      this.#lastSignInFailure = adopted.ok ? null : adopted.failure;
+      return adopted;
     });
   }
 
@@ -325,7 +361,7 @@ export class BridgeSession {
       this.#unmark(unmarked);
       const message = err instanceof PlayoutSignInError ? err.playoutMessage : null;
       const code = err instanceof PlayoutSignInError ? err.code : 'unexpected';
-      this.#set({ state: 'refused', message: message ?? REFUSED_WITHOUT_REASON });
+      this.#set({ state: 'refused', message: message ?? REFUSED_WITHOUT_REASON, failure: code });
       this.#log(
         `the Playout refused the session refresh before using the token (${code}); the token is kept`,
       );
@@ -374,6 +410,7 @@ export class BridgeSession {
         ...(this.#record?.sub !== undefined ? { sub: this.#record.sub } : {}),
         ...(this.#record?.name !== undefined ? { name: this.#record.name } : {}),
         obtainedAt: new Date(this.#now()).toISOString(),
+        ...(this.#opts.address !== undefined ? { address: this.#opts.address } : {}),
       };
       try {
         this.#save(this.#opts.file, record);
@@ -432,7 +469,8 @@ export class BridgeSession {
     const same =
       next.state === this.#state.state &&
       (next.name ?? null) === (this.#state.name ?? null) &&
-      (next.message ?? null) === (this.#state.message ?? null);
+      (next.message ?? null) === (this.#state.message ?? null) &&
+      (next.failure ?? null) === (this.#state.failure ?? null);
     this.#state = next;
     if (!same) for (const l of this.#listeners) l(next);
   }

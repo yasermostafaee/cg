@@ -361,6 +361,19 @@ if (args['bridge-session-path'] === true) {
 }
 const bridgeSessionPath =
   typeof args['bridge-session-path'] === 'string' ? args['bridge-session-path'] : undefined;
+/*
+  `RELEASE-0112-01` (`R-085`) — `--backup-playout-address <url>`: the BACKUP engine's API address,
+  outright. By default it is the Playout's address at server B's host; the dev station's `--pair` names
+  it, because its two fake engines share `127.0.0.1` and differ by port. A valueless flag is a hard error.
+*/
+if (args['backup-playout-address'] === true) {
+  console.error(
+    '[caspar-bridge] --backup-playout-address needs a value (the backup engine: http://host:port).',
+  );
+  process.exit(1);
+}
+const backupPlayoutAddress =
+  typeof args['backup-playout-address'] === 'string' ? args['backup-playout-address'] : undefined;
 
 // R-021 — mirrors --persist-path, EXCEPT for what an absent file means: here it
 // means the built-in default bank, not "no bank" (see the header).
@@ -762,6 +775,7 @@ const bridgeOptions = {
   persistPath,
   stackPath,
   ...(bridgeSessionPath !== undefined ? { bridgeSessionPath } : {}),
+  ...(backupPlayoutAddress !== undefined ? { backupPlayoutAddress } : {}),
   fixedLayersPath,
   reservedLayers,
   reservedLayersPath,

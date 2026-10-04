@@ -25,38 +25,66 @@ is sent to a core); §5 the console FULL (it reads a new channel and decides wha
 
 ## 2. `R-085` — one session per engine (CG Bridge)
 
-- [ ] 2.1 `backupEngineAddress`; the record's optional `address`; `bridge-session-backup.json`
-- [ ] 2.2 The backup's verifier (its own JWKS; `aud`, `exp`, `sub`, `name`; no issuer)
-- [ ] 2.3 The backup reads on the backup's session only: D11, D4 (rule 9 at server B's host), the license,
-      the introducing D9; the version read for reachability
-- [ ] 2.4 `engineState` — the one function; `bridgeSession.engines`, `-changed`, `backup.sign-in`
-- [ ] 2.5 `/health`: `casparcg.channels`, `playout.backup`, the backup's problems
+- [x] 2.1 `backupEngineAddress` (`backup-engine.ts`: the primary engine's address at server B's host;
+      `--backup-playout-address` names it outright); the record's optional `address`, a session bound to
+      it never sending a token saved for another engine; `bridge-session-backup.json`
+- [x] 2.2 The backup's verifier (`backupTokenVerifier`: its own JWKS; `aud`, `exp`, `sub`, `name`; no issuer,
+      nothing adopted — `PlayoutAuth` untouched)
+- [x] 2.3 The backup read on the backup's session only: D11 (`BackupMediaLookup`'s bearer — the primary's
+      `usableBearer` was the crossing), D4 (rule 9 at the backup's host), the license, the introducing D9 per
+      token gained; the version read (no token) for reachability (`PlayoutVersionReader.reachable`)
+- [x] 2.4 `engineState` (`engine-state.ts`) — the one function, its order the order of remedies;
+      `bridgeSession.engines`, `-changed`, `backup.sign-in` (`station-admin`, a lock verb, audited
+      `server: 'backup'`); the census lists and the scope tables carry them
+- [x] 2.5 `/health`: `casparcg.channels`, `playout.backup`, problems `backup-engine` / `core-held` /
+      `core-shared` (`health.test.ts`)
+- [x] 2.6 Delta C2 — D2's outcome table (`refreshTokenFate`): `400`, `415`, `403`, `404`, `429` kept; `401`
+      lost; `5xx`, `423`, no answer never sent again — for the primary's session, the backup's, and every
+      console's (`playout-session.test.ts`, `bridge-session-d2-table.test.ts`)
+- [x] 2.7 Delta C3 — `cg-bridge` from `2.9.4`: the fake's account and its meters by version
+      (`playout-meters.integration.test.ts`: the meters flow with the `cg-bridge` token on `2.9.4`; CONTROL:
+      none on `2.9.3`); `suggestedBridgeAccount` (`bridge-engines.test.ts`)
 
 ## 3. Part C — the fake pair
 
-- [ ] 3.1 The fake engine: a password of its own; bearer-gated reads verified against its OWN key
-- [ ] 3.2 Signed in on both; B's D11 lookup with B's token finds B's own clip; CONTROL: with the primary's
-      token B answers `401` and the box stays empty with its reason
-- [ ] 3.3 Reuse revocation on B leaves A's session and every console untouched, and the reverse
-- [ ] 3.4 B `403 cg_not_licensed`: the backup line in words, and the primary still takes
-- [ ] 3.5 B unreachable leaves the primary untouched
-- [ ] 3.6 The wire: a take, a clear and a failover catch-up send to server A exactly what they sent before;
-      to server B the same but for the backup's own clip path — recorded line for line
+- [x] 3.1 The fake engine (`fake-playout.ts`): `password`; `verifyBearers` — every bearer-gated read verified
+      against its OWN keys (`foreignRefusals` counts the refused)
+- [x] 3.2 Signed in on both through a real bridge: each engine's own password, the other's refused; every
+      bearer B received is B's, every one A received is A's (`backup-session.integration.test.ts`). B's D11
+      lookup with B's own token finds B's own clip; CONTROL: the primary's token is `401` there and the boxes
+      stay empty, `backup-unread` (`backup-media.integration.test.ts`)
+- [x] 3.3 A spent token on B: B's session lost, A's signed in, no console signed out, A counts no theft — and
+      the reverse
+- [x] 3.4 B `403 cg_not_licensed`: the backup's line `not-licensed`, the primary signed in, a take on A sent
+      as before
+- [x] 3.5 B unreachable: the backup's line `unreachable`, the primary and a take on it untouched
+- [x] 3.6 The wire, line for line (`backup-media.integration.test.ts`): a take and a clear (mirror-sync) and a
+      failover catch-up (journal-replay) send server B exactly server A's writes but for the backup's own clip
+      path — and the same two tests pass on the pre-change runtime and adapter (measured: both stashed and
+      rebuilt), so what reaches server A did not move
 
 ## 4. `B-313` — never a second sender on the backup core
 
-- [ ] 4.1 `drivesCore`; the guard (start, B's connect, every 15 s); B's session stopped while held; no
-      failover to B; `core-held`; server A said only (`core-shared`); its own `/health` never counts
-- [ ] 4.2 Tests: a second bridge configured against the backup with a channel holds the primary's mirror;
-      CONTROL: idle (first-run), it holds nobody, and ITS AMCP trace carries no layer write
+- [x] 4.1 `drivesCore` / `CoreGuard` (`core-guard.ts`): read at start, on server changes and every 15 s; server
+      B held until the first answer, then while another CG Bridge drives its core (`holdServerB`: its session
+      stopped, `RedundancyAdapter.setHeld` — no failover onto it, no line, no replay); `core-held`; server A
+      said only (`core-shared`); its own `/health` never counts (`startedAt` + port)
+- [x] 4.2 Tests (`backup-session.integration.test.ts`): a second bridge on the backup core with a channel → this
+      bridge never connects there (the core admits one connection), its AMCP log names no line to server B,
+      server A takes, `/health` and the backup line say `core-held`; CONTROL: an idle (first-run) second bridge
+      holds nobody (the core admits both, the mirror reaches it) and ITS own lines carry no layer write.
+      `core-guard.test.ts`, `engine-state.test.ts`
 
 ## 5. The console
 
-- [ ] 5.1 «Sign in CG Bridge…» lists the engines (address, state in words), signs the chosen one in; the one
-      password line; the banner names the backup
-- [ ] 5.2 The status bar's engine chips beside `PRIMARY A` / `BACKUP B`
-- [ ] 5.3 The check's Sign-in group: `bridge-session-backup`
-- [ ] 5.4 dom specs; e2e: the dialog with two engines, the status-bar states, the check's per-engine lines
+- [x] 5.1 «Sign in CG Bridge…» lists the engines (address, state in words), a `Tabs` choice signs the chosen
+      one in through its own channel; the one password line; the banner names the backup; C3's account offer
+      (`bridgeSessionBanner.dom.test.ts`)
+- [x] 5.2 The status bar's engine chips beside `PRIMARY A` / `BACKUP B` — a prop from the shell
+      (`statusBar.engines.dom.test.ts`)
+- [x] 5.3 The check's Sign-in group: `bridge-session-backup` (`connectionCheckGroups.dom.test.ts`)
+- [ ] 5.4 e2e `backup-engine.spec.ts` (the dialog with two engines, each engine's own password, the
+      status-bar states, the check's per-engine line) — green on Windows; the Linux run owed
 
 ## 6. Docs and close
 

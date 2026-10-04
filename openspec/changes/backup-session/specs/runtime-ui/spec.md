@@ -9,7 +9,10 @@ drives its CasparCG, or the engine's own refusal. A station admin SHALL choose a
 with that engine's account and password; the dialog keeps no password after the request. One line SHALL say
 where each password is read — each engine's own «تنظیمات ← اتصال به CG Control» — and the dialog SHALL carry
 no other prose. It SHALL be built from the shared primitives only. The banner that opens it SHALL show while
-either engine needs a station admin's sign-in, naming the engine when it is the backup.
+either engine needs a station admin's sign-in, naming the engine when it is the backup. `RELEASE-0112-01-C`
+C3: the account offered SHALL be `cg-bridge` when the chosen engine's version is `2.9.4` or newer (its meters
+carry every CG-licensed programme channel from then) and `cg-admin` otherwise — never `cg-bridge` for
+`2.9.3`; any account the admin types SHALL be accepted, and kept when another engine is chosen.
 
 #### Scenario: Two engines, each with its own state
 
@@ -17,6 +20,11 @@ either engine needs a station admin's sign-in, naming the engine when it is the 
   `Primary engine` and `Backup engine`, each with its address and its state in words
 - **AND WHEN** the admin chooses `Backup engine` and signs in with its password **THEN** the request names the
   backup engine, and the primary engine's session is untouched
+
+#### Scenario: The account offered follows the engine's version
+
+- **WHEN** the chosen engine is `2.9.4` **THEN** the account reads `cg-bridge` **AND WHEN** it is `2.9.3` or
+  `2.9.2` **THEN** it reads `cg-admin`
 
 #### Scenario: The backup needs a sign-in
 

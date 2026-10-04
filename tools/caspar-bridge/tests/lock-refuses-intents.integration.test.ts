@@ -299,6 +299,11 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'bridge.capabilities',
         // `CENTRAL-BRIDGE-01` §1 A — a read: a ticket for the logs. A locked station still reports.
         'bridge.logs-ticket',
+        /*
+          `RELEASE-0112-01` (`R-085`) — each engine's session, a READ, reachable locked as `state` is;
+          the backup's sign-in, like the primary's, is an operator-lock verb and is refused locked.
+        */
+        'bridgeSession.engines',
         // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, a READ (its sign-in is refused locked).
         'bridgeSession.state',
         // `PLAYOUT-FEATURES-01` D — the CG license, as last read.

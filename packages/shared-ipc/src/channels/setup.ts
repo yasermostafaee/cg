@@ -178,7 +178,13 @@ export type ConnectionCheckId = z.infer<typeof ConnectionCheckIdSchema>;
  * `R-081` — the lines a CONSOLE adds to the check from what only it knows, never on the wire: where it
  * found CG Bridge (the address it dialled), CG Bridge's release against its own, and its own sign-in.
  */
-export const CONSOLE_CHECK_IDS = ['bridge', 'bridge-version', 'signin'] as const;
+export const CONSOLE_CHECK_IDS = [
+  'bridge',
+  'bridge-version',
+  'signin',
+  // `RELEASE-0112-01` (`R-085`) — CG Bridge's own session on the BACKUP engine (from `bridgeSession.engines`).
+  'bridge-session-backup',
+] as const;
 export type ConsoleCheckId = (typeof CONSOLE_CHECK_IDS)[number];
 /** Any line of the check as a console shows it. */
 export type CheckLineId = ConnectionCheckId | ConsoleCheckId;
@@ -203,7 +209,11 @@ export type CheckLineId = ConnectionCheckId | ConsoleCheckId;
 export const CONNECTION_CHECK_GROUPS = [
   { id: 'reach', title: 'Reachable', lines: ['proxy', 'route', 'api', 'bridge', 'ports'] },
   { id: 'versions', title: 'Versions', lines: ['bridge-version', 'playout-version'] },
-  { id: 'sign-in', title: 'Sign-in', lines: ['cors', 'signin', 'bridge-session'] },
+  {
+    id: 'sign-in',
+    title: 'Sign-in',
+    lines: ['cors', 'signin', 'bridge-session', 'bridge-session-backup'],
+  },
   {
     id: 'session',
     title: 'After sign-in',

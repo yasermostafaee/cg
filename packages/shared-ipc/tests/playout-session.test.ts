@@ -246,28 +246,36 @@ describe('CENTRAL-BRIDGE-01-A — what a failed D2 did to its token', () => {
     return 'resolved';
   }
 
-  it('401 is SPENT — gone; only a full sign-in goes on', async () => {
+  it('401 is SPENT — gone; only a full sign-in goes on (a disabled or deleted user too, their §4)', async () => {
     expect(await fateOf(answer(401, { error: 'invalid_refresh_token' }))).toBe('spent');
   });
 
-  it('🔴 the contract’s OTHER refusals are KEPT — their §2: a D2 refusal comes before the token is used', async () => {
+  /*
+    🔴 `RELEASE-0112-01-C` C2 — the Playout team's own table (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md`
+    §4): every one of these comes BEFORE the token is used, so the token is KEPT.
+  */
+  it('🔴 their table’s refusals before use are KEPT — 400, 415, 403, 404, 429', async () => {
     for (const [status, error] of [
+      [400, 'invalid_request'],
+      [415, 'unsupported_media_type'],
       [403, 'cg_not_licensed'],
       [403, 'no_cg_access'],
-      [423, 'account_locked'],
+      [404, 'not_found'],
       [429, 'rate_limited'],
     ] as const) {
       expect(await fateOf(answer(status, { error })), `${String(status)} ${error}`).toBe('kept');
     }
+    // A bare 404 too — CG Control switched off answers with no body of ours.
+    expect(await fateOf(answer(404, '')), 'a bare 404').toBe('kept');
   });
 
-  it('🔴 an answer that does not say is UNKNOWN — never sent again', async () => {
+  it('🔴 an answer that does not say is UNKNOWN — never sent again; 423 is D1’s alone, so at D2 it is unknown', async () => {
     expect(await fateOf(answer(500, 'boom')), '5xx').toBe('unknown');
     expect(await fateOf(answer(502, '')), 'a gateway').toBe('unknown');
-    // A status the contract does not define is not assumed to be a refusal before use: a wrong
-    // `kept` resends a used token past the 10 s grace, and that signs the whole account out.
-    expect(await fateOf(answer(400, { error: 'bad_request' })), '400').toBe('unknown');
-    expect(await fateOf(answer(404, '')), '404').toBe('unknown');
+    // A status their table does not name is not assumed to be a refusal before use: a wrong `kept`
+    // resends a used token past the 10 s grace, and that signs the whole account out.
+    expect(await fateOf(answer(423, { error: 'account_locked' })), '423 at D2').toBe('unknown');
+    expect(await fateOf(answer(409, '')), 'a 409').toBe('unknown');
     expect(await fateOf(new Error('socket hang up')), 'no answer').toBe('unknown');
     // A 200 the Playout sent means it USED the token — and the successor could not be read.
     expect(await fateOf(answer(200, { expires_in: 60 })), 'an unreadable 200').toBe('unknown');

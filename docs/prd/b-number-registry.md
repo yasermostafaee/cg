@@ -3222,3 +3222,12 @@ found on `dev`; no stash. The same measurement covers `B-312`–`B-316` and `P-0
 Measured free before use: the `R-087` entry's measurement above covers `B-312`–`B-316`.
 
 ⇒ **Next free after this entry is `B-314`**, **`D-162`**, **`P-066`**, **`R-088`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0112-01-C` takes `R-088`
+
+- `R-088` — a single D2 re-send within 10 s of the first send, for a transport failure (filed only) —
+  [runtime.md](runtime.md).
+
+Measured free before use: the `R-087` entry's measurement above covers `R-087`–`R-089`.
+
+⇒ **Next free after this entry is `B-314`**, **`D-162`**, **`P-066`**, **`R-089`** and **`C-049`**.

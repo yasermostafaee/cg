@@ -118,6 +118,12 @@ import {
   BridgeSessionSignInChannel,
   BridgeSessionStateChangedChannel,
   BridgeSessionStateChannel,
+  BridgeBackupSignInChannel,
+  BridgeEnginesChangedChannel,
+  BridgeEnginesChannel,
+  isServerReachable,
+  type EngineLine,
+  type EngineSessions,
   LicenseStateChangedChannel,
   LicenseStateChannel,
   cgUnlicensedReason,
@@ -269,10 +275,14 @@ import {
   playoutVersionUrl,
   type PlayoutVersionReaderOptions,
 } from './playout-version.js';
-import { BackupMediaLookup, backupMediaUrl } from './backup-media.js';
+import { BackupMediaLookup } from './backup-media.js';
+import { BackupEngine, backupSessionPath, type BackupEngineOptions } from './backup-engine.js';
+import { engineState } from './engine-state.js';
+import { CoreGuard, type CoreGuardOptions } from './core-guard.js';
 import {
   airOf,
   hostJoinsStation,
+  isLoopbackCasparHost,
   PlayoutCatalogue,
   resolveCasparHost,
   type CatalogueRow,
@@ -580,10 +590,36 @@ export interface BridgeOptions {
   /** TEST-ONLY seam — `fetch` and period for the Playout's version read (`R-084`). */
   playoutVersionOptions?: PlayoutVersionReaderOptions;
   /**
-   * TEST-ONLY seam — the BACKUP Playout's D11 URL (`PLAYOUT-FEATURES-01` A). In production it is the configured
-   * Playout's address at server B's host; a suite whose two fake servers share `127.0.0.1` names it.
+   * 🔴 `RELEASE-0112-01` (`R-085`) — the BACKUP engine's API address, outright. In production it is the
+   * primary engine's address at server B's host (`backupEngineAddress`); a suite or the dev station's
+   * `--pair`, whose two fake engines share `127.0.0.1` and differ by port, names it (the CLI's
+   * `--backup-playout-address`). It replaces `PLAYOUT-FEATURES-01`'s media-URL seam: every backup read
+   * derives from it now.
    */
-  backupPlayoutMediaUrl?: string;
+  backupPlayoutAddress?: string;
+  /**
+   * `RELEASE-0112-01` (`R-085`) — the BACKUP engine's session file. Default: `bridge-session-backup.json`
+   * beside {@link bridgeSessionPath}; with no session path there is no backup session either.
+   */
+  backupBridgeSessionPath?: string;
+  /**
+   * TEST-ONLY seam — `B-313`: the port a CG Bridge on a core's machine answers `/health` on. Default:
+   * this bridge's own control port (an installed CG Bridge's is `5280` everywhere). A suite whose two
+   * bridges share `127.0.0.1` names the other's.
+   */
+  coreGuardPort?: number;
+  /** TEST-ONLY seam — the guard's `fetch` and period (`B-313`). */
+  coreGuardOptions?: Pick<CoreGuardOptions, 'fetchImpl' | 'pollMs'>;
+  /** TEST-ONLY seam — the backup engine's reads and session timings (`R-085`). */
+  backupEngineOptions?: Pick<
+    BackupEngineOptions,
+    | 'readFetch'
+    | 'sessionTimings'
+    | 'versionOptions'
+    | 'licenseOptions'
+    | 'catalogueOptions'
+    | 'now'
+  >;
   /** TEST-ONLY seam — the Playout meters stream's backoff, silence and linger (`PLAYOUT-FEATURES-01` E). */
   playoutMetersTuning?: Partial<PlayoutMetersTuning>;
   /**
@@ -2235,21 +2271,54 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     clip's `PLAY` then reaches server B with B's own path, or not at all; a take never waits on it. With no
     Playout (auth off) there is no lookup, and a clip's `PLAY` mirrors as it always did.
   */
+  /*
+    🔴 `RELEASE-0112-01` (`R-085`) — THE BACKUP ENGINE, READ WITH ITS OWN SESSION. Each engine signs with
+    its own key and keeps its own users, so the primary's token is `401` on every backup endpoint. The
+    backup's session (its own D1/D2, file and in-flight mark) is the ONLY bearer for the backup's reads —
+    D11 below, its D4, its license and its AMCP introduction. With no session path (a development bridge)
+    there is no backup session, and the backup is read by nothing: today's empty boxes, with their reason.
+  */
+  const primaryEngineAddress =
+    auth.playout === null
+      ? null
+      : (auth.playout.address ?? new URL(auth.playout.channelsUrl).origin);
+  const backupEngine =
+    playoutAuth === null || auth.playout === null || primaryEngineAddress === null
+      ? null
+      : new BackupEngine({
+          primaryAddress: primaryEngineAddress,
+          backupHost: () => runtime.config().servers.B?.host,
+          addressOverride: options.backupPlayoutAddress,
+          sessionFile:
+            options.backupBridgeSessionPath ??
+            (options.bridgeSessionPath !== undefined
+              ? backupSessionPath(options.bridgeSessionPath)
+              : undefined),
+          audience: auth.playout.audience,
+          sessionFetch: playoutFetchForSession,
+          ...(options.backupEngineOptions ?? {}),
+        });
+  backupEngine?.start();
   const backupMedia =
-    playoutAuth === null || auth.playout === null
+    backupEngine === null
       ? null
       : new BackupMediaLookup({
-          url: () =>
-            options.backupPlayoutMediaUrl ??
-            backupMediaUrl(
-              (auth.playout as PlayoutAuthConfig).mediaUrl,
-              runtime.config().servers.B?.host,
-            ),
-          bearer: () => playoutAuth.usableBearer(),
+          url: () => backupEngine.mediaUrl(),
+          // 🔴 `R-085` — the backup engine's own token, never the primary's (`usableBearer` was that).
+          bearer: () => backupEngine.accessToken(),
           log: (line) => {
             process.stderr.write(`[caspar-bridge] ${line}\n`);
           },
         });
+  if (backupEngine !== null && backupMedia !== null) {
+    // The backup's session gaining a token is a reason to read its list at once.
+    let hadToken = backupEngine.accessToken() !== null;
+    backupEngine.onChanged(() => {
+      const hasToken = backupEngine.accessToken() !== null;
+      if (hasToken && !hadToken) void backupMedia.refreshAll();
+      hadToken = hasToken;
+    });
+  }
   if (backupMedia !== null) {
     runtime.useBackupMedia((fingerprint) => backupMedia.lookup(fingerprint));
     const fingerprintsOf = (catalog: SourceCatalog): string[] =>
@@ -2267,11 +2336,114 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       const host = runtime.config().servers.B?.host;
       if (host === backupHost) return;
       backupHost = host;
+      // `R-085` — a backup on another machine is another engine: its session is rebuilt there first.
+      backupEngine?.refresh();
       void backupMedia.reset();
     });
     void backupMedia.track(fingerprintsOf(runtime.sourceCatalog()));
     backupMedia.start();
   }
+  /*
+    🔴 `RELEASE-0112-01` (`R-085`) — EACH ENGINE'S LINE, decided once (`engineState`) from what is held:
+    the session, the last sign-in's code, the license, whether the engine's API answers, the core's
+    AMCP, and the guard's verdict (`B-313`, assigned before the runtime connects). Pushed to every
+    console on change (`bridgeSession.engines-changed`); re-judged every 5 s so the AMCP trust window
+    is crossed on time. The backup's line never refuses anything on the primary.
+  */
+  let coreGuard: CoreGuard | null = null;
+  let primarySignedInAtMs: number | null =
+    bridgeSession?.state().state === 'signed-in' ? Date.now() : null;
+  bridgeSession?.onChanged((state) => {
+    if (state.state === 'signed-in') primarySignedInAtMs = Date.now();
+  });
+  const amcpUpOf = (label: 'A' | 'B'): boolean | null => {
+    const h = runtime.health();
+    const server = [h.primary, h.backup].find((s) => s?.label === label);
+    return server === undefined ? null : isServerReachable(server.state);
+  };
+  const lineOf = (
+    engine: EngineLine['engine'],
+    address: string | null,
+    verdict: { state: EngineLine['state']; message?: string },
+    session: { state: string; name?: string | undefined },
+    version: string | null,
+  ): EngineLine => ({
+    engine,
+    address,
+    state: verdict.state,
+    ...(verdict.state === 'signed-in' && session.name !== undefined ? { name: session.name } : {}),
+    ...(verdict.message !== undefined ? { message: verdict.message.slice(0, 300) } : {}),
+    version,
+  });
+  const engineSessionsNow = (): EngineSessions => {
+    const nowMs = Date.now();
+    const servers = runtime.config().servers;
+    const verdict = coreGuard?.verdict() ?? null;
+    const primarySession = bridgeSession?.state() ?? { state: 'off' as const };
+    const primary = lineOf(
+      'primary',
+      primaryEngineAddress,
+      engineState({
+        configured: auth.playout !== null,
+        session: primarySession,
+        lastSignInFailure: bridgeSession?.lastSignInFailure() ?? null,
+        licensed: playoutLicense?.license()?.licensed ?? null,
+        reachable: playoutVersion?.reachable() ?? null,
+        amcpUp: amcpUpOf('A'),
+        amcpRemote: !isLoopbackCasparHost(servers.A.host),
+        signedInAtMs: primarySignedInAtMs,
+        nowMs,
+        coreSharedWith: verdict?.sharedA ?? null,
+      }),
+      primarySession,
+      playoutVersion?.version() ?? null,
+    );
+    if (servers.B === undefined || backupEngine === null) return { primary, backup: null };
+    const backupSession = backupEngine.session();
+    const backup = lineOf(
+      'backup',
+      backupEngine.address(),
+      engineState({
+        configured: true,
+        session: backupSession,
+        lastSignInFailure: backupEngine.lastSignInFailure(),
+        licensed: backupEngine.license()?.licensed ?? null,
+        reachable: backupEngine.reachable(),
+        amcpUp: amcpUpOf('B'),
+        amcpRemote: !isLoopbackCasparHost(servers.B.host),
+        signedInAtMs: backupEngine.signedInAtMs(),
+        nowMs,
+        coreHeldBy: verdict?.heldB ?? null,
+      }),
+      backupSession,
+      backupEngine.version(),
+    );
+    return { primary, backup };
+  };
+  const enginesListeners = new Set<(sessions: EngineSessions) => void>();
+  let lastEngines = JSON.stringify(engineSessionsNow());
+  const publishEngines = (): void => {
+    const next = engineSessionsNow();
+    const text = JSON.stringify(next);
+    if (text === lastEngines) return;
+    lastEngines = text;
+    for (const listener of [...enginesListeners]) listener(next);
+  };
+  const subscribeEngines = (listener: (sessions: EngineSessions) => void): (() => void) => {
+    enginesListeners.add(listener);
+    return () => {
+      enginesListeners.delete(listener);
+    };
+  };
+  bridgeSession?.onChanged(publishEngines);
+  backupEngine?.onChanged(publishEngines);
+  playoutLicense?.onChanged(publishEngines);
+  playoutVersion?.onChanged(publishEngines);
+  playoutVersion?.onReachChanged(publishEngines);
+  runtime.healthChanged.subscribe(publishEngines);
+  runtime.configChanged.subscribe(publishEngines);
+  const enginesTicker = setInterval(publishEngines, 5_000);
+  enginesTicker.unref();
   /*
     🔴 `PLAYOUT-SOURCES-01` — THE STATION'S SOURCES, FROM THE PLAYOUT. D10 and the bound media are
     read with the signed-in operator's bearer, checked at use (D4's rule 3); with auth off a test
@@ -2557,6 +2729,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     actorScope: () => socketScope(currentAuthSession(), playoutAuth, runtime),
     // `CENTRAL-BRIDGE-01` (D7) — the bridge's own Playout session, for its state and its sign-in.
     bridgeSession,
+    // `RELEASE-0112-01` (`R-085`) — each engine's line, and the backup engine's own sign-in.
+    engines: engineSessionsNow,
+    backupEngine,
+    publishEngines,
     // `PLAYOUT-FEATURES-01` D — the CG license as last read, for `license.state`.
     license: () => playoutLicense?.license() ?? null,
     playoutSources,
@@ -2838,6 +3014,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           payload: told,
         });
       }),
+      // `RELEASE-0112-01` (`R-085`) — each engine's line, station-wide, behind the same delivery gate.
+      subscribeEngines((sessions) => {
+        if (!mayBeTold(authGateState(session, playoutAuth))) return;
+        send(socket, {
+          type: 'publish',
+          channel: BridgeEnginesChangedChannel.name,
+          payload: BridgeEnginesChangedChannel.payload.parse(sessions),
+        });
+      }),
       // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, behind the same delivery gate.
       ...(bridgeSession !== null
         ? [
@@ -2931,6 +3116,31 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     socket.on('error', dropSocket);
   });
 
+  /*
+    🔴 `B-313` (`RELEASE-0112-01` Part B) — NEVER A SECOND SENDER ON THE BACKUP CORE. Built before the
+    runtime connects: a declared server B is HELD until the guard's first reading of its machine, so not
+    one line reaches a core another CG Bridge drives. Server A is read and only ever said.
+  */
+  const guardSelf = { startedAt: new Date(startedAtMs).toISOString(), controlPort: () => port };
+  coreGuard = new CoreGuard({
+    servers: () => {
+      const s = runtime.config().servers;
+      return {
+        A: { host: s.A.host, amcpPort: s.A.amcpPort },
+        ...(s.B !== undefined ? { B: { host: s.B.host, amcpPort: s.B.amcpPort } } : {}),
+      };
+    },
+    peerPort: () => options.coreGuardPort ?? port,
+    self: guardSelf,
+    holdB: (held) => runtime.holdServerB(held),
+    ...(options.coreGuardOptions ?? {}),
+  });
+  coreGuard.onChanged(publishEngines);
+  const guard = coreGuard;
+  runtime.configChanged.subscribe(() => {
+    void guard.serversChanged();
+  });
+  await coreGuard.start();
   runtime.start();
   // B-038 Phase 3 — start the template HTTP server so `CG ADD` can reference a
   // real, loadable `/template/<id>` URL. Awaited so the bound port is known.
@@ -3048,6 +3258,22 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutAddress: auth.playout?.address ?? null,
       session: bridgeSession?.state() ?? { state: 'off' },
       lastPlayoutReadAtMs: playoutCatalogue?.lastGoodReadAtMs() ?? null,
+      // `RELEASE-0112-01` — what this bridge drives (`B-313` reads it), and the engines' lines.
+      channels: runtime.declaredChannels(),
+      ...(() => {
+        const engines = engineSessionsNow();
+        return {
+          primaryLine: engines.primary,
+          backup:
+            engines.backup === null || backupEngine === null
+              ? null
+              : {
+                  line: engines.backup,
+                  session: backupEngine.session(),
+                  lastReadAtMs: backupEngine.lastReadAtMs(),
+                },
+        };
+      })(),
       consoles: wss.clients.size,
       ports: { control: port, templates: templateServe.port, osc: servers.A.oscPort },
       portProblems,
@@ -3093,6 +3319,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutAuth?.dispose();
       // `CENTRAL-BRIDGE-01` (D7) — and the bridge's own session refresh.
       bridgeSession?.dispose();
+      backupEngine?.dispose();
+      coreGuard?.dispose();
+      clearInterval(enginesTicker);
       // `C-039` — and the D4 tick, for the same reason.
       playoutCatalogue?.dispose();
       // `PLAYOUT-FEATURES-01` D — and the license's.
@@ -3790,6 +4019,14 @@ export function buildRoutes(
      * `off` and a sign-in has nothing to sign in.
      */
     bridgeSession?: BridgeSession | null;
+    /**
+     * `RELEASE-0112-01` (`R-085`) — each engine's line (`engineState`), the backup engine (for its own
+     * sign-in), and the push that follows a sign-in. Absent (the route-coverage guard): the primary
+     * reads `off` and there is no backup.
+     */
+    engines?: () => EngineSessions;
+    backupEngine?: BackupEngine | null;
+    publishEngines?: () => void;
     /** `PLAYOUT-FEATURES-01` D — the CG license as last read, or `null`. Absent: nothing read. */
     license?: () => PlayoutLicense | null;
     fixedLayersPath?: string;
@@ -4268,6 +4505,45 @@ export function buildRoutes(
         b.recordBridgeSignIn(
           result.ok ? { outcome: 'ok' } : { outcome: 'failed', errorCode: result.failure },
         );
+        paths.publishEngines?.();
+        return result;
+      },
+    ),
+    /*
+      🔴 `RELEASE-0112-01` (`R-085`) — EACH ENGINE'S LINE, read by every console, and a station admin's
+      sign-in of CG Bridge on the BACKUP engine with that engine's own account and password: the same
+      rung and the same lock as the primary's, its row naming the server (`server: 'backup'`), the
+      password left in this one request.
+    */
+    route(
+      BridgeEnginesChannel,
+      'read',
+      'read',
+      () =>
+        paths.engines?.() ?? {
+          primary: {
+            engine: 'primary' as const,
+            address: null,
+            state: 'off' as const,
+            version: null,
+          },
+          backup: null,
+        },
+    ),
+    route(
+      BridgeBackupSignInChannel,
+      'operator',
+      'station-admin',
+      async (r: { username: string; password: string }) => {
+        const engine = paths.backupEngine ?? null;
+        if (engine === null || engine.address() === null) {
+          return { ok: false, failure: 'unexpected' as const };
+        }
+        const result = await engine.signIn(r.username, r.password);
+        b.recordBridgeSignIn({
+          ...(result.ok ? { outcome: 'ok' } : { outcome: 'failed', errorCode: result.failure }),
+          server: 'backup',
+        });
         return result;
       },
     ),

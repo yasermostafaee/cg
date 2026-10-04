@@ -1,3 +1,81 @@
+## MODIFIED Requirements
+
+### Requirement: CG Bridge SHALL keep its own Playout session, and never the password
+
+When its session file is configured, CG Bridge SHALL sign in to the Playout itself (D1) as the account a
+station admin names — once, from any console, through a `station-admin` route the lock refuses — SHALL keep
+the refresh token in that file, written durably (a temp file, `fsync`, rename) BEFORE anything the answer
+carries is used, and SHALL NOT store the password anywhere: not in the file, a log, the audit or the
+console. At start it SHALL refresh (D2) with the saved token, and while it has no session every console
+SHALL show `CG Bridge needs a station admin to sign in`, with the sign-in offered to a station admin only.
+Its access token SHALL be the bearer of every Playout read the bridge makes (D4, D9, D10, D11) — a
+signed-in console's being the fallback only while it has none — and SHALL keep the revocation list polled
+with no console signed in. Every request the bridge sends the Playout SHALL carry no `Origin` and no
+`X-Apasai-Mirrored`. The sign-in SHALL be recorded as `bridge-sign-in`, naming the admin, with no
+credential.
+
+_Amended 2026-09-30 (`CENTRAL-BRIDGE-01-A`; Playout `2.9.2` §2 and §8, where a spent refresh token that
+comes back more than 10 s after its use revokes its whole family and puts every access token of that user
+on D9):_ the bridge SHALL refresh one at a time, and SHALL write a mark naming the token as in flight to the
+file BEFORE the token is sent — a refresh whose mark cannot be written SHALL NOT be sent — and SHALL write
+the successor with the mark cleared before it is used. A mark found at start, an answer that never arrives
+(a timeout, a dropped connection) and a `401` SHALL each be a lost session, and that token SHALL NOT be sent
+again; a request that never reached the Playout SHALL keep the token and ask again.
+
+_Amended 2026-10-04 (`RELEASE-0112-01-C` C2, the Playout team's own table,
+`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §4):_ the answers that come BEFORE the token is used are `400` and
+`415` (malformed), `403` (`cg_not_licensed`, `no_cg_access`), `404` (CG Control switched off on that
+Playout) and `429` (rate limit): on each the bridge SHALL keep the token unmarked, SHALL show the Playout's own
+message on every console as `CG Bridge: <message>`, and SHALL ask again about every 60 s — never a lost
+session. A `401` (used, revoked, expired, or its user disabled or deleted) SHALL be a lost session. A `5xx`,
+any status the table does not name — `423` among them, which is D1's alone — and an answer that never
+arrives SHALL leave the outcome unknown, and that token SHALL NOT be sent again. The same rules SHALL hold
+for each engine's session (`R-085`).
+
+#### Scenario: An admin signs the bridge in once
+
+- **WHEN** the bridge starts with no saved session **THEN** every console shows the line; an operator's
+  sign-in of the bridge is refused for its role; a station admin's succeeds, every console is told, the
+  record names the admin and holds no password, and the bridge's own Playout reads carry its own bearer,
+  still after every console has gone
+
+#### Scenario: A crash between receiving a rotated token and using it
+
+- **WHEN** the bridge refreshes, saves the rotated token and stops before using it **THEN** the restarted
+  bridge refreshes with the saved token and is signed in — control: the spent token is presented exactly
+  once and never again; and a crash before the save leaves the in-flight mark, so the restarted bridge
+  sends nothing and says it needs an admin (amended 2026-09-30: it no longer sends the spent token to be
+  refused — `2.9.2` would read that as theft)
+
+#### Scenario: No Origin and no X-Apasai-Mirrored
+
+- **WHEN** the bridge signs in, polls D9 and reads D4 **THEN** no request the Playout received carries
+  either header — control: the same log holds the bridge's D1 and a request carrying a bearer
+
+#### Scenario: A crash between sending a refresh and saving its answer
+
+- **WHEN** the bridge sends D2 and stops before saving the answer, and restarts more than 10 s later
+  **THEN** it sends no refresh with that token, says it needs a station admin, and the Playout counts no
+  reuse — control: a clean refresh keeps working across three restarts, rotating the token each time
+
+#### Scenario: An answer that never arrives
+
+- **WHEN** the D2 reaches the Playout and its answer is lost **THEN** the token is not sent again — not by a
+  retry and not after a restart — and a request that never reached the Playout is asked again and works
+
+#### Scenario: A refusal before use keeps the token
+
+- **WHEN** the Playout answers the refresh `403 cg_not_licensed` with a message **THEN** every console shows
+  `CG Bridge: <message>`, the saved token is kept unmarked, and once the licence is back the same token
+  refreshes
+
+#### Scenario: D2's outcome table, on each engine's session
+
+- **WHEN** an engine answers a refresh `400`, `415`, `403`, `404` or `429` **THEN** that engine's token is kept
+  and asked again **AND WHEN** it answers `401` **THEN** that engine's session is lost **AND WHEN** it answers
+  a `5xx` or `423`, or never answers **THEN** that token is never sent again — on the primary engine's
+  session and on the backup's alike
+
 ## ADDED Requirements
 
 ### Requirement: CG Bridge SHALL keep one Playout session per engine, each signed in with that engine's own account

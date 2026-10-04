@@ -104,6 +104,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private readonly now: () => number;
 
   private consecutiveTimeouts = 0;
+  /** `B-313` — servers never failed over onto ({@link setHeld}). */
+  private readonly held = new Set<ServerLabel>();
   private fiveXxTimestamps: number[] = [];
   private divergenceTimestamps: number[] = [];
   private correctiveResendInFlight = false;
@@ -164,6 +166,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    * replays read the same rule (`journalLineFor`).
    */
   private lineFor(label: ServerLabel, line: string, options: SendOptions): string | null {
+    // `B-313` — a HELD server is sent nothing, and its absence is no divergence (`null`, as `B-286`'s).
+    if (this.held.has(label) && label !== this.primary) return null;
     return journalLineFor(
       { line, ...(options.serverB !== undefined ? { lineB: options.serverB } : {}) },
       label,
@@ -213,9 +217,11 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     if (this.failoverInProgress) return false;
     if (this.backupSession === null) return false;
     if (reason !== 'manual' && !this.autoFailoverEnabled) return false;
-    this.failoverInProgress = true;
     const from = this.primary;
     const to: ServerLabel = from === 'A' ? 'B' : 'A';
+    // `B-313` — never onto a HELD server: another CG Bridge drives its core.
+    if (this.held.has(to)) return false;
+    this.failoverInProgress = true;
     const event: FailoverEvent = { reason, from, to, at: this.now() };
     this.emit('failover-requested', event);
     try {
@@ -232,6 +238,16 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     } finally {
       this.failoverInProgress = false;
     }
+  }
+
+  /**
+   * 🔴 `B-313` — **HOLD A SERVER: never fail over onto it.** The bridge holds server B while another CG
+   * Bridge drives B's core (it also stops B's session, so nothing is sent there); a failover onto a
+   * held server would make this bridge that core's second sender. Released, it is a target again.
+   */
+  setHeld(label: ServerLabel, held: boolean): void {
+    if (held) this.held.add(label);
+    else this.held.delete(label);
   }
 
   /**
@@ -478,6 +494,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    */
   private async triggerCorrectiveResend(target: ServerLabel): Promise<void> {
     if (this.correctiveResendInFlight) return;
+    // `B-313` — never a replay to a held server.
+    if (this.held.has(target)) return;
     const session = this.sessions[target];
     if (session === undefined || !isLiveState(session.state)) return;
     this.correctiveResendInFlight = true;
@@ -556,6 +574,7 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    * target is not live at fire time (B-046).
    */
   private async replayJournalTo(label: ServerLabel): Promise<void> {
+    if (this.held.has(label)) return;
     const session = this.sessions[label];
     if (session === undefined || !isLiveState(session.state)) return;
     const queue: CommandQueue = session.queue;
