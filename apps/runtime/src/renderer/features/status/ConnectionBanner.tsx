@@ -25,6 +25,10 @@ import { setTestMode } from '../../../platform/testMode.js';
  * the harness flag (`window.CG_E2E`, `platform/testMode.ts`). The way OUT stays too, so a session
  * left in test mode can still leave it.
  *
+ * 🔴 `R-087` A2 — the disconnected banner says `data-tone="alarm"`, and its actions are drawn FOR
+ * RED by that scope in `controls.css` (the first a white fill with dark-red ink, the rest white
+ * text, a white focus ring) — never the console's blue, and with no `style` on a control.
+ *
  * When the link is live this renders nothing: no banner is itself the signal that the
  * Runtime can actually reach air.
  */
@@ -109,6 +113,7 @@ export function ConnectionBanner({
     <div
       role="alert"
       aria-label="Bridge disconnected"
+      data-tone="alarm"
       style={{ ...styles.banner, background: colors.alarmFill, color: cssVars['--r-ink-on-fill'] }}
     >
       <span style={styles.text}>

@@ -1110,6 +1110,71 @@
 }
 
 /*
+ * ── 🔴 `R-087` A2 — ACTIONS ON A RED BANNER ARE DRAWN FOR RED ───────────────
+ *
+ * The owner's screenshot (`RELEASE-0112-01-A`): on the red NOT CONNECTED banner, `Retry
+ * connection` wore the console's blue outline (`--secondary`) and `Set up again` the muted
+ * ghost grey — neither designed for red, the blue hard to read on it. One SCOPE, here in the
+ * shared declaration: a banner whose ground is the alarm red says `data-tone="alarm"` (the tone
+ * vocabulary the failover strip already speaks), and every control inside it is drawn for that
+ * ground. No new colour: the white is `--r-ink-on-fill`, the banner's own ink; the dark red is
+ * `--r-danger-strong`; the near-white hover is `--r-text`.
+ *
+ *   - THE FIRST ACTION (`--secondary` / `--primary`): a white fill with dark-red ink.
+ *   - EVERY OTHER ACTION: quiet — white text, no fill; its hover draws a white edge.
+ *   - FOCUS: a white ring, OFFSET, so the banner's red shows between it and the control —
+ *     never the blue `--r-accent` ring, which is the one blue the banner would otherwise carry.
+ *   - DISABLED: no fill and a dashed white edge, the text kept white — never the shared 0.45
+ *     opacity, which would sink white text into the red below 4.5 : 1.
+ *
+ * Contrast is MEASURED in Chromium (`banner-on-red.spec.ts`), every state, never computed from
+ * these names (golden rule 12 c).
+ */
+[data-tone='alarm'] .cg-btn {
+  background: transparent;
+  border-color: transparent;
+  color: var(--r-ink-on-fill);
+}
+[data-tone='alarm'] .cg-btn--secondary,
+[data-tone='alarm'] .cg-btn--primary {
+  background: var(--r-ink-on-fill);
+  border-color: var(--r-ink-on-fill);
+  color: var(--r-danger-strong);
+}
+/* Each hover restates fill AND ink: `--ghost`'s own hover (0,3,0) would otherwise paint the slate. */
+[data-tone='alarm'] .cg-btn:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--r-ink-on-fill);
+  color: var(--r-ink-on-fill);
+  filter: none;
+}
+[data-tone='alarm'] .cg-btn--secondary:hover:not(:disabled),
+[data-tone='alarm'] .cg-btn--primary:hover:not(:disabled) {
+  background: var(--r-text);
+  border-color: var(--r-text);
+  color: var(--r-danger-strong);
+}
+[data-tone='alarm'] .cg-btn:active:not(:disabled) {
+  filter: none;
+}
+[data-tone='alarm'] .cg-btn--secondary:active:not(:disabled),
+[data-tone='alarm'] .cg-btn--primary:active:not(:disabled) {
+  background: var(--r-text);
+}
+[data-tone='alarm'] .cg-btn:focus-visible {
+  box-shadow: none;
+  outline: var(--r-focus-ring) solid var(--r-ink-on-fill);
+  outline-offset: var(--r-focus-ring);
+}
+[data-tone='alarm'] .cg-btn:disabled {
+  opacity: 1;
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--r-ink-on-fill);
+  color: var(--r-ink-on-fill);
+}
+
+/*
  * THE ROW VERB — neutral, square, icon-only.
  *
  * Why neutral. A bright PLAY, an amber CLEAR and a red REMOVE on EVERY row meant

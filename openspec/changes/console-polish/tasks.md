@@ -270,8 +270,20 @@ A2 FAST (visual). One batch, one gate, one push — before `v0.11.2`'s tag.
       line this delta replaces, `R-006` (marked superseded in part). `bannerCompact.dom.test.ts` pins the
       ABSENCE, with the control that `Retry connection` still reloads; `connectionBannerSetUpAgain` keeps
       Set up again's
-- [ ] 12.3 A2: actions on a red (`alarm`) banner drawn for red in `controls.css` by a banner scope
-      (`[data-tone='alarm']`) — every state, existing tokens only, no `style` on a control, no blue
-- [ ] 12.4 A2 measured in Chromium (e2e): text ≥ 4.5 : 1, focus ring ≥ 3 : 1, every state; the amber
-      banners checked; screenshots before and after
+- [x] 12.3 A2: actions on a red (`alarm`) banner drawn for red in `controls.css` by a banner scope
+      (`[data-tone='alarm']`, the tone word the failover strip already speaks): the first action
+      (`--secondary` / `--primary`) a white fill (`--r-ink-on-fill`) with dark-red ink
+      (`--r-danger-strong`), hover / pressed on `--r-text`; every other action white text, a white
+      edge on hover; focus a white ring offset from the control; disabled a dashed white edge with
+      white text (never the shared 0.45). Existing tokens only, no `style` on a control, no blue. The
+      NOT CONNECTED banner says `data-tone="alarm"`; the failover strip's alarm tone carries no
+      action (its Dismiss shows only on notice and caution), so it is unchanged
+- [x] 12.4 A2 measured in Chromium — `banner-on-red.spec.ts`: Retry connection text 6.47 (rest,
+      focus), 5.80 (hover, pressed), 8.31 (disabled) : 1, its fill 8.31 : 1 off the banner; Set up
+      again 8.31 : 1 in every state; both focus rings 8.31 : 1 against the banner; no blue hue in any
+      colour of either, in any state. CONTROL: the same spec on the old CSS fails at its first check,
+      `Retry connection rest paints blue: rgb(116, 205, 246)`. The amber banners measured and left as
+      they are — drawn for amber already: the orphan strip's CLEAR 6.33 : 1 in every state with a
+      7.64 : 1 ring, `neutral` (Sign in CG Bridge…) 13.87 : 1, `ghost` (DISMISS) 4.96 : 1. Screenshots
+      before and after in `Claude outputs/RELEASE-0112-01-A-banner-{before,after}-*.png`
 - [ ] 12.5 Gate, push, CI COMPLETED green with the jobs RAN (the banner's e2e among them)
