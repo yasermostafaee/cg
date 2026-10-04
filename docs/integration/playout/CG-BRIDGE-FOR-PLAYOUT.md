@@ -78,11 +78,17 @@ Example (a fresh install, no CasparCG yet, no station-admin sign-in yet):
 
 ## 2. The installer
 
-**File:** `CG-Bridge_<version>_x64-setup.exe`. NSIS, per machine, 64-bit Windows only (on 32-bit
-Windows it exits `2`). It asks for administrator rights. **Size:** about 22.5 MB — 23,616,613 bytes for
-the last CI build (the release lists the exact size of `0.10.0`'s). It carries everything: the official
-`node.exe` (as `cg-bridge.exe`), the service host Shawl 1.9.0 (MIT), our bridge as one file, and the
-licences. **Nothing is downloaded during an install.**
+**File:** `CG-Bridge_<version>_x64-setup.exe`. Per machine, 64-bit Windows only (on 32-bit Windows it
+exits `2`). It asks for administrator rights. **What it is:** our setup program, CG Setup, with CG
+Bridge's NSIS installer inside it. Double-clicked, it shows CG Setup's window. **Run with `/S`, it shows
+nothing: it runs the NSIS installer with exactly your command line and returns that installer's exit
+code — every switch, the uninstall line and every exit code in this section are the NSIS installer's
+own, unchanged.** Our clean-Windows test runs each silent path against the NSIS installer alone and
+against the file you receive, and requires the same codes. It needs Windows 10 or later, as CG Bridge's
+own Node runtime does. **Size:** about 23.3 MB — 24,471,859 bytes for the last CI build (the release
+lists the exact size of each release's). It carries everything: the official `node.exe` (as
+`cg-bridge.exe`), the service host Shawl 1.9.0 (MIT), our bridge as one file, and the licences.
+**Nothing is downloaded during an install.**
 
 **Signing:** this test build is NOT signed. Windows SmartScreen warns when a person double-clicks a
 downloaded copy (Mark of the Web). Your installer running ours from its own payload is not a download.

@@ -3859,5 +3859,10 @@ larger than its engine.
 
 **Built in code (2026-10-04).** `tools/setup-ui` (46 unit tests), `tools/release/src/pack-installers.mjs`,
 `desktop.yml` (built 32-bit, packed, the smokes and the `setup-window` job). The uninstallers stay the
-engines' classic pages (`design.md` §4). **Owed:** the CI runs green with every job confirmed to have run;
-the captures; the sizes; the Playout document's §2.
+engines' classic pages (`design.md` §4). **Verified (2026-10-04, `11ff890c`):** Desktop run
+37168047465 green with every job run — the silent paths equal against each engine, every page of each
+installer driven through UI Automation and captured, "Launch when ready" starting the app, updates keeping
+the settings, the first screen with WebView2 blocked on Server 2022 and 2025, the keyboard, 150 %; PR run
+37168047476's `e2e` green. Each installer +0.84 MB. The Playout document's §2 says what the installer is
+now. **Not verified on a runner:** Windows 11's rounded corners (Windows does not round without a GPU)
+and 200 % (the runner's display stops at 175 %). **Owed:** the owner's look on his own PC; archive.

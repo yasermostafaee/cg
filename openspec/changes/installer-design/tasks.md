@@ -30,13 +30,23 @@
 - [x] 2.3 The smokes: silent A/B against the engines; the apps' and CG Bridge's windows driven through
       UI Automation (fresh, update, error); the `setup-window` job (Server 2022 and 2025: WebView2
       blocked, the keyboard, 150 % / 200 %)
-- [ ] 2.4 The `installers`, `smoke`, `bridge-smoke` and `setup-window` jobs COMPLETED and GREEN on the
-      pushed commit, each confirmed to have run (run URL here)
-- [ ] 2.5 The `pr.yml` `e2e` job COMPLETED and GREEN, confirmed to have run (run URL here)
+- [x] 2.4 The `installers`, `smoke`, `bridge-smoke` and `setup-window` jobs COMPLETED and GREEN on the
+      pushed commit, each confirmed to have run — `11ff890c`,
+      https://github.com/yasermostafaee/cg/actions/runs/37168047465 (`installers` success; `smoke`
+      success, 65/65 + the setup flows 64/64; `bridge-smoke` success, 39/39 + 31/31; `setup-window`
+      success on `windows-2022` 35/35 and `windows-2025` 35/35; `release` skipped: tag only). The run
+      before it (`88e3be9a`, 37166490439) was green on every product behaviour and red on two harness
+      defects, fixed in `11ff890c`.
+- [x] 2.5 The `pr.yml` `e2e` job COMPLETED and GREEN, confirmed to have run — `11ff890c`,
+      https://github.com/yasermostafaee/cg/actions/runs/37168047476 (Designer 293 passed, Runtime 327
+      passed)
 
 ## 3. Evidence and docs
 
-- [ ] 3.1 Every page of every installer captured on the clean runners, beside its mockup
-- [ ] 3.2 Every installer's size before (engine) and after (installer), each under +15 MB
-- [ ] 3.3 `CG-BRIDGE-FOR-PLAYOUT.md` §2: what the installer is now, and its size
-- [ ] 3.4 `P-063` filed and its status kept current; the report written
+- [x] 3.1 Every page of every installer captured on the clean runners (run 37168047465's artifacts
+      `installer-smoke`, `bridge-smoke`, `setup-window-*`), beside its mockup in the report
+- [x] 3.2 Every installer's size before (engine) and after (installer), each under +15 MB — run
+      37168047465: CG Bridge 23,630,140 → 24,471,859 (+841,719); CG Control 217,602,964 →
+      218,444,598 (+841,634); CG Designer 226,206,057 → 227,047,531 (+841,474)
+- [x] 3.3 `CG-BRIDGE-FOR-PLAYOUT.md` §2: what the installer is now, and its size
+- [x] 3.4 `P-063` filed and its status kept current; the report written
