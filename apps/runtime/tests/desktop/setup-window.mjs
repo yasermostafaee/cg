@@ -115,10 +115,25 @@ function powershell(script) {
   ).trim();
 }
 
-/** The DLLs a running process has loaded (the "no WebView2" proof reads these). */
+/**
+ * The DLLs a running process has loaded (the "no WebView2" proof reads these). CG Setup is 32-bit, and
+ * a 64-bit reader sees only a 32-bit process's WOW64 layer — so it is read from the 32-bit PowerShell.
+ */
 export function modulesOf(pid) {
+  const windir = process.env.SystemRoot ?? 'C:\\Windows';
+  const ps32 = path.join(windir, 'SysWOW64', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const script = `(Get-Process -Id ${String(pid)}).Modules | ForEach-Object { $_.ModuleName }`;
   try {
-    return powershell(`(Get-Process -Id ${String(pid)}).Modules | ForEach-Object { $_.ModuleName }`)
+    return execFileSync(
+      fs.existsSync(ps32) ? ps32 : 'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-EncodedCommand',
+        Buffer.from(script, 'utf16le').toString('base64'),
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    )
       .split(/\r?\n/)
       .map((s) => s.trim())
       .filter(Boolean);

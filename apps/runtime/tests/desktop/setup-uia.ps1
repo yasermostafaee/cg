@@ -22,6 +22,8 @@ param(
   [int]$Timeout = 60
 )
 $ErrorActionPreference = 'Stop'
+# The answer is UTF-8: the window's words carry a middle dot, which the console code page loses.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
 Add-Type -TypeDefinition @"
 using System; using System.Runtime.InteropServices;
