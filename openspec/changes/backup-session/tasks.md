@@ -133,7 +133,10 @@ Lane: FULL (delivery: the version, the installers' contract and the guide a clie
       `docs/integration/playout/`. `guide.test.ts`: ten sections, the new labels against their sources, the
       marks counted and placed, their lines read from the letter
 - [ ] 7.4 The `0.11.2` pictures from a Desktop run of the bump; then gate, push, CI green with every job RAN
-- [ ] 7.5 `CG-BRIDGE-FOR-PLAYOUT.md` at `0.11.2`: the pair, `/health`'s new fields, D2's table (the disabled-user
-      sentence corrected), the Installed-apps guarantee, the version policy
+- [x] 7.5 `CG-BRIDGE-FOR-PLAYOUT.md` at `0.11.2`: §3 a primary and a backup engine (the layout, server B, a
+      session per engine, a backup problem never stopping the primary, the guard); `/health`'s new fields and
+      codes; the Installed-apps entry as a guarantee (§2); D2's table, the disabled-user sentence corrected
+      where §3 stated it and where §6 asked it (now §7, their answer); the version policy (a new file and
+      hash per release, so a new engine build; the skip rule); `/S` and every exit code unchanged
 - [ ] 7.6 Tag `v0.11.2`; the draft "APASAI CG 0.11.2" read back, sums checked; `v0.11.1` retitled superseded;
       NOT published
