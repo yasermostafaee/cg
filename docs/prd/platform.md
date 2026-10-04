@@ -3834,3 +3834,30 @@ certificate the client does not have and a trust decision in each console. **Why
 `CENTRAL-BRIDGE-01` chose the transport. **Acceptance (sketch):** WHEN a station enables TLS on CG Bridge
 THEN every console connects over `wss://`, a console that does not trust the bridge's certificate refuses
 with one line, and the Playout's own choice (HTTP or HTTPS) is not constrained.
+
+## [~] P-063 — A setup window of our own for all three installers ⟨priority: high⟩ — FILED 2026-10-04 by `INSTALLER-DESIGN-01` (v2) · `openspec/changes/installer-design`
+
+**What.** The three installers open the default NSIS wizard (a white page, a grey system button row). They
+open instead one setup window of our own — CG Setup (`tools/setup-ui`, Rust: Win32 + Direct2D +
+DirectWrite, no WebView2, no .NET): frameless, the system's shadow and Windows 11's corners, its own title
+bar, a step rail (Welcome → Location → Installing → Done) on the splash's ground and the page on the
+sign-in card's surface, in the console's tokens and faces, vector at every scale. Each installer is CG
+Setup with the product's NSIS installer — built exactly as before — appended behind it as its ENGINE: with
+`/S` (or Tauri's `/P`) CG Setup runs the engine with the same command line and returns its exit code, so
+every silent path is the engine's; without, it shows the window and drives the same engine silently, its
+bar following the engine's real steps. **Why.** The owner (2026-09-30, clarified 2026-10-03): setup
+should feel like installing a current product and look like the same product as the splash and sign-in —
+not a classic wizard, nor one with a picture pasted on top.
+
+**Acceptance:** WHEN an installer is run with `/S` THEN it and its engine alone exit the same, for every
+silent path the Playout document names; WHEN it is run without THEN its window shows Welcome (the question,
+the tile, publisher, version, what it installs, "Update from … to …" over an older release), Location,
+Installing (a real bar), Done ("Launch when ready" starts the app) and Error, every page operable by
+keyboard and UI Automation, sharp at 150 % and 200 %, still under reduced motion; WHEN WebView2 is
+unavailable THEN the first screen opens all the same; WHEN packed THEN each installer is at most 15 MB
+larger than its engine.
+
+**Built in code (2026-10-04).** `tools/setup-ui` (46 unit tests), `tools/release/src/pack-installers.mjs`,
+`desktop.yml` (built 32-bit, packed, the smokes and the `setup-window` job). The uninstallers stay the
+engines' classic pages (`design.md` §4). **Owed:** the CI runs green with every job confirmed to have run;
+the captures; the sizes; the Playout document's §2.

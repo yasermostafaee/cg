@@ -3124,3 +3124,17 @@ Measured free before use: the same sweep as `B-298`'s, on every local branch and
 nothing for `B-299`, against `B-298`'s own heading on `dev` as the positive control; no stash.
 
 ⇒ **Next free after this entry is `B-300`**, **`D-162`**, **`P-063`**, **`R-080`** and **`C-049`**.
+
+### 2026-10-04 — `INSTALLER-DESIGN-01` takes `P-063`
+
+- `P-063` — a setup window of our own for all three installers — [platform.md](platform.md).
+- ⚠ **This tail was stale.** `B-300` – `B-308` and `R-080` – `R-084` were taken since the entry above
+  (`PLAYOUT-FEATURES-01`, `CONSOLE-POLISH-01`) without a line here; their headings are in the PRD files, so
+  the next free numbers below are measured from the headings, not carried from the entry above.
+
+Measured free before use: `git grep -n -E "^## \[.\] P-06[23] " <branch> -- docs` on every local branch
+(`ai-stale`, `design/live-source-multibox`, `dev`, `main`) returned only `P-062`'s own heading on `dev` —
+the positive control — and nothing for `P-063`; with `--untracked`, `P-062` and this entry's own new
+heading; no stash. The highest headings in the PRD files are `B-308` and `R-084`.
+
+⇒ **Next free after this entry is `B-309`**, **`D-162`**, **`P-064`**, **`R-085`** and **`C-049`**.
