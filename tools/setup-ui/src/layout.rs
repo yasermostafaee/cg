@@ -6,9 +6,13 @@
 //! drawn first with the real tokens, faces and icons.
 
 use crate::icons::Icon;
-use crate::model::{format_bytes, Model, Page, StepState, STEPS};
+use crate::model::{format_bytes, Model, Page, StepState};
 use crate::palette::{self, Rgb};
 use crate::product::{ProductId, PUBLISHER, WEBVIEW2_LINE};
+use crate::server::{
+    AddressChoice, ADDRESS_LABEL, AMCP_LABEL, OTHER_LABEL, PLAYOUT_LABEL, PLAYOUT_PLACEHOLDER,
+    SEPARATE_LABEL,
+};
 
 pub const WIN_W: f32 = 800.0;
 pub const WIN_H: f32 = 520.0;
@@ -140,6 +144,24 @@ pub enum WidgetId {
     Help,
     Minimize,
     CloseWindow,
+    // `RELEASE-0111-01` Part A — CG Bridge's separate-server page.
+    Separate,
+    PlayoutField,
+    AmcpField,
+    /// One of this server's IPv4 addresses, by its place in the list.
+    Address(u8),
+    AddressOther,
+    AddressOtherField,
+}
+
+impl WidgetId {
+    /// The page's text fields.
+    pub fn is_field(self) -> bool {
+        matches!(
+            self,
+            WidgetId::PlayoutField | WidgetId::AmcpField | WidgetId::AddressOtherField
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,6 +178,15 @@ pub enum WidgetKind {
     Link,
     /// Minimise and close, in the window's own title bar (not in the Tab order).
     TitleButton,
+    /// `RELEASE-0111-01` Part A — one line of text: its caret (in characters), the whole value
+    /// selected, and a refusal said beside it.
+    TextField {
+        caret: usize,
+        all: bool,
+        refused: bool,
+    },
+    /// One choice of a group (this server's addresses): chosen or not.
+    Radio(bool),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,11 +194,28 @@ pub struct Widget {
     pub id: WidgetId,
     pub kind: WidgetKind,
     pub rect: Rect,
+    /// What UI Automation names it; a text field's label.
     pub label: String,
     pub enabled: bool,
+    /// A text field's text.
+    pub value: String,
+    /// A text field's placeholder, shown while it is empty.
+    pub placeholder: String,
 }
 
 impl Widget {
+    pub fn new(id: WidgetId, kind: WidgetKind, rect: Rect, label: &str, enabled: bool) -> Widget {
+        Widget {
+            id,
+            kind,
+            rect,
+            label: label.to_string(),
+            enabled,
+            value: String::new(),
+            placeholder: String::new(),
+        }
+    }
+
     pub fn tabbable(&self) -> bool {
         self.enabled && !matches!(self.kind, WidgetKind::TitleButton)
     }
@@ -305,17 +353,166 @@ fn footer(b: &mut Builder, right_to_left: &[(WidgetId, &str, Variant, bool)]) {
     for (id, label, variant, enabled) in right_to_left {
         let w = b.button_w(label, *variant);
         x -= w;
-        placed.push(Widget {
-            id: *id,
-            kind: WidgetKind::Button(*variant),
-            rect: Rect::new(x, 472.0, w, 32.0),
-            label: (*label).to_string(),
-            enabled: *enabled,
-        });
+        placed.push(Widget::new(
+            *id,
+            WidgetKind::Button(*variant),
+            Rect::new(x, 472.0, w, 32.0),
+            label,
+            *enabled,
+        ));
         x -= 10.0;
     }
     placed.reverse();
     b.widgets.extend(placed);
+}
+
+/// A text field, from its model.
+fn field_widget(
+    id: WidgetId,
+    rect: Rect,
+    label: &str,
+    field: &crate::field::Field,
+    placeholder: &str,
+    refused: bool,
+) -> Widget {
+    let mut w = Widget::new(
+        id,
+        WidgetKind::TextField {
+            caret: field.caret(),
+            all: field.all_selected(),
+            refused,
+        },
+        rect,
+        label,
+        true,
+    );
+    w.value = field.text().to_string();
+    w.placeholder = placeholder.to_string();
+    w
+}
+
+/// A field's refusal, in words, on the line under it.
+fn refusal(b: &mut Builder, y: f32, text: Option<&str>) {
+    if let Some(text) = text {
+        b.text(
+            Rect::new(X0, y, CONTENT_W, 18.0),
+            text,
+            Style::Body,
+            palette::CAUTION_TEXT,
+        );
+    }
+}
+
+/// 🔴 `RELEASE-0111-01` Part A (`P-065`) — **CG BRIDGE'S PLAYOUT PAGE.** The checkbox — unticked, the
+/// Playout CG Bridge will use, as one fact — and, ticked, the three addresses the engine needs, each
+/// with its refusal said under it. Labels and values only; the Playout field alone has a placeholder.
+fn server_page(b: &mut Builder, m: &Model) {
+    let s = &m.server;
+    b.heading(Rect::new(X0, 54.0, CONTENT_W, 34.0), m.title());
+    let (lw, _) = b.m.measure(SEPARATE_LABEL, Style::Body, CONTENT_W);
+    b.widgets.push(Widget::new(
+        WidgetId::Separate,
+        WidgetKind::Checkbox(s.separate),
+        Rect::new(X0, 108.0, (28.0 + lw.ceil()).min(CONTENT_W), 24.0),
+        SEPARATE_LABEL,
+        true,
+    ));
+    if !s.separate {
+        let stored = m
+            .facts
+            .bridge_config
+            .as_ref()
+            .filter(|_| !s.was_separate)
+            .and_then(|c| c.playout.clone());
+        b.label(152.0, PLAYOUT_LABEL);
+        b.text(
+            Rect::new(X0, 174.0, CONTENT_W, 20.0),
+            format!(
+                "{} · on this machine",
+                stored
+                    .as_deref()
+                    .unwrap_or(crate::server::PLAYOUT_ON_THIS_MACHINE)
+            ),
+            Style::Body,
+            palette::TEXT,
+        );
+        return;
+    }
+    let shown = s.shown.clone();
+    let mut y = 150.0;
+    b.label(y, PLAYOUT_LABEL);
+    b.widgets.push(field_widget(
+        WidgetId::PlayoutField,
+        Rect::new(X0, y + 20.0, CONTENT_W, 32.0),
+        PLAYOUT_LABEL,
+        &s.playout,
+        PLAYOUT_PLACEHOLDER,
+        shown.playout.is_some(),
+    ));
+    refusal(b, y + 56.0, shown.playout);
+    y += 84.0;
+    b.label(y, AMCP_LABEL);
+    b.widgets.push(field_widget(
+        WidgetId::AmcpField,
+        Rect::new(X0, y + 20.0, CONTENT_W, 32.0),
+        AMCP_LABEL,
+        &s.amcp,
+        "",
+        shown.amcp.is_some(),
+    ));
+    refusal(b, y + 56.0, shown.amcp);
+    y += 84.0;
+    b.label(y, ADDRESS_LABEL);
+    // This server's addresses, one choice each, then Other; a row that is full wraps.
+    let (mut x, mut row) = (X0, y + 20.0);
+    let mut chip = |b: &mut Builder, id: WidgetId, text: &str, on: bool| {
+        let (tw, _) = b.m.measure(text, Style::Body, 300.0);
+        let w = (tw.ceil() + 40.0).min(CONTENT_W);
+        if x > X0 && x + w > X1 {
+            x = X0;
+            row += 40.0;
+        }
+        b.widgets.push(Widget::new(
+            id,
+            WidgetKind::Radio(on),
+            Rect::new(x, row, w, 32.0),
+            text,
+            true,
+        ));
+        x += w + 8.0;
+    };
+    for (i, address) in s.addresses.iter().enumerate().take(8) {
+        chip(
+            b,
+            WidgetId::Address(i as u8),
+            address,
+            s.choice == AddressChoice::Listed(i),
+        );
+    }
+    chip(
+        b,
+        WidgetId::AddressOther,
+        OTHER_LABEL,
+        s.choice == AddressChoice::Other,
+    );
+    if s.choice == AddressChoice::Other {
+        let room = X1 - x;
+        let rect = if room >= 160.0 {
+            Rect::new(x, row, room, 32.0)
+        } else {
+            row += 40.0;
+            Rect::new(X0, row, CONTENT_W, 32.0)
+        };
+        b.widgets.push(field_widget(
+            WidgetId::AddressOtherField,
+            rect,
+            &format!("{ADDRESS_LABEL} (other)"),
+            &s.other,
+            "",
+            shown.address.is_some(),
+        ));
+    }
+    refusal(b, row + 36.0, shown.address);
 }
 
 pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
@@ -442,13 +639,13 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                     Style::Body,
                     palette::TEXT,
                 );
-                b.widgets.push(Widget {
-                    id: WidgetId::Change,
-                    kind: WidgetKind::Button(Variant::Secondary),
-                    rect: Rect::new(X1 - change_w, y + 22.0, change_w, 34.0),
-                    label: "Change".into(),
-                    enabled: true,
-                });
+                b.widgets.push(Widget::new(
+                    WidgetId::Change,
+                    WidgetKind::Button(Variant::Secondary),
+                    Rect::new(X1 - change_w, y + 22.0, change_w, 34.0),
+                    "Change",
+                    true,
+                ));
                 y += 82.0;
             } else {
                 b.label(y, "Folder");
@@ -500,6 +697,25 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
                 );
                 y += h + 10.0;
             }
+            let go = if m.is_update() { "Update" } else { "Install" };
+            // CG Bridge goes on to its Playout page; the apps install from here.
+            let (forward, label) = if m.has_server_page() {
+                (WidgetId::Next, "Next")
+            } else {
+                (WidgetId::Install, go)
+            };
+            footer(
+                &mut b,
+                &[
+                    (forward, label, Variant::Primary, m.can_install()),
+                    (WidgetId::Back, "Back", Variant::Ghost, true),
+                ],
+            );
+            primary = Some(forward);
+            escape = Some(WidgetId::Cancel);
+        }
+        Page::Server => {
+            server_page(&mut b, m);
             let go = if m.is_update() { "Update" } else { "Install" };
             footer(
                 &mut b,
@@ -582,13 +798,13 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
             }
             // The one option, at the foot's left: the box and its label are one target.
             let (lw, _) = measure.measure(p.launch_label, Style::Body, 300.0);
-            b.widgets.push(Widget {
-                id: WidgetId::Launch,
-                kind: WidgetKind::Checkbox(m.launch),
-                rect: Rect::new(X0, 476.0, 28.0 + lw.ceil(), 24.0),
-                label: p.launch_label.into(),
-                enabled: true,
-            });
+            b.widgets.push(Widget::new(
+                WidgetId::Launch,
+                WidgetKind::Checkbox(m.launch),
+                Rect::new(X0, 476.0, 28.0 + lw.ceil(), 24.0),
+                p.launch_label,
+                true,
+            ));
             let mut buttons = vec![(WidgetId::Finish, "Finish", Variant::Primary, true)];
             if m.outcome.warning.is_some() {
                 buttons.push((WidgetId::OpenLog, "Open log", Variant::Ghost, true));
@@ -624,31 +840,32 @@ pub fn build(m: &Model, measure: &dyn Measure) -> Scene {
     // Help, at the rail's foot: the guide when it is bundled; CG Bridge's status once installed.
     if help_target(m).is_some() {
         let (w, _) = measure.measure("Help", Style::Body, 100.0);
-        b.widgets.push(Widget {
-            id: WidgetId::Help,
-            kind: WidgetKind::Link,
-            rect: Rect::new(32.0, 476.0, 32.0 + w.ceil(), 24.0),
-            label: "Help".into(),
-            enabled: true,
-        });
+        b.widgets.push(Widget::new(
+            WidgetId::Help,
+            WidgetKind::Link,
+            Rect::new(32.0, 476.0, 32.0 + w.ceil(), 24.0),
+            "Help",
+            true,
+        ));
     }
     let installing = m.page == Page::Installing;
-    b.widgets.push(Widget {
-        id: WidgetId::Minimize,
-        kind: WidgetKind::TitleButton,
-        rect: Rect::new(708.0, 0.0, 46.0, 40.0),
-        label: "Minimise".into(),
-        enabled: true,
-    });
-    b.widgets.push(Widget {
-        id: WidgetId::CloseWindow,
-        kind: WidgetKind::TitleButton,
-        rect: Rect::new(754.0, 0.0, 46.0, 40.0),
-        label: "Close".into(),
-        enabled: !installing || (!m.progress.engine_started && !m.cancelling),
-    });
+    b.widgets.push(Widget::new(
+        WidgetId::Minimize,
+        WidgetKind::TitleButton,
+        Rect::new(708.0, 0.0, 46.0, 40.0),
+        "Minimise",
+        true,
+    ));
+    b.widgets.push(Widget::new(
+        WidgetId::CloseWindow,
+        WidgetKind::TitleButton,
+        Rect::new(754.0, 0.0, 46.0, 40.0),
+        "Close",
+        !installing || (!m.progress.engine_started && !m.cancelling),
+    ));
 
-    let rail = STEPS
+    let rail = m
+        .step_labels()
         .iter()
         .zip(m.steps())
         .enumerate()
@@ -890,6 +1107,149 @@ mod tests {
             vec![WidgetId::OpenLog, WidgetId::Close, WidgetId::Help]
         );
         assert!(m.steps().contains(&StepState::Failed));
+    }
+
+    /// `RELEASE-0111-01` Part A — CG Bridge's Playout page.
+    fn bridge_on_server_page() -> Model {
+        let mut m = model(
+            &BRIDGE,
+            Facts {
+                ipv4: vec!["192.0.2.20".into(), "198.51.100.7".into()],
+                ..Facts::default()
+            },
+        );
+        m.server = crate::server::ServerSetup::new(
+            None,
+            &crate::server::StoredBridge::default(),
+            m.facts.ipv4.clone(),
+        );
+        m.page = Page::Server;
+        m
+    }
+
+    #[test]
+    fn cg_bridges_location_goes_on_to_its_playout_page_and_its_rail_has_five_steps() {
+        let mut m = model(&BRIDGE, Facts::default());
+        m.page = Page::Location;
+        let s = build(&m, &Fake);
+        assert_eq!(s.primary, Some(WidgetId::Next));
+        assert!(s.widget(WidgetId::Install).is_none());
+        assert_eq!(
+            s.rail.iter().map(|r| r.label).collect::<Vec<_>>(),
+            vec!["Welcome", "Location", "Playout", "Installing", "Done"]
+        );
+        // Control: CG Control's Location installs, and its rail is the four steps it always had.
+        let mut c = model(&CONTROL, Facts::default());
+        c.page = Page::Location;
+        let s = build(&c, &Fake);
+        assert_eq!(s.primary, Some(WidgetId::Install));
+        assert_eq!(s.rail.len(), 4);
+    }
+
+    #[test]
+    fn unticked_the_page_is_the_checkbox_and_the_playout_on_this_machine() {
+        let m = bridge_on_server_page();
+        let s = build(&m, &Fake);
+        assert_eq!(s.texts()[0], "Playout");
+        let separate = s.widget(WidgetId::Separate).unwrap();
+        assert_eq!(
+            (separate.label.as_str(), separate.kind),
+            (crate::server::SEPARATE_LABEL, WidgetKind::Checkbox(false))
+        );
+        assert!(s
+            .texts()
+            .contains(&"http://127.0.0.1:8080 · on this machine"));
+        assert!(s.widget(WidgetId::PlayoutField).is_none());
+        assert_eq!(s.primary, Some(WidgetId::Install));
+        assert_eq!(s.escape, Some(WidgetId::Cancel));
+        assert_eq!(
+            m.steps(),
+            vec![
+                StepState::Done,
+                StepState::Done,
+                StepState::Current,
+                StepState::Pending,
+                StepState::Pending
+            ]
+        );
+    }
+
+    #[test]
+    fn ticked_it_asks_for_the_three_addresses_in_tab_order() {
+        let mut m = bridge_on_server_page();
+        m.server.toggle();
+        let s = build(&m, &Fake);
+        assert!(s.texts().contains(&"PLAYOUT ADDRESS"));
+        assert!(s.texts().contains(&"CASPARCG (AMCP) HOST"));
+        assert!(s.texts().contains(&"THIS SERVER'S ADDRESS"));
+        let tab: Vec<WidgetId> = s
+            .widgets
+            .iter()
+            .filter(|w| w.tabbable())
+            .map(|w| w.id)
+            .collect();
+        assert_eq!(
+            tab,
+            vec![
+                WidgetId::Separate,
+                WidgetId::PlayoutField,
+                WidgetId::AmcpField,
+                WidgetId::Address(0),
+                WidgetId::Address(1),
+                WidgetId::AddressOther,
+                WidgetId::Back,
+                WidgetId::Install,
+                WidgetId::Help,
+            ]
+        );
+        assert_eq!(s.widget(WidgetId::Address(0)).unwrap().label, "192.0.2.20");
+        assert_eq!(
+            s.widget(WidgetId::PlayoutField).unwrap().placeholder,
+            crate::server::PLAYOUT_PLACEHOLDER
+        );
+        // Every control is on the page, above the foot.
+        for w in &s.widgets {
+            if matches!(
+                w.kind,
+                WidgetKind::TextField { .. } | WidgetKind::Radio(_) | WidgetKind::Checkbox(_)
+            ) {
+                assert!(w.rect.bottom() <= FOOT_Y, "{:?} reaches the foot", w.id);
+                assert!(w.rect.right() <= X1 + 0.01, "{:?} is past the page", w.id);
+            }
+        }
+        // Other opens its own field.
+        m.server.choice = crate::server::AddressChoice::Other;
+        assert!(build(&m, &Fake)
+            .widget(WidgetId::AddressOtherField)
+            .is_some());
+    }
+
+    #[test]
+    fn a_refusal_is_said_in_words_under_its_field() {
+        let mut m = bridge_on_server_page();
+        m.server.toggle();
+        m.server.shown = m.server.judge();
+        let s = build(&m, &Fake);
+        assert!(s.texts().contains(&crate::server::TYPE_THE_PLAYOUT));
+        let field = s.widget(WidgetId::PlayoutField).unwrap();
+        assert!(matches!(
+            field.kind,
+            WidgetKind::TextField { refused: true, .. }
+        ));
+        let words = s
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Text { rect, text, .. } if text == crate::server::TYPE_THE_PLAYOUT => {
+                    Some(*rect)
+                }
+                _ => None,
+            })
+            .unwrap();
+        assert!(
+            words.y >= field.rect.bottom() && words.y - field.rect.bottom() < 8.0,
+            "the refusal sits right under its field"
+        );
     }
 
     #[test]

@@ -1,8 +1,9 @@
 //! The three products this one front end installs, and what each one's setup says.
 //!
 //! ⚠ Every user-facing sentence of the setup window lives in this file (and the page titles in
-//! `layout.rs`). Change one and sweep for the OLD wording (golden rule 9): the clean-Windows smoke
-//! reads several of them back through UI Automation.
+//! `layout.rs`; CG Bridge's separate-server page's words in `server.rs`). Change one and sweep for the
+//! OLD wording (golden rule 9): the clean-Windows smoke reads several of them back through UI
+//! Automation, and the install guide's test checks the ones the guide quotes.
 
 use crate::icons::Icon;
 use serde::{Deserialize, Serialize};

@@ -55,7 +55,7 @@ pub fn render(g: &Gfx, shot: &Shot, scale: f32, out: &Path) -> Result<()> {
             focus: shot.focus,
             focus_visible: shot.focus.is_some(),
             page_t: 1.0,
-            step_t: [1.0; 4],
+            step_t: [1.0; crate::model::MAX_STEPS],
             mark_t: 1.0,
             dwm_border: true,
             scale,

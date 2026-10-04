@@ -3909,3 +3909,25 @@ private address, a test secret, a token or dev-only code; WHEN `v0.11.0` is tagg
 37192167182 with `ci` and E2E RAN; Desktop 37192167147, both acceptances RAN — 148 checks); the tag's own
 run 37194356468 repeated the acceptances and opened the draft, read back and each file re-checked against
 its sums. Owed: the owner's check and publication, and the `.111` run on Playout 2.9.2.
+
+## [~] P-065 — CG Bridge's setup asks whether it runs on a separate server: no command line for a separate server ⟨priority: high — the delivery rule⟩ — FILED 2026-10-04 by `RELEASE-0111-01` Part A · `openspec/changes/installer-design` (tasks §4)
+
+**What.** CG Bridge's setup window gets a Playout page, after Location, with one checkbox — "CG Bridge runs on
+a separate server (not on the Playout machine)" — unticked by default. Ticked, it asks for the Playout address,
+CasparCG's AMCP host and this server's address (one of this machine's IPv4 addresses, or one typed), judges each
+by the engine's own rules, says a refusal in words under its field, and gives the engine exactly the options a
+command-line user types (`/PLAYOUT=`, `/AMCPHOST=`, `/BRIDGEADDRESS=`). On an upgrade it starts from the stored
+configuration. **Why.** `0.11.0`'s guide told the client to install a separate-server CG Bridge from a
+PowerShell line — a side step outside every app's own UI, which the delivery rule forbids (the owner,
+2026-10-04).
+
+**Acceptance:** WHEN the checkbox stays unticked THEN the install is `0.11.0`'s: the same configuration file,
+field by field, and the same service; WHEN it is ticked and the three filled THEN the configuration equals what
+`/S /PLAYOUT=… /AMCPHOST=… /BRIDGEADDRESS=…` writes, field by field, the service runs and `/health` names that
+Playout; WHEN the Playout address is empty, or one the engine refuses, THEN the page refuses it in words — and
+the same value on the command line keeps its old exit code; WHEN a separate-server `0.11.0` is upgraded through
+the window THEN the page opens filled and the values are kept; WHEN any installer runs with `/S` THEN it behaves
+and exits exactly as before.
+
+**Built (2026-10-04)** — `tools/setup-ui` (`address.rs`, `field.rs`, `server.rs`, the page, the window, UI
+Automation); the engine unchanged. Evidence in `installer-design` tasks §4 and the `RELEASE-0111-01` report.

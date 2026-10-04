@@ -324,6 +324,91 @@ pub fn service_running(name: &str) -> Option<bool> {
     }
 }
 
+/// `RELEASE-0111-01` Part A — this machine's IPv4 addresses, on adapters that are up, loopback never
+/// among them: what CG Bridge's separate-server page offers as "this server's address".
+pub fn ipv4_addresses() -> Vec<String> {
+    use windows::Win32::Foundation::ERROR_BUFFER_OVERFLOW;
+    use windows::Win32::NetworkManagement::IpHelper::{
+        GetAdaptersAddresses, GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_DNS_SERVER,
+        GAA_FLAG_SKIP_MULTICAST, IP_ADAPTER_ADDRESSES_LH,
+    };
+    use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
+    use windows::Win32::Networking::WinSock::{AF_INET, SOCKADDR_IN};
+    let mut size = 16 * 1024u32;
+    for _ in 0..4 {
+        // u64 elements: the adapters list is read through pointers that need 8-byte alignment.
+        let mut buf = vec![0u64; (size as usize).div_ceil(8)];
+        let first = buf.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+        let code = unsafe {
+            GetAdaptersAddresses(
+                u32::from(AF_INET.0),
+                GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER,
+                None,
+                Some(first),
+                &mut size,
+            )
+        };
+        if code == ERROR_BUFFER_OVERFLOW.0 {
+            continue;
+        }
+        if code != 0 {
+            return Vec::new();
+        }
+        let mut out: Vec<String> = Vec::new();
+        let mut adapter = first.cast_const();
+        while !adapter.is_null() {
+            let a = unsafe { &*adapter };
+            if a.OperStatus == IfOperStatusUp {
+                let mut unicast = a.FirstUnicastAddress;
+                while !unicast.is_null() {
+                    let u = unsafe { &*unicast };
+                    let sa = u.Address.lpSockaddr;
+                    if !sa.is_null() && unsafe { (*sa).sa_family } == AF_INET {
+                        let sin = unsafe { &*sa.cast::<SOCKADDR_IN>() };
+                        let b = unsafe { sin.sin_addr.S_un.S_un_b };
+                        let ip = std::net::Ipv4Addr::new(b.s_b1, b.s_b2, b.s_b3, b.s_b4);
+                        let text = ip.to_string();
+                        if !ip.is_loopback() && !ip.is_unspecified() && !out.contains(&text) {
+                            out.push(text);
+                        }
+                    }
+                    unicast = u.Next;
+                }
+            }
+            adapter = a.Next;
+        }
+        return out;
+    }
+    Vec::new()
+}
+
+/// `RELEASE-0111-01` Part A — the clipboard's text, for Ctrl+V in a field; `None` when it holds none.
+pub fn clipboard_text(hwnd: HWND) -> Option<String> {
+    use windows::Win32::Foundation::HGLOBAL;
+    use windows::Win32::System::DataExchange::{CloseClipboard, GetClipboardData, OpenClipboard};
+    use windows::Win32::System::Memory::{GlobalLock, GlobalUnlock};
+    const CF_UNICODETEXT: u32 = 13;
+    unsafe {
+        OpenClipboard(Some(hwnd)).ok()?;
+        let text = GetClipboardData(CF_UNICODETEXT).ok().and_then(|handle| {
+            let global = HGLOBAL(handle.0);
+            let p = GlobalLock(global).cast::<u16>().cast_const();
+            if p.is_null() {
+                return None;
+            }
+            let mut len = 0usize;
+            while *p.add(len) != 0 && len < 4096 {
+                len += 1;
+            }
+            let s = String::from_utf16_lossy(std::slice::from_raw_parts(p, len));
+            let _ = GlobalUnlock(global);
+            Some(s)
+        });
+        let _ = CloseClipboard();
+        text
+    }
+}
+
 /// Open a file or a URL with what the shell associates with it, from THIS process.
 pub fn shell_open(target: &str) -> bool {
     let r = unsafe {

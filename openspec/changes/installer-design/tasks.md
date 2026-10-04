@@ -50,3 +50,26 @@
       218,444,598 (+841,634); CG Designer 226,206,057 → 227,047,531 (+841,474)
 - [x] 3.3 `CG-BRIDGE-FOR-PLAYOUT.md` §2: what the installer is now, and its size
 - [x] 3.4 `P-063` filed and its status kept current; the report written
+
+## 4. `RELEASE-0111-01` Part A — CG Bridge's separate-server page (`P-065`, 2026-10-04)
+
+Lane: FULL (delivery source: what the installer gives its engine).
+
+- [x] 4.1 §A0 established: the engine's options, defaults, store and validation — the engine refuses none
+      of the three with an exit code (`--write-service-config` checks only "not empty"; the service checks
+      the Playout address when it starts, after the installer exited 0); the report §A0
+- [x] 4.2 `address.rs` — `normalisePlayoutAddress` and `splitHostPort`'s host, ported; one table
+      (`packages/shared-ipc/tests/fixtures/playout-addresses.json`) read by the TypeScript test and the
+      Rust test; `stricter` names what the page refuses on purpose
+- [x] 4.3 `field.rs` (one line of text: caret, select-all, paste, Persian digits → ASCII); `server.rs`
+      (pre-fill: command line > stored > none; the AMCP host follows; refusals in words; the engine's
+      options); the Playout page in `layout.rs`; the painter; the window's keys, `WM_CHAR`, Ctrl+A/V;
+      UI Automation Value and SelectionItem; this machine's IPv4 list (`GetAdaptersAddresses`)
+- [x] 4.4 Unit tests (`cargo test -p cg-setup`, 66): the table, the field, the page's model and layout
+- [ ] 4.5 The CG Bridge smoke (B–G) and both upgrade acceptances COMPLETED and GREEN, each job RAN (URLs)
+- [ ] 4.6 The screens: unticked, ticked and filled, a refusal — `Claude outputs/RELEASE-0111-01-screens/`
+- [x] 4.7 `RELEASE-0111-01-A` A2 — a loopback `casparHost` on a separate server: the clean runner has no
+      Playout, so `tools/caspar-bridge/tests/service-config.test.ts` joins the file the page writes to
+      the Playout host the rewrite keys on (control: the unticked file rewrites nothing); the rewrite
+      itself is `playout-address.integration.test.ts` A4 and `central-bridge-service.integration.test.ts`
+      §5

@@ -13,10 +13,10 @@
  * PHASES (the runner is elevated and an operator is not — WebView2 opens DevTools only unelevated):
  *   install         (elevated) the guide's order — CG Bridge, CG Control, CG Designer — each through
  *                              its setup window, with the network CUT (a positive control proves it)
- *   install-classic (elevated) the `v0.10.0` draft's own three installers, silently
+ *   install-classic (elevated) the `--from` draft's own three installers, silently
  *   drive           (medium)   CG Control end to end; `--mode fresh` clears what it took, `--mode
  *                              classic` leaves it on air for the upgrade
- *   upgrade         (elevated) each `0.11.0` installer over `0.10.0`: its Welcome, then `/S`; the
+ *   upgrade         (elevated) each of this release's installers over `--from`: its Welcome, then `/S`; the
  *                              service, the settings and CG Bridge's session kept; no `CLEAR`
  *   drive-upgraded  (medium)   the upgraded CG Control: the station kept, the row still ON AIR, cleared
  *   uninstall       (elevated) all three: the service, its rules and the shortcuts gone; data kept
@@ -24,6 +24,7 @@
  *
  *   node release-acceptance.mjs --phase <phase> --out <dir> --version <x.y.z>
  *     [--bridge <setup.exe>] [--control <setup.exe>] [--designer <setup.exe>] [--mode fresh|classic]
+ *     [--from <x.y.z>]   (the release the upgrade starts from; `0.10.0` by default)
  *     [--expect <phase,phase,…>]   (summary)
  *
  * Node built-ins only, plus `../desktop/setup-window.mjs`'s hands on the setup window.
@@ -56,7 +57,11 @@ const args = Object.fromEntries(
 const PHASE = args.phase;
 const OUT = path.resolve(args.out ?? 'acceptance');
 const VERSION = args.version;
-const OLD = '0.10.0';
+/**
+ * The release the upgrade starts from: the classic `0.10.0` by default; `RELEASE-0111-01` §3 runs it again
+ * from `0.11.0` (`--from 0.11.0`, the `v0.11.0` draft's own installers).
+ */
+const OLD = args.from ?? '0.10.0';
 fs.mkdirSync(OUT, { recursive: true });
 
 const APP_PAGE = 'http://tauri.localhost';
@@ -435,6 +440,8 @@ async function phaseInstall() {
       key: 'CGBridge',
       launchId: 'launch',
       location: 'PROGRAM',
+      // `RELEASE-0111-01` Part A — CG Bridge's Playout page, after Location (the Playout machine: unticked).
+      playoutPage: true,
     },
     {
       title: 'CG Control Setup',
@@ -473,6 +480,15 @@ async function phaseInstall() {
     shot(p.title, path.join(OUT, `install-${p.key.replace(/\s/g, '-').toLowerCase()}-welcome.png`));
     uia(p.title, 'invoke', 'next');
     check(`${p.name}: …Next opens its Location`, untilSetup(p.title, p.location, 20).ok);
+    if (p.playoutPage === true) {
+      uia(p.title, 'invoke', 'next');
+      const server = untilSetup(p.title, 'separate server', 20);
+      check(
+        `${p.name}: …Next opens its Playout page, "separate server" unticked — the Playout machine`,
+        server.byId['separate-server']?.state === 'Off',
+        JSON.stringify(server.byId['separate-server'] ?? null),
+      );
+    }
     uia(p.title, 'invoke', 'install');
     const done = untilSetup(p.title, 'is installed', 600);
     check(
@@ -734,7 +750,6 @@ async function clearRow(page, layer) {
   );
 }
 
-/** Each `0.11.0` installer over the classic `0.10.0`: its Welcome, then `/S`; everything kept. */
 /** What the classic drive left ON AIR, or `null` (a failure said once; the upgrade is checked anyway). */
 function beforeUpgrade() {
   const file = path.join(OUT, 'before-upgrade.json');
@@ -743,6 +758,7 @@ function beforeUpgrade() {
   return found;
 }
 
+/** Each of this release's installers over the `--from` station: its Welcome, then `/S`; everything kept. */
 async function phaseUpgrade() {
   const before = beforeUpgrade();
   const service = serviceConfig();

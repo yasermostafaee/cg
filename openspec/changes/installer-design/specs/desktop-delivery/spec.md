@@ -57,8 +57,9 @@ Nothing is downloaded.
 
 Run without `/S`, each installer SHALL open one frameless 800 × 520 window of its own — the system's
 shadow, rounded corners on Windows 11 and a square edge on Windows 10, its own title bar with minimise and
-close only, no resize and no maximise — with a step rail (Welcome → Location → Installing → Done: done
-steps ticked, the current one marked, Help at its foot) on the splash's ground, and the page on the
+close only, no resize and no maximise — with a step rail (Welcome → Location → Installing → Done, and CG
+Bridge's Welcome → Location → Playout → Installing → Done: done steps ticked, the current one marked, Help at
+its foot) on the splash's ground, and the page on the
 sign-in card's surface and foot. Every colour SHALL be a console token or the splash's brand constant,
 every face the one the splash and the sign-in card render with, every shape vector or a
 multi-resolution source. The window SHALL carry no explanatory prose beyond the lines named below.
@@ -91,6 +92,53 @@ multi-resolution source. The window SHALL carry no explanatory prose beyond the 
 - **WHEN** CG Bridge's engine warned **THEN** Done shows its first warning in one line, with "Open log"
 - **WHEN** the engine fails, or the installer is damaged **THEN** Error gives the reason in words, "Open
   log" and Close, and Close exits `2`
+
+### Requirement: CG Bridge's setup SHALL ask whether it runs on a separate server, and give the engine the addresses it needs
+
+CG Bridge's setup window SHALL have a Playout page, after Location, with one checkbox — "CG Bridge runs on a
+separate server (not on the Playout machine)" — unticked by default. Unticked, the page SHALL show the Playout
+CG Bridge will use, as a fact, and the install SHALL be today's: the engine is given none of the three options
+(on a machine whose stored configuration is a separate server's, it is given this machine's Playout,
+`http://127.0.0.1:8080`, and AMCP `127.0.0.1`). Ticked, the page SHALL ask for the Playout address (host or IP,
+optional port — CG Control's first question's form), CasparCG's AMCP host (following the Playout's host until
+edited) and this server's address (one choice per IPv4 address of this machine, loopback never among them, or
+Other, typed), and SHALL give the engine exactly `/PLAYOUT=<normalised> /AMCPHOST=<host> /BRIDGEADDRESS=<address>`
+— what a command-line user types. Each value SHALL be judged by the engine's own rules — the Playout address by
+`normalisePlayoutAddress`'s, ported and held to one table with the TypeScript, a host by `splitHostPort`'s —
+and on a separate server a loopback value SHALL be refused; a refusal SHALL be said in words under its field
+when Install is pressed, never later by a service that cannot start. On an upgrade the checkbox and the fields
+SHALL start from the stored configuration (`cg-bridge.json`), the command line's options winning. The engine
+SHALL be unchanged, and every silent path with its exit codes SHALL be the engine's own. CG Control and CG
+Designer SHALL have no such page.
+
+#### Scenario: Unticked is today's install
+
+- **WHEN** CG Bridge is installed through its window with the checkbox unticked **THEN** the configuration
+  equals, field by field, what `/S` alone writes, and the service runs
+
+#### Scenario: Ticked and filled
+
+- **WHEN** the checkbox is ticked, a Playout address typed and one of this server's addresses chosen **THEN**
+  the configuration equals, field by field, what `/S /PLAYOUT=… /AMCPHOST=… /BRIDGEADDRESS=…` writes, the
+  service runs, and `/health` names that Playout
+
+#### Scenario: Refused on the page
+
+- **WHEN** Install is pressed with the Playout address empty, or one the engine's rules refuse (`ftp://…`)
+  **THEN** the page says why under the field, in words (`That is not a Playout address.`), and nothing is
+  installed — control: the same value on the command line exits as it always did, from the engine alone and
+  from the installer alike
+
+#### Scenario: An upgrade from a separate server
+
+- **WHEN** a CG Bridge installed as a separate server by command line is upgraded through the window **THEN**
+  the Playout page opens ticked and filled from its configuration, and the values are kept
+
+#### Scenario: The keyboard and UI Automation
+
+- **WHEN** the page is used from the keyboard **THEN** Tab moves through the checkbox, the fields and the
+  addresses, Enter presses Install and Esc cancels; each field is an Edit (Value) and each address a
+  RadioButton (SelectionItem) with a stable automation id
 
 ### Requirement: The setup window SHALL answer the keyboard, the display's scale, reduced motion and UI Automation
 

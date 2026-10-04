@@ -10,7 +10,7 @@
 //! post to the window and return at once, as UI Automation expects.
 #![allow(non_upper_case_globals)] // the `windows` crate's UIA constants, matched as patterns
 
-use super::window::{widget_code, with_app, App, WM_APP_FOCUS, WM_APP_INVOKE};
+use super::window::{widget_code, with_app, App, WM_APP_FOCUS, WM_APP_INVOKE, WM_APP_SETVALUE};
 use crate::layout::{Item, Rect, Role, WidgetId, WidgetKind};
 use crate::model::StepState;
 use crate::win::{var_bool, var_bstr, var_i4, Variant};
@@ -84,7 +84,7 @@ fn bar_rect(app: &App) -> Option<Rect> {
     })
 }
 
-fn automation_id(id: WidgetId) -> &'static str {
+fn automation_id(id: WidgetId) -> String {
     match id {
         WidgetId::Next => "next",
         WidgetId::Back => "back",
@@ -98,7 +98,26 @@ fn automation_id(id: WidgetId) -> &'static str {
         WidgetId::Help => "help",
         WidgetId::Minimize => "minimize",
         WidgetId::CloseWindow => "close-window",
+        // `RELEASE-0111-01` Part A — the separate-server page (the smoke drives it by these).
+        WidgetId::Separate => "separate-server",
+        WidgetId::PlayoutField => "playout-address",
+        WidgetId::AmcpField => "amcp-host",
+        WidgetId::Address(i) => return format!("address-{i}"),
+        WidgetId::AddressOther => "address-other",
+        WidgetId::AddressOtherField => "address-other-field",
     }
+    .to_string()
+}
+
+thread_local! {
+    /// `SetValue`'s text, waiting for the window to take it (`take_value`).
+    static VALUES: RefCell<std::collections::HashMap<usize, String>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+/// The text UI Automation's `SetValue` gave a field, once.
+pub fn take_value(code: usize) -> Option<String> {
+    VALUES.with(|v| v.borrow_mut().remove(&code))
 }
 
 fn step_state(s: StepState) -> &'static str {
@@ -334,7 +353,9 @@ impl IRawElementProviderFragmentRoot_Impl for Root_Impl {
     IRawElementProviderFragment,
     IInvokeProvider,
     IToggleProvider,
-    IRangeValueProvider
+    IRangeValueProvider,
+    IValueProvider,
+    ISelectionItemProvider
 )]
 struct Element {
     hwnd: HWND,
@@ -374,6 +395,8 @@ impl IRawElementProviderSimple_Impl for Element_Impl {
     fn GetPatternProvider(&self, id: UIA_PATTERN_ID) -> Result<IUnknown> {
         let supported = match (self.key, self.kind()) {
             (Key::Widget(_), Some(WidgetKind::Checkbox(_))) => id == UIA_TogglePatternId,
+            (Key::Widget(_), Some(WidgetKind::TextField { .. })) => id == UIA_ValuePatternId,
+            (Key::Widget(_), Some(WidgetKind::Radio(_))) => id == UIA_SelectionItemPatternId,
             (Key::Widget(_), Some(_)) => id == UIA_InvokePatternId,
             (Key::Bar, _) => id == UIA_RangeValuePatternId,
             _ => false,
@@ -435,12 +458,14 @@ impl IRawElementProviderSimple_Impl for Element_Impl {
                     let control = match w.kind {
                         WidgetKind::Checkbox(_) => UIA_CheckBoxControlTypeId,
                         WidgetKind::Link => UIA_HyperlinkControlTypeId,
+                        WidgetKind::TextField { .. } => UIA_EditControlTypeId,
+                        WidgetKind::Radio(_) => UIA_RadioButtonControlTypeId,
                         _ => UIA_ButtonControlTypeId,
                     };
                     (
                         w.label.clone(),
                         control,
-                        automation_id(wid).to_string(),
+                        automation_id(wid),
                         w.enabled,
                         w.tabbable(),
                         None,
@@ -544,6 +569,56 @@ impl IToggleProvider_Impl for Element_Impl {
             Some(WidgetKind::Checkbox(true)) => Ok(ToggleState_On),
             _ => Ok(ToggleState_Off),
         }
+    }
+}
+
+/// `RELEASE-0111-01` Part A — a text field's value: read, and set (the window takes it on its thread).
+impl IValueProvider_Impl for Element_Impl {
+    fn SetValue(&self, val: &windows::core::PCWSTR) -> Result<()> {
+        let Key::Widget(id) = self.key else {
+            return Err(Error::from_hresult(windows::Win32::Foundation::E_NOTIMPL));
+        };
+        let text = unsafe { val.to_string() }.unwrap_or_default();
+        VALUES.with(|v| v.borrow_mut().insert(widget_code(id), text));
+        self.post(WM_APP_SETVALUE, id)
+    }
+    fn Value(&self) -> Result<windows::core::BSTR> {
+        let Key::Widget(id) = self.key else {
+            return Ok(windows::core::BSTR::new());
+        };
+        self.live(|a| {
+            a.scene
+                .widget(id)
+                .map(|w| windows::core::BSTR::from(w.value.as_str()))
+        })
+    }
+    fn IsReadOnly(&self) -> Result<BOOL> {
+        Ok(BOOL(0))
+    }
+}
+
+/// `RELEASE-0111-01` Part A — one of this server's addresses: chosen by `Select`.
+impl ISelectionItemProvider_Impl for Element_Impl {
+    fn Select(&self) -> Result<()> {
+        match self.key {
+            Key::Widget(id) => self.post(WM_APP_INVOKE, id),
+            _ => Err(Error::from_hresult(windows::Win32::Foundation::E_NOTIMPL)),
+        }
+    }
+    fn AddToSelection(&self) -> Result<()> {
+        self.Select()
+    }
+    fn RemoveFromSelection(&self) -> Result<()> {
+        Err(Error::from_hresult(windows::Win32::Foundation::E_NOTIMPL))
+    }
+    fn IsSelected(&self) -> Result<BOOL> {
+        Ok(BOOL::from(matches!(
+            self.kind(),
+            Some(WidgetKind::Radio(true))
+        )))
+    }
+    fn SelectionContainer(&self) -> Result<IRawElementProviderSimple> {
+        Err(Error::empty())
     }
 }
 

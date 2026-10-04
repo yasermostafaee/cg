@@ -263,7 +263,11 @@ jobs:
     name: CG Bridge smoke (clean Windows)
     needs: installers
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    permissions:
+      # RELEASE-0111-01 Part A — the `v0.11.0` DRAFT's CG Bridge installer (an upgrade from a separate
+      # server); a draft release is listed only to a token that can push to the repository.
+      contents: write
 
     steps:
       - name: Checkout
@@ -305,15 +309,29 @@ jobs:
           name: installer-engines
           path: engines
 
+      - name: The 0.11.0 CG Bridge installer, from the v0.11.0 draft
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.0 --pattern 'CG-Bridge_0.11.0_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
       # INSTALLER-DESIGN-01 — the silent paths against the engine alone (same arguments, same exit
       # codes), then CG Bridge's setup window driven through UI Automation: fresh, update, failed.
+      # RELEASE-0111-01 Part A — and its Playout page: unticked is today's install; refused on the page in
+      # words; ticked, the configuration the command line writes, field by field; an upgrade from 0.11.0
+      # installed as a separate server opens filled and keeps its values.
       - name: CG Bridge's setup window, and its silent paths against its engine (elevated)
         if: ${{ !cancelled() }}
         shell: pwsh
         run: |
           $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
           $engine = (Get-ChildItem engines -Filter 'CG-Bridge_*-setup.exe').FullName
-          node tools/bridge-installer/setup-smoke.mjs --installer "$bridge" --engine "$engine" --version "${{ needs.installers.outputs.version }}" --out bridge-smoke/setup
+          $previous = (Resolve-Path previous/CG-Bridge_0.11.0_x64-setup.exe).Path
+          node tools/bridge-installer/setup-smoke.mjs --installer "$bridge" --engine "$engine" --version "${{ needs.installers.outputs.version }}" --out bridge-smoke/setup --previous "$previous" --previous-version 0.11.0
           exit $LASTEXITCODE
 
       - name: Upload the CG Bridge smoke evidence
@@ -669,6 +687,102 @@ jobs:
           path: acceptance/
           retention-days: 30
 
+  # RELEASE-0111-01 §3 — THE SAME REAL UPGRADE, FROM `0.11.0`: the `v0.11.0` draft's own installers (CG Setup
+  # in front of each engine — superseded, never delivered, and what a station may hold), a take left ON AIR
+  # through it, then each new installer over it; everything kept, no `CLEAR`.
+  acceptance-upgrade-0110:
+    name: Release acceptance — upgrade from 0.11.0 (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      # A DRAFT release (`v0.11.0`'s) is listed only to a token that can push to the repository.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node 24 (the fakes run by type stripping)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CasparCG's stand-in
+        run: pnpm --filter @cg/amcp-mock build
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: The 0.11.0 installers, from the v0.11.0 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.11.0 --pattern 'CG-*_0.11.0_x64-setup.exe' --dir previous
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem previous | Format-Table Name, Length
+
+      # ONE step, for the reason the fresh job gives.
+      - name: The 0.11.0 set up with a row ON AIR, each installer upgraded, the upgraded console
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          $node = (Get-Command node -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path previous/CG-Bridge_0.11.0_x64-setup.exe).Path; control = (Resolve-Path previous/CG-Control_0.11.0_x64-setup.exe).Path; designer = (Resolve-Path previous/CG-Designer_0.11.0_x64-setup.exe).Path }
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install-classic 0.11.0 (elevated)"
+          & $node $acceptance --phase install-classic --from 0.11.0 --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the 0.11.0 console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --from 0.11.0 --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade (elevated)"
+          & $node $acceptance --phase upgrade --from 0.11.0 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.0 --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Upload the acceptance evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-upgrade-0110
+          path: acceptance/
+          retention-days: 30
+
   # RELEASE-0110-01 §2 — THE INSTALL GUIDE'S PICTURES OF CG CONTROL AND CG DESIGNER, from the built
   # consoles on Windows (the client's fonts and rendering), by the two `guide-shots.spec.ts` harnesses
   # (`CG_GUIDE_SHOTS`). By hand only (`gh workflow run Desktop --ref dev`): a push never pays for it.
@@ -737,7 +851,16 @@ jobs:
   release:
     name: Draft release (tag only)
     if: ${{ github.ref_type == 'tag' }}
-    needs: [installers, smoke, bridge-smoke, setup-window, acceptance-fresh, acceptance-upgrade]
+    needs:
+      [
+        installers,
+        smoke,
+        bridge-smoke,
+        setup-window,
+        acceptance-fresh,
+        acceptance-upgrade,
+        acceptance-upgrade-0110,
+      ]
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:

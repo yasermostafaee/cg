@@ -6,9 +6,9 @@
 use crate::icons::{self, Icon};
 use crate::layout::{
     Item, Measure, RailStep, Rect, Scene, Style, Variant, WidgetId, WidgetKind, FOOT_Y, RAIL_W,
-    WIN_H, WIN_W,
+    TITLE_H, WIN_H, WIN_W,
 };
-use crate::model::StepState;
+use crate::model::{StepState, MAX_STEPS};
 use crate::palette::{self, Rgb};
 use crate::svgpath::{self, Cmd, Xform};
 use std::cell::RefCell;
@@ -101,7 +101,7 @@ pub struct Frame<'a> {
     /// The page's entrance, 0 → 1.
     pub page_t: f32,
     /// Each rail step's tick, drawing in, 0 → 1.
-    pub step_t: [f32; 4],
+    pub step_t: [f32; MAX_STEPS],
     /// The Done/Failed mark, drawing in, 0 → 1.
     pub mark_t: f32,
     /// Windows 11 draws the window's border (DWM); Windows 10 gets ours.
@@ -605,14 +605,19 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
     for item in &f.scene.items {
         page_item(&mut p, f, item);
     }
-    for w in f.scene.widgets.iter().filter(|w| w.id == WidgetId::Change) {
+    // The page's own controls (the folder's Change, the Playout page's fields) enter with the page;
+    // the foot's buttons, Help and the title bar's stay where they are.
+    let on_page = |w: &&crate::layout::Widget| {
+        w.rect.x >= RAIL_W && w.rect.y >= TITLE_H && w.rect.bottom() <= FOOT_Y
+    };
+    for w in f.scene.widgets.iter().filter(on_page) {
         widget(&mut p, f, w);
     }
     if layered {
         p.pop();
     }
     unsafe { rt.SetTransform(&Matrix3x2::identity()) };
-    for w in f.scene.widgets.iter().filter(|w| w.id != WidgetId::Change) {
+    for w in f.scene.widgets.iter().filter(|w| !on_page(w)) {
         widget(&mut p, f, w);
     }
     if !f.dwm_border {
@@ -1048,6 +1053,52 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
                 focus_ring(p, r, 4.0);
             }
         }
+        WidgetKind::TextField {
+            caret,
+            all,
+            refused,
+        } => text_field(p, f, w, caret, all, refused, hover, a),
+        WidgetKind::Radio(on) => {
+            // A chip: the field's ground, the accent when chosen, a radio mark and the address.
+            let (fill, line) = if on {
+                (palette::ACCENT_FILL, palette::ACCENT)
+            } else {
+                (
+                    mix(palette::FIELD_BG, palette::CONTROL_HOVER_BG, hover),
+                    mix(palette::BORDER_STRONG, palette::ACCENT, hover),
+                )
+            };
+            p.fill_round(r, 4.0, fill, a);
+            p.border_round(r, 4.0, line, a);
+            let (cx, cy) = (r.x + 16.0, r.y + r.h / 2.0);
+            p.ring(
+                cx,
+                cy,
+                6.5,
+                1.5,
+                if on {
+                    palette::ACCENT
+                } else {
+                    palette::BORDER_STRONG
+                },
+                a,
+            );
+            if on {
+                p.circle(cx, cy, 3.5, palette::ACCENT, a);
+            }
+            p.text(
+                Rect::new(r.x + 30.0, r.y, r.w - 36.0, r.h),
+                &w.label,
+                Style::Body,
+                palette::TEXT,
+                a,
+                DWRITE_TEXT_ALIGNMENT_LEADING,
+                false,
+            );
+            if focused {
+                focus_ring(p, r, 4.0);
+            }
+        }
         WidgetKind::TitleButton => {
             if hover > 0.0 || pressed {
                 let bg = if pressed {
@@ -1065,6 +1116,88 @@ fn widget(p: &mut Painter, f: &Frame, w: &crate::layout::Widget) {
             let ink = mix(palette::TEXT_MUTED, palette::TEXT, hover);
             p.icon(icon, w.rect.x + 15.0, w.rect.y + 12.0, 16.0, ink, a, 1.5);
         }
+    }
+}
+
+/// `RELEASE-0111-01` Part A — one line of text (`.cg-field`): the field's ground and border — the accent
+/// while it has the keyboard, caution ink when refused — the value or its placeholder, clipped to the
+/// box and scrolled so the caret stays in it, and the caret (or the whole value, selected).
+#[allow(clippy::too_many_arguments)]
+fn text_field(
+    p: &mut Painter,
+    f: &Frame,
+    w: &crate::layout::Widget,
+    caret: usize,
+    all: bool,
+    refused: bool,
+    hover: f32,
+    a: f32,
+) {
+    let r = w.rect;
+    let editing = f.focus == Some(w.id) && w.enabled;
+    let line = if refused {
+        palette::CAUTION_TEXT
+    } else if editing {
+        palette::ACCENT
+    } else {
+        mix(palette::BORDER, palette::BORDER_STRONG, hover)
+    };
+    p.fill_round(r, 4.0, palette::FIELD_BG, a);
+    p.border_round(r, 4.0, line, a);
+    let inner = Rect::new(r.x + 10.0, r.y + 1.0, r.w - 20.0, r.h - 2.0);
+    let before: String = w.value.chars().take(caret).collect();
+    let caret_x = if before.is_empty() {
+        0.0
+    } else {
+        p.g.measure(&before, Style::Body, 4000.0).0
+    };
+    let shift = (caret_x - inner.w + 2.0).max(0.0);
+    unsafe {
+        p.rt.PushAxisAlignedClip(&rect(inner), D2D1_ANTIALIAS_MODE_ALIASED);
+    }
+    let x = inner.x - shift;
+    if editing && all && !w.value.is_empty() {
+        let width = p.g.measure(&w.value, Style::Body, 4000.0).0;
+        p.fill(
+            Rect::new(x - 1.0, r.y + 7.0, width + 2.0, r.h - 14.0),
+            palette::ACCENT_LINE,
+            a,
+        );
+    }
+    let (text, ink) = if w.value.is_empty() {
+        (w.placeholder.as_str(), palette::TEXT_MUTED)
+    } else {
+        (w.value.as_str(), palette::TEXT)
+    };
+    if !text.is_empty() {
+        p.text(
+            Rect::new(x, r.y, 4000.0, r.h),
+            text,
+            Style::Body,
+            ink,
+            a,
+            DWRITE_TEXT_ALIGNMENT_LEADING,
+            false,
+        );
+    }
+    if editing && !(all && !w.value.is_empty()) {
+        let cx = p.snap(x + caret_x);
+        let b = p.brush(palette::TEXT, 1.0);
+        unsafe {
+            p.rt.DrawLine(
+                v(cx, r.y + 8.0),
+                v(cx, r.bottom() - 8.0),
+                &b,
+                p.hairline(),
+                None,
+            )
+        };
+    }
+    unsafe {
+        p.rt.PopAxisAlignedClip();
+    }
+    if editing && f.focus_visible {
+        focus_ring(p, r, 4.0);
     }
 }
 

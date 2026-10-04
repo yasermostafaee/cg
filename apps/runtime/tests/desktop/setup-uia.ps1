@@ -10,6 +10,8 @@
 #     dump                  every element: automationId, control type, name, enabled, focused, status
 #     invoke  <automationId> press a button or link (InvokePattern), waiting for it to be enabled
 #     toggle  <automationId> flip a check box (TogglePattern)
+#     set     <automationId>=<text>  type into a field (ValuePattern.SetValue) - RELEASE-0111-01 Part A
+#     select  <automationId> choose a radio button (SelectionItemPattern.Select)
 #     until   <text>        wait until an element's name contains <text>
 #     focus                 bring the window to the foreground (UIA SetFocus, then the Win32 call)
 #     keys    <sendkeys>    focus the window, then type (System.Windows.Forms.SendKeys syntax)
@@ -66,9 +68,15 @@ function Elements($w) {
   foreach ($e in $all) {
     try {
       $c = $e.Current
+      # RELEASE-0111-01 Part A - a field's text, a check box's state, a radio button's choice.
+      $value = $null; $state = $null; $selected = $null; $p = $null
+      if ($e.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$p)) { $value = $p.Current.Value }
+      if ($e.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $state = "$($p.Current.ToggleState)" }
+      if ($e.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$p)) { $selected = $p.Current.IsSelected }
       $out += [pscustomobject]@{
         id = $c.AutomationId; type = $c.ControlType.ProgrammaticName.Replace('ControlType.', ''); name = $c.Name
         enabled = $c.IsEnabled; focused = $c.HasKeyboardFocus; status = $c.ItemStatus
+        value = $value; state = $state; selected = $selected
       }
     } catch { }
   }
@@ -95,6 +103,27 @@ switch ($Cmd) {
     $p.Toggle()
     Start-Sleep -Milliseconds 200
     Out-Json @{ ok = $true; state = "$($p.Current.ToggleState)" }
+  }
+  'set' {
+    $i = $Arg.IndexOf('=')
+    if ($i -lt 1) { Fail "set needs <automationId>=<text>" }
+    $aid = $Arg.Substring(0, $i)
+    $e = Element $w $aid -Enabled
+    $e.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($Arg.Substring($i + 1))
+    Start-Sleep -Milliseconds 300
+    # Read back through a FRESH element: an edit that clears a refusal line changes the page, and the
+    # element found before it no longer belongs to it.
+    $value = $null
+    try { $value = (Element $w $aid).GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch { }
+    Out-Json @{ ok = $true; value = $value }
+  }
+  'select' {
+    $e = Element $w $Arg -Enabled
+    $e.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Start-Sleep -Milliseconds 300
+    $selected = $null
+    try { $selected = (Element $w $Arg).GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Current.IsSelected } catch { }
+    Out-Json @{ ok = $true; selected = $selected }
   }
   'until' {
     while ((Get-Date) -lt $deadline) {

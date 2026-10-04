@@ -8,6 +8,7 @@ use crate::layout::{build, WidgetId};
 use crate::model::{Facts, Model, Outcome, Page, Space};
 use crate::observe;
 use crate::product::{product, Config, MainFile, ProductId};
+use crate::server::{AddressChoice, ServerSetup, StoredBridge};
 use crate::ui::gfx::Gfx;
 use crate::ui::preview::{render, Shot};
 use std::path::Path;
@@ -115,6 +116,37 @@ pub fn preview(args: &[String]) -> u32 {
         });
         shots.push(("error".into(), failed, None));
         if id == ProductId::Bridge {
+            // `RELEASE-0111-01` Part A — the Playout page: unticked, ticked and filled (documentation
+            // addresses, RFC 5737), and one refusal said under its field.
+            let on_server = |separate: bool| {
+                let facts = Facts {
+                    ipv4: vec!["192.0.2.20".into(), "198.51.100.7".into()],
+                    ..fresh.clone()
+                };
+                let mut m = mk(&facts);
+                m.server = ServerSetup::new(None, &StoredBridge::default(), facts.ipv4.clone());
+                m.page = Page::Server;
+                if separate {
+                    m.server.toggle();
+                }
+                m
+            };
+            shots.push(("server".into(), on_server(false), None));
+            let mut filled = on_server(true);
+            filled.server.playout.set("192.0.2.10");
+            filled.server.playout_changed();
+            filled.server.choice = AddressChoice::Listed(0);
+            shots.push(("server-filled".into(), filled, None));
+            let mut refused = on_server(true);
+            refused.server.playout.set("ftp://192.0.2.10");
+            refused.server.playout_changed();
+            refused.server.choice = AddressChoice::Listed(0);
+            refused.server.shown = refused.server.judge();
+            shots.push((
+                "server-refused".into(),
+                refused,
+                Some(WidgetId::PlayoutField),
+            ));
             let mut warn = mk(&fresh);
             warn.page = Page::Done;
             warn.outcome = Outcome {

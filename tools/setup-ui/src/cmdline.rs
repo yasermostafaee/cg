@@ -131,6 +131,49 @@ pub fn engine_args(rest: &str, dir: Option<&str>) -> String {
     out
 }
 
+/// `RELEASE-0111-01` Part A — an option's value as CG Bridge's engine reads it: `${GetOptions} " $Args"
+/// " /PLAYOUT="` — after the option (case-insensitive), to the next space; a value in double quotes may
+/// hold one, and loses its quotes. `None` when the option is absent or empty.
+pub fn option_value(rest: &str, option: &str) -> Option<String> {
+    let line = format!(" {rest}");
+    let lower = line.to_ascii_lowercase();
+    let at = lower.find(&format!(" {}", option.to_ascii_lowercase()))? + 1 + option.len();
+    let tail = &line[at..];
+    let value = match tail.strip_prefix('"') {
+        Some(quoted) => quoted.split('"').next().unwrap_or(""),
+        None => tail.split(' ').next().unwrap_or(""),
+    };
+    (!value.trim().is_empty()).then(|| value.trim().to_string())
+}
+
+/// `rest` with every `option=value` token of `options` removed — the page then gives its own.
+pub fn without_options(rest: &str, options: &[&str]) -> String {
+    let mut out = Vec::new();
+    let mut tokens = rest.split(' ').peekable();
+    while let Some(token) = tokens.next() {
+        let lower = token.to_ascii_lowercase();
+        let named = options
+            .iter()
+            .any(|o| lower.starts_with(&o.to_ascii_lowercase()));
+        if !named {
+            if !token.is_empty() {
+                out.push(token);
+            }
+            continue;
+        }
+        // A quoted value may hold spaces: skip to its closing quote.
+        let value = &token[token.find('=').map_or(token.len(), |i| i + 1)..];
+        if value.starts_with('"') && !(value.len() > 1 && value.ends_with('"')) {
+            for next in tokens.by_ref() {
+                if next.ends_with('"') {
+                    break;
+                }
+            }
+        }
+    }
+    out.join(" ")
+}
+
 /// The engine's full command line for a pass-through: its own path quoted, then this installer's
 /// `realcmds` exactly — so NSIS in the engine finds the same tokens, `/D=` and all.
 pub fn passthrough_command_line(engine: &str, tail: &str) -> String {
@@ -218,6 +261,33 @@ mod tests {
         assert!(parse(r#""x.exe" /P /R"#).passive);
         assert!(!parse(r#""x.exe" /R /UPDATE"#).passive);
         assert!(!parse(r#""C:\Users\x.exe""#).passive);
+    }
+
+    #[test]
+    fn the_engines_three_options_read_and_removed_as_getoptions_reads_them() {
+        let rest = r#" /PLAYOUT=http://192.0.2.10:8080 /amcphost=192.0.2.10 /BRIDGEADDRESS="192.0.2.20" /OSCPORT=6251"#;
+        assert_eq!(
+            option_value(rest, "/PLAYOUT=").as_deref(),
+            Some("http://192.0.2.10:8080")
+        );
+        assert_eq!(
+            option_value(rest, "/AMCPHOST=").as_deref(),
+            Some("192.0.2.10")
+        );
+        assert_eq!(
+            option_value(rest, "/BRIDGEADDRESS=").as_deref(),
+            Some("192.0.2.20")
+        );
+        assert_eq!(option_value(rest, "/CONTROLPORT="), None);
+        assert_eq!(option_value(" /PLAYOUT= /S", "/PLAYOUT="), None);
+        assert_eq!(
+            without_options(rest, &["/PLAYOUT=", "/AMCPHOST=", "/BRIDGEADDRESS="]),
+            "/OSCPORT=6251"
+        );
+        assert_eq!(
+            without_options(r#"/PLAYOUT="http://a b" /OSCPORT=6251"#, &["/PLAYOUT="]),
+            "/OSCPORT=6251"
+        );
     }
 
     #[test]

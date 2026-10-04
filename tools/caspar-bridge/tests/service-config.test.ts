@@ -2,6 +2,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { playoutHostOf } from '../src/bridge.js';
+import { resolveCasparHost } from '../src/playout-catalogue.js';
+import { resolvePlayoutSettings } from '../src/playout-config.js';
 import {
   ServiceConfigError,
   loadServiceConfig,
@@ -73,6 +76,40 @@ describe('the file', () => {
     expect(merged.port).toBe('6000');
     expect(merged['osc-port']).toBe('6300');
     expect(merged['playout-address']).toBe('http://127.0.0.1:8080');
+  });
+});
+
+/**
+ * 🔴 `RELEASE-0111-01-A` A2 — **A LOOPBACK `casparHost` ON A SEPARATE SERVER.** The Playout lists
+ * its own CasparCG as `127.0.0.1` (their §4.1); CG Bridge reads that as the Playout's machine
+ * (`CG-BRIDGE-FOR-PLAYOUT.md`, rule 9). The clean-Windows smoke installs the separate-server page's
+ * values with no Playout on the runner, so it cannot see the rewrite — this test joins the two halves:
+ * the file the page writes (the one the smoke compares field by field with `/S /PLAYOUT=… /AMCPHOST=…
+ * /BRIDGEADDRESS=…`) → the flags a start takes from it → the Playout host the rewrite keys on.
+ */
+describe('🔴 `RELEASE-0111-01-A` A2 — the separate-server page’s file makes a loopback casparHost the Playout’s machine', () => {
+  const hostFor = (body: string): string | undefined => {
+    const flags = serviceFlags(loadServiceConfig(configFile(body)));
+    const address = flags['playout-address'];
+    if (typeof address !== 'string') throw new Error('the file names its Playout');
+    const settings = resolvePlayoutSettings({ auth: 'playout', address }, null);
+    if (settings.playout === null) throw new Error('a service is always signed in to the Playout');
+    return playoutHostOf(settings.playout);
+  };
+
+  it('ticked: a 127.0.0.1 or localhost row names the Playout machine; another host passes as it is', () => {
+    const playout = hostFor(
+      '{"playoutAddress":"http://192.0.2.10:8080","amcpHost":"192.0.2.10","bridgeAddress":"192.0.2.20"}',
+    );
+    expect(playout).toBe('192.0.2.10');
+    expect(resolveCasparHost('127.0.0.1', playout)).toBe('192.0.2.10');
+    expect(resolveCasparHost('localhost', playout)).toBe('192.0.2.10');
+    expect(resolveCasparHost('198.51.100.30', playout)).toBe('198.51.100.30');
+  });
+
+  it('CONTROL — unticked, the file names this machine’s Playout, and loopback is left as it is', () => {
+    const playout = hostFor('{"playoutAddress":"http://127.0.0.1:8080","amcpHost":"127.0.0.1"}');
+    expect(resolveCasparHost('127.0.0.1', playout)).toBe('127.0.0.1');
   });
 });
 

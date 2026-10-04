@@ -3191,3 +3191,11 @@ Measured free before use: the `B-311` entry's measurement above (every local and
 no stash) covers `R-085`–`R-089`.
 
 ⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-065`**, **`R-087`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0111-01` takes `P-065`
+
+- `P-065` — CG Bridge's setup asks whether it runs on a separate server — [platform.md](platform.md).
+
+Measured free before use: the `B-311` entry's measurement above covers `P-065`–`P-069`.
+
+⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-066`**, **`R-087`** and **`C-049`**.

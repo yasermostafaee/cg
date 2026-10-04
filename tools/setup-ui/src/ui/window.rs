@@ -14,12 +14,14 @@ use super::gfx::{paint, Device, Frame, Gfx};
 use super::uia;
 use crate::cmdline::{self, Parsed};
 use crate::engine::{self, Child, Payload};
+use crate::field::Field;
 use crate::layout::{
     build, help_target, HelpTarget, Scene, WidgetId, WidgetKind, RAIL_W, TITLE_H, WIN_H, WIN_W,
 };
-use crate::model::{Facts, Model, Outcome, Page, Space, StepState};
+use crate::model::{Facts, Model, Outcome, Page, Space, StepState, MAX_STEPS};
 use crate::observe::{self, AppSignals, Progress};
 use crate::product::{product, Home, ProductId, BRIDGE_DATA, BRIDGE_SERVICE};
+use crate::server::{AddressChoice, ServerSetup, StoredBridge, OPTIONS};
 use crate::win;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -47,8 +49,9 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetKeyState, ReleaseCapture, SetCapture, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT,
-    VK_ESCAPE, VK_RETURN, VK_SHIFT, VK_SPACE, VK_TAB,
+    GetKeyState, ReleaseCapture, SetCapture, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT, VK_BACK,
+    VK_CONTROL, VK_DELETE, VK_END, VK_ESCAPE, VK_HOME, VK_LEFT, VK_RETURN, VK_RIGHT, VK_SHIFT,
+    VK_SPACE, VK_TAB,
 };
 use windows::Win32::UI::Shell::{
     FileOpenDialog, IFileOpenDialog, IShellItem, SHCreateItemFromParsingName, FOS_FORCEFILESYSTEM,
@@ -61,6 +64,8 @@ const WM_MOUSELEAVE: u32 = 0x02A3;
 const WM_APP_UPDATE: u32 = WM_APP + 1;
 pub const WM_APP_INVOKE: u32 = WM_APP + 2;
 pub const WM_APP_FOCUS: u32 = WM_APP + 3;
+/// UI Automation's `SetValue` on a text field (the text waits in `uia::take_value`).
+pub const WM_APP_SETVALUE: u32 = WM_APP + 4;
 const TIMER_FRAME: usize = 1;
 
 /// A window handle that may cross to the worker threads (they only post to it).
@@ -88,14 +93,23 @@ struct Shared {
     finished: Option<Outcome>,
 }
 
-/// One widget id as a message parameter.
+/// One widget id as a message parameter. One of this server's addresses is `ADDRESS_CODE + i`.
 pub fn widget_code(id: WidgetId) -> usize {
-    ALL_WIDGETS.iter().position(|w| *w == id).unwrap_or(0)
+    match id {
+        WidgetId::Address(i) => ADDRESS_CODE + usize::from(i),
+        _ => ALL_WIDGETS.iter().position(|w| *w == id).unwrap_or(0),
+    }
 }
 pub fn widget_from_code(code: usize) -> Option<WidgetId> {
+    if (ADDRESS_CODE..ADDRESS_CODE + 256).contains(&code) {
+        return u8::try_from(code - ADDRESS_CODE)
+            .ok()
+            .map(WidgetId::Address);
+    }
     ALL_WIDGETS.get(code).copied()
 }
-const ALL_WIDGETS: [WidgetId; 12] = [
+const ADDRESS_CODE: usize = 100;
+const ALL_WIDGETS: [WidgetId; 17] = [
     WidgetId::Next,
     WidgetId::Back,
     WidgetId::Cancel,
@@ -108,6 +122,11 @@ const ALL_WIDGETS: [WidgetId; 12] = [
     WidgetId::Help,
     WidgetId::Minimize,
     WidgetId::CloseWindow,
+    WidgetId::Separate,
+    WidgetId::PlayoutField,
+    WidgetId::AmcpField,
+    WidgetId::AddressOther,
+    WidgetId::AddressOtherField,
 ];
 
 /// What must run after the window's state is released (each may re-enter the window procedure).
@@ -141,7 +160,7 @@ pub struct App {
     focus_visible: bool,
     tracking: bool,
     page_at: Instant,
-    step_at: [Option<Instant>; 4],
+    step_at: [Option<Instant>; MAX_STEPS],
     mark_at: Option<Instant>,
     last_frame: Instant,
     timer: bool,
@@ -200,15 +219,43 @@ fn detect(payload: &Payload) -> Facts {
         Home::LocalAppData => format!(r"{}\{}", win::local_app_data(), p.name),
         Home::ProgramFiles => format!(r"{}\{}", win::program_files_64(), p.name),
     };
+    let bridge = p.id == ProductId::Bridge;
     Facts {
         installed_version,
         installed_dir,
-        app_running: p.id != ProductId::Bridge && win::process_running(p.main_exe),
+        app_running: !bridge && win::process_running(p.main_exe),
         webview2_missing,
         os_is_64bit: win::os_is_64bit(),
         default_dir,
-        data_dir: (p.id == ProductId::Bridge)
-            .then(|| format!(r"{}\{}", win::program_data(), BRIDGE_DATA)),
+        data_dir: bridge.then(|| format!(r"{}\{}", win::program_data(), BRIDGE_DATA)),
+        // `RELEASE-0111-01` Part A — what the separate-server page starts from: the stored
+        // configuration (an upgrade), and this machine's addresses. CG Setup runs as an administrator
+        // for CG Bridge, the one account (with SYSTEM) its data folder lets read.
+        bridge_config: bridge
+            .then(|| {
+                std::fs::read(
+                    Path::new(&win::program_data())
+                        .join(BRIDGE_DATA)
+                        .join("cg-bridge.json"),
+                )
+                .ok()
+                .and_then(|raw| StoredBridge::from_json(&raw))
+            })
+            .flatten(),
+        ipv4: if bridge {
+            win::ipv4_addresses()
+        } else {
+            Vec::new()
+        },
+    }
+}
+
+/// `RELEASE-0111-01` Part A — the three separate-server options on this installer's own command line.
+fn given_server(rest: &str) -> StoredBridge {
+    StoredBridge {
+        playout: cmdline::option_value(rest, OPTIONS[0]),
+        amcp_host: cmdline::option_value(rest, OPTIONS[1]),
+        bridge_address: cmdline::option_value(rest, OPTIONS[2]),
     }
 }
 
@@ -241,6 +288,20 @@ pub fn run(payload: Payload, parsed: Parsed) -> u32 {
         facts,
         parsed.install_dir.clone(),
         payload.blob("guide").is_some(),
+    );
+    // The command line wins over what is stored, as it does for the engine.
+    model.server = ServerSetup::new(
+        model.facts.bridge_config.as_ref(),
+        &given_server(&parsed.rest),
+        model.facts.ipv4.clone(),
+    );
+    log_line(
+        &log,
+        &format!(
+            "separate server: {} ({} address(es) on this machine)",
+            model.server.separate,
+            model.server.addresses.len()
+        ),
     );
     measure_space(&mut model);
     let Ok(gfx) = Gfx::new() else {
@@ -288,7 +349,7 @@ pub fn run(payload: Payload, parsed: Parsed) -> u32 {
         focus_visible: false,
         tracking: false,
         page_at: Instant::now(),
-        step_at: [None; 4],
+        step_at: [None; MAX_STEPS],
         mark_at: None,
         last_frame: Instant::now(),
         timer: false,
@@ -649,8 +710,8 @@ impl App {
         let old = self.model.steps();
         self.model.page = page;
         let new = self.model.steps();
-        for i in 0..4 {
-            if new[i] == StepState::Done && old[i] != StepState::Done {
+        for (i, (now, before)) in new.iter().zip(old.iter()).enumerate().take(MAX_STEPS) {
+            if *now == StepState::Done && *before != StepState::Done {
                 self.step_at[i] = Some(Instant::now());
             }
         }
@@ -772,7 +833,7 @@ impl App {
         let Some(rt) = self.rt.clone() else { return };
         let hover_t = self.hover_t.clone();
         let hover_fn = move |id: WidgetId| hover_t.get(&id).copied().unwrap_or(0.0);
-        let step_t = [0, 1, 2, 3].map(|i| {
+        let step_t: [f32; MAX_STEPS] = std::array::from_fn(|i| {
             if self.step_at[i].is_some() {
                 self.progress_of(self.step_at[i], 520)
             } else {
@@ -919,12 +980,15 @@ impl App {
                     self.ensure_timer();
                     self.invalidate();
                 }
-                let link = over
-                    .and_then(|id| self.scene.widget(id))
-                    .is_some_and(|w| w.kind == WidgetKind::Link);
+                let kind = over.and_then(|id| self.scene.widget(id)).map(|w| w.kind);
+                // A link points; a text field takes text (`RELEASE-0111-01` Part A).
+                let cursor = match kind {
+                    Some(WidgetKind::Link) => IDC_HAND,
+                    Some(WidgetKind::TextField { .. }) => IDC_IBEAM,
+                    _ => IDC_ARROW,
+                };
                 unsafe {
-                    let _ =
-                        SetCursor(LoadCursorW(None, if link { IDC_HAND } else { IDC_ARROW }).ok());
+                    let _ = SetCursor(LoadCursorW(None, cursor).ok());
                 }
                 Some(LRESULT(0))
             }
@@ -973,6 +1037,16 @@ impl App {
                 self.invalidate();
                 Some(LRESULT(0))
             }
+            WM_KEYDOWN if self.field_key(wparam.0 as u16) => Some(LRESULT(0)),
+            // `RELEASE-0111-01` Part A — a character typed into the focused field.
+            WM_CHAR if self.focus.is_some_and(WidgetId::is_field) => {
+                if let Some(id) = self.focus {
+                    if let Some(ch) = char::from_u32(wparam.0 as u32).filter(|c| !c.is_control()) {
+                        self.edit(id, |f| f.insert(&ch.to_string()));
+                    }
+                }
+                Some(LRESULT(0))
+            }
             WM_KEYDOWN => {
                 let key = wparam.0 as u16;
                 if key == VK_TAB.0 {
@@ -996,10 +1070,10 @@ impl App {
                     }
                     Some(LRESULT(0))
                 } else if key == VK_SPACE.0 {
-                    if let Some(id) = self
-                        .focus
-                        .filter(|f| self.scene.widget(*f).is_some_and(|w| w.enabled))
-                    {
+                    // A space typed in a field is a character (WM_CHAR), never a press.
+                    if let Some(id) = self.focus.filter(|f| {
+                        !f.is_field() && self.scene.widget(*f).is_some_and(|w| w.enabled)
+                    }) {
                         self.focus_visible = true;
                         self.activate(id, &mut fx);
                     }
@@ -1045,6 +1119,16 @@ impl App {
                 }
                 Some(LRESULT(0))
             }
+            WM_APP_SETVALUE => {
+                if let (Some(id), Some(text)) =
+                    (widget_from_code(wparam.0), uia::take_value(wparam.0))
+                {
+                    if id.is_field() && self.scene.widget(id).is_some_and(|w| w.enabled) {
+                        self.edit(id, |f| f.set(&text));
+                    }
+                }
+                Some(LRESULT(0))
+            }
             WM_APP_FOCUS => {
                 if let Some(id) = widget_from_code(wparam.0) {
                     if self.scene.widget(id).is_some_and(|w| w.tabbable()) {
@@ -1062,6 +1146,76 @@ impl App {
             _ => None,
         };
         (result, fx)
+    }
+
+    /// `RELEASE-0111-01` Part A — a key that edits the focused field: the caret's moves, the two
+    /// deletes, Ctrl+A and Ctrl+V (by the physical key, so a Persian layout pastes as well). Enter,
+    /// Tab and Esc are not editing keys: they keep the page's own meaning.
+    fn field_key(&mut self, key: u16) -> bool {
+        let Some(id) = self.focus.filter(|f| f.is_field()) else {
+            return false;
+        };
+        let ctrl = unsafe { GetKeyState(i32::from(VK_CONTROL.0)) } < 0;
+        let edit: fn(&mut Field) = match key {
+            k if k == VK_BACK.0 => Field::backspace,
+            k if k == VK_DELETE.0 => Field::delete,
+            k if k == VK_LEFT.0 => Field::left,
+            k if k == VK_RIGHT.0 => Field::right,
+            k if k == VK_HOME.0 => Field::home,
+            k if k == VK_END.0 => Field::end,
+            0x41 if ctrl => Field::select_all,
+            0x56 if ctrl => {
+                if let Some(text) = win::clipboard_text(self.hwnd) {
+                    self.edit(id, |f| f.insert(&text));
+                }
+                return true;
+            }
+            _ => return false,
+        };
+        self.edit(id, edit);
+        true
+    }
+
+    /// Change one of the page's fields, and let the page follow (the AMCP host follows the Playout's).
+    fn edit(&mut self, id: WidgetId, change: impl FnOnce(&mut Field)) {
+        let server = &mut self.model.server;
+        let changed = {
+            let field = match id {
+                WidgetId::PlayoutField => &mut server.playout,
+                WidgetId::AmcpField => &mut server.amcp,
+                WidgetId::AddressOtherField => &mut server.other,
+                _ => return,
+            };
+            let before = field.text().to_string();
+            change(field);
+            field.text() != before
+        };
+        if changed {
+            match id {
+                WidgetId::PlayoutField => server.playout_changed(),
+                WidgetId::AmcpField => server.amcp_changed(),
+                _ => server.address_changed(),
+            }
+        }
+        self.rebuild();
+    }
+
+    /// The first field a refusal is said beside — where the keyboard goes after Install refused.
+    fn first_refused(&self) -> Option<WidgetId> {
+        let s = &self.model.server;
+        if s.shown.playout.is_some() {
+            Some(WidgetId::PlayoutField)
+        } else if s.shown.amcp.is_some() {
+            Some(WidgetId::AmcpField)
+        } else if s.shown.address.is_some() {
+            Some(match s.choice {
+                AddressChoice::Other => WidgetId::AddressOtherField,
+                _ if s.addresses.is_empty() => WidgetId::AddressOther,
+                _ => WidgetId::Address(0),
+            })
+        } else {
+            None
+        }
     }
 
     fn move_focus(&mut self, back: bool) {
@@ -1090,7 +1244,7 @@ impl App {
 
     fn close_request(&mut self, fx: &mut Vec<Effect>) {
         match self.model.page {
-            Page::Welcome | Page::Location => self.quit(1, fx),
+            Page::Welcome | Page::Location | Page::Server => self.quit(1, fx),
             Page::Installing => {
                 if !self.model.progress.engine_started && !self.model.cancelling {
                     self.cancel_install(fx);
@@ -1121,8 +1275,15 @@ impl App {
             &format!("pressed {id:?} on {:?}", self.model.page),
         );
         match id {
-            WidgetId::Next => self.set_page(Page::Location),
-            WidgetId::Back => self.set_page(Page::Welcome),
+            WidgetId::Next => match self.model.page {
+                // CG Bridge's Location leads to its Playout page (`RELEASE-0111-01` Part A).
+                Page::Location if self.model.has_server_page() => self.set_page(Page::Server),
+                _ => self.set_page(Page::Location),
+            },
+            WidgetId::Back => match self.model.page {
+                Page::Server => self.set_page(Page::Location),
+                _ => self.set_page(Page::Welcome),
+            },
             WidgetId::Cancel => match self.model.page {
                 Page::Installing => self.cancel_install(fx),
                 _ => self.quit(1, fx),
@@ -1130,12 +1291,49 @@ impl App {
             WidgetId::Change => fx.push(Effect::PickFolder),
             WidgetId::Install => {
                 if self.model.can_install() && !self.installing {
+                    // `RELEASE-0111-01` Part A — refused HERE, in words, beside each field: never
+                    // later, by a service that cannot start.
+                    if self.model.has_server_page() {
+                        let refusals = self.model.server.judge();
+                        if !refusals.none() {
+                            log_line(&self.log, &format!("refused on the page: {refusals:?}"));
+                            self.model.server.shown = refusals;
+                            self.rebuild();
+                            self.focus = self.first_refused();
+                            self.focus_visible = true;
+                            if let Some(f) = self.focus {
+                                uia::focus_changed(self.hwnd, f);
+                            }
+                            return;
+                        }
+                    }
                     self.installing = true;
                     self.set_page(Page::Installing);
                     self.start_install();
                     // A failed unpack (reported while Welcome was up) shows now.
                     self.on_update();
                 }
+            }
+            WidgetId::Separate => {
+                self.model.server.toggle();
+                self.rebuild();
+                if self.model.server.separate {
+                    self.focus = Some(WidgetId::PlayoutField);
+                }
+            }
+            WidgetId::PlayoutField | WidgetId::AmcpField | WidgetId::AddressOtherField => {
+                self.focus = Some(id);
+            }
+            WidgetId::Address(i) => {
+                self.model.server.choice = AddressChoice::Listed(usize::from(i));
+                self.model.server.address_changed();
+                self.rebuild();
+            }
+            WidgetId::AddressOther => {
+                self.model.server.choice = AddressChoice::Other;
+                self.model.server.address_changed();
+                self.rebuild();
+                self.focus = Some(WidgetId::AddressOtherField);
             }
             WidgetId::Launch => {
                 self.model.launch = !self.model.launch;
@@ -1285,7 +1483,18 @@ impl App {
 
     fn start_install(&mut self) {
         let m = &self.model;
-        let args = cmdline::engine_args(&self.parsed.rest, m.engine_dir());
+        // `RELEASE-0111-01` Part A — the separate-server page gives the engine exactly the options a
+        // command-line user types, in place of any of the three this command line carried. A page that
+        // gives none leaves the command line as it was: today's install.
+        let rest = match m.server.engine_options().filter(|_| m.has_server_page()) {
+            Some(options) => format!(
+                "{} {}",
+                options.join(" "),
+                cmdline::without_options(&self.parsed.rest, &OPTIONS)
+            ),
+            None => self.parsed.rest.clone(),
+        };
+        let args = cmdline::engine_args(&rest, m.engine_dir());
         log_line(&self.log, &format!("installing: engine {args}"));
         let job = Job {
             product: m.product.id,

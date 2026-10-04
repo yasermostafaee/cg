@@ -3,12 +3,15 @@
 
 use crate::observe::{compare_versions, Progress};
 use crate::product::{Config, Home, Product, ProductId};
+use crate::server::{ServerSetup, StoredBridge};
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
     Welcome,
     Location,
+    /// `RELEASE-0111-01` Part A — CG Bridge only: where its Playout is (`server.rs`).
+    Server,
     Installing,
     Done,
     Failed,
@@ -39,6 +42,10 @@ pub struct Facts {
     pub default_dir: String,
     /// CG Bridge's data folder.
     pub data_dir: Option<String>,
+    /// CG Bridge's stored configuration (`cg-bridge.json`), when an install left one.
+    pub bridge_config: Option<StoredBridge>,
+    /// This machine's IPv4 addresses (loopback is dropped by the page).
+    pub ipv4: Vec<String>,
 }
 
 impl Default for Facts {
@@ -51,6 +58,8 @@ impl Default for Facts {
             os_is_64bit: true,
             default_dir: String::new(),
             data_dir: None,
+            bridge_config: None,
+            ipv4: Vec::new(),
         }
     }
 }
@@ -87,7 +96,11 @@ pub enum StepState {
     Failed,
 }
 
+/// The rail: CG Control's and CG Designer's four steps; CG Bridge has a fifth, `Playout`.
 pub const STEPS: [&str; 4] = ["Welcome", "Location", "Installing", "Done"];
+pub const BRIDGE_STEPS: [&str; 5] = ["Welcome", "Location", "Playout", "Installing", "Done"];
+/// The most steps a rail has (the window keeps one tick animation per step).
+pub const MAX_STEPS: usize = 5;
 
 pub struct Model {
     pub product: &'static Product,
@@ -111,6 +124,8 @@ pub struct Model {
     pub has_guide: bool,
     /// The user asked to cancel while the setup was still preparing.
     pub cancelling: bool,
+    /// `RELEASE-0111-01` Part A — CG Bridge's separate-server page.
+    pub server: ServerSetup,
 }
 
 impl Model {
@@ -139,6 +154,11 @@ impl Model {
             (_, Some(d)) if !d.is_empty() => d.clone(),
             _ => facts.default_dir.clone(),
         };
+        let server = ServerSetup::new(
+            facts.bridge_config.as_ref(),
+            &StoredBridge::default(),
+            facts.ipv4.clone(),
+        );
         Model {
             product,
             config,
@@ -160,6 +180,21 @@ impl Model {
             outcome: Outcome::default(),
             has_guide,
             cancelling: false,
+            server,
+        }
+    }
+
+    /// CG Bridge asks where its Playout is, on a page of its own (`RELEASE-0111-01` Part A).
+    pub fn has_server_page(&self) -> bool {
+        self.product.id == ProductId::Bridge
+    }
+
+    /// The rail's steps, for this product.
+    pub fn step_labels(&self) -> &'static [&'static str] {
+        if self.has_server_page() {
+            &BRIDGE_STEPS
+        } else {
+            &STEPS
         }
     }
 
@@ -200,15 +235,27 @@ impl Model {
         chosen.then_some(self.dir.as_str())
     }
 
-    pub fn steps(&self) -> [StepState; 4] {
+    /// Each step's state, one per `step_labels()`.
+    pub fn steps(&self) -> Vec<StepState> {
         use StepState::*;
-        match self.page {
-            Page::Welcome => [Current, Pending, Pending, Pending],
-            Page::Location => [Done, Current, Pending, Pending],
-            Page::Installing => [Done, Done, Current, Pending],
-            Page::Done => [Done, Done, Done, Done],
-            Page::Failed => [Done, Done, Failed, Pending],
-        }
+        let labels = self.step_labels();
+        let at = |label: &str| labels.iter().position(|l| *l == label).unwrap_or(0);
+        let (current, failed) = match self.page {
+            Page::Welcome => (at("Welcome"), false),
+            Page::Location => (at("Location"), false),
+            Page::Server => (at("Playout"), false),
+            Page::Installing => (at("Installing"), false),
+            Page::Done => (labels.len(), false),
+            Page::Failed => (at("Installing"), true),
+        };
+        (0..labels.len())
+            .map(|i| match i.cmp(&current) {
+                Ordering::Less => Done,
+                Ordering::Equal if failed => Failed,
+                Ordering::Equal => Current,
+                Ordering::Greater => Pending,
+            })
+            .collect()
     }
 
     /// The page's title.
@@ -222,6 +269,7 @@ impl Model {
                 Kind::Fresh | Kind::Replace { .. } => format!("Install {name}?"),
             },
             Page::Location => "Location".into(),
+            Page::Server => "Playout".into(),
             Page::Installing if update => format!("Updating {name}"),
             Page::Installing => format!("Installing {name}"),
             Page::Done if update => format!("{name} is updated"),
