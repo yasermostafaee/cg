@@ -114,7 +114,9 @@ connection), `B-315` FULL (a predicate that decides what an operator sees), then
 - [x] 6.4 Engine docs: none owed — no engine doc maps CG Bridge's modules (`docs/engines/overview.md` names none,
       and the four deep-dives are the template runtime and the Designer's). `CG-BRIDGE-FOR-PLAYOUT.md` and the
       guide's "With a backup engine": §7 (7.3, 7.5)
-- [ ] 6.5 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here
+- [x] 6.5 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here: `2554c27c` PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37231004452> (`E2E` RAN: runtime 332, designer 293); and
+      every part of this change on `401bfbd6`, 7.4's runs
 
 ## 7. `RELEASE-0112-01` Part D and delta C — the release `0.11.2`
 
@@ -137,7 +139,11 @@ Lane: FULL (delivery: the version, the installers' contract and the guide a clie
       where a silent install is said; three marks, all the backup engine's. Their letter adopted into
       `docs/integration/playout/`. `guide.test.ts`: ten sections, the new labels against their sources, the
       marks counted and placed, their lines read from the letter
-- [ ] 7.4 The `0.11.2` pictures from a Desktop run of the bump; then gate, push, CI green with every job RAN.
+- [x] 7.4 The `0.11.2` pictures from a Desktop run of the bump; then gate, push, CI green with every job RAN —
+      `401bfbd6`: PR <https://github.com/yasermostafaee/cg/actions/runs/37234244883> (`ci` and `E2E` RAN: runtime
+      332, designer 293 passed) and Desktop <https://github.com/yasermostafaee/cg/actions/runs/37234244881>
+      (fresh 74, upgrades from `0.10.0` / `0.11.0` / `0.11.1` 83 each, CG Bridge smoke 117, installer smoke 194; 0
+      failed).
       Pictures: done — Desktop 37231676336 (dispatched on `wip/release-0112-pictures`, the bump `e14274af`): 1
       from `bridge-smoke`, 3 from `setup-window` windows-2025 (both cut to 800 × 520 at (28, 28), the cut proved
       byte for byte on `0.11.1`'s captures), 4 from `guide-shots`; 2, 5, 6, 7 unchanged (no version shown)
@@ -146,5 +152,10 @@ Lane: FULL (delivery: the version, the installers' contract and the guide a clie
       codes; the Installed-apps entry as a guarantee (§2); D2's table, the disabled-user sentence corrected
       where §3 stated it and where §6 asked it (now §7, their answer); the version policy (a new file and
       hash per release, so a new engine build; the skip rule); `/S` and every exit code unchanged
-- [ ] 7.6 Tag `v0.11.2`; the draft "APASAI CG 0.11.2" read back, sums checked; `v0.11.1` retitled superseded;
-      NOT published
+- [x] 7.6 Tag `v0.11.2`; the draft "APASAI CG 0.11.2" read back, sums checked; `v0.11.1` retitled superseded;
+      NOT published — `v0.11.2` (annotated) on `401bfbd6`; its run
+      <https://github.com/yasermostafaee/cg/actions/runs/37236822274> repeated every job (74 / 83 / 83 / 83 / 117 /
+      194, 0 failed) and opened the draft
+      <https://github.com/yasermostafaee/cg/releases/tag/untagged-53465911d98cb5957383>: five files, read back,
+      downloaded again, `OK` ×4 against `SHA256SUMS.txt`. `v0.11.1` reads "v0.11.1 — superseded, do not use",
+      still a draft
