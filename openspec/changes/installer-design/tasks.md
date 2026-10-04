@@ -67,7 +67,10 @@ Lane: FULL (delivery source: what the installer gives its engine).
       UI Automation Value and SelectionItem; this machine's IPv4 list (`GetAdaptersAddresses`)
 - [x] 4.4 Unit tests (`cargo test -p cg-setup`, 66): the table, the field, the page's model and layout
 - [ ] 4.5 The CG Bridge smoke (B–G) and both upgrade acceptances COMPLETED and GREEN, each job RAN (URLs)
-- [ ] 4.6 The screens: unticked, ticked and filled, a refusal — `Claude outputs/RELEASE-0111-01-screens/`
+- [x] 4.6 The screens: unticked, ticked and filled, a refusal, and the upgrade from `0.11.0` opened
+      pre-filled — captured on the clean runner by the CG Bridge smoke (Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37207692158>, `1adacf9a`, artifact `bridge-smoke`),
+      in `Claude outputs/RELEASE-0111-01-screens/` beside CG Setup's own previews
 - [x] 4.7 `RELEASE-0111-01-A` A2 — a loopback `casparHost` on a separate server: the clean runner has no
       Playout, so `tools/caspar-bridge/tests/service-config.test.ts` joins the file the page writes to
       the Playout host the rewrite keys on (control: the unticked file rewrites nothing); the rewrite

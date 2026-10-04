@@ -220,7 +220,12 @@ Lanes: C (`B-310`) FULL — it decides what the Log shows; B (`B-309`) FAST, cop
       the error's `detail`, logged. Sweep: two axes, pathspecs `1166 / 500 / 654 / 220 / 1219 / 3 / 1`, no
       zero. Filed `B-311`: the audio dialog and the Live plates tab are built on the plate id. Control: the
       recorded wire (`live-look-reconcile`) unchanged
-- [ ] 11.5 Gate, push, CI COMPLETED green with the jobs RAN (URLs here)
+- [x] 11.5 Gate, push, CI COMPLETED green with the jobs RAN. C, `d7ab0d18`: PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37200524950> (`ci`, `e2e` — runtime 328 passed,
+      designer 293 passed) and Desktop <https://github.com/yasermostafaee/cg/actions/runs/37200524972>
+      (every job but the two on-request/tag ones). B, `ae5783f3`: PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37201855259> (`e2e` — runtime 328, designer 293
+      passed) and Desktop <https://github.com/yasermostafaee/cg/actions/runs/37201855211>
 
 ### 11A. Delta `RELEASE-0111-01-A` (2026-10-04) — the Playout team's answer `PLAYOUT-CG-RESPONSE-0110-111-v1.md`
 
@@ -237,4 +242,9 @@ Lanes: C (`B-310`) FULL — it decides what the Log shows; B (`B-309`) FAST, cop
       only; `usableBearer` is a pure read). Filed `R-085` (one session per server; not built)
 - [x] 11.8 A4 filed `R-086` (`cg-bridge`, Playout `2.9.3`+; waits on the meters answer — signed in as
       `cg-bridge`, CG Bridge's meters would be EMPTY: its own session wins, no console fallback); A5
-      recorded in `R-076` (IDM) — the chaining note goes into `CG-BRIDGE-FOR-PLAYOUT.md` with Part D
+      recorded in `R-076` (IDM) — the chaining note went into `CG-BRIDGE-FOR-PLAYOUT.md` with Part D
+      (`1adacf9a`)
+- [x] 11.9 Gate, push, CI COMPLETED green with the jobs RAN — `82e45092` + `f8380397` (one push): PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37203942453> (`e2e` — runtime 328 passed, the
+      Versions line among them; designer 293 passed) and Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37203942485>
