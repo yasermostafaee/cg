@@ -3884,3 +3884,23 @@ the settings, the first screen with WebView2 blocked on Server 2022 and 2025, th
 37168047476's `e2e` green. Each installer +0.84 MB. The Playout document's §2 says what the installer is
 now. **Not verified on a runner:** Windows 11's rounded corners (Windows does not round without a GPU)
 and 200 % (the runner's display stops at 175 %). **Owed:** the owner's look on his own PC; archive.
+
+## [~] P-064 — Release `0.11.0`: the delivery build — three installers, the Persian guide, accepted on clean Windows ⟨priority: high⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (v3) · `openspec/changes/release-0-11-0` · `0.10.0` is never delivered
+
+**What.** `0.11.0` is the build the client receives (the owner, 2026-10-03): CG Bridge, CG Control and CG
+Designer from one green commit, behind CG Setup ([[P-063]]), with the Persian install guide and
+`SHA256SUMS.txt`, in a DRAFT release the owner publishes. One version set through `tools/release`
+(`release-version.mjs --set`); the release line (`major.minor`) pinned both ways; [[P-031]]'s compatibility
+floor moved to `0.11.0`. **Why.** The first build a client holds, and the upgrade path from the `0.10.0`
+the owner and the test plant hold must be proved, not assumed: `INSTALLER-DESIGN-01` proved only a
+synthetic one.
+
+**Acceptance:** WHEN the three installers run on a clean Windows, in the guide's order, with the network
+cut THEN each installs; WHEN the installed CG Control is driven against the installed CG Bridge and a fake
+Playout THEN a station admin signs in, chooses channel 2, signs CG Bridge in, takes a row ON AIR and clears
+it; WHEN each `0.11.0` installer runs over the classic `0.10.0` with a row ON AIR THEN its Welcome reads
+"Update from 0.10.0 to 0.11.0. Your settings are kept.", its `/S` exits 0, the service, settings, session
+and station are kept and nothing on air is cleared; WHEN they are uninstalled THEN the service, its rules
+and the shortcuts are gone and the data kept; WHEN the built installers are scanned THEN none carries a
+private address, a test secret, a token or dev-only code; WHEN `v0.11.0` is tagged THEN a draft titled
+"APASAI CG 0.11.0" holds exactly five files.
