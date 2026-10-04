@@ -87,7 +87,11 @@ Lane: FULL (delivery: the version, the floor and the guide a client follows).
       Setup's own painter with documentation addresses — a runner's capture would carry its real ones),
       not a PowerShell line; the Playout's own checkbox «CG Bridge هم نصب شود» marked
       `[confirm with the Playout team]`; the one side step left (a static IP, in Windows' settings)
-- [ ] 5.3 The Welcome and console pictures re-captured at `0.11.1` (CI artifacts) and committed
+- [x] 5.3 The Welcome and console pictures re-captured at `0.11.1` and committed — from Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37207692158> (`1adacf9a`): CG Bridge's Welcome
+      (`bridge-smoke`) and CG Control's (`setup-window-windows-2025`), each cut to the 800 × 520 window at
+      (28, 28); the four console pictures from `guide-shots`. `guide.test.ts` now refuses a picture that shows
+      the version when it is byte for byte an earlier release's (red on the interim copies, measured)
 - [ ] 5.4 The clean-Windows acceptance at `0.11.1`: fresh, from `0.10.0`, from `0.11.0`; the payload scan
       reading every file (count in the job log) — each job RAN (URLs)
 - [ ] 5.5 `v0.11.1` tagged on a commit whose PR run and Desktop run COMPLETED GREEN, every job RAN; the
