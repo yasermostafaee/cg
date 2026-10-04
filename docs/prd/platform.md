@@ -3904,3 +3904,8 @@ and station are kept and nothing on air is cleared; WHEN they are uninstalled TH
 and the shortcuts are gone and the data kept; WHEN the built installers are scanned THEN none carries a
 private address, a test secret, a token or dev-only code; WHEN `v0.11.0` is tagged THEN a draft titled
 "APASAI CG 0.11.0" holds exactly five files.
+
+**Status (2026-10-04): built; the draft is open, unpublished.** `v0.11.0` is tagged on `941ffefc` (PR run
+37192167182 with `ci` and E2E RAN; Desktop 37192167147, both acceptances RAN — 148 checks); the tag's own
+run 37194356468 repeated the acceptances and opened the draft, read back and each file re-checked against
+its sums. Owed: the owner's check and publication, and the `.111` run on Playout 2.9.2.

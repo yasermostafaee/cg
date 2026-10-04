@@ -39,13 +39,26 @@ Part A (`B-308`) is `console-polish` §10. Lanes: §1 FULL (shared config — th
 - [x] 3.2 Two Desktop jobs; the draft release waits for both
 - [x] 3.3 The built installers scanned (engines opened with 7-Zip; CG Setup's strings); tokens and dev-only
       code
-- [ ] 3.3a The apps' own executables read too (`cg-control.exe`, `cg-designer.exe` — the first cut read
-      only CG Setup's, so 3 of the engines' files were scanned), each engine's files listed in the log
-- [ ] 3.4 Both acceptance jobs COMPLETED green, every phase RUN — the run URL here
+- [x] 3.3a The apps' own executables read too (`cg-control.exe`, `cg-designer.exe` — the first cut read
+      only CG Setup's, so 3 of the engines' files were scanned), each engine's files listed in the log —
+      `ea0cbb54`, Desktop https://github.com/yasermostafaee/cg/actions/runs/37194356614 (6 files read, every
+      engine file listed, no finding)
+- [x] 3.4 Both acceptance jobs COMPLETED green, every phase RUN (each phase's results file read: 26, 26,
+      21, 8, 24, 30 and 13 checks, none failed) — `941ffefc`, Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/37192167147; again on the tag,
+      https://github.com/yasermostafaee/cg/actions/runs/37194356468
 
 ## 4. The release
 
-- [ ] 4.1 Tag `v0.11.0` on a commit whose PR and Desktop runs completed green with their jobs RUN
-- [ ] 4.2 The draft read back: five assets, each re-downloaded and checked against `SHA256SUMS.txt`
-- [ ] 4.3 `v0.10.0` and `v0.9.1` retitled "— superseded, do not use", kept as drafts
+- [x] 4.1 Tag `v0.11.0` (annotated) on `941ffefc`: PR https://github.com/yasermostafaee/cg/actions/runs/37192167182
+      (`ci` and `E2E (Playwright)` RAN — designer 293 passed, runtime 328 passed) and Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/37192167147 (every job RAN but the two that run
+      only on request or on a tag); the tag's own run
+      https://github.com/yasermostafaee/cg/actions/runs/37194356468 opened the draft
+- [x] 4.2 The draft read back — `APASAI CG 0.11.0`, a draft pre-release, exactly five assets — each
+      re-downloaded and checked against `SHA256SUMS.txt` (four `OK`), and the three installers opened and
+      scanned again from the downloaded bytes (CG Setup's front end, every text file, both apps' exes: no
+      finding)
+- [x] 4.3 `v0.10.0` and `v0.9.1` retitled `v<x> — superseded, do not use` (as `v0.9.0` already was), kept
+      as draft pre-releases, nothing deleted — read back
 - [ ] 4.4 The owner's own check on the draft; then archive (on the owner's word)
