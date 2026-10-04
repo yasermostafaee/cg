@@ -100,10 +100,20 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     text: "title: 'After sign-in'",
     file: 'packages/shared-ipc/src/channels/setup.ts',
   },
+  {
+    shown: 'SIGN IN',
+    text: '>Sign in<',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
   { shown: 'Username', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'Password', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'Sign in', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'waiting for approval', file: 'tools/caspar-bridge/src/connection-check.ts' },
+  {
+    shown: 'CHANNEL',
+    text: '>Channel<',
+    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+  },
   // `R-081` — Station setup runs the same check again: SETTINGS → Servers → Playout → Check.
   { shown: 'Servers', text: "title: 'Servers'", file: 'apps/runtime/src/renderer/features/stationSetup/sections.ts' },
   {
