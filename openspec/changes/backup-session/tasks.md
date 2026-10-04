@@ -84,8 +84,10 @@ connection), `B-315` FULL (a predicate that decides what an operator sees), then
 - [x] 5.2 The status bar's engine chips beside `PRIMARY A` / `BACKUP B` — a prop from the shell
       (`statusBar.engines.dom.test.ts`)
 - [x] 5.3 The check's Sign-in group: `bridge-session-backup` (`connectionCheckGroups.dom.test.ts`)
-- [ ] 5.4 e2e `backup-engine.spec.ts` (the dialog with two engines, each engine's own password, the
-      status-bar states, the check's per-engine line) — green on Windows; the Linux run owed
+- [x] 5.4 e2e `backup-engine.spec.ts` (the dialog with two engines, each engine's own password, the
+      status-bar states, the check's per-engine line) — green on Windows, and on Linux in the `E2E` step that
+      RAN on `c19529a5` (which carries `26a45394`): <https://github.com/yasermostafaee/cg/actions/runs/37227120747>,
+      runtime 332 passed with `backup-engine.spec.ts` in its log
 
 ## 6. The dev station's pair, what it found, docs and close
 
@@ -109,8 +111,9 @@ connection), `B-315` FULL (a predicate that decides what an operator sees), then
       (`channel-ticks-served.integration.test.ts`: channel 2 still listed after declaring channel 1); R-058's
       list filtered by `#servesOscChannel`; CONTROL: a served channel that stops is still reported. 6.1's run
       again after the fix: `PRIMARY A HEALTHY · BACKUP B HEALTHY`, no chip, no problem
-- [ ] 6.4 Engine docs; `CG-BRIDGE-FOR-PLAYOUT.md` (the pair section; `/health`); the guide's "With a backup
-      engine"
+- [x] 6.4 Engine docs: none owed — no engine doc maps CG Bridge's modules (`docs/engines/overview.md` names none,
+      and the four deep-dives are the template runtime and the Designer's). `CG-BRIDGE-FOR-PLAYOUT.md` and the
+      guide's "With a backup engine": §7 (7.3, 7.5)
 - [ ] 6.5 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here
 
 ## 7. `RELEASE-0112-01` Part D and delta C — the release `0.11.2`
@@ -122,7 +125,9 @@ Lane: FULL (delivery: the version, the installers' contract and the guide a clie
       the upgrade; a new `acceptance-upgrade-0111` job from the `v0.11.1` draft (the draft job waits for it).
       Read on the clean runner (Desktop 37228341119): one row each, 64-bit view, key `CGBridge`, `CG Bridge`,
       `0.10.0` / `0.11.0` / `0.11.1`. The `0.11.1` job's own six reds there were the same-version reinstall
-      ("Reinstall CG Bridge?") a `0.11.1` build meets over `0.11.1` — the premise of the bump below
+      ("Reinstall CG Bridge?") a `0.11.1` build meets over `0.11.1` — the premise of the bump below. On the
+      `0.11.2` build (Desktop 37231676336): one row, 64-bit, `CGBridge`, `CG Bridge`, `0.11.2`, after the install
+      and after the upgrade; the `0.11.1` upgrade job green
 - [x] 7.2 `0.11.2` in all nine version sources (`release-version.mjs --set 0.11.2`); `P-031`'s floor moved to
       `0.11.2` with an empty `git diff v0.11.1` over the five floor files (control: `bridge-session.ts`, 120
       lines); the session record's optional `address` and the new backup file said there
@@ -132,7 +137,10 @@ Lane: FULL (delivery: the version, the installers' contract and the guide a clie
       where a silent install is said; three marks, all the backup engine's. Their letter adopted into
       `docs/integration/playout/`. `guide.test.ts`: ten sections, the new labels against their sources, the
       marks counted and placed, their lines read from the letter
-- [ ] 7.4 The `0.11.2` pictures from a Desktop run of the bump; then gate, push, CI green with every job RAN
+- [ ] 7.4 The `0.11.2` pictures from a Desktop run of the bump; then gate, push, CI green with every job RAN.
+      Pictures: done — Desktop 37231676336 (dispatched on `wip/release-0112-pictures`, the bump `e14274af`): 1
+      from `bridge-smoke`, 3 from `setup-window` windows-2025 (both cut to 800 × 520 at (28, 28), the cut proved
+      byte for byte on `0.11.1`'s captures), 4 from `guide-shots`; 2, 5, 6, 7 unchanged (no version shown)
 - [x] 7.5 `CG-BRIDGE-FOR-PLAYOUT.md` at `0.11.2`: §3 a primary and a backup engine (the layout, server B, a
       session per engine, a backup problem never stopping the primary, the guard); `/health`'s new fields and
       codes; the Installed-apps entry as a guarantee (§2); D2's table, the disabled-user sentence corrected

@@ -4440,6 +4440,11 @@ own CG license, else `403 cg_not_licensed`; the backup token's `cg_channels` use
 - WHEN either server's refresh is reused THEN only that server's session is lost
 
 **Not built in `0.11.1`; built for `0.11.2`** (`RELEASE-0112-01` Part A — the change's tasks name its tests).
+**Verified on the fake pair** (two fake engines, different keys and passwords, each verifying bearers against its
+own keys): every acceptance bullet above in the bridge suite (`backup-session.integration.test.ts`,
+`backup-media.integration.test.ts`), the console in a real browser on Linux (`backup-engine.spec.ts`, in the
+`E2E` step of <https://github.com/yasermostafaee/cg/actions/runs/37227120747>), and the whole path by hand on
+`pnpm dev:station --fake --pair`. **Owed:** a run on two real engines (none is available to us yet).
 
 ## [~] R-086 — Sign CG Bridge in as `cg-bridge` (Playout `2.9.4`+) ⟨priority: medium⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A4; BUILT by `RELEASE-0112-01-C` C3 · `openspec/changes/backup-session/` (tasks 2.7, 5.1)
 

@@ -275,9 +275,21 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     file: 'apps/runtime/src/renderer/features/status/StatusBar.tsx',
   },
   { shown: 'HEALTHY', text: "text: 'HEALTHY'", file: 'apps/runtime/src/renderer/features/status/StatusBar.tsx' },
+  // What the operator sees when an engine machine fails: B is CG's primary, or B is offline.
+  {
+    shown: 'PRIMARY B',
+    text: 'PRIMARY {health.primary.label}',
+    file: 'apps/runtime/src/renderer/features/status/StatusBar.tsx',
+  },
+  { shown: 'OFFLINE', text: "text: 'OFFLINE'", file: 'apps/runtime/src/renderer/features/status/StatusBar.tsx' },
   {
     shown: 'B: SIGN IN CG BRIDGE',
     text: '${server}: SIGN IN CG BRIDGE',
+    file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
+  },
+  {
+    shown: 'B: AMCP NOT APPROVED',
+    text: '${server}: AMCP NOT APPROVED',
     file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
   },
   {
@@ -424,8 +436,8 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     expect(marks).toBe(3);
     expect(markedThere).toHaveLength(3);
     expect(markedThere[0]).toContain(`«${THEIR_CHECKBOX}»`);
-    expect(markedThere[1]).toContain('«تأیید»');
-    expect(markedThere[2]).toContain('`Backup engine`');
+    expect(markedThere[1]).toContain('`Backup engine`');
+    expect(markedThere[2]).toContain('«تأیید»');
   });
 
   it('`RELEASE-0112-01-C` C1 — their silent switch appears only where a silent Playout install is described', () => {

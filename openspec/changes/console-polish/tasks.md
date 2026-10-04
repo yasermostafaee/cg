@@ -286,4 +286,8 @@ A2 FAST (visual). One batch, one gate, one push — before `v0.11.2`'s tag.
       they are — drawn for amber already: the orphan strip's CLEAR 6.33 : 1 in every state with a
       7.64 : 1 ring, `neutral` (Sign in CG Bridge…) 13.87 : 1, `ghost` (DISMISS) 4.96 : 1. Screenshots
       before and after in `Claude outputs/RELEASE-0112-01-A-banner-{before,after}-*.png`
-- [ ] 12.5 Gate, push, CI COMPLETED green with the jobs RAN (the banner's e2e among them)
+- [x] 12.5 Gate, push, CI COMPLETED green with the jobs RAN (the banner's e2e among them) — on `8f811c50`, PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37221039738> and Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37221039820>, both green; the Linux `E2E` step RAN
+      again on `c19529a5`, which carries it — <https://github.com/yasermostafaee/cg/actions/runs/37227120747>,
+      runtime 332 passed with `banner-on-red.spec.ts` in its log, designer 290 passed (3 flaky)

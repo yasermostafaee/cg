@@ -4000,4 +4000,6 @@ install and after the upgrade. **Read on the clean runner** (Desktop 37228341119
 CG Bridge smoke and the classic installs of the `v0.10.0`, `v0.11.0` and `v0.11.1` drafts each left exactly one
 row — 64-bit view, key `CGBridge`, `DisplayName` `CG Bridge`, `DisplayVersion` `0.10.0` / `0.11.0` / `0.11.1` —
 and every upgrade left one row reading the build's version. The NSIS lines that write it are byte-identical at
-the three tags. Owed: the same read on the `0.11.2` build.
+the three tags. **The `0.11.2` build** (Desktop 37231676336, dispatched on the bump `e14274af`): the CG Bridge
+smoke's install and upgrade each left exactly one row — 64-bit, `CGBridge`, `CG Bridge`, `0.11.2` — and every
+upgrade acceptance (from `0.10.0`, `0.11.0`, `0.11.1`) passed its row checks.
