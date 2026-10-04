@@ -3149,3 +3149,13 @@ branch (`ai-stale`, `design/live-source-multibox`, `dev`, `main`) returned only 
 — the positive control — and nothing for `B-309`; the same with `--untracked`; no stash.
 
 ⇒ **Next free after this entry is `B-310`**, **`D-162`**, **`P-064`**, **`R-085`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0110-01` takes `B-310`
+
+- `B-310` — a Log page read while the audit file rotates comes back empty (a CI red on `c4933ece`) —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: `git grep -n -E "^## \[.\] B-31[0-9] " <branch> -- docs` on every local branch
+returned nothing, and the same with `--untracked`; control: `B-309`'s own heading is found on `dev`; no stash.
+
+⇒ **Next free after this entry is `B-311`**, **`D-162`**, **`P-064`**, **`R-085`** and **`C-049`**.

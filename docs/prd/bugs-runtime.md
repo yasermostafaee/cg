@@ -13222,3 +13222,18 @@ labelled `Live source for l1` (`LiveSourceSwapDialog.tsx:147`, an accessible nam
 assignment validator names plate, template and source by id (`sources.ts:1059`, `:1068` — a malformed-file
 message; the console shows its own words for `unknown-source`). **Expected:** golden rule 11 — `Plate N`, the
 look's name, the template's name. **Fix:** not built.
+
+## [ ] B-310 — A Log page read while the audit file rotates comes back EMPTY ⟨priority: low — a CI red once; on a station, the first row of a new day⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (CI run 37185337111)
+
+**Repro:** CI run <https://github.com/yasermostafaee/cg/actions/runs/37185337111> (`c4933ece`):
+`audit-page.integration.test.ts:71` — "a console holding channel 1 gets a FULL page" — got **0** rows where
+it wants 100; the same test passed in CI on `ae9f9c25` and in the local gate on `c4933ece`. **Suspected
+cause (not yet proven):** the test's 300 rows are dated `2026-10-01`, so the bridge's first row of the test
+day (the operator's sign-in) ROTATES the record — the writer renames the current file the moment a row
+lands on a new day. `readAuditPage` (`packages/audit/src/reader.ts:133-140`) handles a rotation mid-read by
+reading again from a fresh list, but only twice and with no wait, and then answers `{ entries: [] }`; and
+`CasparRuntime.auditPage` falls back to the in-memory tail on any read error. Either path gives an empty page.
+**Expected:** a page read during a rotation waits for the rename and reads the record; it never answers
+empty while rows exist. **Proposed fix:** retry `MOVED` with a short bounded wait (and say so in the page if
+it still cannot read), and date the test's rows from the test's own clock so the suite does not depend on
+the calendar. **Not fixed here:** `RELEASE-0110-01` changes no product behaviour beyond `B-308`.
