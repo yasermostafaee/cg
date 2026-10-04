@@ -1,7 +1,16 @@
 import { useState } from 'react';
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
-import { stoppedChannelsOf } from '@cg/shared-ipc';
+import {
+  ENGINE_LABEL,
+  ENGINE_SERVER,
+  engineChipText,
+  engineNeedsAttention,
+  engineStateText,
+  stoppedChannelsOf,
+  type EngineLine,
+  type EngineSessions,
+} from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -295,8 +304,31 @@ function staleTitle(state: string): string {
   );
 }
 
+/**
+ * 🔴 `RELEASE-0112-01` (`R-085`) — the engines whose CG Bridge session needs a person, as chips: a
+ * signed-in, waiting or unconfigured engine is the absence of an alarm, as health is in this bar.
+ */
+function engineChips(
+  engines: EngineSessions | null | undefined,
+): { server: 'A' | 'B'; line: EngineLine }[] {
+  if (engines === null || engines === undefined) return [];
+  const lines = [engines.primary, ...(engines.backup !== null ? [engines.backup] : [])];
+  return lines
+    .filter((line) => engineNeedsAttention(line.state))
+    .map((line) => ({ server: ENGINE_SERVER[line.engine], line }));
+}
+
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
-export function StatusBar(): JSX.Element {
+export function StatusBar({
+  engines,
+}: {
+  /**
+   * `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, handed down by the shell (a prop,
+   * not a subscription: this bar's dom specs stub only the connection channels — see `CONSOLE-MATCH-03`
+   * below). Absent: no engine chip.
+   */
+  engines?: EngineSessions | null;
+}): JSX.Element {
   const health = useConnections();
   // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
   // ask the ROLE and never the channel. See `useHoldsOperatorRole`.
@@ -477,6 +509,28 @@ export function StatusBar(): JSX.Element {
               <span style={styles.backup}>○ NO BACKUP</span>
             </Tag>
           )}
+          {/*
+            🔴 `RELEASE-0112-01` (`R-085`) — AN ENGINE'S CG BRIDGE SESSION, BESIDE ITS SERVER: a chip
+            for an engine that needs a person (a sign-in, a license, an approval, an engine that does
+            not answer, a core another CG Bridge drives), keyed to that engine's server label, the full
+            sentence on its title. Station-wide, so it lives here and not on a channel. While the link
+            is down the bridge's word cannot be read, and nothing is said.
+          */}
+          {!stale &&
+            engineChips(engines).map(({ server, line }) => (
+              <Tag
+                key={line.engine}
+                className="cg-pill"
+                title={`${ENGINE_LABEL[line.engine]}: ${engineStateText(line)}`}
+                aria-label={`${ENGINE_LABEL[line.engine]}: ${engineStateText(line)}`}
+                data-engine-chip={line.engine}
+                data-engine-state={line.state}
+              >
+                <span style={styles.noOsc}>
+                  <Icon icon={TriangleAlert} size={11} /> {engineChipText(server, line.state)}
+                </span>
+              </Tag>
+            ))}
           {/* B-094 — a SEPARATE indicator, deliberately not a pill STATE.
               The pill's vocabulary mirrors the session state machine exactly, and
               "answering AMCP but inaudible" is an orthogonal axis, not another

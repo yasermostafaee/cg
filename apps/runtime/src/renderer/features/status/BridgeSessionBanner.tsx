@@ -3,11 +3,22 @@ import { KeyRound, TriangleAlert } from 'lucide-react';
 import {
   BRIDGE_NEEDS_ADMIN_LINE,
   BRIDGE_SESSION_DEFAULT_ACCOUNT,
+  CG_BRIDGE_ACCOUNT,
+  ENGINE_BRIDGE_ACCOUNT_LINE,
+  ENGINE_LABEL,
+  ENGINE_PASSWORD_LINE,
+  engineStateText,
   holdsPermissionClass,
+  suggestedBridgeAccount,
   type BridgeSessionState,
+  type Engine,
+  type EngineLine,
+  type EngineSessions,
 } from '@cg/shared-ipc';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
+import { useEngineSessions } from '../../hooks/useEngineSessions.js';
 import { useLicense } from '../../hooks/useLicense.js';
+import { Tabs } from '../../ui/Tabs.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -52,10 +63,23 @@ const styles = {
   },
   text: { flex: 1, minWidth: 0, fontWeight: 700, letterSpacing: '0.04em' },
   field: { display: 'grid', gap: 6, marginBottom: 12 },
+  /* `RELEASE-0112-01` — the engines, one fact row each: its name, its address, its state in words. */
+  engines: { display: 'grid', gap: 4, margin: '0 0 12px', fontSize: cssVars['--r-text-sm'] },
+  engineRow: { display: 'flex', gap: 8, alignItems: 'baseline', minWidth: 0 },
+  engineName: { fontWeight: 700, flexShrink: 0 },
+  engineAddress: { color: cssVars['--r-text-muted'], flexShrink: 0 },
+  engineState: { minWidth: 0 },
+  where: { fontSize: cssVars['--r-text-sm'], color: cssVars['--r-text-muted'], margin: '0 0 12px' },
 } as const;
+
+/** `RELEASE-0112-01` — the backup engine needs a station admin's sign-in (the banner names it). */
+function backupNeedsAdmin(engines: EngineSessions | null): boolean {
+  return engines?.backup?.state === 'needs-admin';
+}
 
 export function BridgeSessionBanner(): JSX.Element | null {
   const auth = useAuthSession();
+  const engines = useEngineSessions();
   const [session, setSession] = useState<BridgeSessionState | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   /*
@@ -82,7 +106,10 @@ export function BridgeSessionBanner(): JSX.Element | null {
     };
   }, [mayAsk]);
 
-  if (session?.state !== 'needs-admin' && session?.state !== 'refused') return null;
+  const primaryNeeds = session?.state === 'needs-admin' || session?.state === 'refused';
+  // `RELEASE-0112-01` (`R-085`) — the backup engine needing a sign-in shows the banner too, naming it.
+  const backupNeeds = backupNeedsAdmin(engines);
+  if (!primaryNeeds && !backupNeeds) return null;
   const admin =
     auth.kind === 'signed-in' && holdsPermissionClass(auth.principal.roles, 'station-admin');
 
@@ -91,17 +118,19 @@ export function BridgeSessionBanner(): JSX.Element | null {
       style={styles.banner}
       role="alert"
       data-bridge-session-banner=""
-      data-bridge-session-state={session.state}
+      data-bridge-session-state={primaryNeeds ? session?.state : 'backup-needs-admin'}
       data-tone="caution"
     >
       <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
       <span style={styles.text}>
-        {session.state === 'refused' ? (
+        {session?.state === 'refused' ? (
           <>
             CG Bridge: <bdi>{session.message}</bdi>
           </>
-        ) : (
+        ) : primaryNeeds ? (
           BRIDGE_NEEDS_ADMIN_LINE
+        ) : (
+          `${BRIDGE_NEEDS_ADMIN_LINE} on the backup engine`
         )}
       </span>
       {admin && (
@@ -109,7 +138,13 @@ export function BridgeSessionBanner(): JSX.Element | null {
           Sign in CG Bridge…
         </Button>
       )}
-      {admin && dialogOpen && <BridgeSignInDialog onClose={() => setDialogOpen(false)} />}
+      {admin && dialogOpen && (
+        <BridgeSignInDialog
+          engines={engines}
+          startOn={!primaryNeeds && backupNeeds ? 'backup' : 'primary'}
+          onClose={() => setDialogOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -153,19 +188,58 @@ export function localDateTime(iso: string): string {
   );
 }
 
-/** A station admin's one-time sign-in for the bridge. Holds the password only while it is open. */
-function BridgeSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
-  const [username, setUsername] = useState(BRIDGE_SESSION_DEFAULT_ACCOUNT);
+/**
+ * A station admin's one-time sign-in for the bridge. Holds the password only while it is open.
+ *
+ * 🔴 `RELEASE-0112-01` (`R-085`) — **ONE SIGN-IN PER ENGINE.** It lists the station's engines — `Primary
+ * engine` and, with a server B, `Backup engine` — each with its address and its state in words, and signs
+ * the chosen one in with THAT engine's account and password (each engine has its own random password, on
+ * its own «تنظیمات ← اتصال به CG Control»; the one line says so). Delta C3: the account offered is
+ * `cg-bridge` when the chosen engine is `2.9.4` or newer, `cg-admin` otherwise — until the admin types one.
+ * With no engine lines (a bridge too old to know them) it is the primary's sign-in, exactly as before.
+ */
+function BridgeSignInDialog({
+  engines,
+  startOn,
+  onClose,
+}: {
+  engines: EngineSessions | null;
+  startOn: Engine;
+  onClose: () => void;
+}): JSX.Element {
+  const lines: readonly EngineLine[] =
+    engines === null ? [] : [engines.primary, ...(engines.backup !== null ? [engines.backup] : [])];
+  const [engine, setEngine] = useState<Engine>(
+    engines?.backup !== null && engines?.backup !== undefined ? startOn : 'primary',
+  );
+  const chosen = lines.find((l) => l.engine === engine) ?? null;
+  const offered =
+    chosen === null ? BRIDGE_SESSION_DEFAULT_ACCOUNT : suggestedBridgeAccount(chosen.version);
+  const [username, setUsername] = useState(offered);
+  const [typed, setTyped] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<{ text: string; marksField: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // C3 — the account follows the chosen engine's version, until the admin types one of their own.
+  useEffect(() => {
+    if (!typed) setUsername(offered);
+  }, [offered, typed]);
+
+  const choose = (next: Engine): void => {
+    setEngine(next);
+    setPassword('');
+    setError(null);
+  };
 
   const submit = async (): Promise<void> => {
     if (busy || username === '' || password === '') return;
     setBusy(true);
     setError(null);
     try {
-      const answer = await window.cg.bridgeSession.signIn({ username, password });
+      const answer =
+        engine === 'backup'
+          ? await window.cg.bridgeSession.signInBackup({ username, password })
+          : await window.cg.bridgeSession.signIn({ username, password });
       if (answer.ok) {
         onClose();
         return;
@@ -173,7 +247,9 @@ function BridgeSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
       // `CENTRAL-BRIDGE-01-A` A4 — `cg_not_licensed` carries the Playout's own message, shown as it is
       // (the message region renders each line in its own `dir="auto"` isolate).
       const line = signInFailureLine(answer.failure ?? 'unexpected', answer.message ?? null);
-      setError({ text: line.text, marksField: line.marksField });
+      // `RELEASE-0112-01` — with two engines, the line names which one refused.
+      const text = lines.length > 1 ? `${ENGINE_LABEL[engine]}: ${line.text}` : line.text;
+      setError({ text, marksField: line.marksField });
     } catch (err) {
       setError({
         text: err instanceof Error ? err.message : signInMessage('unexpected'),
@@ -218,34 +294,81 @@ function BridgeSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
         alone).
       */}
       <SignInBrand />
-      <label htmlFor="cg-bridge-signin-user" style={styles.field}>
-        Account
-        <TextInput
-          id="cg-bridge-signin-user"
-          value={username}
-          onChange={setUsername}
-          autoComplete="off"
-          // A machine account name (`cg-admin`): LTR is a statement about the CONTENT.
-          dir="ltr"
-          disabled={busy}
-          aria-label="Account"
-          onKeyDown={onEnter}
-        />
-      </label>
-      <label htmlFor="cg-bridge-signin-pass" style={styles.field}>
-        Password
-        <PasswordInput
-          id="cg-bridge-signin-pass"
-          value={password}
-          onChange={setPassword}
-          autoComplete="off"
-          disabled={busy}
-          invalid={error?.marksField === true}
-          aria-label="Password"
-          onKeyDown={onEnter}
-        />
-      </label>
+      {lines.length > 0 && (
+        // `RELEASE-0112-01` — each engine, its address and its state, in words (facts, not controls).
+        <div style={styles.engines} aria-label="Engines" data-engines="">
+          {lines.map((line) => (
+            <div key={line.engine} style={styles.engineRow} data-engine-row={line.engine}>
+              <span style={styles.engineName}>{ENGINE_LABEL[line.engine]}</span>
+              {line.address !== null && (
+                <bdi style={styles.engineAddress} dir="ltr">
+                  {line.address}
+                </bdi>
+              )}
+              <span style={styles.engineState} data-engine-state={line.state}>
+                {engineStateText(line)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {lines.length > 1 ? (
+        <Tabs
+          tabs={lines.map((line) => ({ id: line.engine, label: ENGINE_LABEL[line.engine] }))}
+          activeId={engine}
+          onSelect={(id) => choose(id as Engine)}
+          ariaLabel="Sign in on"
+          idPrefix="cg-bridge-signin-engine"
+          level="inner"
+        >
+          {fields()}
+        </Tabs>
+      ) : (
+        fields()
+      )}
       <AppVersionLine />
     </Modal>
   );
+
+  function fields(): JSX.Element {
+    return (
+      <>
+        {lines.length > 0 && (
+          <p style={styles.where} data-password-where="">
+            {offered === CG_BRIDGE_ACCOUNT ? ENGINE_BRIDGE_ACCOUNT_LINE : ENGINE_PASSWORD_LINE}
+          </p>
+        )}
+        <label htmlFor="cg-bridge-signin-user" style={styles.field}>
+          Account
+          <TextInput
+            id="cg-bridge-signin-user"
+            value={username}
+            onChange={(next) => {
+              setTyped(true);
+              setUsername(next);
+            }}
+            autoComplete="off"
+            // A machine account name (`cg-admin`): LTR is a statement about the CONTENT.
+            dir="ltr"
+            disabled={busy}
+            aria-label="Account"
+            onKeyDown={onEnter}
+          />
+        </label>
+        <label htmlFor="cg-bridge-signin-pass" style={styles.field}>
+          Password
+          <PasswordInput
+            id="cg-bridge-signin-pass"
+            value={password}
+            onChange={setPassword}
+            autoComplete="off"
+            disabled={busy}
+            invalid={error?.marksField === true}
+            aria-label="Password"
+            onKeyDown={onEnter}
+          />
+        </label>
+      </>
+    );
+  }
 }

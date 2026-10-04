@@ -4,6 +4,7 @@ import {
   connectionCheckSubject,
   DEFAULT_OSC_PORT,
   defaultFixedLayerBank,
+  engineStateText,
   fiveRowVisibility,
   sameReleaseLine,
   versionMismatchRefusal,
@@ -12,6 +13,7 @@ import {
   type CheckLineId,
   type ConnectionCheckLine,
   type ConnectionConfig,
+  type EngineLine,
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import type { AuthSessionState, RuntimeBridge } from '../../../shared/runtime-bridge.js';
@@ -197,6 +199,11 @@ export interface ConsoleCheckFacts {
   readonly consoleVersion: string;
   /** This console's sign-in. */
   readonly auth: AuthSessionState;
+  /**
+   * `RELEASE-0112-01` (`R-085`) — CG Bridge's session on the BACKUP engine, as the bridge words it;
+   * absent or `null` — no server B (or a bridge too old to say), and no line.
+   */
+  readonly backupEngine?: EngineLine | null | undefined;
 }
 
 /**
@@ -242,6 +249,20 @@ export function consoleCheckLines(facts: ConsoleCheckFacts): ShownCheckLine[] {
       id: 'signin',
       status: 'wait',
       text: "This console's sign-in: not signed in yet.",
+    });
+  }
+  // `RELEASE-0112-01` (`R-085`) — one line per engine: the backup's beside the primary's.
+  const backup = facts.backupEngine ?? null;
+  if (backup !== null && backup.state !== 'off') {
+    lines.push({
+      id: 'bridge-session-backup',
+      status:
+        backup.state === 'signed-in'
+          ? 'pass'
+          : backup.state === 'needs-admin' || backup.state === 'waiting'
+            ? 'wait'
+            : 'fail',
+      text: `CG Bridge on the backup engine: ${engineStateText(backup)}`,
     });
   }
   return lines;

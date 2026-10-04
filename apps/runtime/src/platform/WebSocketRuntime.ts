@@ -505,6 +505,7 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #straySubs = new Subs<readonly ipcChannels.StationStray[]>();
   /** `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session, as the bridge last said. */
   readonly #bridgeSessionSubs = new Subs<ipcChannels.BridgeSessionState>();
+  readonly #enginesSubs = new Subs<ipcChannels.EngineSessions>();
   /** `PLAYOUT-FEATURES-01` D — the CG license as CG Bridge last read it. */
   readonly #licenseSubs = new Subs<ipcChannels.LicenseState>();
   /** `PLAYOUT-FEATURES-01` E — the Playout's meters, one reading at a time. */
@@ -1188,6 +1189,16 @@ export class WebSocketRuntime implements RuntimeBridge {
         return;
       }
     }
+    // `RELEASE-0112-01` (`R-085`) — and each engine's, by the same rule (a bridge too old to answer
+    // leaves it as it was: the console shows the primary alone).
+    try {
+      this.#enginesSubs.emit(await this.#invoke(ipcChannels.BridgeEnginesChannel, undefined));
+    } catch (err) {
+      if (err instanceof BridgeDisconnectedError) {
+        this.#setResyncing(false);
+        return;
+      }
+    }
     // `PLAYOUT-FEATURES-01` D — and the CG license, by the same rule (a bridge too old to answer
     // leaves it as it was).
     try {
@@ -1439,6 +1450,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       case ipcChannels.BridgeSessionStateChangedChannel.name: {
         const p = ipcChannels.BridgeSessionStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#bridgeSessionSubs.emit(p.data);
+        break;
+      }
+      // `RELEASE-0112-01` (`R-085`) — either engine's session moved.
+      case ipcChannels.BridgeEnginesChangedChannel.name: {
+        const p = ipcChannels.BridgeEnginesChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#enginesSubs.emit(p.data);
         break;
       }
       // `PLAYOUT-FEATURES-01` D — the CG license moved.
@@ -1952,6 +1969,12 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#bridgeSessionSubs.add(handler),
     signIn: (req: ChannelRequest<typeof ipcChannels.BridgeSessionSignInChannel>) =>
       this.#invoke(ipcChannels.BridgeSessionSignInChannel, req),
+    // `RELEASE-0112-01` (`R-085`) — each engine's session, and the backup engine's own sign-in.
+    engines: () => this.#invoke(ipcChannels.BridgeEnginesChannel, undefined),
+    onEnginesChanged: (handler: (sessions: ipcChannels.EngineSessions) => void) =>
+      this.#enginesSubs.add(handler),
+    signInBackup: (req: ChannelRequest<typeof ipcChannels.BridgeBackupSignInChannel>) =>
+      this.#invoke(ipcChannels.BridgeBackupSignInChannel, req),
   };
 
   /** `PLAYOUT-FEATURES-01` D — the CG license, pulled by its hook and pushed on change. */

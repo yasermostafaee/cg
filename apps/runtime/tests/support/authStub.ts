@@ -93,6 +93,29 @@ export function signedInStub(
  * is the pre-`C-038` console, so a spec filled by this helper measures exactly what it
  * measured before.
  */
+/**
+ * `RELEASE-0112-01` (`R-085`) — CG Bridge's own session, the QUIET answer: `off`, and a bridge too old
+ * to know `bridgeSession.engines` (it rejects, so the console shows the primary alone). A stub that
+ * fills this measures exactly what it measured before the engines existed.
+ */
+export function bridgeSessionStub(): {
+  state: () => Promise<{ state: 'off' }>;
+  onChanged: () => () => void;
+  signIn: () => Promise<{ ok: false; failure: 'unexpected' }>;
+  engines: () => Promise<never>;
+  onEnginesChanged: () => () => void;
+  signInBackup: () => Promise<{ ok: false; failure: 'unexpected' }>;
+} {
+  return {
+    state: () => Promise.resolve({ state: 'off' }),
+    onChanged: () => () => undefined,
+    signIn: () => Promise.resolve({ ok: false, failure: 'unexpected' }),
+    engines: () => Promise.reject(new Error('unknown channel: bridgeSession.engines')),
+    onEnginesChanged: () => () => undefined,
+    signInBackup: () => Promise.resolve({ ok: false, failure: 'unexpected' }),
+  };
+}
+
 export function fillBridgeStub<T extends object>(stub: T): T {
   const cg = stub as Record<string, unknown>;
   cg['auth'] ??= authStub();
@@ -165,6 +188,18 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     state: () => Promise.resolve({ license: null }),
     onChanged: () => () => undefined,
   };
+  /*
+    `RELEASE-0112-01` (`R-085`) — each engine's session. The quiet default is a bridge too old to know
+    the channel: `engines` REJECTS, and the console shows the primary alone — so a filled stub measures
+    exactly what it measured before. Filled into a `bridgeSession` a spec states itself (only the absent
+    members).
+  */
+  cg['bridgeSession'] ??= bridgeSessionStub();
+  const bridgeSession = cg['bridgeSession'] as Record<string, unknown>;
+  const quiet = bridgeSessionStub();
+  bridgeSession['engines'] ??= quiet.engines;
+  bridgeSession['onEnginesChanged'] ??= quiet.onEnginesChanged;
+  bridgeSession['signInBackup'] ??= quiet.signInBackup;
   /*
     `CENTRAL-BRIDGE-01` — the restore-notice dismiss buttons dismiss on the BRIDGE too. Filled into
     a `stack` a spec states itself (only the absent member), answering as a bridge with nothing left

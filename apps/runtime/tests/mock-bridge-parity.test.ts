@@ -131,7 +131,8 @@ const BRIDGE_SURFACE: {
     // `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare.
     strays: ['list', 'onChanged', 'takeOffAir'],
     // `CENTRAL-BRIDGE-01` (D7) — CG Bridge's own Playout session (the mock: `off`).
-    bridgeSession: ['state', 'onChanged', 'signIn'],
+    // `RELEASE-0112-01` (`R-085`) — and each engine's session, and the backup engine's own sign-in.
+    bridgeSession: ['state', 'onChanged', 'signIn', 'engines', 'onEnginesChanged', 'signInBackup'],
     // `PLAYOUT-FEATURES-01` D — the CG license (the mock: nothing read).
     license: ['state', 'onChanged'],
     // `PLAYOUT-FEATURES-01` E — the Playout's meters (the mock: none).

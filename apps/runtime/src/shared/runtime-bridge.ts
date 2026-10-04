@@ -7,9 +7,12 @@
  * the contract.
  */
 import type {
+  BridgeBackupSignInChannel,
+  BridgeEnginesChannel,
   BridgeSessionSignInChannel,
   BridgeSessionState,
   BridgeSessionStateChannel,
+  EngineSessions,
   LicenseState,
   LicenseStateChannel,
   PgmMeterReading,
@@ -1006,6 +1009,18 @@ export interface RuntimeBridge {
     signIn(
       req: ChannelRequest<typeof BridgeSessionSignInChannel>,
     ): Promise<ChannelResponse<typeof BridgeSessionSignInChannel>>;
+    /**
+     * 🔴 `RELEASE-0112-01` (`R-085`) — EACH ENGINE'S CG Bridge session (`Primary engine`, and with a
+     * server B, `Backup engine`), in one word each: what the status bar's chips, the sign-in dialog
+     * and the check's Sign-in group say. A bridge too old to answer rejects: the console then shows the
+     * primary alone, as before.
+     */
+    engines(): Promise<ChannelResponse<typeof BridgeEnginesChannel>>;
+    onEnginesChanged(handler: (sessions: EngineSessions) => void): Unsubscribe;
+    /** A station admin signs CG Bridge in on the BACKUP engine, with that engine's own password. */
+    signInBackup(
+      req: ChannelRequest<typeof BridgeBackupSignInChannel>,
+    ): Promise<ChannelResponse<typeof BridgeBackupSignInChannel>>;
   };
 
   /**

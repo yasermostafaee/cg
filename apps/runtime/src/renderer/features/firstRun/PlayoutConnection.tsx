@@ -3,6 +3,7 @@ import { normaliseBridgeAddress, orderCheckLines, type CheckLineId } from '@cg/s
 import { APP_VERSION } from '../../appVersion.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
+import { useEngineSessions } from '../../hooks/useEngineSessions.js';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { TextInput } from '../../ui/TextInput.js';
@@ -54,6 +55,8 @@ function consoleSubject(id: CheckLineId): string {
       return "CG Bridge's release";
     case 'signin':
       return "This console's sign-in";
+    case 'bridge-session-backup':
+      return "CG Bridge's own sign-in on the backup engine";
     default:
       return id;
   }
@@ -113,6 +116,7 @@ export function PlayoutConnection({
 }): JSX.Element {
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
+  const engines = useEngineSessions();
   const canWrite = mayChange && window.cg.setup.canSetPlayoutAddress();
   const [editing, setEditing] = useState(startEditing);
   const [address, setAddress] = useState(origin ?? '');
@@ -374,6 +378,8 @@ export function PlayoutConnection({
                   : {}),
                 consoleVersion: APP_VERSION,
                 auth,
+                // `RELEASE-0112-01` (`R-085`) — the backup engine's line, beside the primary's.
+                backupEngine: engines?.backup ?? null,
               }).map((line) =>
                 busy === 'checking'
                   ? { ...line, status: 'checking' as const, text: consoleSubject(line.id) }

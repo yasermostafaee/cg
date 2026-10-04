@@ -3,7 +3,12 @@ import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { BRIDGE_NEEDS_ADMIN_LINE, type BridgeSessionState } from '@cg/shared-ipc';
+import {
+  BRIDGE_NEEDS_ADMIN_LINE,
+  type BridgeSessionState,
+  type EngineLine,
+  type EngineSessions,
+} from '@cg/shared-ipc';
 import { BridgeSessionBanner } from '../src/renderer/features/status/BridgeSessionBanner.js';
 import type { AuthSessionState } from '../src/shared/runtime-bridge.js';
 import { authStub, fillBridgeStub, signedInStub } from './support/authStub.js';
@@ -54,9 +59,18 @@ async function mount(
   auth: AuthSessionState,
   signIn: (req: { username: string; password: string }) => Promise<unknown> = () =>
     Promise.resolve({ ok: true }),
-): Promise<{ push: (next: BridgeSessionState) => Promise<void>; signIn: typeof signIn }> {
+  engines?: {
+    readonly sessions: EngineSessions;
+    readonly signInBackup?: (req: { username: string; password: string }) => Promise<unknown>;
+  },
+): Promise<{
+  push: (next: BridgeSessionState) => Promise<void>;
+  signIn: typeof signIn;
+  signInBackup: ReturnType<typeof vi.fn>;
+}> {
   const listeners = new Set<(s: BridgeSessionState) => void>();
   const spy = vi.fn(signIn);
+  const backupSpy = vi.fn(engines?.signInBackup ?? (() => Promise.resolve({ ok: true })));
   const stub = {
     auth: authStub(auth),
     bridgeSession: {
@@ -66,6 +80,14 @@ async function mount(
         return () => listeners.delete(l);
       },
       signIn: spy,
+      // `RELEASE-0112-01` — each engine's session; absent, a bridge too old to know them (rejects).
+      ...(engines !== undefined
+        ? {
+            engines: () => Promise.resolve(engines.sessions),
+            onEnginesChanged: () => () => undefined,
+            signInBackup: backupSpy,
+          }
+        : {}),
     },
   };
   (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
@@ -86,6 +108,7 @@ async function mount(
       });
     },
     signIn: spy,
+    signInBackup: backupSpy,
   };
 }
 
@@ -246,5 +269,126 @@ describe('CENTRAL-BRIDGE-01-A A2 — the bridge’s refused renewal', () => {
     expect(openButton()).not.toBeNull();
     await push({ state: 'signed-in', name: 'cg-admin' });
     expect(banner()).toBeNull();
+  });
+});
+
+/**
+ * 🔴 `RELEASE-0112-01` (`R-085`) and delta C3 — **«Sign in CG Bridge…» NAMES EACH ENGINE.** The dialog
+ * lists `Primary engine` and `Backup engine`, each with its address and its state in words; a station
+ * admin chooses one and signs it in with THAT engine's password; the one line says where each password
+ * is; the account offered follows the chosen engine's version (`cg-bridge` from `2.9.4`).
+ */
+describe('RELEASE-0112-01 — one sign-in per engine', () => {
+  const line = (
+    engine: 'primary' | 'backup',
+    state: EngineLine['state'],
+    version: string | null = '2.9.2',
+  ): EngineLine => ({
+    engine,
+    address: engine === 'primary' ? 'http://192.0.2.10:8080' : 'http://192.0.2.20:8080',
+    state,
+    ...(state === 'signed-in' ? { name: 'cg-admin' } : {}),
+    version,
+  });
+  const pair = (primary: EngineLine, backup: EngineLine): EngineSessions => ({ primary, backup });
+  const rows = (): string[] =>
+    [...(openDialog()?.querySelectorAll('[data-engine-row]') ?? [])].map(
+      (r) => r.textContent ?? '',
+    );
+  const account = (): HTMLInputElement | null =>
+    openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-user') ?? null;
+  async function chooseTab(name: string): Promise<void> {
+    const tab = [...(openDialog()?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [])].find(
+      (t) => t.textContent?.includes(name) === true,
+    );
+    expect(tab, `no ${name} tab`).toBeDefined();
+    await act(async () => {
+      tab?.click();
+    });
+  }
+
+  it('🔴 lists both engines with their addresses and states; the backup is signed in with ITS OWN password, through its own channel — the primary’s sign-in untouched', async () => {
+    const { signIn, signInBackup } = await mount(
+      { state: 'signed-in', name: 'cg-admin' },
+      ADMIN,
+      undefined,
+      { sessions: pair(line('primary', 'signed-in'), line('backup', 'needs-admin')) },
+    );
+    // The banner shows for the backup alone, and names it.
+    expect(banner()?.textContent).toContain(`${BRIDGE_NEEDS_ADMIN_LINE} on the backup engine`);
+    await act(async () => {
+      openButton()?.click();
+    });
+    expect(rows()).toEqual([
+      'Primary enginehttp://192.0.2.10:8080Signed in as cg-admin.',
+      'Backup enginehttp://192.0.2.20:8080Needs a station admin to sign in.',
+    ]);
+    // The one line: where each engine's password is read.
+    expect(openDialog()?.querySelector('[data-password-where]')?.textContent).toContain(
+      "Each engine's password is on that engine's",
+    );
+    // It opened on the engine that needs a sign-in.
+    const password = openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass');
+    if (password === null || password === undefined) throw new Error('no password field');
+    await type(password, 'the-backup-password');
+    await press('Sign in');
+    expect(signInBackup).toHaveBeenCalledWith({
+      username: 'cg-admin',
+      password: 'the-backup-password',
+    });
+    expect(signIn).not.toHaveBeenCalled();
+  });
+
+  it('a refusal names the engine that refused', async () => {
+    await mount({ state: 'needs-admin' }, ADMIN, undefined, {
+      sessions: pair(line('primary', 'needs-admin'), line('backup', 'needs-admin')),
+      signInBackup: () => Promise.resolve({ ok: false, failure: 'invalid_credentials' }),
+    });
+    await act(async () => {
+      openButton()?.click();
+    });
+    await chooseTab('Backup engine');
+    const password = openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass');
+    if (password === null || password === undefined) throw new Error('no password field');
+    await type(password, 'wrong');
+    await press('Sign in');
+    expect(openDialog()?.textContent).toContain(
+      'Backup engine: The username or password is wrong.',
+    );
+  });
+
+  it('🔴 C3 — the account offered is cg-bridge for a 2.9.4 engine, cg-admin for 2.9.3 — and an account the admin types is kept', async () => {
+    await mount({ state: 'needs-admin' }, ADMIN, undefined, {
+      sessions: pair(
+        line('primary', 'needs-admin', '2.9.3'),
+        line('backup', 'needs-admin', '2.9.4'),
+      ),
+    });
+    await act(async () => {
+      openButton()?.click();
+    });
+    expect(account()?.value, 'the primary at 2.9.3').toBe('cg-admin');
+    await chooseTab('Backup engine');
+    expect(account()?.value, 'the backup at 2.9.4').toBe('cg-bridge');
+    // The line names the cg-bridge account's own place when that is the account offered.
+    expect(openDialog()?.querySelector('[data-password-where]')?.textContent).toContain(
+      'CG Bridge',
+    );
+    // Typed, it stays — choosing another engine does not overwrite it.
+    const input = account();
+    if (input === null) throw new Error('no account field');
+    await type(input, 'ops-bridge');
+    await chooseTab('Primary engine');
+    expect(account()?.value).toBe('ops-bridge');
+  });
+
+  it('a 2.9.2 engine offers cg-admin (it has no cg-bridge account)', async () => {
+    await mount({ state: 'needs-admin' }, ADMIN, undefined, {
+      sessions: pair(line('primary', 'needs-admin', '2.9.2'), line('backup', 'signed-in', '2.9.2')),
+    });
+    await act(async () => {
+      openButton()?.click();
+    });
+    expect(account()?.value).toBe('cg-admin');
   });
 });

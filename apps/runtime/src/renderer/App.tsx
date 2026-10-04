@@ -51,6 +51,7 @@ import { useFixedSlots } from './hooks/useFixedLayers.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
+import { useEngineSessions } from './hooks/useEngineSessions.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { initSources } from './features/sources/sourceStore.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
@@ -131,6 +132,8 @@ export function App(): JSX.Element {
   // covered console keeps its other channels; the strip names the covered ones.
   const lockCovers = useLockCoverage().kind === 'all';
   const health = useConnections();
+  // `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, for the status bar's chips.
+  const engines = useEngineSessions();
   const orphans = useOrphans();
   // `B-292` — a layer of ours cleared outside CG Control: the banner's third strip, and its mark.
   const clearedOutside = useClearedOutside();
@@ -596,7 +599,7 @@ export function App(): JSX.Element {
         )}
         {/* `AUDIT-CLOSE-01` B1 — the two doors are in the app header now; this bar is
             STATUS, plus the two controls the reference draws nowhere (see its own note). */}
-        <StatusBar />
+        <StatusBar engines={engines} />
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
           by delegation — nothing new has to be wired, which is the point (see

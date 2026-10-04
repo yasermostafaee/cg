@@ -315,6 +315,19 @@ export function createMockBridge(): RuntimeBridge {
       state: () => Promise.resolve({ state: 'off' as const }),
       onChanged: () => () => undefined,
       signIn: () => Promise.resolve({ ok: false, failure: 'unexpected' as const }),
+      // `RELEASE-0112-01` — no Playout, no engine: the primary `off`, no backup.
+      engines: () =>
+        Promise.resolve({
+          primary: {
+            engine: 'primary' as const,
+            address: null,
+            state: 'off' as const,
+            version: null,
+          },
+          backup: null,
+        }),
+      onEnginesChanged: () => () => undefined,
+      signInBackup: () => Promise.resolve({ ok: false, failure: 'unexpected' as const }),
     },
 
     // `PLAYOUT-FEATURES-01` D — test mode has no Playout, so no license read: nothing is refused.

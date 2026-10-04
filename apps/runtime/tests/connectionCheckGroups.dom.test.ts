@@ -3,7 +3,7 @@ import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import { versionMismatchRefusal } from '@cg/shared-ipc';
+import { CONNECTION_CHECK_GROUPS, versionMismatchRefusal } from '@cg/shared-ipc';
 import { ConnectionCheckList } from '../src/renderer/features/firstRun/ConnectionCheckList.js';
 import {
   consoleCheckLines,
@@ -172,5 +172,43 @@ describe('R-081 — the lines only the console can write', () => {
     expect(
       consoleCheckLines({ bridgeAddress: null, consoleVersion: '0.10.0', auth: { kind: 'off' } }),
     ).toEqual([]);
+  });
+
+  /*
+    🔴 `RELEASE-0112-01` (`R-085`) — ONE LINE PER ENGINE in the Sign-in group: the backup engine's CG
+    Bridge session beside the primary's, in the engine line's own words.
+  */
+  it('🔴 the backup engine’s line: waiting for a station admin, passed when signed in, failed otherwise — and none without a server B', () => {
+    const backup = (state: 'needs-admin' | 'signed-in' | 'not-licensed') => ({
+      engine: 'backup' as const,
+      address: 'http://192.0.2.20:8080',
+      state,
+      ...(state === 'signed-in' ? { name: 'cg-admin' } : {}),
+      version: '2.9.2',
+    });
+    const of = (b: ReturnType<typeof backup> | null) =>
+      consoleCheckLines({
+        bridgeAddress: null,
+        consoleVersion: '0.11.2',
+        auth: { kind: 'off' },
+        backupEngine: b,
+      });
+    expect(of(backup('needs-admin'))).toEqual([
+      {
+        id: 'bridge-session-backup',
+        status: 'wait',
+        text: 'CG Bridge on the backup engine: Needs a station admin to sign in.',
+      },
+    ]);
+    expect(of(backup('signed-in'))[0]).toMatchObject({ status: 'pass' });
+    expect(of(backup('not-licensed'))[0]).toEqual({
+      id: 'bridge-session-backup',
+      status: 'fail',
+      text: 'CG Bridge on the backup engine: CG not licensed on this engine.',
+    });
+    expect(of(null)).toEqual([]);
+    // It sits in the Sign-in group, right after the primary's.
+    const signIn = CONNECTION_CHECK_GROUPS.find((g) => g.id === 'sign-in');
+    expect(signIn?.lines).toEqual(['cors', 'signin', 'bridge-session', 'bridge-session-backup']);
   });
 });
