@@ -20,6 +20,8 @@ import { findingsIn } from '../src/scan-payload.mjs';
 const VERSION = releaseVersion(REPO);
 const GUIDE = path.join(REPO, 'docs', 'release', VERSION, 'install-guide.fa.md');
 const source = fs.readFileSync(GUIDE, 'utf8');
+/** The pictures the guide embeds, by source — every figure line. */
+const PICTURES = [...source.matchAll(/^!\[[^\]]*\]\(([^)\s]+)/gm)].map((m) => m[1] ?? '');
 
 /**
  * What the guide quotes (backticked, so isolated LTR), and the file that renders it. `text` is the
@@ -79,30 +81,54 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     shown: 'are different releases',
     file: 'packages/shared-ipc/src/channels/capabilities.ts',
   },
-  {
-    shown: 'PLAYOUT',
-    text: '>Playout<',
-    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
-  },
   // `CENTRAL-BRIDGE-01` — the gate's Connect (the station's Playout is checked on open, unpressed).
   {
     shown: 'Connect',
     file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
   },
-  { shown: 'waiting for sign-in', file: 'tools/caspar-bridge/src/connection-check.ts' },
+  // `CONSOLE-POLISH-01` (`R-080`) — CG Control's first question: CG Bridge's address may stay empty.
   {
-    shown: 'SIGN IN',
-    text: '>Sign in<',
-    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+    shown: 'Found automatically',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+  },
+  // `CONSOLE-POLISH-01` (`R-081`) — the check in four groups, the sign-in the gate between them.
+  { shown: 'Reachable', text: "title: 'Reachable'", file: 'packages/shared-ipc/src/channels/setup.ts' },
+  { shown: 'Versions', text: "title: 'Versions'", file: 'packages/shared-ipc/src/channels/setup.ts' },
+  { shown: 'Sign-in', text: "title: 'Sign-in'", file: 'packages/shared-ipc/src/channels/setup.ts' },
+  {
+    shown: 'After sign-in',
+    text: "title: 'After sign-in'",
+    file: 'packages/shared-ipc/src/channels/setup.ts',
   },
   { shown: 'Username', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'Password', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'Sign in', file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx' },
   { shown: 'waiting for approval', file: 'tools/caspar-bridge/src/connection-check.ts' },
+  // `R-081` — Station setup runs the same check again: SETTINGS → Servers → Playout → Check.
+  { shown: 'Servers', text: "title: 'Servers'", file: 'apps/runtime/src/renderer/features/stationSetup/sections.ts' },
   {
-    shown: 'CHANNEL',
-    text: '>Channel<',
-    file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
+    shown: 'Playout',
+    text: '<span className="cg-card__title">Playout</span>',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: 'Check',
+    text: "'Checking…' : 'Check'",
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
+  // `INSTALLER-DESIGN-01` (`P-063`) — the setup window every installer opens: its pages and buttons.
+  { shown: 'Install CG Bridge?', text: 'format!("Install {name}?")', file: 'tools/setup-ui/src/model.rs' },
+  { shown: 'Install CG Control?', text: 'format!("Install {name}?")', file: 'tools/setup-ui/src/model.rs' },
+  { shown: 'Install CG Designer?', text: 'format!("Install {name}?")', file: 'tools/setup-ui/src/model.rs' },
+  { shown: 'Next', text: '"Next"', file: 'tools/setup-ui/src/layout.rs' },
+  { shown: 'Install', text: '"Install"', file: 'tools/setup-ui/src/layout.rs' },
+  { shown: 'Finish', text: '"Finish"', file: 'tools/setup-ui/src/layout.rs' },
+  { shown: 'Launch when ready', file: 'tools/setup-ui/src/product.rs' },
+  { shown: 'Open CG Bridge status', file: 'tools/setup-ui/src/product.rs' },
+  {
+    shown: `Update from 0.10.0 to ${VERSION}. Your settings are kept.`,
+    text: 'Update from {from} to {v}. Your settings are kept.',
+    file: 'tools/setup-ui/src/model.rs',
   },
   {
     shown: 'SERVE ADDRESS',
@@ -176,7 +202,8 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
       '۶. نصب CG Designer',
       '۷. پیغام‌های CG Control',
       '۸. گزارش مشکل',
-      '۹. محدودیت‌های این نسخهٔ آزمایشی',
+      // `RELEASE-0110-01` — `0.11.0` is the build the client gets: no longer "the test build's".
+      '۹. محدودیت‌های این نسخه',
     ]);
   });
 
@@ -207,10 +234,11 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     }
   });
 
-  it('embeds at most four pictures, each a PNG that exists', () => {
-    const pictures = [...source.matchAll(/^!\[[^\]]*\]\(([^)\s]+)/gm)].map((m) => m[1] ?? '');
-    expect(pictures.length).toBeGreaterThan(0);
-    expect(pictures.length).toBeLessThanOrEqual(4);
+  it('embeds at most six pictures, each a PNG that exists', () => {
+    // `RELEASE-0110-01` §2 — six at most: the two installers' Welcome joined the four.
+    expect(PICTURES.length).toBeGreaterThan(0);
+    expect(PICTURES.length).toBeLessThanOrEqual(6);
+    const pictures = PICTURES;
     for (const src of pictures) {
       const file = path.resolve(path.dirname(GUIDE), src);
       expect(fs.readFileSync(file).subarray(1, 4).toString('latin1'), src).toBe('PNG');
@@ -222,8 +250,11 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     expect(source).not.toMatch(/password\s*[:=]/i);
   });
 
-  it('marks the one Playout-side point our records do not file', () => {
-    expect(source.split(CONFIRM_MARKER).length - 1).toBe(1);
+  it('`RELEASE-0110-01` §2 — carries no unconfirmed Playout-side point: the approve action is «تأیید»', () => {
+    // The Playout team confirmed the button's label (`PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §3), so
+    // the one point `0.10.0`'s guide marked is a fact now, and the guide says it in their words.
+    expect(source.split(CONFIRM_MARKER).length - 1).toBe(0);
+    expect(source).toContain('«تأیید»');
   });
 });
 
@@ -286,7 +317,7 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the page Chromium prints', () => {
   });
 
   it('inlines every picture and reaches for nothing off the page', () => {
-    expect((html.match(/<img src="data:image\/png;base64,/g) ?? []).length).toBe(4);
+    expect((html.match(/<img src="data:image\/png;base64,/g) ?? []).length).toBe(PICTURES.length);
     expect(html).not.toMatch(/(src|href)="https?:/);
     expect(html).not.toMatch(/url\((['"]?)https?:/);
   });
