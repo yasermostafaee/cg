@@ -4407,7 +4407,15 @@ asked with neither header; control: not served, every other line unchanged; a bl
 line through the socket; control as above), `connectionCheckGroups.dom.test.ts` (the Versions group's two
 lines). The fake Playout serves the endpoint (`2.9.2`, switchable off).
 
-## [ ] R-085 — CG Bridge keeps one Playout session per server (primary and backup) ⟨priority: medium — the backup's media list cannot be read without it⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A3
+## [~] R-085 — CG Bridge keeps one Playout session per engine (primary and backup) ⟨priority: high — the client runs a pair from day one (the owner, 2026-10-04)⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A3; BUILT by `RELEASE-0112-01` Part A · `openspec/changes/backup-session/` (tasks §2, §3, §5)
+
+**Amended 2026-10-04 (`RELEASE-0112-01`, delta B):** a pair is two ENGINES — each with its own CasparCG core,
+its own API on `:8080`, its own key, users and license — listed by ONE Playout client; "server" below reads
+"engine". The station admin signs CG Bridge in on each engine from «Sign in CG Bridge…», which names `Primary
+engine` and `Backup engine` with their addresses and states. Beyond D11, the backup's session reads the
+backup's D4, its license, and makes the introducing D9 read that lets this machine into the backup core's
+AMCP, so the backup's «تأیید» is automatic in the ordinary case. Priority raised: without it, every media-plate
+take after a failover is refused (`backup-no-copy`).
 
 **What:** CG Bridge signs in on EACH Playout it reads — the primary and, when a server B is configured, the
 backup — with that server's own D1 and D2: a separate access and refresh token per server, and reuse detection
@@ -4431,7 +4439,7 @@ own CG license, else `403 cg_not_licensed`; the backup token's `cg_channels` use
   could not be read, in words, and the primary's session is untouched
 - WHEN either server's refresh is reused THEN only that server's session is lost
 
-**Not built in this release.**
+**Not built in `0.11.1`; built for `0.11.2`** (`RELEASE-0112-01` Part A — the change's tasks name its tests).
 
 ## [ ] R-086 — Sign CG Bridge in as `cg-bridge` (Playout `2.9.3`+) ⟨priority: low — WAITS on the meters answer⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A4
 

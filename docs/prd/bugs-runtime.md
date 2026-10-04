@@ -13303,3 +13303,29 @@ TECHNICAL surface (golden rule 11's exemption) — the owner's call whether it i
 surface: `Plate N` in every label, accessible name and sentence (`plateLabelOf`), the id on a `title`, PANIC's
 failure naming the plate AND its layer (`R-028`: the layer number stays visible in a sentence), and one answer
 for `LooksBindingsSection`'s finders. **Fix:** not built.
+
+## [~] B-312 — On the installed CG Bridge, the backup (server B) set in Station setup is dropped at the next start ⟨priority: high — the client runs a pair from day one⟩ — FILED 2026-10-04 by `RELEASE-0112-01` §0.1 · `openspec/changes/backup-session/` (tasks §1)
+
+**Repro / Actual:** on the CG Bridge service, a station admin adds server B in Station setup. It is applied at
+once and saved to `.cg-runtime/bridge-connection.json` (`bridge.ts:4287-4289`), and the pair mirrors. At the
+next service start — a reboot, an upgrade, a recovery restart — server B is gone: every line goes to server A
+alone, and nothing says so. **Cause:** the service always passes `--caspar-host` (`serviceFlags`,
+`service-config.ts:113`), so the CLI builds the connection from flags with no server B
+(`bin/caspar-bridge.mjs:592-640`), and `createBridge` takes a given connection over the saved file
+(`bridge.ts:2039-2042`). **Why it matters:** after any restart the backup core receives nothing from CG, so on
+a failover it airs whatever CG layers it last held, or none. **Expected:** the saved server B, with its
+strategy and auto-failover, back in force after a restart; server A stays the configuration file's.
+
+## [~] B-313 — A CG Bridge on the backup engine's machine can become a second sender on the backup core ⟨priority: high — never two senders on one core⟩ — FILED 2026-10-04 by `RELEASE-0112-01` §0.4 · `openspec/changes/backup-session/` (tasks §4)
+
+**Repro / Actual:** the Playout's engine installer ticks «CG Bridge هم نصب شود» by default and runs our
+installer with `/S` (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §4.2) — on the backup engine's machine too. That CG
+Bridge drives `127.0.0.1:5250`, the backup core, which admits loopback with no approval (`BH` 44). In first-run
+it sends only reads (`VERSION`, `INFO`, `OSC SUBSCRIBE`, `INFO CONFIG`). But a console given the backup engine's
+address finds it automatically (`bridgeUrl.ts:60-74`), and once a station admin gives it a channel it writes
+layers 50–99 on the core the primary's CG Bridge also writes as its server B. The core's `DEFER` list is one per
+channel, shared by every AMCP connection, so each bridge's `COMMIT` applies the other's half-built mixer changes
+(`V13S` 207-213). No engine publication says an engine is a backup (`RELEASE-0112-01` §0.4). **Expected:** CG
+Bridge is never the second sender: while another CG Bridge drives its server B's core, it sends that core
+nothing and says so; the guide says to untick the box on the backup engine; the Playout team is asked for a
+role signal.

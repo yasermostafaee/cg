@@ -3211,3 +3211,14 @@ found on `dev`; no stash. The same measurement covers `B-312`–`B-316` and `P-0
 `RELEASE-0112-01`.
 
 ⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-066`**, **`R-088`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0112-01` takes `B-312` and `B-313`
+
+- `B-312` — on the installed CG Bridge, the backup (server B) set in Station setup is dropped at the next start —
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-313` — a CG Bridge on the backup engine's machine can become a second sender on the backup core —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: the `R-087` entry's measurement above covers `B-312`–`B-316`.
+
+⇒ **Next free after this entry is `B-314`**, **`D-162`**, **`P-066`**, **`R-088`** and **`C-049`**.
