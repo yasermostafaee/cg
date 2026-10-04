@@ -93,6 +93,21 @@ describe('R-081 — four groups, in the order things happen', () => {
     expect(idsIn(groups[2] as Element)).toEqual(['amcp', 'topology']);
   });
 
+  it('🔴 `R-084` — the Versions group: CG Bridge’s release, then the Playout’s version CG Bridge read', async () => {
+    const c = await render(
+      [
+        { id: 'playout-version', status: 'pass', text: 'Playout 2.9.2.' },
+        { id: 'bridge-version', status: 'pass', text: 'CG Bridge 0.11.1 · this console 0.11.1.' },
+        line('api'),
+      ],
+      true,
+    );
+    const versions = c.querySelector('[data-check-group][aria-label="Versions"]');
+    expect(
+      [...(versions?.querySelectorAll('[data-check]') ?? [])].map((li) => li.textContent),
+    ).toEqual(['CG Bridge 0.11.1 · this console 0.11.1.', 'Playout 2.9.2.']);
+  });
+
   it('CONTROL — ungrouped (the sign-in gate’s one deciding line) is one plain list, as before', async () => {
     const c = await render([line('api', 'fail')], false);
     expect(c.querySelector('[data-check-group]')).toBeNull();

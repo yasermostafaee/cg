@@ -4258,6 +4258,12 @@ only in a narrower browser. Tests: `pgm-audio.test.ts`, `playout-meters.integrat
 `pgmAudioPlayer.test.ts`, `meterScale.test.ts`, `programMeter.dom.test.ts`, e2e `programme-sound.spec.ts`.
 **Owed:** `2.9.2` on `.111` (the meters endpoint), and a listen on the plant.
 
+**IDM — recorded, nothing to change (`RELEASE-0111-01-A` A5; `PLAYOUT-CG-RESPONSE-0110-111-v1.md` §1).** Their client
+`2.9.3` reads the core's `/audio`, not `/audio.wav`; the core itself is unchanged and serves any path that
+carries `/audio` (measured on `.111`: `GET http://127.0.0.1:9250/audio` → `200`, `RIFF`/`WAVE`). CG Bridge's relay
+reads the core upstream from Node, never through a browser, so no download manager's hook can touch that read;
+and the console's own path is already `/pgm/<n>/sound`, typed `application/octet-stream`.
+
 ## [x] R-077 — CG Control licensed through the Playout's dongle ⟨priority: medium⟩ — FILED 2026-09-29 by `RELEASE-091-01` §6.3 · ANSWERED by `PLAYOUT-CG-RESPONSE-LICENSE-v1.md` (Playout `2.9.2`) · BUILT by `PLAYOUT-FEATURES-01` D (§1) · archived 2026-10-03 (`openspec/changes/archive/2026-10-03-playout-features`) · owed: `2.9.2` on `.111`
 
 **What.** CG Control works with a Playout only if that Playout's license includes CG Control. The
@@ -4373,7 +4379,7 @@ every kept audit file. **Why:** the dialog read the whole file on every open. **
 - WHEN the next page is asked, or a filter set THEN the right rows come back
 - WHEN a row is written while the dialog is open THEN it appears at the top
 
-## [ ] R-084 — Show the Playout build in Versions once the Playout publishes it ⟨priority: low — WAITS for the Playout team⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A3
+## [~] R-084 — Show the Playout build in Versions once the Playout publishes it ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` A3; BUILT 2026-10-04 by `RELEASE-0111-01-A` A1 (change `console-polish`, tasks §11)
 
 **What:** the connection check's Versions group shows the Playout's build beside CG Bridge's release and
 this console's. **Why:** `R-081` asked for the Playout build there, and `CONSOLE-POLISH-01` §0.4 found the
@@ -4383,3 +4389,64 @@ letter). Nothing is built until then. **Acceptance:**
 
 - WHEN the Playout publishes its build THEN the Versions group shows it, read from that source
 - WHEN it does not THEN the Versions group says nothing about it rather than guessing
+
+**It exists — the Playout team's answer, 2026-10-04 (`docs/integration/playout/PLAYOUT-CG-RESPONSE-0110-111-v1.md`
+§3.1):** `GET /api/v1/system/version` on the API port (8080), with NO token, in every Playout from `2.1.0`
+(`.111` answers `2.9.2`); read `version` (semver) and nothing else — the `changelog` is long, Persian and changes
+every build, and there is no separate build number; read it from CG Bridge, never a browser (it answers any
+origin today, which may tighten); not part of the contract (they warn before any change to its shape).
+**Built:** `tools/caspar-bridge/src/playout-version.ts` — CG Bridge reads it at start and then at most once a
+minute, through `playoutFetch` (no `Origin`) with no `Authorization`, and logs `Playout version: …` when it
+changes; the connection check's eighth line, `playout-version`, asks the candidate address the same way and
+shows `Playout 2.9.2.` in the Versions group beside CG Bridge's release, or `The Playout's version: not served.`
+— neutral, never a refusal, and nothing else reads it. **Tests:** `playout-version.test.ts` (the `version` alone;
+read at start with no token or `Origin`, again each period; not served), `connection-check.test.ts` (served,
+asked with neither header; control: not served, every other line unchanged; a black hole reads not served),
+`playout-version.integration.test.ts` (a real CG Bridge configured by address reads it at start; the Versions
+line through the socket; control as above), `connectionCheckGroups.dom.test.ts` (the Versions group's two
+lines). The fake Playout serves the endpoint (`2.9.2`, switchable off).
+
+## [ ] R-085 — CG Bridge keeps one Playout session per server (primary and backup) ⟨priority: medium — the backup's media list cannot be read without it⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A3
+
+**What:** CG Bridge signs in on EACH Playout it reads — the primary and, when a server B is configured, the
+backup — with that server's own D1 and D2: a separate access and refresh token per server, and reuse detection
+per server. A station admin signs CG Bridge in on each server once, through the same in-app «Sign in CG Bridge…»
+flow, with each server named in it. **Why:** the Playout team's answer (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §2):
+each Playout signs its tokens with its OWN ES256 key, and keys and users are never mirrored — so the primary's
+token gets `401 invalid_token` on the backup's D4, D9, D10, D11, `/api/cg/license` and `/api/cg/meters`, and they
+will not change that. Today CG Bridge reads only the backup's D11 (`PLAYOUT-FEATURES-01` A) with the primary's
+token: a `401` is logged (`backup media list answered 401 — kept what was known`), nothing is guessed, server B
+is sent no clip, and the row reads `Backup has no copy of “…” (its media list has not been read); these boxes stay
+empty on the backup` (`backup-media.integration.test.ts`, `takeRefusalLine.test.ts`, `RELEASE-0111-01-A`) — and
+the `401` never touches the primary's session (the lookup's bearer is a pure read, `playout-auth.ts`
+`usableBearer`; nothing in `backup-media.ts` refreshes). **Conditions (their §2):** the account exists on that
+server — `cg-admin`, or `cg-bridge` from `2.9.3` — with THAT server's own random password; and that server has its
+own CG license, else `403 cg_not_licensed`; the backup token's `cg_channels` use the backup's own channel numbers
+(no matter for D11, which is not per channel). **Acceptance:**
+
+- WHEN a station admin signs CG Bridge in on the backup THEN its D11 is read with the backup's own token, and a
+  clip it holds reaches server B by its own path
+- WHEN the backup refuses (no account, a wrong password, `cg_not_licensed`) THEN the row says the backup's list
+  could not be read, in words, and the primary's session is untouched
+- WHEN either server's refresh is reused THEN only that server's session is lost
+
+**Not built in this release.**
+
+## [ ] R-086 — Sign CG Bridge in as `cg-bridge` (Playout `2.9.3`+) ⟨priority: low — WAITS on the meters answer⟩ — FILED 2026-10-04 by `RELEASE-0111-01-A` A4
+
+**What:** «Sign in CG Bridge…» suggests the account `cg-bridge` when the Playout's version (`R-084`) is at least
+`2.9.3`. **Why:** the Playout team built a CG-only account for the bridge (`PLAYOUT-CG-RESPONSE-0110-111-v1.md`
+§3.2–§3.3): role `viewer`, `cg_channels: []`, a random password per install shown beside `cg-admin` in «تنظیمات ←
+اتصال به CG Control» → «حسابِ داخلیِ CG Bridge», accepted even with `AllowViewerSignIn` off, and its own refresh
+family — so a reuse, or a «گذرواژهٔ تازه», on it touches no `cg-admin` console, and a new `cg-admin` password no
+longer cuts CG Bridge off. **Enough for** D4, D9, D10, D11, `/api/cg/license` and D8 (they check the token, not
+its role). **⚠ Not enough for `/api/cg/meters`:** it filters by the token's `cg_channels`, so a `cg-bridge` token
+gets `: ping` and no data for any channel. **What CG Bridge would do signed in as `cg-bridge` today** (measured by
+reading the code, `RELEASE-0111-01-A`): its meters stream uses CG Bridge's OWN session whenever it has one
+(`usableBearer`: own first, a console's only while it has none), and reopens an open stream on its own session the
+moment it arrives (`playout-meters.ts` `restart`) — so the meters would be EMPTY on every channel: the bars at the
+floor, the badge `— LUFS`; there is no fallback to a console's token while CG Bridge holds its own. **Also:** D1
+still needs the CG license; and AMCP's automatic acceptance of the first bridge needs `station-admin`, so a
+separate-server CG Bridge signed in as `cg-bridge` waits as pending for the admin's «تأیید» (a loopback CG Bridge
+needs nothing). **Waits on:** the Playout team serving the meters to `cg-bridge` (we ask), or a decision to read
+the meters with another token. **Not built now.**

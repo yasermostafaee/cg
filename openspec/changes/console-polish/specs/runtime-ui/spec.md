@@ -115,7 +115,9 @@ found at 127.0.0.1:<port>`
 
 The connection check SHALL be shown, in first-run and in Station setup alike, as four visibly headed groups in
 this order — **Reachable** (VPN or proxy, the route, the Playout's API, CG Bridge's address as dialled, this
-station's ports), **Versions** (CG Bridge's version against this console's), **Sign-in** (whether this console
+station's ports), **Versions** (CG Bridge's version against this console's, and the Playout's own version —
+`R-084`: CG Bridge asks `GET /api/v1/system/version` with no token and no `Origin`, reads `version` alone, and
+says `not served` when the Playout does not answer it, which is never a refusal), **Sign-in** (whether this console
 can sign in, this console's sign-in, CG Bridge's own Playout session), **After sign-in** (CasparCG through CG
 Bridge, OSC, the CG license, the channels, where the Playout and CasparCG run) — so the sign-in reads as the
 gate between them. Before any sign-in every line of the last group SHALL wait, neutral, saying what it waits
@@ -131,6 +133,12 @@ same check for a station admin on its Servers pane.
 #### Scenario: Run again from Station setup
 
 - **WHEN** a station admin presses Check in Station setup → Servers **THEN** the same four groups run again
+
+#### Scenario: The Playout's version
+
+- **WHEN** the Playout answers `/api/v1/system/version` with `2.9.2` **THEN** the Versions group reads `Playout
+2.9.2.` beside CG Bridge's release, the request carrying no token and no `Origin` — control: a Playout that does
+  not answer it reads `The Playout's version: not served.`, and every other line of the check is unchanged
 
 ### Requirement: First-run's Sign in section SHALL show a blocker only once the check has a verdict
 

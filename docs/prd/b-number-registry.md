@@ -3181,3 +3181,13 @@ local and remote branch returned nothing, and the same with `--untracked`; contr
 taken below by this session.
 
 ⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-065`**, **`R-085`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0111-01-A` takes `R-085` and `R-086`
+
+- `R-085` — CG Bridge keeps one Playout session per server (primary and backup) — [runtime.md](runtime.md).
+- `R-086` — sign CG Bridge in as `cg-bridge` (Playout `2.9.3`+) — [runtime.md](runtime.md).
+
+Measured free before use: the `B-311` entry's measurement above (every local and remote branch, `--untracked`,
+no stash) covers `R-085`–`R-089`.
+
+⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-065`**, **`R-087`** and **`C-049`**.

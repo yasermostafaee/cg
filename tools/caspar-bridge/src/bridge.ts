@@ -264,6 +264,11 @@ import { PgmAudioRelay } from './pgm-audio.js';
 import { PlayoutMetersReader, type PlayoutMetersTuning } from './playout-meters.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
+import {
+  PlayoutVersionReader,
+  playoutVersionUrl,
+  type PlayoutVersionReaderOptions,
+} from './playout-version.js';
 import { BackupMediaLookup, backupMediaUrl } from './backup-media.js';
 import {
   airOf,
@@ -572,6 +577,8 @@ export interface BridgeOptions {
   playoutCatalogueOptions?: PlayoutCatalogueOptions;
   /** TEST-ONLY seam — clock, `fetch` and tick for the CG license read (`PLAYOUT-FEATURES-01` D). */
   playoutLicenseOptions?: PlayoutLicenseReaderOptions;
+  /** TEST-ONLY seam — `fetch` and period for the Playout's version read (`R-084`). */
+  playoutVersionOptions?: PlayoutVersionReaderOptions;
   /**
    * TEST-ONLY seam — the BACKUP Playout's D11 URL (`PLAYOUT-FEATURES-01` A). In production it is the configured
    * Playout's address at server B's host; a suite whose two fake servers share `127.0.0.1` names it.
@@ -2003,6 +2010,23 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           },
         );
   playoutLicense?.start();
+  /*
+    🔴 `R-084` (`RELEASE-0111-01-A` A1) — THE PLAYOUT'S OWN VERSION (`GET /api/v1/system/version`, every
+    Playout from `2.1.0`), read at start and then with D9's cadence — at most once a minute — with no
+    token and no `Origin` (`playout-version.ts`). Logged when it changes; `not served` refuses nothing.
+  */
+  const playoutVersionAddress = auth.playout?.address ?? null;
+  const playoutVersion =
+    playoutVersionAddress === null
+      ? null
+      : new PlayoutVersionReader(
+          playoutVersionUrl(playoutVersionAddress),
+          options.playoutVersionOptions ?? {},
+        );
+  playoutVersion?.onChanged((version) => {
+    process.stderr.write(`[caspar-bridge] Playout version: ${version ?? 'not served'}\n`);
+  });
+  playoutVersion?.start();
   // The bridge's own session arriving is a reason to read at once (the sign-in's short floor).
   bridgeSession?.onChanged((state) => {
     if (state.state === 'signed-in') void playoutLicense?.refresh({ soon: true });
@@ -3073,6 +3097,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutCatalogue?.dispose();
       // `PLAYOUT-FEATURES-01` D — and the license's.
       playoutLicense?.dispose();
+      playoutVersion?.dispose();
       // `PLAYOUT-FEATURES-01` A — and the backup media lookup's.
       backupMedia?.dispose();
       // `PLAYOUT-SOURCES-01` — and the D10 / bound-media tick.

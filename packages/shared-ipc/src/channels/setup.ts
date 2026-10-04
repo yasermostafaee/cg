@@ -168,6 +168,8 @@ export const CONNECTION_CHECK_IDS = [
   'osc',
   'license',
   'channels',
+  // `R-084` (`RELEASE-0111-01-A` A1) — the Playout's own version, `GET /api/v1/system/version`.
+  'playout-version',
 ] as const;
 export const ConnectionCheckIdSchema = z.enum(CONNECTION_CHECK_IDS);
 export type ConnectionCheckId = z.infer<typeof ConnectionCheckIdSchema>;
@@ -189,8 +191,8 @@ export type CheckLineId = ConnectionCheckId | ConsoleCheckId;
  *
  *   1. **Reachable** — nothing needed: the path (VPN or proxy, the route), the Playout's API, CG Bridge
  *      where this console found it, and this station's ports;
- *   2. **Versions** — CG Bridge's release against this console's (the Playout publishes no build
- *      number to CG; when it does, it joins here);
+ *   2. **Versions** — CG Bridge's release against this console's, and the Playout's own version
+ *      (`R-084`: `GET /api/v1/system/version`, read by CG Bridge; `not served` is never a refusal);
  *   3. **Sign-in** — whether this console CAN sign in, this console's own sign-in, then CG Bridge's
  *      own Playout session;
  *   4. **After sign-in** — what needs a signed-in session: CasparCG through CG Bridge, OSC, the CG
@@ -200,7 +202,7 @@ export type CheckLineId = ConnectionCheckId | ConsoleCheckId;
  */
 export const CONNECTION_CHECK_GROUPS = [
   { id: 'reach', title: 'Reachable', lines: ['proxy', 'route', 'api', 'bridge', 'ports'] },
-  { id: 'versions', title: 'Versions', lines: ['bridge-version'] },
+  { id: 'versions', title: 'Versions', lines: ['bridge-version', 'playout-version'] },
   { id: 'sign-in', title: 'Sign-in', lines: ['cors', 'signin', 'bridge-session'] },
   {
     id: 'session',
@@ -276,6 +278,8 @@ export function connectionCheckSubject(id: ConnectionCheckId, host: string, port
       return 'CG license';
     case 'channels':
       return "The Playout's channels";
+    case 'playout-version':
+      return "The Playout's version";
   }
 }
 

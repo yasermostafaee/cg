@@ -221,3 +221,20 @@ Lanes: C (`B-310`) FULL — it decides what the Log shows; B (`B-309`) FAST, cop
       zero. Filed `B-311`: the audio dialog and the Live plates tab are built on the plate id. Control: the
       recorded wire (`live-look-reconcile`) unchanged
 - [ ] 11.5 Gate, push, CI COMPLETED green with the jobs RAN (URLs here)
+
+### 11A. Delta `RELEASE-0111-01-A` (2026-10-04) — the Playout team's answer `PLAYOUT-CG-RESPONSE-0110-111-v1.md`
+
+- [x] 11.6 A1 `R-084` (FULL — a new outbound read, a new check line on the wire): CG Bridge reads
+      `GET /api/v1/system/version` with no token and no `Origin` at start and at most once a minute
+      (`playout-version.ts`, logged on change); the check's eighth line `playout-version` shows
+      `Playout 2.9.2.` in Versions, or `The Playout's version: not served.` (neutral, never a refusal). The
+      fake Playout serves it. Tests: `playout-version.test.ts`, `connection-check.test.ts`,
+      `playout-version.integration.test.ts`, `connectionCheckGroups.dom.test.ts`, e2e `first-run.spec.ts`
+      (the Versions line). The letter adopted into `docs/integration/playout/`
+- [x] 11.7 A3: a backup that answers `401` to the primary's token — the fake's D11 refuses
+      (`setRefusesForeignTokens`); B is sent no clip, each plate reads `(its media list has not been
+  read)`, and the `401` never touches the primary's session (`backup-media.ts` reads the bearer only;
+      `usableBearer` is a pure read). Filed `R-085` (one session per server; not built)
+- [x] 11.8 A4 filed `R-086` (`cg-bridge`, Playout `2.9.3`+; waits on the meters answer — signed in as
+      `cg-bridge`, CG Bridge's meters would be EMPTY: its own session wins, no console fallback); A5
+      recorded in `R-076` (IDM) — the chaining note goes into `CG-BRIDGE-FOR-PLAYOUT.md` with Part D

@@ -200,4 +200,15 @@ describe('`PLAYOUT-FEATURES-01` A (`B-286`) — the clips server B was sent noth
   it('control: none — no line', () => {
     expect(backupNoCopyLine([])).toBeNull();
   });
+
+  it('🔴 `RELEASE-0111-01-A` A3 — a backup that refused the primary’s token: each clip says its list was not read', () => {
+    // What the bridge records when the backup's D11 answers `401` (`backup-media.integration`, A3).
+    const line = backupNoCopyLine([
+      { plateId: 'l1', name: 'پرومو', reason: 'backup-unread' },
+      { plateId: 'l2', name: 'Sting', reason: 'backup-unread' },
+    ]);
+    expect(line?.text).toBe(
+      'Backup has no copy of “پرومو” (its media list has not been read), “Sting” (its media list has not been read); these boxes stay empty on the backup',
+    );
+  });
 });

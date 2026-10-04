@@ -201,6 +201,12 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   await expect(
     check.locator('[data-check-group="versions"] [data-check="bridge-version"]'),
   ).toHaveAttribute('data-status', 'pass');
+  // `R-084` (`RELEASE-0111-01-A` A1) — the Playout's own version, read by CG Bridge, beside it.
+  const playoutVersion = check.locator(
+    '[data-check-group="versions"] [data-check="playout-version"]',
+  );
+  await expect(playoutVersion).toHaveAttribute('data-status', 'pass');
+  await expect(playoutVersion).toHaveText('Playout 2.9.2.');
   await expect(check.locator('[data-check-group="session"] [data-check="amcp"]')).toHaveCount(1);
   // Before any sign-in, what needs one WAITS — neutral, never a failure.
   for (const id of ['amcp', 'license', 'channels']) {
@@ -423,6 +429,7 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
     'channels',
     'bridge',
     'bridge-version',
+    'playout-version',
     'signin',
   ]) {
     await expect(check.locator(`[data-check="${id}"]`)).toHaveAttribute('data-status', 'checking');

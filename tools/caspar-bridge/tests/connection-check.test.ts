@@ -40,7 +40,16 @@ const PORTS = { console: 5174, control: 5280, templates: 7911, osc: 6250 };
  * nothing, then whether this console can sign in, then what needs a signed-in session. The four lines
  * that read CG Bridge's own state are added by the route (`withStationLines`, below).
  */
-const PROBED_IN_ORDER = ['proxy', 'route', 'api', 'ports', 'cors', 'amcp', 'topology'];
+const PROBED_IN_ORDER = [
+  'proxy',
+  'route',
+  'api',
+  'ports',
+  'playout-version',
+  'cors',
+  'amcp',
+  'topology',
+];
 const closers: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
@@ -65,9 +74,30 @@ async function fakeApi(opts: {
   allowOrigin: string | null;
   /** Every request the fake was asked, as `METHOD url` — what a check probed, and what it did not. */
   seen?: string[];
+  /** `R-084` — the `version` `/api/v1/system/version` answers (`2.9.2` by default); `null` — `404`. */
+  version?: string | null;
+  /** `R-084` — the headers each version request carried. */
+  versionHeaders?: http.IncomingHttpHeaders[];
 }): Promise<string> {
   const server = http.createServer((req, res) => {
     opts.seen?.push(`${String(req.method)} ${String(req.url)}`);
+    const version = opts.version === undefined ? '2.9.2' : opts.version;
+    if (req.method === 'GET' && req.url === '/api/v1/system/version' && version !== null) {
+      opts.versionHeaders?.push({ ...req.headers });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      // As `.111` answered it — more than a reader may use (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §3.1).
+      res.end(
+        JSON.stringify({
+          component: 'engine',
+          title: 'Apasai Playout',
+          version,
+          releaseDate: '2026-09-30',
+          assemblyVersion: `${version}.0`,
+          changelog: [{ version, items: ['بهبودِ پایداری'] }],
+        }),
+      );
+      return;
+    }
     if (req.method === 'OPTIONS' && req.url === '/api/cg/auth/token') {
       res.writeHead(
         204,
@@ -332,6 +362,12 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
     // …and AMCP does not wait for a sign-in no Playout can take: it is its own result, a failure.
     expect(line(lines, 'amcp').status).toBe('fail');
     expect(line(lines, 'amcp').text).not.toMatch(/sign-in/);
+    // `R-084` — a Playout that does not answer serves no version: a fact, never a failure.
+    expect(line(lines, 'playout-version')).toEqual({
+      id: 'playout-version',
+      status: 'skip',
+      text: "The Playout's version: not served.",
+    });
   });
 
   it('CONTROL — against the fakes every network line comes back OK', async () => {
@@ -375,6 +411,49 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
       amcpTimeoutMs: 300,
     });
     expect(line(lines, 'api').status).toBe('pass');
+  });
+});
+
+describe('🔴 R-084 (`RELEASE-0111-01-A` A1) — the Playout’s version, read by CG Bridge with no token', () => {
+  const check = (api: string) =>
+    runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes({ resolve: async () => ['10.0.0.1'] }),
+      { ports: PORTS, amcpTimeoutMs: 300 },
+    );
+
+  it('served: the Versions line reads the Playout’s `version` — asked with no token and no Origin', async () => {
+    const versionHeaders: http.IncomingHttpHeaders[] = [];
+    const api = await fakeApi({ keys: [{ kid: 'k1' }], allowOrigin: ORIGIN, versionHeaders });
+    const { lines } = await check(api);
+    expect(line(lines, 'playout-version')).toEqual({
+      id: 'playout-version',
+      status: 'pass',
+      text: 'Playout 2.9.2.',
+    });
+    expect(versionHeaders).toHaveLength(1);
+    expect(versionHeaders[0]?.authorization).toBeUndefined();
+    expect(versionHeaders[0]?.origin).toBeUndefined();
+    // In the Versions group, beside CG Bridge's release.
+    expect(CONNECTION_CHECK_GROUPS.find((g) => g.id === 'versions')?.lines).toEqual([
+      'bridge-version',
+      'playout-version',
+    ]);
+  });
+
+  it('CONTROL — a Playout that does not serve it reads `not served`, and every other line is unchanged', async () => {
+    const served = await check(await fakeApi({ keys: [{ kid: 'k1' }], allowOrigin: ORIGIN }));
+    const notServed = await check(
+      await fakeApi({ keys: [{ kid: 'k1' }], allowOrigin: ORIGIN, version: null }),
+    );
+    expect(line(notServed.lines, 'playout-version')).toEqual({
+      id: 'playout-version',
+      status: 'skip',
+      text: "The Playout's version: not served.",
+    });
+    const others = (lines: readonly ConnectionCheckLine[]): ConnectionCheckLine[] =>
+      lines.filter((l) => l.id !== 'playout-version' && l.id !== 'proxy');
+    expect(others(notServed.lines)).toEqual(others(served.lines));
   });
 });
 

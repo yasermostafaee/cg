@@ -24,6 +24,7 @@ import {
 } from '@cg/shared-ipc';
 import { playoutEndpointsFor } from './playout-config.js';
 import { pinnedIPv4, plainAgentFor } from './playout-http.js';
+import { playoutVersionOf, playoutVersionUrl } from './playout-version.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01` §2F — **THE CONNECTION CHECK: one line per link, pass or fail, and on a
@@ -340,7 +341,7 @@ export async function runConnectionCheck(
       .amcp(ip, AMCP_PORT, options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS)
       .catch((): AmcpOutcome => ({ kind: 'unreachable', code: 'error' }));
 
-  const [proxy, route, amcp, api, cors, ports, topology] = await Promise.all([
+  const [proxy, route, amcp, api, cors, ports, topology, playoutVersion] = await Promise.all([
     // 1 — a VPN or proxy between this machine and the plant.
     line(
       'proxy',
@@ -435,6 +436,17 @@ export async function runConnectionCheck(
         text: 'The machine check did not finish in time.',
       }),
     ),
+    // 8 — `R-084`: the Playout's own version, asked with no token. Not served is a fact, never a
+    // refusal: no other line reads it, and nothing waits on it.
+    line(
+      'playout-version',
+      async () => {
+        const ip = await playoutIp;
+        if (ip === null) return PLAYOUT_VERSION_NOT_SERVED;
+        return checkPlayoutVersion(probes, playoutVersionUrl(endpoints.address), ip, bounds);
+      },
+      (): ConnectionCheckLine => PLAYOUT_VERSION_NOT_SERVED,
+    ),
   ]);
 
   // `CHECK-RERUN-01` B — the lines that need a sign-in, settled on the API line in ONE place.
@@ -443,7 +455,7 @@ export async function runConnectionCheck(
     casparHost,
     options,
   });
-  const all = [proxy, route, needing.amcp, api.line, needing.cors, ports, topology];
+  const all = [proxy, route, needing.amcp, api.line, needing.cors, ports, topology, playoutVersion];
   // C1 — every line's time and its outcome as worded, in the order the lines finished.
   const timings = all
     .map((l): LineTiming => {
@@ -455,7 +467,11 @@ export async function runConnectionCheck(
   // C6 — a host with no IPv4 address is ONE line (the route's); the address-bound lines go.
   const noIpv4 = (await playoutIp) === null;
   const lines = all.filter(
-    (l) => !(noIpv4 && (l.id === 'amcp' || l.id === 'api' || l.id === 'cors')),
+    (l) =>
+      !(
+        noIpv4 &&
+        (l.id === 'amcp' || l.id === 'api' || l.id === 'cors' || l.id === 'playout-version')
+      ),
   );
   // `R-081` — in the order things happen (`CONNECTION_CHECK_GROUPS`), never the order probed.
   return { lines: orderCheckLines(lines), localAddress: (await casparRoute)?.address ?? null };
@@ -851,6 +867,41 @@ function amcpLine(host: string, outcome: AmcpOutcome): ConnectionCheckLine {
         status: 'fail',
         text: `${host} cannot be reached on port ${port} (${outcome.code}).`,
       };
+  }
+}
+
+/** `R-084` — the version line when the Playout does not answer it (unreachable, `404`, no version). */
+const PLAYOUT_VERSION_NOT_SERVED: ConnectionCheckLine = {
+  id: 'playout-version',
+  status: 'skip',
+  text: "The Playout's version: not served.",
+};
+
+/**
+ * `R-084` (`RELEASE-0111-01-A` A1) — `GET /api/v1/system/version` on the ONE IPv4, with no token and
+ * no `Origin` (the probe sends neither): its `version`, and nothing else of the answer.
+ */
+async function checkPlayoutVersion(
+  probes: CheckProbes,
+  url: string,
+  ip: string,
+  bounds: RequestBounds,
+): Promise<ConnectionCheckLine> {
+  const target = onAddress(url, ip);
+  try {
+    const answer = await probes.request(
+      'GET',
+      target.url,
+      { accept: 'application/json', host: target.host },
+      bounds,
+    );
+    if (answer.status !== 200) return PLAYOUT_VERSION_NOT_SERVED;
+    const version = playoutVersionOf(JSON.parse(answer.body));
+    return version === null
+      ? PLAYOUT_VERSION_NOT_SERVED
+      : { id: 'playout-version', status: 'pass', text: `Playout ${version}.` };
+  } catch {
+    return PLAYOUT_VERSION_NOT_SERVED;
   }
 }
 

@@ -179,6 +179,10 @@ async function boot(
     readonly resolveFirst?: boolean;
     readonly backupLegacy?: boolean;
     readonly backupOffline?: boolean;
+    /** `RELEASE-0111-01-A` A3 — the backup's D11 answers `401` to the primary's token. */
+    readonly backupRefusesToken?: boolean;
+    /** Every line the lookup logs. */
+    readonly log?: string[];
   } = {},
 ): Promise<Rig> {
   const provider = new LocalPlayoutSources({ media: PRIMARY_MEDIA });
@@ -201,9 +205,11 @@ async function boot(
   backupPlayout.setMedia(BACKUP_MEDIA);
   backupPlayout.setD11Legacy(options.backupLegacy === true);
   if (options.backupOffline === true) await backupPlayout.goOffline();
+  backupPlayout.setRefusesForeignTokens(options.backupRefusesToken === true);
   const lookup = new BackupMediaLookup({
     url: () => backupPlayout.mediaUrl,
     bearer: () => 'bridge-bearer',
+    ...(options.log !== undefined ? { log: (line: string) => options.log?.push(line) } : {}),
   });
   lookups.push(lookup);
 
@@ -326,6 +332,24 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     expect(item0(r)?.backupNoCopy?.map((e) => e.reason)).toEqual([
       'backup-unread',
       'backup-unread',
+    ]);
+  });
+
+  it('🔴 `RELEASE-0111-01-A` A3 — a backup that refuses the primary’s token (`401`): B is sent nothing, each plate says its list was not read', async () => {
+    const log: string[] = [];
+    const { r, aLines, bLines, backupPlayout } = await boot({ backupRefusesToken: true, log });
+    // Control: the backup was asked, and answered 401 every time.
+    const asked = backupPlayout.requestLog.filter((q) => q.path === '/api/cg/media');
+    expect(asked.length).toBeGreaterThan(0);
+    expect(log).toContain('backup media list answered 401 — kept what was known');
+    await take(r);
+    // A airs both clips; B is sent no clip at all — nothing guessed, no primary path.
+    expect(plays(await aLines())).toHaveLength(2);
+    expect(plays(await bLines())).toEqual([]);
+    expect((await bLines()).filter((l) => l.includes('C:/Apasai CIaB'))).toEqual([]);
+    expect(item0(r)?.backupNoCopy).toEqual([
+      { plateId: 'l1', name: 'پرومو', reason: 'backup-unread' },
+      { plateId: 'l2', name: 'Sting', reason: 'backup-unread' },
     ]);
   });
 

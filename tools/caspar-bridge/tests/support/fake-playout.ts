@@ -88,6 +88,11 @@ const PATHS = {
   /** `PLAYOUT-FEATURES-01` D — `2.9.2`'s CG license (LICENSE §3.1). */
   license: '/api/cg/license',
   meters: '/api/cg/meters',
+  /**
+   * `R-084` — the Playout's own version (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §3.1): every Playout from
+   * `2.1.0`, NO token, outside the contract.
+   */
+  version: '/api/v1/system/version',
 } as const;
 
 // ── `PLAYOUT-SOURCES-01` §3 — D10 AND D11, AS THEIR ANSWER DESCRIBES THEM ──────────────────────
@@ -1188,6 +1193,15 @@ export interface FakePlayout {
    * channel's `cgLicensed` at its next read.
    */
   setLicense(preset: FakeLicensePreset | null): void;
+  /** `R-084` — `GET /api/v1/system/version`: NO token, every Playout from `2.1.0`. */
+  readonly versionUrl: string;
+  /** `R-084` — the `version` it answers (`2.9.2` by default); `null` — the endpoint `404`s. */
+  setVersion(version: string | null): void;
+  /**
+   * `RELEASE-0111-01-A` A3 — D11 answers `401 invalid_token` to every bearer: a BACKUP Playout, whose own
+   * ES256 key signed none of the primary's tokens (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §2).
+   */
+  setRefusesForeignTokens(on: boolean): void;
   /**
    * `PLAYOUT-FEATURES-01` A — D11 as a Playout before `2.9.1` serves it: no `fingerprint` or `source` on any
    * item, and `fingerprint=` ignored (answered as a plain search). Default off (`2.9.1`).
@@ -1481,6 +1495,10 @@ class FakePlayoutServer implements FakePlayout {
   #cgNotLicensed: string | null = null;
   /** `PLAYOUT-FEATURES-01` D — the CG license `GET /api/cg/license` answers; `null` — before `2.9.2`. */
   #license: FakeLicensePreset | null = 'licensed';
+  /** `R-084` — the version `GET /api/v1/system/version` answers; `null` — not served (`404`). */
+  #version: string | null = '2.9.2';
+  /** `RELEASE-0111-01-A` A3 — D11 refuses every bearer, as a backup refuses the primary's tokens. */
+  #refusesForeignTokens = false;
   /** `PLAYOUT-FEATURES-01` A — D11 as before `2.9.1`: no `fingerprint`/`source`, the filter ignored. */
   #d11Legacy = false;
   // `PLAYOUT-FEATURES-01` E — the meters stream's state.
@@ -1902,6 +1920,18 @@ class FakePlayoutServer implements FakePlayout {
     return `${this.baseUrl}${PATHS.license}`;
   }
 
+  get versionUrl(): string {
+    return `${this.baseUrl}${PATHS.version}`;
+  }
+
+  setVersion(version: string | null): void {
+    this.#version = version;
+  }
+
+  setRefusesForeignTokens(on: boolean): void {
+    this.#refusesForeignTokens = on;
+  }
+
   setD11Legacy(legacy: boolean): void {
     this.#d11Legacy = legacy;
   }
@@ -2051,6 +2081,10 @@ class FakePlayoutServer implements FakePlayout {
       this.#serveMeters(req, res);
       return;
     }
+    if (method === 'GET' && pathname === PATHS.version) {
+      this.#serveVersion(res);
+      return;
+    }
     if (method === 'GET' && pathname === PATHS.media) {
       const query = new URL(req.url ?? '/', this.baseUrl).searchParams;
       if (query.has('ids')) this.#counts.mediaIds += 1;
@@ -2112,7 +2146,11 @@ class FakePlayoutServer implements FakePlayout {
       return;
     }
     const authorization = req.headers.authorization;
-    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
+    if (
+      authorization === undefined ||
+      !authorization.startsWith('Bearer ') ||
+      this.#refusesForeignTokens
+    ) {
       sendError(res, 'invalid_token');
       return;
     }
@@ -2232,6 +2270,27 @@ class FakePlayoutServer implements FakePlayout {
    * `PLAYOUT-FEATURES-01` D — `GET /api/cg/license` (LICENSE §3.1): bearer-gated like D4 and D10,   * `Cache-Control: no-store`, `404` while CG Control is switched off — and, here, with no license set
    * (a Playout before `2.9.2` has no such endpoint).
    */
+  /**
+   * `R-084` — `GET /api/v1/system/version`, as `.111` answered it (`PLAYOUT-CG-RESPONSE-0110-111-v1.md`
+   * §3.1): NO token asked, and more than a reader may use — the `changelog` is long, Persian and changes
+   * every build, so it is here to be ignored.
+   */
+  #serveVersion(res: http.ServerResponse): void {
+    if (this.#version === null) {
+      sendError(res, 'not_found');
+      return;
+    }
+    sendJson(res, 200, {
+      component: 'engine',
+      title: 'Apasai Playout',
+      version: this.#version,
+      releaseDate: '2026-09-30',
+      assemblyVersion: `${this.#version}.0`,
+      company: { name: 'Apasai' },
+      changelog: [{ version: this.#version, items: ['بهبودِ پایداری'] }],
+    });
+  }
+
   #serveLicense(req: http.IncomingMessage, res: http.ServerResponse): void {
     if (!this.#cgEnabled || this.#license === null) {
       sendError(res, 'not_found');
