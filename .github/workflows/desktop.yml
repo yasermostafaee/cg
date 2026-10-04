@@ -450,6 +450,62 @@ jobs:
           path: setup-window/
           retention-days: 14
 
+  # RELEASE-0110-01 §2 — THE INSTALL GUIDE'S PICTURES OF CG CONTROL AND CG DESIGNER, from the built
+  # consoles on Windows (the client's fonts and rendering), by the two `guide-shots.spec.ts` harnesses
+  # (`CG_GUIDE_SHOTS`). By hand only (`gh workflow run Desktop --ref dev`): a push never pays for it.
+  # The PNGs are an artifact; the release's author commits them into `docs/release/<version>/img/`.
+  # A runner rather than a developer's machine because the second harness binds a CasparCG stand-in on
+  # TCP 5250, which the owner's machine — also a station — may have its own CG Bridge dialling. The
+  # installers' own pages are pictured by `setup-window`. No real address, token or password in any
+  # picture: a documentation address is typed (RFC 5737) and the password is masked by its field.
+  guide-shots:
+    name: Guide screenshots (dispatch only)
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The pictures are of the BUILT consoles (Playwright's staleness guard refuses anything else).
+      - name: Build (workspace)
+        run: pnpm build
+
+      - name: CG Control's and CG Designer's pictures (the runner's Chrome)
+        shell: pwsh
+        env:
+          CG_GUIDE_SHOTS: ${{ github.workspace }}\guide-shots
+          PW_CHANNEL: chrome
+        run: |
+          pnpm --filter @cg/runtime exec playwright test tests/e2e/guide-shots.spec.ts --reporter=list
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          pnpm --filter @cg/designer exec playwright test tests/e2e/guide-shots.spec.ts --reporter=list
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem guide-shots | Format-Table Name, Length
+
+      - name: Upload the pictures
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: guide-shots
+          path: guide-shots/
+          retention-days: 30
+
   # CLIENT-TEST-RELEASE-01 B4 — ON A TAG ONLY, and only once the installers are built from the
   # tagged commit and BOTH clean-Windows smokes have passed (the apps', and CG Bridge's own): a DRAFT
   # pre-release with exactly five files (CENTRAL-BRIDGE-01: CG Bridge's installer joined the two).
