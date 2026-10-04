@@ -1551,10 +1551,11 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
     itemId: 'item-1',
     plateId: plate,
     disposition,
-    // The bridge's sentence for a clip set to restart when hidden (`MEDIA-PLATES-01`).
+    // The bridge's sentence for a clip set to restart when hidden (`MEDIA-PLATES-01`), naming the
+    // plate `Plate N` (`B-308`): `guest-2` is the template's second plate.
     reason:
-      `plate "${plate}" is a media clip set to restart when hidden, so it was cleared and ` +
-      `will play from the beginning when a look shows it again`,
+      `Plate ${plate.replace(/\D+/g, '')} is a media clip set to restart when hidden, so it was ` +
+      `cleared and will play from the beginning when a look shows it again`,
   });
 
   it('🔴 B-247 — a frame that WAS seated and was torn down reads Cleared, not Not seated', async () => {

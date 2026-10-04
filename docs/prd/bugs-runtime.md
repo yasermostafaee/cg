@@ -13089,7 +13089,7 @@ an UPDATE pass (`#refuseBindingChange`) asked only the duplicate-input and band 
 already punched the planner never asks the resolver, it resolves the plate from the showable entries alone,
 the new route was not among them, and the change was recorded as landed. **Fix:** the binding door asks
 rule 1 (and `B-298`'s loop) of every NEW or CHANGED binding against the one in force, with the take's own
-clause (`Plate "l1": “ورودی ۴” can't be shown on CH 2.`), before anything is written or sent; an unchanged
+clause (`Plate "l1": “ورودی ۴” can't be shown on CH 2.` — since `B-308`, `Plate 1: “ورودی ۴” can't be shown on CH 2.`), before anything is written or sent; an unchanged
 binding is never refused for what became of its entry since (`unbindableChange`'s doctrine). **Tests:**
 `route-plates.integration.test.ts` (`B-299`: the swap refused, nothing sent, the seat unchanged; control: a
 swap to `ورودی ۵` lands; and a mark added after binding never refuses a neighbour's swap — control: the
@@ -13186,11 +13186,39 @@ support folder that parses only complete lines — a trailing partial line waits
 every copy uses it. Test-only. **Regression test:** handed a half-written last line, the old reader throws
 and the shared one returns the complete lines.
 
-## [ ] B-308 — Some of CG Bridge's sentences name a live plate by its template id ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` (found while fixing `B-306`)
+## [~] B-308 — Some of CG Bridge's sentences name a live plate by its template id ⟨priority: low⟩ — FILED 2026-10-04 by `CONSOLE-POLISH-01-A` (found while fixing `B-306`); BUILT 2026-10-04 by `RELEASE-0110-01` Part A (change `console-polish`)
 
 **Repro:** a swap CasparCG refuses reads `CasparCG refused the substitution, so plate "guest-1" is still on
 its previous source.` **Expected:** a plate is named in the operator's words in any sentence an operator
 reads (golden rule 11). **Actual:** twelve sentences in `tools/caspar-bridge/src` write `plate "<id>"`
 (`caspar-runtime.ts`, `live-plate-release.ts`, `live-plate-fit.ts`); some are log lines, some reach a
-console. **Cause:** they predate the plate wording. **Fix:** not built — the sentences are shared by the
-swap, the look switch and the plate release, so it is its own sweep (two axes) of the bridge's wording.
+console. **Cause:** they predate the plate wording. **Fix:** every sentence CG Bridge says about a plate that
+reaches a console names it `Plate N` — its position in the template's declaration, through ONE numbering,
+`@cg/shared-ipc`'s `plateLabel`, which the console's `plateLabelOf` now calls too — and isolates every source
+name it carries (`isolateText`, the string form of a `<bdi>`, moved to `@cg/shared-ipc` with `directionOf`).
+The id is relocated, not deleted: it stays in each payload (`plateId`, `plateIds`, `refused`) and in the log
+lines, which keep it with `Plate N` beside it where the row is in hand. The second axis of the sweep found six
+more sentences of the same shape (`Plate "<id>": …` in the binding door and the take's resolver), the
+unassigned-plates list (built through a helper, so a per-line search missed it) and `seatCollisionMessage`;
+all are reworded. One is kept on purpose: `This template has no live plate called "<id>".` — the plate is not
+declared, so it has no position and its id is the only name it has. Copy only: no refusal condition and no
+wire changed. **Tests:** the bridge's unit and integration suites read every sentence with `Plate N` and no
+id (`live-plate-release`, `live-plate-fit`, `live-plate-assignment` — numbered from the whole template when
+only a subset must resolve — `live-look-reconcile`, `route-plates`, `playout-sources`, `live-source-swap`);
+`live-source-swap-names.spec.ts` (Chromium, a real CG Bridge and AMCP mock): a refused swap's dialog reads
+`… so Plate 1 is still on its previous source. Nothing was cleared.` with no plate id, and the row's Persian
+alias reads right to left. **Control — the wire:** the refused swap (`live-source-swap`, and the e2e's six
+lines) and the solo look switch with its plate releases (`live-look-reconcile`, eighteen lines) send exactly
+what the unchanged bridge sent, recorded before the change. **Positive control:** the e2e fails on the old
+build at `plate "l1"`.
+
+## [ ] B-309 — More operator sentences that name a plate, a look or a template by its id ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0110-01` Part A (found by `B-308`'s sweep)
+
+**Repro / Actual:** outside `B-308`'s scope (CG Bridge's live-plate sentences), the same sweep found:
+`seatCollisionMessage` names the LOOK by its id (`in look "two"`; a look has an authored `name`,
+`looks.ts:85`); the console's audio toast lists plate ids (`Audio not applied to guest-1, guest-2 — those
+plates are unchanged.`, `LiveSourcesPanel.tsx:315`, fed by `LayerRow.tsx:1289`); the swap dialog's picker is
+labelled `Live source for l1` (`LiveSourceSwapDialog.tsx:147`, an accessible name); and `@cg/shared-ipc`'s
+assignment validator names plate, template and source by id (`sources.ts:1059`, `:1068` — a malformed-file
+message; the console shows its own words for `unknown-source`). **Expected:** golden rule 11 — `Plate N`, the
+look's name, the template's name. **Fix:** not built.

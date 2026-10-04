@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import {
   inputSourceId,
+  isolateText,
   mediaSourceId,
   type ConnectionConfig,
   type SourceAssignments,
@@ -343,7 +344,10 @@ describe('§1.C — an input the Playout stopped offering', () => {
     const before = (await recvLines()).length;
     const verdict = await r.take('item-1');
     expect(verdict).toMatchObject({ accepted: false, errorCode: 'source-unavailable' });
-    expect(verdict.message).toContain("“Studio 1” is not in the Playout's input list.");
+    // `B-308` — `Plate N`, and the name in its own isolate.
+    expect(verdict.message).toBe(
+      `Plate 1: “${isolateText('Studio 1')}” is not in the Playout's input list.`,
+    );
     // Nothing reached CasparCG: refused before any AMCP that could change air.
     expect(
       (await recvLines())
@@ -400,7 +404,9 @@ describe('§1.C — an input the Playout stopped offering', () => {
     await r.load('item-1', 'lower-third', {});
     const verdict = await r.take('item-1');
     expect(verdict).toMatchObject({ accepted: false, errorCode: 'source-unavailable' });
-    expect(verdict.message).toContain('“خبر ۱۴۰۵” is not available in the Playout right now.');
+    expect(verdict.message).toBe(
+      `Plate 1: “${isolateText('خبر ۱۴۰۵')}” is not available in the Playout right now.`,
+    );
     // Control: back in the library, it plays.
     provider.restoreMedia(FAKE_MEDIA_IDS.khabar1405);
     await ps.refresh(0);

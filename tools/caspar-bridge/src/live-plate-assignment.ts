@@ -1,11 +1,14 @@
 import {
+  isolateText,
   notShowableWords,
   ownOutputWords,
+  plateLabel,
+  plateList,
   SOURCE_OWN_OUTPUT_CODE,
   sourceLoopsOn,
   sourceSeatable,
   sourceShowableOn,
-  unseatableClause,
+  unseatableWords,
   type SourceAssignments,
   type SourceCatalog,
   type SourceDefinition,
@@ -144,8 +147,18 @@ export function resolvePlateAssignments(input: {
    * v1.3 rule 1) is refused here, after the entry's own state. Absent asks nothing about channels.
    */
   channel?: number | undefined;
+  /**
+   * 🔴 `B-308` — the template's WHOLE declaration, in order: what numbers a plate `Plate N` in the
+   * refusal (`plateLabel`). Not `declarations`, which a caller may narrow to the plates that must
+   * resolve — numbered from that subset, the third plate would read `Plate 1`. Absent numbers from
+   * `declarations`, which is then the whole list.
+   */
+  plates?: readonly { readonly sourceId: string }[] | undefined;
 }): PlateAssignmentOutcome {
   const byId = new Map(input.catalog.sources.map((s) => [s.id, s] as const));
+  // `B-308` — every sentence below names a plate `Plate N`; `plateIds` and `refused` keep the ids.
+  const numbering = input.plates ?? input.declarations;
+  const named = (plateId: string): string => plateLabel(numbering, plateId) ?? 'A plate';
   const assigned = new Map(
     input.assignments.assignments
       .filter((a) => a.templateId === input.templateId)
@@ -165,10 +178,10 @@ export function resolvePlateAssignments(input: {
   const loops: { plateId: string; source: SourceDefinition }[] = [];
 
   for (const declaration of input.declarations) {
-    // The plate's operator-facing handle is its `sourceId` — the SCENE's vocabulary
-    // for a hole in this template ("guest-1"), never a device and never a catalog
-    // id. §2z restated the meaning; the schema field keeps its name because
-    // renaming it is a scene migration.
+    // The plate's handle is its `sourceId` — the SCENE's vocabulary for a hole in this
+    // template ("guest-1"), never a device and never a catalog id. §2z restated the
+    // meaning; the schema field keeps its name because renaming it is a scene migration.
+    // `B-308`: it is NOT the operator's word — a sentence names the plate `Plate N`.
     const plateId = declaration.sourceId;
     const sourceId = assigned.get(plateId);
     if (sourceId === undefined) {
@@ -220,7 +233,7 @@ export function resolvePlateAssignments(input: {
         errorCode: LIVE_PLATE_SOURCE_OWN_OUTPUT,
         plateIds: loops.map((u) => u.plateId),
         refused: first,
-        message: `Plate "${first.plateId}": “${words.name}”${words.rest}`,
+        message: `${named(first.plateId)}: “${isolateText(words.name)}”${words.rest}`,
       };
     }
     // Only the first is named: the take stops there, as for an unseatable entry.
@@ -231,7 +244,7 @@ export function resolvePlateAssignments(input: {
       errorCode: LIVE_PLATE_SOURCE_NOT_SHOWABLE,
       plateIds: notShowable.map((u) => u.plateId),
       refused: first,
-      message: `Plate "${first.plateId}": “${words.name}”${words.rest}`,
+      message: `${named(first.plateId)}: “${isolateText(words.name)}”${words.rest}`,
     };
   }
 
@@ -239,12 +252,13 @@ export function resolvePlateAssignments(input: {
     // Only the first is named: the take stops there (`FIELD-FIXES-01-A` Decision 1).
     const first = unseatable[0] as { plateId: string; source: SourceDefinition };
     const unavailable = first.source.status === 'unavailable';
+    const words = unseatableWords(first.source);
     return {
       ok: false,
       errorCode: unavailable ? LIVE_PLATE_SOURCE_UNAVAILABLE : LIVE_PLATE_SOURCE_UNUSABLE,
       plateIds: unseatable.map((u) => u.plateId),
       refused: first,
-      message: `Plate "${first.plateId}": ${unseatableClause(first.source)}`,
+      message: `${named(first.plateId)}: “${isolateText(words.name)}”${words.rest}`,
     };
   }
 
@@ -253,20 +267,20 @@ export function resolvePlateAssignments(input: {
     ok: false,
     errorCode: LIVE_PLATE_UNASSIGNED,
     plateIds,
-    message: refusalMessage(unassigned, stale),
+    message: refusalMessage(unassigned.map(named), stale.map(named)),
   };
 }
 
 /**
  * The operator-facing sentence. It NAMES the plates — a count would send them
  * hunting through the template to find which, which is the same objection §2c
- * records against a count on the picker row.
+ * records against a count on the picker row. `B-308`: by `Plate N`, never by id.
  */
 function refusalMessage(unassigned: readonly string[], stale: readonly string[]): string {
   const parts: string[] = [];
   if (unassigned.length > 0) {
     parts.push(
-      `${plural(unassigned)} ${list(unassigned)} ${unassigned.length === 1 ? 'has' : 'have'} no ` +
+      `${plateList(unassigned)} ${unassigned.length === 1 ? 'has' : 'have'} no ` +
         `live source assigned, so ${unassigned.length === 1 ? 'it' : 'they'} would go to air empty`,
     );
   }
@@ -275,20 +289,11 @@ function refusalMessage(unassigned: readonly string[], stale: readonly string[])
     // than an operator omission, and saying so is what stops them looking for an
     // assignment they will find already made.
     parts.push(
-      `${plural(stale)} ${list(stale)} ${stale.length === 1 ? 'is' : 'are'} assigned to a source ` +
+      `${plateList(stale)} ${stale.length === 1 ? 'is' : 'are'} assigned to a source ` +
         `this installation no longer has`,
     );
   }
   return `${parts.join('; and ')}. Assign ${
     unassigned.length + stale.length === 1 ? 'it' : 'them'
   } in CG Control, then take again.`;
-}
-
-const plural = (ids: readonly string[]): string => (ids.length === 1 ? 'plate' : 'plates');
-
-/** `"a"`, `"a" and "b"`, `"a", "b" and "c"` — quoted, so an id with a dash reads cleanly. */
-function list(ids: readonly string[]): string {
-  const quoted = ids.map((id) => `"${id}"`);
-  if (quoted.length === 1) return quoted[0] as string;
-  return `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1] as string}`;
 }

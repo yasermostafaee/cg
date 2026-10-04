@@ -53,7 +53,7 @@ export const StackTakeChannel = defineChannel(
      *
      * A take can now be refused by a Live Source plate, and those refusals are
      * required to NAME THE PLATE (`live-plate-assignment.ts`, `live-plate-fit.ts`):
-     * _"plates "guest-1" and "guest-3" have no live source assigned"_ is what
+     * _"Plate 1 and Plate 3 have no live source assigned"_ (`B-308`) is what
      * makes the refusal actionable, and a code is a fixed string that cannot say
      * which of a template's plates is the problem. Without this the operator got
      * a generic sentence and the specific one stopped at the bridge's stderr.

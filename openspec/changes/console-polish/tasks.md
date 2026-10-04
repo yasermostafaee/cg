@@ -159,3 +159,28 @@ one push for the batch.
       <https://github.com/yasermostafaee/cg/actions/runs/37155833135> (Installers, Installer smoke, CG
       Bridge smoke) — its installers are the owner's check build
 - [x] 9.5 The owner's check, step by step, in the report
+
+## 10. `RELEASE-0110-01` Part A — `B-308` (2026-10-04)
+
+Lane: copy only (what CG Bridge SAYS about a plate). No refusal condition and nothing on the wire changes —
+proved by recorded wire, below.
+
+- [x] 10.1 §A0: the twelve filed sentences (`caspar-runtime.ts` 4, `live-plate-fit.ts` 1,
+      `live-plate-release.ts` 7) and, by the second axis, ten more (`Plate "<id>": …` ×6, the
+      unassigned-plates list, `seatCollisionMessage`, the unknown-plate reply, one more log line) —
+      each with where it surfaces (report Part A)
+- [x] 10.2 One numbering: `plateLabel` / `plateList` in `@cg/shared-ipc`'s `operator-naming.ts`; the
+      console's `plateLabelOf` calls it. `directionOf` / `isolateText` moved there unchanged (re-exported
+      from `OperatorNames.tsx`), so the bridge isolates the names in its sentences
+- [x] 10.3 Every console-facing sentence reworded to `Plate N`; log lines keep the id, with `Plate N`
+      beside it where the row is in hand; `This template has no live plate called "<id>".` kept (an
+      undeclared plate has no position)
+- [x] 10.4 Tests: bridge units and integrations read each sentence with `Plate N` and no id; the
+      resolver numbers from the whole template (`§8.8`: `Plate 3`); e2e `live-source-swap-names.spec`
+      (`B-308`): the refused swap's dialog reads `Plate 1`, no id, and the row's Persian alias reads
+      right to left. Controls: the refused swap (1 line in the integration, 6 in the e2e) and the solo
+      switch with its releases (18 lines) equal the wire recorded on the unchanged bridge. Positive
+      control: the e2e fails on the old build at `plate "l1"`
+- [x] 10.5 Filed `B-309`: the look id in `seatCollisionMessage`, the console's audio toast, the swap
+      picker's accessible name, the assignment validator (found by the sweep; not built)
+- [ ] 10.6 Gate, push, and the CI run (e2e RAN) recorded here

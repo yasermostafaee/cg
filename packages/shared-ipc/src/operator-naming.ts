@@ -136,6 +136,73 @@ export function commandForDisplay(command: string): string {
 }
 
 /**
+ * 🔴 `B-308` — **A PLATE IS `Plate N`**: its position among its template's declared plates, counted
+ * from 1 — the word the swap dialog, the Inspector and the row's refusal line use, and now every
+ * sentence CG Bridge says about a plate. The plate's id (`guest-1`) is the scene's handle for a hole,
+ * not the operator's word for it (golden rule 11): it stays on a `title`, in a payload and in a log
+ * line's detail. `undefined` when the template does not declare the plate — the caller says it in
+ * words, never by falling back to the id.
+ */
+export function plateLabel(
+  plates: readonly { readonly sourceId: string }[] | undefined,
+  plateId: string,
+): string | undefined {
+  const index = (plates ?? []).findIndex((p) => p.sourceId === plateId);
+  return index < 0 ? undefined : `Plate ${String(index + 1)}`;
+}
+
+/** `B-308` — `Plate 1`, `Plate 1 and Plate 3`, `Plate 1, Plate 2 and Plate 3`. */
+export function plateList(labels: readonly string[]): string {
+  if (labels.length <= 1) return labels[0] ?? '';
+  return `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1] as string}`;
+}
+
+/**
+ * The code points of the right-to-left LETTERS: Hebrew, Arabic (with Persian), Syriac, Thaana, NKo
+ * and the presentation forms. The Arabic-Indic and Persian DIGITS are left out on purpose — a digit
+ * is a number, not a letter, and `۱` alone does not make a name Persian.
+ */
+const RTL_LETTERS: readonly (readonly [number, number])[] = [
+  [0x0590, 0x05ff],
+  [0x0606, 0x065f],
+  [0x066e, 0x06ef],
+  [0x06fa, 0x08ff],
+  [0xfb1d, 0xfdff],
+  [0xfe70, 0xfefc],
+];
+
+/**
+ * 🔴 `B-303` / `R-082` — **A NAME'S OWN DIRECTION: right to left when it holds a right-to-left letter.**
+ *
+ * `dir="auto"` (and `<bdi>`'s default) takes the FIRST strong letter, so `NDI کانالِ ۱ (APASAI)` —
+ * a Persian name that starts with a Latin word — was laid out left to right, and read `NDI ۱ کانال
+ * (APASAI)` (the owner's screenshot, 2026-09-30). The Playout shows its names right to left; a name
+ * with any Persian in it is a Persian name, and is laid out that way. A name with none — `Studio 1`,
+ * `MTA (APASAI)` — stays left to right, so its trailing parenthesis is never thrown to the front.
+ *
+ * Moved here unchanged from the console's `OperatorNames.tsx` (`B-308`), which re-exports it: CG
+ * Bridge isolates the names in its own sentences by the same rule.
+ */
+export function directionOf(text: string): 'rtl' | 'ltr' {
+  for (const ch of text) {
+    const cp = ch.codePointAt(0) ?? 0;
+    if (RTL_LETTERS.some(([lo, hi]) => cp >= lo && cp <= hi)) return 'rtl';
+  }
+  return 'ltr';
+}
+
+/**
+ * `B-300` — a name inside a PLAIN-TEXT line (a dialog's message region, a banner, a refusal CG Bridge
+ * sends — strings by contract): the string form of a `<bdi dir>`, isolated in its own
+ * {@link directionOf} — a right-to-left isolate for a name with Persian in it, a left-to-right one
+ * otherwise. `B-308`: CG Bridge's sentences isolate every name they carry with this.
+ */
+export function isolateText(text: string): string {
+  const open = String.fromCodePoint(directionOf(text) === 'rtl' ? 0x2067 : 0x2066);
+  return `${open}${text}${String.fromCodePoint(0x2069)}`;
+}
+
+/**
  * 🔴 `TIMING-WIRE-22 · DELTA B · R3` — a `set-pass-timing` row's VALUE, as one clause.
  *
  * The entry stores DATA (`{ passes?, delayMs? }`) and this turns it into words, which is

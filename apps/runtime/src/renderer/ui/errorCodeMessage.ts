@@ -207,8 +207,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
  *
  * The first cut of DELTA R inverted the preference for EVERY code, and `asyncButton.test.ts`
  * caught what that costs: for `live-source-unassigned` the bridge's own sentence names the
- * PLATE — `plate "guest-3" has no live source assigned` — and `guest-3` is the operator's own
- * word for it, the one thing on that message they can act on. Our generic sentence cannot say
+ * PLATE — `Plate 3 has no live source assigned` (`B-308`: its position, never its id) — the one
+ * thing on that message they can act on. Our generic sentence cannot say
  * it, and no lookup in the renderer can recover it from the code alone.
  *
  * **The wire's sentence sometimes carries the only operator-actionable word.** So this stays a

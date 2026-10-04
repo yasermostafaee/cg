@@ -241,15 +241,23 @@ export function releaseLivePlate(input: {
    * operator told "this look does not show it" would go looking in the wrong place.
    */
   offFrame?: boolean | undefined;
+  /**
+   * 🔴 `B-308` — the plate in the operator's words, `Plate N` (`@cg/shared-ipc`'s `plateLabel`, from
+   * the template's declaration). The sentence names the plate by THIS, never by `plateId`: the id
+   * stays in the release's own `plateId` field, for a technician. Absent when the template no longer
+   * declares the plate — the sentence then says "This plate".
+   */
+  plateLabel?: string | undefined;
 }): LivePlateRelease {
   const { itemId, plateId } = input;
+  const plate = input.plateLabel ?? 'This plate';
   if (!input.stillDeclared) {
     return {
       itemId,
       plateId,
       disposition: 'torn-down',
       reason:
-        `plate "${plateId}" is no longer declared by this template, so there is no look ` +
+        `${plate} is no longer declared by this template, so there is no look ` +
         `that can bring it back — its producer was cleared rather than held`,
     };
   }
@@ -268,7 +276,7 @@ export function releaseLivePlate(input: {
       plateId,
       disposition: 'held',
       reason:
-        `plate "${plateId}" is not shown by the active look and its source could not be ` +
+        `${plate} is not shown by the active look and its source could not be ` +
         `resolved, so its producer was held rather than cleared — an unknown source form is ` +
         `not a reason to destroy a picture that is working`,
     };
@@ -280,7 +288,7 @@ export function releaseLivePlate(input: {
       plateId,
       disposition: 'torn-down',
       reason:
-        `plate "${plateId}" is a media clip set to restart when hidden, so it was cleared and ` +
+        `${plate} is a media clip set to restart when hidden, so it was cleared and ` +
         `will play from the beginning when a look shows it again`,
     };
   }
@@ -290,7 +298,7 @@ export function releaseLivePlate(input: {
       plateId,
       disposition: 'held',
       reason:
-        `plate "${plateId}" is shown by the active look but its hole is entirely outside the ` +
+        `${plate} is shown by the active look but its hole is entirely outside the ` +
         `frame — the row's position carried it off — so its producer stays seated, muted and ` +
         `idle rather than being cleared`,
     };
@@ -303,9 +311,9 @@ export function releaseLivePlate(input: {
       disposition: 'held',
       reason:
         mediaPlaybackOf(input.source).whenHidden === 'pause'
-          ? `plate "${plateId}" is a media clip set to pause when hidden — it stays seated, ` +
+          ? `${plate} is a media clip set to pause when hidden — it stays seated, ` +
             `paused, muted and hidden, and resumes from the same frame when a look shows it again`
-          : `plate "${plateId}" is a media clip set to keep playing when hidden — it stays ` +
+          : `${plate} is a media clip set to keep playing when hidden — it stays ` +
             `seated and running, muted and hidden, and shows wherever it has reached when a look ` +
             `shows it again`,
     };
@@ -315,7 +323,7 @@ export function releaseLivePlate(input: {
     plateId,
     disposition: 'held',
     reason:
-      `plate "${plateId}" has no rect in the active look — its producer stays seated, muted ` +
+      `${plate} has no rect in the active look — its producer stays seated, muted ` +
       `and idle, so switching back is a cut rather than a re-acquire`,
   };
 }

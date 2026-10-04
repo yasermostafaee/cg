@@ -493,8 +493,9 @@ describe('the WIRE — the channel a browser actually reads', () => {
       itemId: 'item-a',
       plateId: 'guest-2',
       disposition: 'torn-down' as const,
+      // The bridge's sentence names the plate `Plate N` (`B-308`); `plateId` keeps the id.
       reason:
-        'plate "guest-2" is a media clip set to restart when hidden, so it was cleared and ' +
+        'Plate 2 is a media clip set to restart when hidden, so it was cleared and ' +
         'will play from the beginning when a look shows it again',
     };
     handle.runtime.livePlateReleased.emit(release);

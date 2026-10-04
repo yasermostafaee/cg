@@ -3138,3 +3138,14 @@ the positive control — and nothing for `P-063`; with `--untracked`, `P-062` an
 heading; no stash. The highest headings in the PRD files are `B-308` and `R-084`.
 
 ⇒ **Next free after this entry is `B-309`**, **`D-162`**, **`P-064`**, **`R-085`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0110-01` takes `B-309`
+
+- `B-309` — more operator sentences that name a plate, a look or a template by its id (found by `B-308`'s
+  sweep) — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: `git grep -n -E "^## \[.\] (B-30[89]|B-31[0-9]) " <branch> -- docs` on every local
+branch (`ai-stale`, `design/live-source-multibox`, `dev`, `main`) returned only `B-308`'s own heading on `dev`
+— the positive control — and nothing for `B-309`; the same with `--untracked`; no stash.
+
+⇒ **Next free after this entry is `B-310`**, **`D-162`**, **`P-064`**, **`R-085`** and **`C-049`**.

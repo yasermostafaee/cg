@@ -276,14 +276,16 @@ describe('6.9 — the dialog names each plate’s assignment, and commits in ONE
   });
 
   it('🔴 a REFUSED swap is surfaced with the bridge’s own sentence', async () => {
+    // `B-308` — the bridge's sentence names the plate `Plate 1`, as this dialog's own label does.
     const message =
-      'CasparCG refused the substitution, so plate "guest-1" is still on its previous source.';
+      'CasparCG refused the substitution, so Plate 1 is still on its previous source. Nothing ' +
+      'was cleared.';
     await renderDialog(() => Promise.resolve({ ok: false, message }));
 
     await choosePickerOption(field(), 'src-b');
 
     // The operator must be told the plate did NOT move. A silent refusal here
     // leaves them believing they patched around a dead feed when they did not.
-    expect(openDialog()?.textContent).toContain('still on its previous source');
+    expect(openDialog()?.textContent).toContain('Plate 1 is still on its previous source');
   });
 });

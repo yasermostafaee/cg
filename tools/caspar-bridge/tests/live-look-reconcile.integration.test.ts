@@ -676,6 +676,40 @@ it('🔴 §12.4 fallback — a MEDIA clip set to RESTART is torn down BY NAME', 
   const clipRelease = seen.find((e) => e.plateId === 'live-2');
   expect(clipRelease?.disposition, 'a restart clip is not held').toBe('torn-down');
   expect(clipRelease?.reason).toContain('media clip set to restart when hidden');
+  /*
+    🔴 `B-308` — every release names its plate `Plate N` (its position in the template), never its
+    id: the id is the release's own `plateId`, kept above for a technician.
+  */
+  expect(seen.map((e) => /^Plate \d+ /.exec(e.reason)?.[0].trim())).toEqual([
+    'Plate 2',
+    'Plate 3',
+    'Plate 4',
+    'Plate 5',
+    'Plate 6',
+  ]);
+  for (const e of seen) expect(e.reason).not.toMatch(/live-\d/);
+  // CONTROL — the switch's wire (the look switch and the plate release) is the one recorded
+  // before `B-308`, line for line: the sentences changed and nothing sent did.
+  expect(lines.filter((l) => /^(PLAY|LOAD|LOADBG|MIXER|CLEAR|STOP|CG) /.test(l))).toEqual([
+    'CG 1-60 UPDATE 0 "{\\"__cg\\":{\\"look\\":\\"solo\\"}}"',
+    'MIXER 1-30 FILL 0 0 1 1 DEFER',
+    'MIXER 1-30 CLIP 0 0 1 1 DEFER',
+    'MIXER 1-32 VOLUME 0 DEFER',
+    'MIXER 1-32 FILL 2 2 0.25 0.25 DEFER',
+    'MIXER 1-32 CLIP 0 0 1 1 DEFER',
+    'MIXER 1-33 VOLUME 0 DEFER',
+    'MIXER 1-33 FILL 2 2 0.25 0.25 DEFER',
+    'MIXER 1-33 CLIP 0 0 1 1 DEFER',
+    'MIXER 1-34 VOLUME 0 DEFER',
+    'MIXER 1-34 FILL 2 2 0.25 0.25 DEFER',
+    'MIXER 1-34 CLIP 0 0 1 1 DEFER',
+    'MIXER 1-35 VOLUME 0 DEFER',
+    'MIXER 1-35 FILL 2 2 0.25 0.25 DEFER',
+    'MIXER 1-35 CLIP 0 0 1 1 DEFER',
+    'MIXER 1 COMMIT',
+    'CLEAR 1-31',
+    'MIXER 1-31 CLEAR',
+  ]);
   // Torn down means actually cleared, and dropped from the ledger…
   expect(lines).toContain(`CLEAR 1-${String(clipLayer)}`);
   expect(lines).toContain(`MIXER 1-${String(clipLayer)} CLEAR`);
@@ -2123,9 +2157,10 @@ it('🔴 §8.6 — two frames of ONE look on ONE input is refused in CG Control,
 
   expect(verdict.ok).toBe(false);
   expect(verdict.reason).toBe('live-source-duplicate');
-  // It NAMES both frames and the look — a refusal that named neither is a dead end.
-  expect(verdict.message).toContain('"live-1"');
-  expect(verdict.message).toContain('"live-2"');
+  // It NAMES both frames and the look — a refusal that named neither is a dead end. `B-308`: the
+  // frames as the operator knows them, `Plate N`, never by their ids.
+  expect(verdict.message).toMatch(/^Plate 1 and Plate 2 would both show /);
+  expect(verdict.message).not.toMatch(/live-\d/);
   expect(verdict.message).toContain('two');
   // Refused means refused: nothing reached the wire and nothing was recorded.
   expect(await since(before), 'nothing on air was disturbed').toEqual([]);
@@ -2189,7 +2224,9 @@ it('🔴 §8.8 — a hole in a look you are NOT showing does not refuse the take
   const before = (await recvLines()).length;
   const verdict = await r.setActiveLook('item-1', 'solo');
   expect(verdict.ok).toBe(false);
-  expect(verdict.message).toContain('live-3');
+  // `B-308` — `Plate 3`: numbered in the TEMPLATE, though only this plate was asked to resolve.
+  expect(verdict.message).toMatch(/^Plate 3 has no live source assigned/);
+  expect(verdict.message).not.toContain('live-3');
   // 7.9's rule still holds through the new door: a refusal changes nothing.
   expect(r.activeLookId('item-1'), 'the row stays where it was').toBe('two');
   expect(playsIn(await since(before))).toEqual([]);
@@ -2260,7 +2297,7 @@ it('🔴 §6.2 — a REFUSED batch lands NOTHING: not the texts, not the binding
 
   expect(res.accepted).toBe(false);
   expect(res.errorCode).toBe('live-source-duplicate');
-  expect(res.message).toContain('"live-1"');
+  expect(res.message).toMatch(/^Plate 1 and Plate 2 would both show /);
   // 🔴 NOTHING REACHED THE WIRE — no producer moved, and the page was never told.
   expect(await since(before), 'a refused batch sends nothing at all').toEqual([]);
   // 🔴 AND NOTHING WAS RECORDED — the TEXT did not land either, which is the half a

@@ -1,7 +1,9 @@
 import type { SourceCatalog, SourceDefinition, TemplateLiveSources } from '@cg/shared-ipc';
 import {
   effectiveOverridesForLook,
+  isolateText,
   lookPlateRects,
+  plateLabel,
   resolvePlateSourcesForLook,
 } from '@cg/shared-ipc';
 import type { LiveSourceDeclaration } from '@cg/shared-schema';
@@ -262,12 +264,19 @@ function lookIdsOf(carrier: TemplateLiveSources): readonly (string | undefined)[
  * ⚠ It deliberately reuses the export message's vocabulary — _"one source is ONE seat, so
  * only one frame can show it"_ — so the two doors read as one rule met from two sides.
  */
-export function seatCollisionMessage(collision: SeatCollision): string {
-  const frames = collision.plateIds.map((id) => `"${id}"`).join(' and ');
+export function seatCollisionMessage(
+  collision: SeatCollision,
+  /**
+   * 🔴 `B-308` — the template's declared plates, in order: each frame is named `Plate N`
+   * (`plateLabel`), never by its id. `collision.plateIds` keeps the ids.
+   */
+  plates: readonly { readonly sourceId: string }[],
+): string {
+  const frames = collision.plateIds.map((id) => plateLabel(plates, id) ?? 'a plate').join(' and ');
   const look = collision.lookId === undefined ? 'this template' : `look "${collision.lookId}"`;
   return (
-    `${frames} would both show "${collision.sourceName}" in ${look}. One source is ONE seat, ` +
-    `so only one frame can show it and the other would go to air empty. Point one of them at ` +
+    `${frames} would both show “${isolateText(collision.sourceName)}” in ${look}. One source ` +
+    `is ONE seat, so only one frame can show it and the other would go to air empty. Point one of them at ` +
     `a different source.`
   );
 }

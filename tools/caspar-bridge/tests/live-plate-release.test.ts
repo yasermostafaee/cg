@@ -66,8 +66,54 @@ describe('releaseLivePlate', () => {
     });
     expect(r.disposition).toBe('held');
     expect(r.reason).toContain('no rect in the active look');
-    // It NAMES the plate. A release an operator cannot attribute is a release they cannot act on.
-    expect(r.reason).toContain('live-2');
+  });
+
+  it('🔴 `B-308` — EVERY sentence names the plate `Plate N`, and none carries its id', () => {
+    // It NAMES the plate — a release an operator cannot attribute is one they cannot act on —
+    // in the operator's words. The id is RELOCATED to the release's own `plateId`.
+    const cases: readonly Parameters<typeof releaseLivePlate>[0][] = [
+      { itemId: 'i', plateId: 'live-2', source: { producer: ROUTE }, stillDeclared: false },
+      { itemId: 'i', plateId: 'live-2', source: undefined, stillDeclared: true },
+      {
+        itemId: 'i',
+        plateId: 'live-2',
+        source: { producer: CLIP, media: { whenHidden: 'restart' } },
+        stillDeclared: true,
+      },
+      {
+        itemId: 'i',
+        plateId: 'live-2',
+        source: { producer: ROUTE },
+        stillDeclared: true,
+        offFrame: true,
+      },
+      {
+        itemId: 'i',
+        plateId: 'live-2',
+        source: { producer: CLIP, media: { whenHidden: 'pause' } },
+        stillDeclared: true,
+      },
+      {
+        itemId: 'i',
+        plateId: 'live-2',
+        source: { producer: CLIP, media: { whenHidden: 'continue' } },
+        stillDeclared: true,
+      },
+      { itemId: 'i', plateId: 'live-2', source: { producer: ROUTE }, stillDeclared: true },
+    ];
+    const reasons = new Set<string>();
+    for (const c of cases) {
+      const r = releaseLivePlate({ ...c, plateLabel: 'Plate 2' });
+      expect(r.reason).toMatch(/^Plate 2 /);
+      expect(r.reason).not.toContain('live-2');
+      expect(r.plateId).toBe('live-2');
+      reasons.add(r.reason);
+    }
+    // Seven distinct sentences — every one of the function's branches was asked.
+    expect(reasons.size).toBe(7);
+    // A plate with no position (the template no longer declares it) is said in words.
+    const undeclared = releaseLivePlate({ ...(cases[0] as (typeof cases)[number]) });
+    expect(undeclared.reason).toMatch(/^This plate is no longer declared/);
   });
 
   it('a MEDIA clip set to `restart` falls back to teardown, and the fallback SAYS SO', () => {

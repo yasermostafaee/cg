@@ -126,6 +126,9 @@ import {
   SOURCE_OWN_OUTPUT_CODE,
   // `B-299` — the binding door names a source this channel may not show by rule 1's clause.
   notShowableWords,
+  // `B-308` — a plate is `Plate N` in every sentence, and every name in one is isolated.
+  plateLabel,
+  isolateText,
   // `PLAYOUT-FEATURES-01` C — the playlist output's box is locked at volume 0.
   isPlaylistOutput,
   PLAYLIST_AUDIO_LOCKED_CODE,
@@ -446,16 +449,23 @@ function planSeatsPlayoutRoute(plan: {
   return [...plan.placements, ...plan.parked].find(placementIsPlayoutRoute);
 }
 
-/** `ROUTE-PLATES-01` — the refusal's sentence when no epoch could be confirmed for a route plate. */
-function routeWaitingMessage(plateId: string): string {
+/**
+ * `ROUTE-PLATES-01` — the refusal's sentence when no epoch could be confirmed for a route plate.
+ * `B-308`: the plate is `Plate N` (`plate`), never its id.
+ */
+function routeWaitingMessage(plate: string | undefined): string {
   return (
-    `Plate "${plateId}": waiting for the Playout's input list — its route cannot be sent until ` +
+    `${plate ?? 'A plate'}: waiting for the Playout's input list — its route cannot be sent until ` +
     `a fresh one is read. Nothing was sent.`
   );
 }
 
 /** `ROUTE-PLATES-01` — a reconcile refused for a waiting route plate, naming it for the row's line. */
-function routeWaitingRefusal(placement: LivePlatePlacement): {
+function routeWaitingRefusal(
+  placement: LivePlatePlacement,
+  /** `B-308` — the plate's `Plate N`, for the sentence; `refused.plateId` keeps the id. */
+  plate: string | undefined,
+): {
   readonly ok: false;
   readonly errorCode: string;
   readonly message: string;
@@ -467,7 +477,7 @@ function routeWaitingRefusal(placement: LivePlatePlacement): {
   return {
     ok: false,
     errorCode: ROUTE_WAITING_CODE,
-    message: routeWaitingMessage(placement.plateId),
+    message: routeWaitingMessage(plate),
     refused: {
       plateId: placement.plateId,
       source: { id: placement.source.id, name: placement.source.name, origin: 'input' },
@@ -6709,6 +6719,8 @@ export class CasparRuntime {
         overrides: this.#effectiveOverridesFor(itemId, lookId),
         // `ROUTE-PLATES-01` — so an entry this row's channel may not show is named as such.
         channel: slot.channel,
+        // `B-308` — numbered from the WHOLE declaration; `mustResolve` is a subset of it.
+        plates: carrier.sources,
       });
       if (!refusal.ok) {
         return {
@@ -6791,6 +6803,7 @@ export class CasparRuntime {
       );
       const aspect = resolvePlateAspect({
         plateId: frame.plateId,
+        plateLabel: plateLabel(carrier.sources, frame.plateId),
         source: frame.source,
         expectedAspect: frame.declaration.expectedAspect,
         fitMode: fitMode.mode,
@@ -7094,6 +7107,23 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `B-308` — **A ROW'S PLATE IN THE OPERATOR'S WORDS: `Plate N`**, its position among the
+   * template's declared plates — the template version the row's channel lists — through
+   * `@cg/shared-ipc`'s `plateLabel`, the numbering the console's swap dialog, Inspector and row line
+   * use. Every sentence this bridge says about a plate names it by this; the id stays in the payload
+   * and in a log line's detail. `undefined` for a plate the template does not declare.
+   */
+  #plateLabelOf(itemId: string, plateId: string): string | undefined {
+    const templateId = this.#reconciler.get(itemId)?.templateId;
+    const slot = this.#slots.get(itemId);
+    if (templateId === undefined || slot === undefined) return undefined;
+    return plateLabel(
+      this.#templates.getOn(slot.channel, templateId)?.liveSources?.sources,
+      plateId,
+    );
+  }
+
+  /**
    * 🔴 **§6.2 / §2.7 — THE DOOR A BINDING CHANGE IS REFUSED AT: HERE, IN CG CONTROL, WHILE
    * THE OPERATOR IS WATCHING — never at the take and never on air.**
    *
@@ -7142,7 +7172,10 @@ export class CasparRuntime {
     });
     const collision = prospective.collisions[0];
     if (collision !== undefined) {
-      return { reason: 'live-source-duplicate', message: seatCollisionMessage(collision) };
+      return {
+        reason: 'live-source-duplicate',
+        message: seatCollisionMessage(collision, carrier.sources),
+      };
     }
     /*
       🔴 `PLAYOUT-FEATURES-01` B (`B-298`) and `B-299` — A NEW BINDING THIS ROW'S CHANNEL MAY NOT SHOW: the
@@ -7175,18 +7208,20 @@ export class CasparRuntime {
     const held = new Set(inForce.frames.map(frameKey));
     for (const frame of prospective.frames) {
       if (held.has(frameKey(frame))) continue;
+      // `B-308` — the plate is `Plate N` and the source's name sits in its own isolate.
+      const plate = plateLabel(carrier.sources, frame.plateId) ?? 'A plate';
       if (sourceLoopsOn(frame.source, slot.channel)) {
         const words = ownOutputWords(frame.source.name, slot.channel);
         return {
           reason: SOURCE_OWN_OUTPUT_CODE,
-          message: `Plate "${frame.plateId}": “${words.name}”${words.rest}`,
+          message: `${plate}: “${isolateText(words.name)}”${words.rest}`,
         };
       }
       if (!sourceShowableOn(frame.source, slot.channel)) {
         const words = notShowableWords(frame.source.name, slot.channel);
         return {
           reason: LIVE_PLATE_SOURCE_NOT_SHOWABLE,
-          message: `Plate "${frame.plateId}": “${words.name}”${words.rest}`,
+          message: `${plate}: “${isolateText(words.name)}”${words.rest}`,
         };
       }
     }
@@ -8479,7 +8514,8 @@ export class CasparRuntime {
     const routeSeat = planSeatsPlayoutRoute(plan);
     if (routeSeat !== undefined) {
       const epochBefore = this.#sourceCatalog.inputsEpoch;
-      if (!(await this.#ensureRouteEpoch())) return routeWaitingRefusal(routeSeat);
+      if (!(await this.#ensureRouteEpoch()))
+        return routeWaitingRefusal(routeSeat, this.#plateLabelOf(itemId, routeSeat.plateId));
       if (this.#sourceCatalog.inputsEpoch !== epochBefore) {
         plan = planReconcile();
         if (!plan.ok) return refusePlan(plan);
@@ -8490,7 +8526,8 @@ export class CasparRuntime {
         const record = prior.get(p.producerArg);
         return record?.held === true && record.epoch !== this.#sourceCatalog.inputsEpoch;
       });
-      if (staleReturn !== undefined) return routeWaitingRefusal(staleReturn);
+      if (staleReturn !== undefined)
+        return routeWaitingRefusal(staleReturn, this.#plateLabelOf(itemId, staleReturn.plateId));
     }
     /*
       🔴 `LOOK-SWITCH-01` / `B-273` — A SWITCH SEATS WHAT ITS LOOK NEEDS BEFORE `beforeApply` TELLS
@@ -9740,8 +9777,11 @@ export class CasparRuntime {
         const dropped = touched.indexOf(record);
         if (dropped >= 0) touched.splice(dropped, 1);
         // `PLAYOUT-SOURCES-01` §1.E — a stream argument can carry credentials; never printed.
+        // A log line: the plate's id, with its `Plate N` beside it (`B-308`).
+        const plate = this.#plateLabelOf(itemId, placement.plateId);
         process.stderr.write(
-          `[caspar-bridge] ${itemId}: could not pre-seat "${placement.plateId}" ` +
+          `[caspar-bridge] ${itemId}: could not pre-seat "${placement.plateId}"` +
+            `${plate === undefined ? '' : ` (${plate})`} ` +
             `(${redactUrlCredentials(placement.producerArg)}) for a look that is not on screen: ` +
             `${redactUrlCredentials(String(failure))}\n`,
         );
@@ -10078,10 +10118,11 @@ export class CasparRuntime {
         return {
           ok: false,
           errorCode: failure,
+          // `B-308` — the plate is `Plate N`; its id stays in `refusalOf`'s payload.
           message:
-            `plate "${failed.record.sourceId}" IS now on its new source, but CasparCG refused ` +
-            `the command that followed it, so its geometry or volume may be wrong. Nothing was ` +
-            `cleared — re-issue the change to correct it.`,
+            `${this.#plateLabelOf(itemId, failed.record.sourceId) ?? 'The plate'} IS now on its ` +
+            `new source, but CasparCG refused the command that followed it, so its geometry or ` +
+            `volume may be wrong. Nothing was cleared — re-issue the change to correct it.`,
           ...refusalOf(failed),
         };
       }
@@ -10180,6 +10221,8 @@ export class CasparRuntime {
         */
         stillDeclared: declared.has(record.producer),
         offFrame: offFrame.has(record.sourceId),
+        // `B-308` — the sentence names the plate `Plate N`; its id stays in the release's payload.
+        plateLabel: this.#plateLabelOf(itemId, record.sourceId),
       });
       releases.push(release);
       if (release.disposition !== 'held') continue;
@@ -10585,10 +10628,12 @@ export class CasparRuntime {
       return {
         ok: false,
         reason: applied.reason ?? 'amcp-error',
+        // `B-308` — the plate in the operator's words; the request carried its id.
         message:
           applied.message ??
-          `CasparCG refused the substitution, so plate "${plateId}" is still on its previous ` +
-            `source. Nothing was cleared.`,
+          `CasparCG refused the substitution, so ` +
+            `${plateLabel(template?.liveSources?.sources, plateId) ?? 'the plate'} is still on ` +
+            `its previous source. Nothing was cleared.`,
       };
     });
   }
@@ -14466,8 +14511,11 @@ export class CasparRuntime {
       sourceName: placement.source.name,
       sourceOrigin: 'input',
     });
-    const message = routeWaitingMessage(placement.plateId);
-    process.stderr.write(`[caspar-bridge] take refused for ${itemId}: ${message}\n`);
+    const message = routeWaitingMessage(this.#plateLabelOf(itemId, placement.plateId));
+    // The log line keeps the id beside the sentence, for a technician (`B-308`).
+    process.stderr.write(
+      `[caspar-bridge] take refused for ${itemId} (plate "${placement.plateId}"): ${message}\n`,
+    );
     return { accepted: false, errorCode: ROUTE_WAITING_CODE, message, refusalOnRow: true };
   }
 
@@ -14478,9 +14526,12 @@ export class CasparRuntime {
       plateId: record.sourceId,
       sourceOrigin: 'input',
     });
+    // A log line: it keeps the plate's id, with its `Plate N` beside it (`B-308`).
+    const plate = this.#plateLabelOf(itemId, record.sourceId);
     process.stderr.write(
-      `[caspar-bridge] ${itemId}: plate "${record.sourceId}" waits for the Playout's input list ` +
-        `(its route belongs to epoch ${record.epoch ?? 'unknown'}); nothing is sent for it.\n`,
+      `[caspar-bridge] ${itemId}: plate "${record.sourceId}"${plate === undefined ? '' : ` (${plate})`} ` +
+        `waits for the Playout's input list (its route belongs to epoch ` +
+        `${record.epoch ?? 'unknown'}); nothing is sent for it.\n`,
     );
   }
 

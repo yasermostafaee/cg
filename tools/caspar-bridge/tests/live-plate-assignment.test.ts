@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SourceAssignments, SourceCatalog } from '@cg/shared-ipc';
+import { isolateText, type SourceAssignments, type SourceCatalog } from '@cg/shared-ipc';
 import type { LiveSourceDeclaration } from '@cg/shared-schema';
 import { LIVE_PLATE_UNASSIGNED, resolvePlateAssignments } from '../src/live-plate-assignment.js';
 
@@ -12,6 +12,10 @@ import { LIVE_PLATE_UNASSIGNED, resolvePlateAssignments } from '../src/live-plat
  * `live-source-unassigned` with three guest boxes on screen learns nothing they can
  * act on. What this file pins is that the message says WHICH plate, in both of the
  * two ways a plate can be unassigned.
+ *
+ * 🔴 `B-308` — and it says it in the OPERATOR's words: `Plate N`, the plate's position in its
+ * template (the swap dialog's and the Inspector's word), never the scene's id (`guest-1`). The ids
+ * stay in `plateIds` and `refused`, for a technician.
  */
 
 const plate = (sourceId: string): LiveSourceDeclaration => ({
@@ -69,11 +73,13 @@ describe('🔴 the refusal NAMES THE PLATE — in both ways of being unassigned'
     expect(out.ok).toBe(false);
     if (out.ok) return;
     expect(out.errorCode).toBe(LIVE_PLATE_UNASSIGNED);
-    expect(out.message).toContain('guest-1');
-    // …and says what happens if it is not fixed, in the operator's terms.
-    expect(out.message).toMatch(/to air empty/i);
-    // …and what to do next. A refusal with no next step reads as a broken console.
-    expect(out.message).toMatch(/CG Control/);
+    // `B-308` — `Plate 1`, and no id in the sentence; the id stays in `plateIds`.
+    expect(out.message).toBe(
+      'Plate 1 has no live source assigned, so it would go to air empty. Assign it in CG ' +
+        'Control, then take again.',
+    );
+    expect(out.message).not.toContain('guest-1');
+    expect(out.plateIds).toEqual(['guest-1']);
   });
 
   it('CASCADED AWAY (the source was retired) names the plate too', () => {
@@ -81,10 +87,11 @@ describe('🔴 the refusal NAMES THE PLATE — in both ways of being unassigned'
     // catalog. Modelled here as the assignment simply being absent — which is
     // exactly what the cascade leaves behind, and exactly why the two cases
     // resolve to ONE state.
-    const out = resolve([plate('guest-2')], assignments());
+    const out = resolve([plate('guest-1'), plate('guest-2')], assignments(['guest-1', 'cat-a']));
     expect(out.ok).toBe(false);
     if (out.ok) return;
-    expect(out.message).toContain('guest-2');
+    expect(out.message).toMatch(/^Plate 2 has no live source assigned/);
+    expect(out.message).not.toContain('guest-2');
   });
 
   it('a STALE assignment naming a missing source keeps the CODE and changes the WORDING', () => {
@@ -96,8 +103,11 @@ describe('🔴 the refusal NAMES THE PLATE — in both ways of being unassigned'
     expect(out.ok).toBe(false);
     if (out.ok) return;
     expect(out.errorCode).toBe(LIVE_PLATE_UNASSIGNED);
-    expect(out.message).toContain('guest-1');
-    expect(out.message).toMatch(/no longer has/i);
+    expect(out.message).toBe(
+      'Plate 1 is assigned to a source this installation no longer has. Assign it in CG ' +
+        'Control, then take again.',
+    );
+    expect(out.message).not.toContain('guest-1');
   });
 
   it('names EVERY unresolved plate, not just the first', () => {
@@ -110,17 +120,37 @@ describe('🔴 the refusal NAMES THE PLATE — in both ways of being unassigned'
     expect(out.ok).toBe(false);
     if (out.ok) return;
     expect(out.plateIds).toEqual(['guest-1', 'guest-3']);
-    expect(out.message).toContain('guest-1');
-    expect(out.message).toContain('guest-3');
-    expect(out.message).not.toContain('guest-2');
+    expect(out.message).toMatch(/^Plate 1 and Plate 3 have no live source assigned/);
+    expect(out.message).not.toContain('Plate 2');
+    expect(out.message).not.toMatch(/guest-/);
   });
 
   it('mixes the two causes in ONE message, each in its own words', () => {
     const out = resolve([plate('guest-1'), plate('guest-2')], assignments(['guest-2', 'cat-GONE']));
     expect(out.ok).toBe(false);
     if (out.ok) return;
-    expect(out.message).toMatch(/"guest-1".*no live source assigned/is);
-    expect(out.message).toMatch(/"guest-2".*no longer has/is);
+    expect(out.message).toMatch(/Plate 1 has no live source assigned/);
+    expect(out.message).toMatch(/Plate 2 is assigned to a source .* no longer has/);
+    expect(out.message).not.toMatch(/guest-/);
+  });
+
+  it('🔴 `B-308` — a plate is numbered in its TEMPLATE, not in the subset asked to resolve', () => {
+    // The reconcile hands this function only the plates that must resolve. Numbered from that
+    // subset, the template's third plate would read `Plate 1`; `plates` is the whole declaration.
+    const whole = [plate('guest-1'), plate('guest-2'), plate('guest-3')];
+    const out = resolvePlateAssignments({
+      templateId: 'tpl-1',
+      declarations: [plate('guest-3')],
+      plates: whole,
+      assignments: assignments(),
+      catalog,
+    });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.message).toMatch(/^Plate 3 has no live source assigned/);
+    // Control: without the whole declaration it is numbered from what it was given.
+    const narrowed = resolve([plate('guest-3')], assignments());
+    expect(!narrowed.ok && narrowed.message).toMatch(/^Plate 1 /);
   });
 
   it('🔴 ALL-OR-NOTHING — a partly-assigned template seats NOTHING', () => {
@@ -131,5 +161,33 @@ describe('🔴 the refusal NAMES THE PLATE — in both ways of being unassigned'
     // reason to look for what is missing.
     const out = resolve([plate('guest-1'), plate('guest-2')], assignments(['guest-1', 'cat-a']));
     expect(out.ok).toBe(false);
+  });
+});
+
+describe('🔴 `B-308` — an entry the plate may not use: `Plate N`, the name isolated', () => {
+  it('an UNAVAILABLE entry names the plate by position and isolates the Persian name', () => {
+    const persian: SourceCatalog = {
+      sources: [
+        {
+          id: 'cat-p',
+          name: 'ورودی ۴',
+          format: '1080i5000',
+          producer: { kind: 'route', channel: 4 },
+          status: 'unavailable',
+          reason: 'no signal',
+        },
+      ],
+    };
+    const out = resolvePlateAssignments({
+      templateId: 'tpl-1',
+      declarations: [plate('guest-1'), plate('guest-2')],
+      assignments: assignments(['guest-1', 'cat-p'], ['guest-2', 'cat-p']),
+      catalog: persian,
+    });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.message).toBe(`Plate 1: “${isolateText('ورودی ۴')}” is unavailable: no signal`);
+    // The id is RELOCATED, not deleted: it is the refusal's payload.
+    expect(out.refused?.plateId).toBe('guest-1');
   });
 });

@@ -2,6 +2,7 @@ import {
   CG_UNLICENSED_CODE,
   notShowableWords,
   ownOutputWords,
+  plateLabel,
   SOURCE_OWN_OUTPUT_CODE,
   unseatableWords,
   type SourceDefinition,
@@ -263,15 +264,15 @@ export function takeRefusalLine(
 
 /**
  * `Plate N` for a template's plate — its position among the template's declared plates, the
- * operator's word for it (golden rule 11: the id stays on a `title`).
+ * operator's word for it (golden rule 11: the id stays on a `title`). The numbering is
+ * `@cg/shared-ipc`'s `plateLabel`, which CG Bridge's sentences use too (`B-308`).
  */
 export function plateLabelOf(
   template: TemplateInfo | null | undefined,
   plateId: string | undefined,
 ): string | undefined {
   if (plateId === undefined) return undefined;
-  const index = (template?.liveSources?.sources ?? []).findIndex((p) => p.sourceId === plateId);
-  return index < 0 ? undefined : `Plate ${String(index + 1)}`;
+  return plateLabel(template?.liveSources?.sources, plateId);
 }
 
 /**

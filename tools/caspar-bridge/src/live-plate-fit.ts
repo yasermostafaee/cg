@@ -1,4 +1,4 @@
-import { aspectForFormat, type SourceDefinition } from '@cg/shared-ipc';
+import { aspectForFormat, isolateText, type SourceDefinition } from '@cg/shared-ipc';
 import { DEFAULT_LIVE_FIT_MODE, type LiveFitMode } from '@cg/shared-schema';
 
 /**
@@ -48,8 +48,13 @@ export const LIVE_PLATE_ASPECT_MISMATCH = 'live-source-aspect-mismatch';
 export const ASPECT_MATCH_TOLERANCE = 0.01;
 
 export interface PlateAspectInput {
-  /** The operator-facing handle for the plate — used in the refusal message. */
+  /** The plate's id — the scene's handle for it, never put in the sentence (`B-308`). */
   readonly plateId: string;
+  /**
+   * 🔴 `B-308` — the plate in the operator's words, `Plate N` (`@cg/shared-ipc`'s `plateLabel`, from
+   * the template's declaration): the refusal names the plate by THIS. Absent reads "This plate".
+   */
+  readonly plateLabel?: string | undefined;
   /** The catalog entry this plate is ASSIGNED to. Resolved by the caller (6.7). */
   readonly source: SourceDefinition;
   /** The author's assertion about the feed's shape, when they made one. */
@@ -203,9 +208,10 @@ export function resolvePlateAspect(input: PlateAspectInput): PlateAspectOutcome 
         errorCode: LIVE_PLATE_ASPECT_MISMATCH,
         // NAMES the plate and BOTH numbers. A bare "aspect mismatch" sends the
         // operator to guess which of several plates, and to guess which side to fix.
+        // `B-308` — the plate as `Plate N`, and the source's name in its own isolate.
         message:
-          `plate "${input.plateId}" is designed for a ${fmt(expected)} feed, but the ` +
-          `assigned source "${input.source.name}" delivers ${fmt(stated)}. ` +
+          `${input.plateLabel ?? 'This plate'} is designed for a ${fmt(expected)} feed, but the ` +
+          `assigned source “${isolateText(input.source.name)}” delivers ${fmt(stated)}. ` +
           (input.fitMode === 'cover'
             ? `Cropping it would cut a part of the picture the author never saw — ` +
               `re-assign the plate, or correct the source's format.`

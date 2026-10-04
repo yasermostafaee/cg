@@ -249,10 +249,22 @@ it('🔴 a REFUSED replace leaves the previous producer up, and records NO overr
   const layer = layerOf(r, 'guest-1') ?? 0;
   const beforeProducer = r.liveLayers().get('item-1')?.[0]?.producer;
 
+  const wireFrom = (await recvLines()).length;
   const verdict = await r.swapLiveSource('item-1', 'guest-1', 'src-bad');
 
   expect(verdict.ok).toBe(false);
-  expect(verdict.message).toContain('still on its previous source');
+  // 🔴 `B-308` — the plate in the operator's words (`Plate 1`), never its id (`guest-1`).
+  expect(verdict.message).toBe(
+    'CasparCG refused the substitution, so Plate 1 is still on its previous source. Nothing was ' +
+      'cleared.',
+  );
+  expect(verdict.message).not.toContain('guest-1');
+  // CONTROL — the wire is the one the unchanged sentence's swap sent, recorded before `B-308`.
+  expect(
+    (await recvLines())
+      .slice(wireFrom)
+      .filter((l) => /^(PLAY|LOAD|LOADBG|MIXER|CLEAR|STOP|CG) /.test(l)),
+  ).toEqual(['PLAY 1-30 "bogus://clip.mov"']);
   // Nothing was cleared, so the plate is still showing what it was showing.
   expect((await recvLines()).some((l) => l === `CLEAR 1-${String(layer)}`)).toBe(false);
   expect(r.liveLayers().get('item-1')?.[0]?.producer).toBe(beforeProducer);

@@ -2,13 +2,52 @@ import { describe, expect, it } from 'vitest';
 import {
   cleanFileName,
   commandForDisplay,
+  directionOf,
   displayLabel,
+  isolateText,
   placeName,
+  plateLabel,
+  plateList,
   producerForDisplay,
   templateDisplayName,
   timingClause,
   type FixedLayerBank,
 } from '../src/index.js';
+
+describe('🔴 `B-308` — a plate’s name: `Plate N`, its position in its template', () => {
+  const PLATES = [{ sourceId: 'guest-1' }, { sourceId: 'guest-2' }, { sourceId: 'guest-3' }];
+
+  it('counts from 1 in declaration order, and never returns the id', () => {
+    expect(plateLabel(PLATES, 'guest-1')).toBe('Plate 1');
+    expect(plateLabel(PLATES, 'guest-3')).toBe('Plate 3');
+  });
+
+  it('a plate the template does not declare has no position — undefined, never the id', () => {
+    expect(plateLabel(PLATES, 'guest-9')).toBeUndefined();
+    expect(plateLabel(undefined, 'guest-1')).toBeUndefined();
+  });
+
+  it('lists plates as a sentence does', () => {
+    expect(plateList([])).toBe('');
+    expect(plateList(['Plate 1'])).toBe('Plate 1');
+    expect(plateList(['Plate 1', 'Plate 3'])).toBe('Plate 1 and Plate 3');
+    expect(plateList(['Plate 1', 'Plate 2', 'Plate 3'])).toBe('Plate 1, Plate 2 and Plate 3');
+  });
+});
+
+describe('a name in a plain-text line: its own direction, in its own isolate (`B-303`, `B-300`)', () => {
+  it('a name with any Persian letter is right to left; a Persian digit alone is not', () => {
+    expect(directionOf('NDI کانالِ ۱ (APASAI)')).toBe('rtl');
+    expect(directionOf('Studio 1')).toBe('ltr');
+    expect(directionOf('Cam ۱')).toBe('ltr');
+  });
+
+  it('isolates a name in the isolate of its own direction (RLI or LRI … PDI)', () => {
+    const pdi = String.fromCodePoint(0x2069);
+    expect(isolateText('ورودی ۴')).toBe(`${String.fromCodePoint(0x2067)}ورودی ۴${pdi}`);
+    expect(isolateText('Studio 1')).toBe(`${String.fromCodePoint(0x2066)}Studio 1${pdi}`);
+  });
+});
 
 /**
  * `CONSOLE-POLISH-01` (`R-083`) — the words a row shows, in their new home. They moved here from the

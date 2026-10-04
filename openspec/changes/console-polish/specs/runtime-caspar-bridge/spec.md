@@ -95,3 +95,38 @@ parsed. No test SHALL carry its own copy of the reader.
 #### Scenario: The rest of the line arrives
 
 - **WHEN** the mock finishes the line **THEN** the next read returns it whole
+
+### Requirement: CG Bridge SHALL name a plate `Plate N` in every sentence an operator reads, never by its id
+
+CG Bridge SHALL name a plate `Plate N` in every sentence it sends that a console shows — a refusal of a
+take, a look switch, a swap or a binding change, and the reason a plate was released by a look switch:
+its position among its template's declared plates, counted from 1, through the one numbering `@cg/shared-ipc` provides
+(`plateLabel`), which the console's own plate labels use too. A plate SHALL be numbered from the template's
+whole declaration, never from a subset a caller was asked to resolve. A plate the template does not declare
+SHALL be said in words, never by its id. Every source name such a sentence carries SHALL sit in its own bidi
+isolate, in its own direction (`isolateText`). The id SHALL be relocated, not deleted: it stays in each
+payload (`plateId`, `plateIds`, `refused`) and in the bridge's log lines. Only the words change: no refusal
+condition and nothing sent to CasparCG.
+
+#### Scenario: A refused swap
+
+- **WHEN** CasparCG refuses the `PLAY` of a swap of a template's first plate **THEN** the refusal reads
+  `CasparCG refused the substitution, so Plate 1 is still on its previous source. Nothing was cleared.`, with
+  no plate id in it — control: the AMCP lines the swap sent equal, line for line, those the unchanged bridge
+  sent for the same swap
+
+#### Scenario: A plate released by a look switch
+
+- **WHEN** a switch to a solo look tears down a clip set to restart when hidden and holds four other plates
+  **THEN** each release's reason begins `Plate 2` … `Plate 6`, none carries a plate id, and each release's
+  `plateId` still names the plate — control: the switch's AMCP lines equal those recorded before the change
+
+#### Scenario: A plate numbered in its template
+
+- **WHEN** a look switch must resolve only the template's third plate and it has no source assigned **THEN**
+  the refusal reads `Plate 3 has no live source assigned …`, not `Plate 1`
+
+#### Scenario: A Persian source name
+
+- **WHEN** a take is refused because `ورودی ۴` cannot be shown on channel 2 **THEN** the refusal reads
+  `Plate 1: “ورودی ۴” can't be shown on CH 2.` with the name in a right-to-left isolate

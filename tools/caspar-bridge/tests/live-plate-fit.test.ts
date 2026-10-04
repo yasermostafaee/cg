@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SourceDefinition } from '@cg/shared-ipc';
+import { isolateText, type SourceDefinition } from '@cg/shared-ipc';
 import type { LiveFitMode } from '@cg/shared-schema';
 import {
   ASPECT_MATCH_TOLERANCE,
@@ -108,13 +108,16 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
     // sends the operator to guess which of several plates, and which side to fix.
     const out = resolvePlateAspect({
       plateId: 'guest-2',
+      plateLabel: 'Plate 2',
       source: source({ format: 'PAL', name: 'Baku' }),
       expectedAspect: 16 / 9,
       fitMode: 'cover',
     });
     if (out.ok) throw new Error('expected a refusal');
-    expect(out.message).toContain('guest-2');
-    expect(out.message).toContain('Baku');
+    // 🔴 `B-308` — the plate in the operator's words, never its id; the source's name isolated.
+    expect(out.message).toMatch(/^Plate 2 is designed for a 16:9 feed/);
+    expect(out.message).not.toContain('guest-2');
+    expect(out.message).toContain(`“${isolateText('Baku')}”`);
     expect(out.message).toContain('16:9');
     expect(out.message).toContain('4:3');
     // …and it says what to DO. A refusal with no next step reads as a broken console.
@@ -201,6 +204,7 @@ describe('the expectedAspect VALIDATION — a different role from the fallback',
 describe('C-028 — the aspect-mismatch refusal, per mode', () => {
   const MISMATCH = {
     plateId: 'guest-2',
+    plateLabel: 'Plate 2',
     source: source({ format: 'PAL', name: 'Baku' }),
     expectedAspect: 16 / 9,
   } as const;
@@ -220,7 +224,8 @@ describe('C-028 — the aspect-mismatch refusal, per mode', () => {
     const out = resolvePlateAspect({ ...MISMATCH, fitMode: 'contain' });
     if (!out.ok) throw new Error('expected contain not to refuse');
     expect(out.warning?.errorCode).toBe(LIVE_PLATE_ASPECT_MISMATCH);
-    expect(out.warning?.message).toContain('guest-2');
+    expect(out.warning?.message).toContain('Plate 2');
+    expect(out.warning?.message).not.toContain('guest-2');
     expect(out.warning?.message).toContain('Baku');
     expect(out.warning?.message).toContain('16:9');
     expect(out.warning?.message).toContain('4:3');

@@ -269,7 +269,8 @@ describe('asyncResultMessage — the shared button/menu wording', () => {
     part of the refusal an operator can act on, while still looking correct.
   */
   it('prefers the refusal’s own message over the code’s generic wording', () => {
-    const specific = 'plate "guest-3" has no live source assigned, so it would go to air empty.';
+    // `B-308` — the bridge names the plate `Plate N`, its position in the template.
+    const specific = 'Plate 3 has no live source assigned, so it would go to air empty.';
     expect(
       asyncResultMessage({
         accepted: false,

@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import type {
   ConnectionConfig,
   FixedLayerBank,
@@ -11,7 +11,7 @@ import type {
   SourceCatalog,
   TemplateInfo,
 } from '@cg/shared-ipc';
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { textRunX } from './fixtures/runtime.js';
 
 /**
@@ -111,9 +111,14 @@ async function readsRightToLeft(target: Locator, first: string, last: string): P
   expect(a.left, `"${first}" is not RIGHT of "${last}"`).toBeGreaterThanOrEqual(b.right);
 }
 
-test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in their own order, no paragraph, no id; control: the swap sends exactly the recorded wire', async ({
-  page,
-}) => {
+/**
+ * A real CasparCG mock and a real CG Bridge; `two-box` taken ON AIR on row 59 of `bank`, settled
+ * (its own seating and the boot blanket all sent); the row's SOURCE dialog open.
+ */
+async function swapDialogOnAir(
+  page: Page,
+  bank: FixedLayerBank,
+): Promise<{ mock: MockHandle; row: Locator; dialog: Locator }> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 10, channels: 1 });
   scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-swap-names-'));
@@ -125,7 +130,7 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
   bridge = await createBridge({
     port: 0,
     connection,
-    fixedLayers: BANK,
+    fixedLayers: bank,
     sourceCatalog: CATALOG,
     sourceAssignments: ASSIGNMENTS,
     stackPath: path.join(scratch, 'bridge-stack.json'),
@@ -202,6 +207,13 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
       .click({ force: true, timeout: 2000 });
     await expect(dialog).toBeVisible({ timeout: 2000 });
   }).toPass({ timeout: 20_000 });
+  return { mock, row, dialog };
+}
+
+test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in their own order, no paragraph, no id; control: the swap sends exactly the recorded wire', async ({
+  page,
+}) => {
+  const { mock, dialog } = await swapDialogOnAir(page, BANK);
 
   // No paragraph, and no plate id anywhere in what the operator reads.
   await expect(dialog.locator('p')).toHaveCount(0);
@@ -238,4 +250,76 @@ test('🔴 B-306 — plates are `Plate N`, sources the Playout’s names in thei
       { timeout: 5000 },
     )
     .toEqual(RECORDED_WIRE);
+});
+
+/**
+ * 🔴 `RELEASE-0110-01` Part A (`B-308`) — **CG BRIDGE'S OWN SENTENCES NAME A PLATE `Plate N`.**
+ *
+ * The swap's refusal is CG Bridge's sentence, shown in this dialog as it comes. It read
+ * `CasparCG refused the substitution, so plate "l1" is still on its previous source.` — the template
+ * author's id, beside a label that says `Plate 1`. Now it says `Plate 1` too; the id stays in what the
+ * console sent, for a technician.
+ *
+ * The row is named by the console alone (`operatorRowName` — its alias here, Persian), never by CG
+ * Bridge, and it reads in its own logical order: right to left, its first word RIGHTMOST.
+ *
+ * CONTROL — **the wire**. The refused swap's AMCP lines are compared with what the bridge sent for
+ * the same press BEFORE `B-308`, recorded on 2026-10-04 from the unchanged build.
+ */
+const PERSIAN_ROW = 'بستر خبر';
+const PERSIAN_BANK: FixedLayerBank = {
+  ...BANK,
+  low: { start: 50, count: 10, aliases: { '59': PERSIAN_ROW } },
+};
+
+/** What the refused swap of plate 1 to `NAME_2` sent, recorded on the bridge before `B-308`. */
+const REFUSED_WIRE: readonly string[] = [
+  'MIXER 1-61 OPACITY 0 DEFER',
+  'MIXER 1-61 VOLUME 0 DEFER',
+  'MIXER 1-61 FILL 0 0.238542 0.522917 0.522917 DEFER',
+  'MIXER 1-61 CLIP 0 0.238542 0.522917 0.522917 DEFER',
+  'MIXER 1 COMMIT',
+  'PLAY 1-61 DECKLINK DEVICE 2',
+];
+
+test('🔴 B-308 — a refused swap names the plate `Plate 1`, never its id; the Persian row reads right to left; control: the refused swap sends exactly the recorded wire', async ({
+  page,
+}) => {
+  const { mock, row, dialog } = await swapDialogOnAir(page, PERSIAN_BANK);
+
+  // The row, in the console's words (its alias), laid out in its own direction.
+  await expect(row).toContainText(PERSIAN_ROW);
+  await readsRightToLeft(row, 'بستر', 'خبر');
+
+  // CasparCG refuses the swap's PLAY of DeckLink 2; every other command is answered as before.
+  const honest = defaultHandlers().get('PLAY');
+  if (honest === undefined) throw new Error('the mock has no PLAY handler');
+  mock.setHandler('PLAY', (req, ctx) =>
+    req.raw.includes('DECKLINK DEVICE 2')
+      ? { kind: 'err' as const, code: 404, verb: 'PLAY' }
+      : honest(req, ctx),
+  );
+
+  // ── the swap: plate 1 onto `NAME_2`, refused ──
+  const before = mock.receivedCommands().length;
+  await dialog.locator('#swap-bed-59-l1').click();
+  await page.locator('[data-picker-input]').filter({ hasText: 'CAM 2' }).first().click();
+  const wire = (): string[] =>
+    mock
+      .receivedCommands()
+      .slice(before)
+      .map((c) => c.line)
+      .filter((l) => /^(PLAY|LOAD|LOADBG|MIXER|CLEAR|STOP|CG) /.test(l));
+
+  // The plate in the operator's words, and no plate id anywhere in what the operator reads.
+  await expect(dialog).toContainText(
+    'CasparCG refused the substitution, so Plate 1 is still on its previous source. Nothing was ' +
+      'cleared.',
+  );
+  expect((await dialog.textContent()) ?? '').not.toMatch(/\bl1\b|\bl2\b/);
+  // …and the plate did not move: it is not marked swapped.
+  await expect(dialog.locator('[data-swap-plate="l1"]')).not.toContainText('swapped for this row');
+
+  // CONTROL — the wire is the recorded one, line for line.
+  await expect.poll(wire, { timeout: 5000 }).toEqual(REFUSED_WIRE);
 });

@@ -172,7 +172,7 @@ describe('a refusal never becomes a local truth, and never shows a wire identifi
   it('does NOT adopt a refused assignment', async () => {
     initSources(installBridge());
     await settle();
-    assignmentRefusal = { reason: 'unknown-source', message: 'plate "guest-1" …' };
+    assignmentRefusal = { reason: 'unknown-source', message: 'Plate 1 …' };
 
     const refusal = await commitSourceAssignments(bound);
     // `PLAYOUT-SOURCES-01` — nothing is "defined on this station" now: the sources are the Playout's.

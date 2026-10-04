@@ -117,8 +117,8 @@ export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted
 
     ⚠ AND IT IS PER-CODE, NOT BLANKET — the first cut of this fix inverted the order for
     everything and `asyncButton.test.ts` caught what that costs: for `live-source-unassigned`
-    the bridge's sentence names the PLATE (`guest-3`), which is the operator's own word for it
-    and the only part of the refusal they can act on. Our generic sentence cannot say it. So
+    the bridge's sentence names the PLATE (`Plate 3` — its position, since `B-308`, never its
+    id) and that is the only part of the refusal they can act on. Our generic sentence cannot say it. So
     `prefersOwnMessage` lists the codes whose bridge text identifies things by UUID, and
     everything else keeps the old order.
 

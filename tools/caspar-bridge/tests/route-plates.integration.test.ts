@@ -7,6 +7,7 @@ import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import { DEFAULT_LAYER_POLICY } from '@cg/caspar-client';
 import {
   inputSourceId,
+  isolateText,
   type ConnectionConfig,
   type FixedLayerBank,
   type SourceAssignments,
@@ -683,7 +684,13 @@ describe('§1.C — rule 5: a route is never sent from a stale or unknown epoch'
     await dropAndReconnect(r, () => mock.closeAllAmcpConnections());
     await waitFor(() => row(r)?.takeRefusal?.code === ROUTE_WAITING_CODE, 'the waiting line');
     expect(await r.out(ROW)).toMatchObject({ accepted: true });
-    expect(await r.take(ROW)).toMatchObject({ accepted: false, errorCode: ROUTE_WAITING_CODE });
+    const waiting = await r.take(ROW);
+    expect(waiting).toMatchObject({ accepted: false, errorCode: ROUTE_WAITING_CODE });
+    // `B-308` — the plate in the operator's words; its id stays on the row's `takeRefusal`.
+    expect(waiting.message).toBe(
+      "Plate 1: waiting for the Playout's input list — its route cannot be sent until a fresh " +
+        'one is read. Nothing was sent.',
+    );
     expect(routeLines(await sentSince(from))).toEqual([]);
   });
 
@@ -738,7 +745,10 @@ describe('§1.D — rule 1: only on a channel the input names, and only while it
     const from = await mark();
     const verdict = await r.take(ROW);
     expect(verdict).toMatchObject({ accepted: false, errorCode: 'source-not-showable' });
-    expect(verdict).toMatchObject({ message: 'Plate "l1": “ورودی ۴” can\'t be shown on CH 2.' });
+    // `B-308` — `Plate N`, never the id, and the Persian name in its own isolate.
+    expect(verdict).toMatchObject({
+      message: `Plate 1: “${isolateText('ورودی ۴')}” can't be shown on CH 2.`,
+    });
     expect(await sentSince(from)).toEqual([]);
     expect(row(r)?.takeRefusal).toMatchObject({
       code: 'source-not-showable',
@@ -753,7 +763,9 @@ describe('§1.D — rule 1: only on a channel the input names, and only while it
     const from = await mark();
     const verdict = await r.take(ROW);
     expect(verdict).toMatchObject({ accepted: false, errorCode: 'source-unavailable' });
-    expect(verdict).toMatchObject({ message: 'Plate "l1": “ورودی ۴” is unavailable: no signal' });
+    expect(verdict).toMatchObject({
+      message: `Plate 1: “${isolateText('ورودی ۴')}” is unavailable: no signal`,
+    });
     expect(await sentSince(from)).toEqual([]);
   });
 
@@ -923,7 +935,7 @@ describe('PLAYOUT-FEATURES-01 B (B-298) — `ownOutputOf`: refused on its own ch
     expect(verdict).toMatchObject({
       accepted: false,
       errorCode: 'source-own-output',
-      message: 'Plate "l1": “NDI کانالِ ۲” is the own output of CH 2 (would loop).',
+      message: `Plate 1: “${isolateText('NDI کانالِ ۲')}” is the own output of CH 2 (would loop).`,
     });
     expect(await sentSince(from)).toEqual([]);
     expect(row(r)?.takeRefusal).toMatchObject({
@@ -977,7 +989,7 @@ describe('B-299 — a swap to a route this channel may not show is refused; an u
     expect(refused).toMatchObject({
       ok: false,
       reason: 'source-not-showable',
-      message: 'Plate "l1": “ورودی ۴” can\'t be shown on CH 2.',
+      message: `Plate 1: “${isolateText('ورودی ۴')}” can't be shown on CH 2.`,
     });
     expect(await sentSince(from)).toEqual([]);
     // Nothing was recorded either: the seat still names the route it had.
