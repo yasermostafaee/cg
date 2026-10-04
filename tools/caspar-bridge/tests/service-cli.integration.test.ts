@@ -231,16 +231,28 @@ describe('🔴 a service start', () => {
       expect(out).not.toContain(home);
       expect(fs.readdirSync(home)).toEqual([]);
     } finally {
-      child.kill();
+      // Gone before its folder is: a graceful stop writes into it (the B-312 tests' race, below).
+      await new Promise<void>((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          resolve();
+          return;
+        }
+        child.once('exit', () => resolve());
+        child.kill();
+      });
     }
   });
 });
 
-/** Start the service on `file` and answer its `/health` once it listens; `stop` ends it. */
+/**
+ * Start the service on `file` and answer its `/health` once it listens. `stop` ends it AND waits for its
+ * exit: on Linux a stopped service writes into its state home on the way out, so a folder removed before
+ * the exit is a folder still being written (`ENOTEMPTY`, PR run 37222671859).
+ */
 async function startService(
   file: string,
   extra: readonly string[] = [],
-): Promise<{ health: () => Promise<unknown>; out: () => string; stop: () => void }> {
+): Promise<{ health: () => Promise<unknown>; out: () => string; stop: () => Promise<void> }> {
   const home = scratch();
   const child = spawn(process.execPath, [CLI, '--service-config', file, ...QUIET, ...extra], {
     env: { ...process.env, HOME: home, USERPROFILE: home },
@@ -268,7 +280,15 @@ async function startService(
   return {
     health: async () => (await fetch(`http://127.0.0.1:${String(port)}/health`)).json(),
     out: () => out,
-    stop: () => child.kill(),
+    stop: () =>
+      new Promise<void>((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          resolve();
+          return;
+        }
+        child.once('exit', () => resolve());
+        child.kill();
+      }),
   };
 }
 
@@ -312,7 +332,7 @@ describe('🔴 B-312 — the service keeps Station setup’s backup across a res
       ]);
       expect(service.out()).toContain('server B from Station setup: 127.0.0.1:2');
     } finally {
-      service.stop();
+      await service.stop();
     }
   });
 
@@ -324,7 +344,7 @@ describe('🔴 B-312 — the service keeps Station setup’s backup across a res
     try {
       expect(servers(await alone.health()).map((r) => r.label)).toEqual(['A']);
     } finally {
-      alone.stop();
+      await alone.stop();
     }
     const file = configIn({ playoutAddress: playout.issuer, amcpHost: '127.0.0.1', amcpPort: 3 });
     saved(path.dirname(file), { host: '127.0.0.1', amcpPort: 2 });
@@ -337,7 +357,7 @@ describe('🔴 B-312 — the service keeps Station setup’s backup across a res
     try {
       expect(servers(await typed.health()).find((r) => r.label === 'B')?.amcpPort).toBe(4);
     } finally {
-      typed.stop();
+      await typed.stop();
     }
   });
 });
