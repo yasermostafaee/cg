@@ -232,9 +232,9 @@ Lanes: C (`B-310`) FULL — it decides what the Log shows; B (`B-309`) FAST, cop
       `playout-version.integration.test.ts`, `connectionCheckGroups.dom.test.ts`, e2e `first-run.spec.ts`
       (the Versions line). The letter adopted into `docs/integration/playout/`
 - [x] 11.7 A3: a backup that answers `401` to the primary's token — the fake's D11 refuses
-      (`setRefusesForeignTokens`); B is sent no clip, each plate reads `(its media list has not been
-  read)`, and the `401` never touches the primary's session (`backup-media.ts` reads the bearer only;
-      `usableBearer` is a pure read). Filed `R-085` (one session per server; not built)
+      (`setRefusesForeignTokens`); B is sent no clip, and each plate says its media list has not
+      been read; the `401` never touches the primary's session (`backup-media.ts` reads the bearer
+      only; `usableBearer` is a pure read). Filed `R-085` (one session per server; not built)
 - [x] 11.8 A4 filed `R-086` (`cg-bridge`, Playout `2.9.3`+; waits on the meters answer — signed in as
       `cg-bridge`, CG Bridge's meters would be EMPTY: its own session wins, no console fallback); A5
       recorded in `R-076` (IDM) — the chaining note goes into `CG-BRIDGE-FOR-PLAYOUT.md` with Part D
