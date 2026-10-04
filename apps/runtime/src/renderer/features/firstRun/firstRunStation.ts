@@ -114,9 +114,9 @@ async function declareWithFallback(
 }
 
 /**
- * The connection first-run applies: ONE server — the CasparCG host the Playout's own list names —
- * on the standard ports, and the serve host CasparCG fetches templates from. Everything else the
- * station already had is kept.
+ * The connection first-run applies: server A — the CasparCG host the Playout's own list names — on
+ * the standard ports, and the serve host CasparCG fetches templates from. Everything else the
+ * station already had is kept, a declared server B included (`B-314`).
  */
 export function firstRunConnection(
   current: ConnectionConfig,
@@ -125,9 +125,14 @@ export function firstRunConnection(
 ): ConnectionConfig {
   const { templateServeHost: _previous, ...rest } = current;
   const serve = serveHost.trim();
+  // 🔴 `B-314` — server A only: a server B already declared stays as it is (Station setup removes it).
+  const backup = current.servers.B;
   return {
     ...rest,
-    servers: { A: { host: casparHost.trim(), amcpPort: AMCP_PORT, oscPort: OSC_PORT } },
+    servers: {
+      A: { host: casparHost.trim(), amcpPort: AMCP_PORT, oscPort: OSC_PORT },
+      ...(backup !== undefined ? { B: backup } : {}),
+    },
     ...(serve !== '' ? { templateServeHost: serve } : {}),
   };
 }

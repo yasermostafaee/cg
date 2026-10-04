@@ -57,3 +57,19 @@ passed when signed in, waiting while it needs a station admin's sign-in, and fai
 
 - **WHEN** a station admin runs the check on a station whose backup engine needs a sign-in **THEN** the
   Sign-in group reads the backup engine's line as waiting for a station admin
+
+### Requirement: First-run's channel pick SHALL leave a declared server B as it is
+
+First-run's channel pick SHALL write server A — the CasparCG host the Playout's own list names, on the standard
+ports — and SHALL keep a server B the bridge already declares, with everything else the connection held; the
+same SHALL hold for Station setup's Change channel… onto a channel on another CasparCG host, which writes
+through the same step (`B-314`). Removing server B SHALL stay Station setup's.
+
+#### Scenario: A pair keeps its backup through first-run
+
+- **WHEN** a bridge started with a server B runs first-run and the station admin picks channel 1 **THEN** the
+  connection in force and the one saved both still declare server B, and the status bar still shows `BACKUP B`
+
+#### Scenario: No backup, none written
+
+- **WHEN** a bridge with no server B runs first-run **THEN** the connection declares server A alone

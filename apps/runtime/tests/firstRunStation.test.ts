@@ -91,9 +91,13 @@ describe('DESKTOP-APPS-01-D b — the layers first-run declares', () => {
 });
 
 describe('the connection first-run applies', () => {
-  it('is ONE server — the Playout-named CasparCG host — on the standard ports, with the serve host', () => {
+  it('names server A — the Playout-named CasparCG host — on the standard ports, with the serve host', () => {
     expect(firstRunConnection(current, ' 192.168.21.111 ', '192.168.21.93')).toEqual({
-      servers: { A: { host: '192.168.21.111', amcpPort: 5250, oscPort: 6251 } },
+      servers: {
+        A: { host: '192.168.21.111', amcpPort: 5250, oscPort: 6251 },
+        // `B-314` — the declared server B, as it was.
+        B: { host: '127.0.0.2', amcpPort: 5251, oscPort: 6252 },
+      },
       strategy: 'mirror-sync',
       autoFailoverEnabled: true,
       templateServeHost: '192.168.21.93',
@@ -102,6 +106,19 @@ describe('the connection first-run applies', () => {
 
   it('an empty serve address leaves the serve host to the bridge’s derivation', () => {
     expect(firstRunConnection(current, 'caspar', '  ').templateServeHost).toBeUndefined();
+  });
+
+  /*
+    🔴 `B-314` — a server B the bridge already declares (its `--backup-*` flags, or Station setup's
+    server B before a Change channel… onto another CasparCG host) is LEFT AS IT IS: first-run names
+    server A only. It used to write `servers: { A }` (the test above pinned that as "ONE server") and
+    so took the backup engine's core out of the connection in silence, mid-run.
+  */
+  it('B-314 control — with no server B declared, first-run declares none', () => {
+    const single: ConnectionConfig = { ...current, servers: { A: current.servers.A } };
+    expect(firstRunConnection(single, '192.168.21.111', '').servers).toEqual({
+      A: { host: '192.168.21.111', amcpPort: 5250, oscPort: 6251 },
+    });
   });
 });
 

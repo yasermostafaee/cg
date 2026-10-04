@@ -13329,3 +13329,16 @@ channel, shared by every AMCP connection, so each bridge's `COMMIT` applies the 
 Bridge is never the second sender: while another CG Bridge drives its server B's core, it sends that core
 nothing and says so; the guide says to untick the box on the backup engine; the Playout team is asked for a
 role signal.
+
+## [~] B-314 — First-run's channel pick takes a declared server B out of the connection ⟨priority: medium — the backup core is dropped mid-run, in silence⟩ — FILED 2026-10-04 by `RELEASE-0112-01` (found building `pnpm dev:station --fake --pair`) · `openspec/changes/backup-session/` (tasks §6)
+
+**Repro / Actual:** a CG Bridge started with a server B already declared — its `--backup-*` flags, as the dev
+station's `--pair` and the suites start it — runs first-run; the station admin picks a channel. First-run writes
+`servers: { A }` (`firstRunConnection`, `firstRunStation.ts:121-133`) through `connections.set-config`, which
+applies it at once and saves it: server B is out of the connection, the backup core receives nothing from then
+on, and nothing says so; the next restart's flags bring it back. Station setup's **Change channel…** onto a
+channel on another CasparCG host writes through the same function and drops a Station-setup server B the same
+way (`ChannelScopeCards.tsx:87-91`). The installer never writes a backup flag, so a fresh installed station does
+not meet the first half. The unit test pinned the drop as "ONE server", from before a backup was a product
+feature. **Expected:** first-run names server A — the host the Playout's list names — and leaves a declared
+server B as it is; removing server B stays Station setup's.
