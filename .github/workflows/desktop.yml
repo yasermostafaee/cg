@@ -131,18 +131,61 @@ jobs:
       - name: Build CG Designer
         run: pnpm --filter @cg/designer tauri build
 
+      # INSTALLER-DESIGN-01 (P-063) — CG Setup, the setup window every installer opens. The three
+      # installers built above become its ENGINES, unchanged: CG Setup goes in front of each, and with
+      # /S it hands the command line to the engine and returns the engine's exit code. 32-bit, as the
+      # NSIS installers are, so an installer still starts on 32-bit Windows and refuses there with
+      # exit 2 as before. Its unit tests (the NSIS-exact command line, the progress steps keyed to
+      # cg-bridge.nsi's log labels, the palette read from theme.ts) run first.
+      - name: Test CG Setup
+        run: cargo test -p cg-setup
+
+      - name: Build CG Setup (32-bit)
+        run: |
+          rustup target add i686-pc-windows-msvc
+          cargo build --release -p cg-setup --target i686-pc-windows-msvc
+
+      # The install guide the window's Help opens, when this release has one (the release job prints
+      # the same file again for the release itself).
+      - name: Build the install guide for the installers' Help
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $md = "docs/release/$env:VERSION/install-guide.fa.md"
+          if (Test-Path $md) {
+            node tools/release/src/build-guide.mjs $md --out guide/install-guide.pdf
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          } else {
+            "No install guide for $env:VERSION: the installers carry none, and their Help is not shown."
+          }
+
+      # Each installer: CG Setup + the product's icon and version + its engine appended. The sizes of
+      # each engine and each installer go to the log (the report compares them).
+      - name: Pack the installers (CG Setup in front of each engine)
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $guide = @()
+          if (Test-Path guide/install-guide.pdf) { $guide = @('--guide', 'guide/install-guide.pdf') }
+          node tools/release/src/pack-installers.mjs $env:VERSION --setup target/i686-pc-windows-msvc/release --out installers @guide
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
       # P-060 — the hashes go to the LOG only. This job used to write installers/SHA256SUMS.txt over
       # Tauri's built names (with a space) and ship it inside both artifacts; the owner took that for
       # the release's. The release's own SHA256SUMS.txt (release-files.mjs) is the only file of that name.
-      - name: Collect the installers
+      # INSTALLER-DESIGN-01 — the engines are kept too: the smokes run every silent path against the
+      # engine alone AND the installer, and require the same exit codes.
+      - name: Collect the installers, and their engines
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force installers | Out-Null
-          Copy-Item target/release/bundle/nsis/*-setup.exe installers/
-          Copy-Item tools/bridge-installer/CG-Bridge_*_x64-setup.exe installers/
-          Get-ChildItem installers | ForEach-Object {
+          New-Item -ItemType Directory -Force engines | Out-Null
+          Copy-Item target/release/bundle/nsis/*-setup.exe engines/
+          Copy-Item tools/bridge-installer/CG-Bridge_*_x64-setup.exe engines/
+          Get-ChildItem installers, engines | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
-            "$hash  $($_.Name)"
+            "$hash  $($_.Directory.Name)/$($_.Name)  $($_.Length) bytes"
           }
 
       - name: Upload CG Control
@@ -169,6 +212,15 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Not a deliverable: the three engines, for the smokes' engine-vs-installer exit codes.
+      - name: Upload the engines (for the smokes)
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-engines
+          path: engines/
+          if-no-files-found: error
+          retention-days: 14
+
   # CENTRAL-BRIDGE-01 1E — CG Bridge on a clean Windows, as the Playout's installer will chain it:
   # silent install, the service (automatic, recovery, no dependency), /health under a second, our
   # rules, nothing on UDP 6250, no state for a console without a token, a stop that stays stopped
@@ -187,9 +239,13 @@ jobs:
         with:
           fetch-depth: 1
           # The smoke, and the firewall judge both smokes share (CLIENT-TEST-RELEASE-01 B2).
+          # INSTALLER-DESIGN-01 — and the setup window's smoke, with the window's hands it shares.
           sparse-checkout: |
             tools/bridge-installer/smoke.mjs
+            tools/bridge-installer/setup-smoke.mjs
             apps/runtime/tests/desktop/firewall-rule.mjs
+            apps/runtime/tests/desktop/setup-window.mjs
+            apps/runtime/tests/desktop/setup-uia.ps1
           sparse-checkout-cone-mode: false
 
       - name: Set up Node (test harness only)
@@ -208,6 +264,24 @@ jobs:
         run: |
           $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
           node tools/bridge-installer/smoke.mjs --installer "$bridge" --version "${{ needs.installers.outputs.version }}" --out bridge-smoke
+          exit $LASTEXITCODE
+
+      - name: Download the engines
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@v8
+        with:
+          name: installer-engines
+          path: engines
+
+      # INSTALLER-DESIGN-01 — the silent paths against the engine alone (same arguments, same exit
+      # codes), then CG Bridge's setup window driven through UI Automation: fresh, update, failed.
+      - name: CG Bridge's setup window, and its silent paths against its engine (elevated)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $engine = (Get-ChildItem engines -Filter 'CG-Bridge_*-setup.exe').FullName
+          node tools/bridge-installer/setup-smoke.mjs --installer "$bridge" --engine "$engine" --version "${{ needs.installers.outputs.version }}" --out bridge-smoke/setup
           exit $LASTEXITCODE
 
       - name: Upload the CG Bridge smoke evidence
@@ -284,6 +358,32 @@ jobs:
           & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer $designer --control $control --version ${{ needs.installers.outputs.version }} --out smoke
           exit $LASTEXITCODE
 
+      - name: Download the engines
+        if: ${{ !cancelled() }}
+        uses: actions/download-artifact@v8
+        with:
+          name: installer-engines
+          path: engines
+
+      # INSTALLER-DESIGN-01 — the two apps' setup windows, driven unelevated through UI Automation:
+      # the silent paths against each engine alone, then a fresh install, an update and a damaged
+      # download, every page captured. Names without a space again, for gsudo.
+      - name: CG Designer's and CG Control's setup windows, driven (unelevated)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          Copy-Item (Get-ChildItem engines -Filter 'CG Designer_*-setup.exe').FullName engines\cg-designer-engine.exe
+          Copy-Item (Get-ChildItem engines -Filter 'CG Control_*-setup.exe').FullName engines\cg-control-engine.exe
+          $designer = (Resolve-Path installers\cg-designer-setup.exe).Path
+          $control = (Resolve-Path installers\cg-control-setup.exe).Path
+          $designerEngine = (Resolve-Path engines\cg-designer-engine.exe).Path
+          $controlEngine = (Resolve-Path engines\cg-control-engine.exe).Path
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/setup-smoke.mjs --designer $designer --control $control --designer-engine $designerEngine --control-engine $controlEngine --version ${{ needs.installers.outputs.version }} --out smoke/setup
+          exit $LASTEXITCODE
+
       - name: Uninstall CG Control (elevated), and sum every phase
         if: ${{ !cancelled() }}
         shell: pwsh
@@ -297,14 +397,68 @@ jobs:
           path: smoke/
           retention-days: 14
 
+  # INSTALLER-DESIGN-01 (P-063) — the setup window itself, before anything is installed, on the two
+  # Windows code bases: Server 2022 (Windows 10's — a square window edge) and Server 2025 (Windows
+  # 11's — rounded corners). Each installer's first screen with WebView2 made unavailable to every
+  # program (and no WebView2 module loaded), the keyboard (Tab, Shift+Tab, Enter, Esc → exit 1), and
+  # Welcome at 150 % and 200 % display scaling. Nothing is installed, so it needs its own runner only
+  # for the display and policy changes it makes.
+  setup-window:
+    name: Setup window (${{ matrix.os }})
+    needs: installers
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          sparse-checkout: |
+            apps/runtime/tests/desktop/setup-window.mjs
+            apps/runtime/tests/desktop/setup-window-smoke.mjs
+            apps/runtime/tests/desktop/setup-uia.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Node (test harness only)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download the installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: Each installer's first screen, the keyboard, and 150 % / 200 %
+        shell: pwsh
+        run: |
+          node apps/runtime/tests/desktop/setup-window-smoke.mjs --installers installers --version "${{ needs.installers.outputs.version }}" --label "${{ matrix.os }}" --out setup-window
+          exit $LASTEXITCODE
+
+      - name: Upload the setup window's evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: setup-window-${{ matrix.os }}
+          path: setup-window/
+          retention-days: 14
+
   # CLIENT-TEST-RELEASE-01 B4 — ON A TAG ONLY, and only once the installers are built from the
   # tagged commit and BOTH clean-Windows smokes have passed (the apps', and CG Bridge's own): a DRAFT
   # pre-release with exactly five files (CENTRAL-BRIDGE-01: CG Bridge's installer joined the two).
+  # INSTALLER-DESIGN-01 — and the setup window's own job, on both Windows images.
   # Never published here.
   release:
     name: Draft release (tag only)
     if: ${{ github.ref_type == 'tag' }}
-    needs: [installers, smoke, bridge-smoke]
+    needs: [installers, smoke, bridge-smoke, setup-window]
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:
