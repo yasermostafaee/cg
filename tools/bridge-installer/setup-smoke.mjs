@@ -409,8 +409,12 @@ async function captureInstalling(file) {
     pg.names.join(' | '),
   );
   shot(TITLE, path.join(OUT, 'bridge-server-refused.png'));
-  uia(TITLE, 'invoke', 'cancel');
-  check('Cancel exits 1', (await exitCode(r, 30_000)) === 1);
+  // The Playout page has no Cancel button — like Location, it is left with Back, Esc or the window's ×.
+  uia(TITLE, 'invoke', 'close-window');
+  const closed = await exitCode(r, 30_000);
+  check('closing the window on the page (×) exits 1', closed === 1, String(closed));
+  // A window left open would share its title with the next section's.
+  if (closed === null) r.child.kill();
   check('…and nothing was installed', displayVersion() === null, String(displayVersion()));
 
   // CONTROL — the same value on the command line exits as it always did: the install does not refuse it.
