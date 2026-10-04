@@ -63,9 +63,29 @@ export const FAKE_STATION_CHANNELS = 2;
 /** The ports a station uses — `AMCP_PORT`, `OSC_PORT` and `pgmPort(1..2)` — every one explicit. */
 export const FAKE_STATION_PORTS: FakeStationPorts = { amcp: 5250, osc: 6251, pgm: [9250, 9251] };
 
+/**
+ * 🔴 `RELEASE-0112-01` (`R-085`) — **`--pair`: THE BACKUP ENGINE.** A second fake Playout — its own
+ * ES256 key (every fake mints its own), its own `cg-admin` password — and its own CasparCG stand-in on
+ * its own AMCP port, admitting this machine by THAT engine's allow list. The bridge declares it as
+ * server B. Both engines then verify every bearer against their own keys, so a token sent to the wrong
+ * engine is refused there as a real Playout refuses it — tokens never cross.
+ */
+export interface FakeStationBackup {
+  /** Server B's AMCP port — beside the primary's 5250, on the same loopback host. */
+  readonly amcp: number;
+  /** The backup engine's own `cg-admin` password: never the primary's. */
+  readonly password: string;
+}
+
+/** `--pair`'s backup engine: server B's port, and a password that is not the primary's. */
+export const FAKE_BACKUP_AMCP_PORT = 5251;
+export const FAKE_BACKUP_PASSWORD = 'test-only-backup-engine-not-a-secret';
+
 export interface FakeStationOptions {
   /** TEST-ONLY — record every AMCP line CasparCG received (`@cg/amcp-mock`'s trace). */
   readonly tracePath?: string;
+  /** `--pair` — start the backup engine too (see `FakeStationBackup`). */
+  readonly backup?: FakeStationBackup;
 }
 
 export interface FakeStation {
@@ -75,6 +95,8 @@ export interface FakeStation {
   readonly feeds: readonly FakePgmFeed[];
   /** One line per part that could not start — a feed whose port is taken. */
   readonly notes: readonly string[];
+  /** `--pair` — the backup engine and its CasparCG; absent on a one-engine station. */
+  readonly backup?: { readonly playout: FakePlayout; readonly caspar: MockHandle };
   /** Stop every part. Safe to call twice. */
   stop(): Promise<void>;
 }
@@ -89,15 +111,19 @@ export async function startFakeStation(
   options: FakeStationOptions = {},
 ): Promise<FakeStation> {
   const host = FAKE_STATION_HOST;
+  // The test Playout's real `cg-admin` holds channels 1 AND 2; the fake admin does here too.
+  const grants = {
+    admin: [
+      { host, channel: 1 },
+      { host, channel: 2 },
+    ],
+  };
+  // `--pair` — both engines verify bearers, so a token that crossed would be refused, not served.
+  const pair = options.backup;
   const playout = await mods.startFakePlayout({
-    // The test Playout's real `cg-admin` holds channels 1 AND 2; the fake admin does here too.
-    grants: {
-      admin: [
-        { host, channel: 1 },
-        { host, channel: 2 },
-      ],
-    },
+    grants,
     sealOnLoopback: false,
+    ...(pair !== undefined ? { verifyBearers: true } : {}),
   });
   let caspar: MockHandle;
   try {
@@ -119,6 +145,43 @@ export async function startFakeStation(
         'is a CasparCG or another dev station running on this machine?',
     );
   }
+  let backup: { playout: FakePlayout; caspar: MockHandle } | undefined;
+  if (pair !== undefined) {
+    const b = await mods
+      .startFakePlayout({
+        grants,
+        sealOnLoopback: false,
+        verifyBearers: true,
+        password: pair.password,
+      })
+      .catch(async (err: unknown) => {
+        await caspar.stop();
+        await playout.stop();
+        throw err;
+      });
+    try {
+      backup = {
+        playout: b,
+        caspar: await mods.createMock({
+          host,
+          amcpPort: pair.amcp,
+          oscPort: 0,
+          channels: FAKE_STATION_CHANNELS,
+          // Server B admits this machine by the BACKUP engine's own allow list, never the primary's.
+          admit: (ip) => b.isTrusted(ip),
+          clipLength: (file) => b.clipLengthS(file),
+        }),
+      };
+    } catch (err) {
+      await b.stop();
+      await caspar.stop();
+      await playout.stop();
+      throw new Error(
+        `The backup engine's CasparCG stand-in could not listen on ${host}:${String(pair.amcp)} ` +
+          `(${why(err)}) — is a CasparCG or another dev station running on this machine?`,
+      );
+    }
+  }
   const feeds: FakePgmFeed[] = [];
   const notes: string[] = [];
   for (const [index, port] of ports.pgm.entries()) {
@@ -137,12 +200,15 @@ export async function startFakeStation(
     caspar,
     feeds,
     notes,
+    ...(backup !== undefined ? { backup } : {}),
     stop: async () => {
       if (stopped) return;
       stopped = true;
       await Promise.all(feeds.map((feed) => feed.stop()));
       await caspar.stop();
       await playout.stop();
+      await backup?.caspar.stop();
+      await backup?.playout.stop();
     },
   };
 }

@@ -72,6 +72,17 @@ declare module '*station-plan.mjs' {
   export const OSC_PORT: 6251;
   export const BRIDGE_CONSOLE_PORT: 5175;
   export const STATION_PORTS: readonly StationPort[];
+  /** `RELEASE-0112-01` — `--pair`'s server B: the bridge's OSC port for it, and its stand-in's AMCP. */
+  export const BACKUP_OSC_PORT: 6252;
+  export const BACKUP_AMCP_PORT: 5251;
+  /** The ports this run binds — with `--pair`, server B's OSC port too. */
+  export function stationPorts(options: { readonly pair?: boolean }): readonly StationPort[];
+  /** `RELEASE-0112-01` (`R-085`) — `--pair`'s backup engine, as the bridge is told it. */
+  export interface BackupEngineArgs {
+    readonly address: string;
+    /** Its CasparCG stand-in, `host:port`. */
+    readonly caspar: string;
+  }
 
   /** CG Control's own folder — `%APPDATA%\CG Control` on Windows. */
   export function installedStateDir(
@@ -99,13 +110,17 @@ declare module '*station-plan.mjs' {
   ): string | null;
   export function stationPaths(stateDir: string, platform: string): StationPaths;
   export function fakeModulePaths(repo: string): FakeModulePaths;
-  /** `DEV-LOCAL-CASPAR-01` — `fake`, or `fake-local` with `--caspar`. */
-  export function fakeStateName(options: { readonly caspar: string | undefined }): string;
+  /** `DEV-LOCAL-CASPAR-01` — `fake`, or `fake-local` with `--caspar`; `fake-pair` with `--pair`. */
+  export function fakeStateName(options: {
+    readonly caspar: string | undefined;
+    readonly pair?: boolean;
+  }): string;
   export function previousStateDir(stateDir: string): string;
   export function bridgeArgs(
     paths: StationPaths,
     playoutAddress: string,
     ports?: StationPortOverrides,
+    backup?: BackupEngineArgs,
   ): string[];
   export function setAddressArgs(paths: StationPaths, address: string): string[];
   export function viteArgs(ports?: StationPortOverrides): string[];
@@ -136,6 +151,8 @@ declare module '*station-plan.mjs' {
           /** `DEV-LOCAL-CASPAR-01` — present when `caspar` is this machine's own CasparCG. */
           local?: LocalCasparBanner;
           notes?: readonly string[];
+          /** `RELEASE-0112-01` — `--pair`'s backup engine. */
+          backup?: BackupEngineArgs & { username: string; password: string };
         }
       | undefined;
     log?: string | undefined;
@@ -144,6 +161,8 @@ declare module '*station-plan.mjs' {
     | {
         playout: string | undefined;
         fake: boolean;
+        /** `RELEASE-0112-01` (`R-085`) — `--fake --pair`: two fake engines. */
+        pair: boolean;
         open: boolean;
         caspar: string | undefined;
         /** `CENTRAL-BRIDGE-01` — the fake Playout alone, for an installed CG Bridge. */

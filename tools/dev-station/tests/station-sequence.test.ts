@@ -328,6 +328,41 @@ describe('the Playout address — asked once, remembered, changed by --playout',
     expect(h.calls).toContain('start http://127.0.0.1:43111');
     expect(h.printed.join('\n')).toContain('sign in as admin / pw');
   });
+
+  it('`RELEASE-0112-01` — --fake --pair: the start is handed the backup engine, and both passwords are printed', async () => {
+    const backup = {
+      address: 'http://127.0.0.1:43222',
+      username: 'admin',
+      password: 'pw-b',
+      caspar: '127.0.0.1:5251',
+    };
+    const handed: unknown[] = [];
+    const h = harness({
+      startFake: async () => ({
+        address: 'http://127.0.0.1:43111',
+        username: 'admin',
+        password: 'pw-a',
+        caspar: '127.0.0.1:5250',
+        feeds: [],
+        notes: [],
+        backup,
+        stop: async () => undefined,
+      }),
+      start: async (_playout, fake) => {
+        handed.push(fake?.backup);
+        return { stop: async () => undefined };
+      },
+    });
+    expect((await runDevStation({ ...OPTIONS, fake: true, pair: true }, h.deps)).outcome).toBe(
+      'running',
+    );
+    expect(handed).toEqual([backup]);
+    // The PRIMARY engine's address is the one written as the Playout.
+    expect(h.calls).toContain('set-address http://127.0.0.1:43111');
+    const said = h.printed.join('\n');
+    expect(said).toContain('sign in as admin / pw-a');
+    expect(said).toContain('sign in as admin / pw-b');
+  });
 });
 
 describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` starts a whole station, fresh', () => {

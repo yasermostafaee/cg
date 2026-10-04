@@ -3,7 +3,8 @@
 Lanes, said before each part: §1 `B-312` FULL (the path to air: what reaches the backup core); §2–§3 `R-085`
 FULL (a new session, new outbound reads, an IPC schema, a persisted file); §4 `B-313` FULL (it decides what
 is sent to a core); §5 the console FULL (it reads a new channel and decides what a station admin can do);
-§6 docs.
+§6 the dev station FULL (shared tooling the next session starts from), `B-314` FULL (the persisted
+connection), `B-315` FULL (a predicate that decides what an operator sees), then docs.
 
 ## 0. Establish
 
@@ -86,9 +87,28 @@ is sent to a core); §5 the console FULL (it reads a new channel and decides wha
 - [ ] 5.4 e2e `backup-engine.spec.ts` (the dialog with two engines, each engine's own password, the
       status-bar states, the check's per-engine line) — green on Windows; the Linux run owed
 
-## 6. Docs and close
+## 6. The dev station's pair, what it found, docs and close
 
-- [ ] 6.1 `pnpm dev:station --fake --pair`
-- [ ] 6.2 Engine docs; `CG-BRIDGE-FOR-PLAYOUT.md` (the pair section; `/health`); the guide's "With a backup
+- [x] 6.1 `pnpm dev:station --fake --pair`: `fake-station.ts`'s backup engine (its own fake Playout and
+      password, both engines verifying bearers, its own CasparCG stand-in on 5251); the bridge told
+      `--backup-host`/`--backup-amcp-port`/`--backup-playout-address`; both passwords on the banner; UDP 6252
+      probed; a `fake-pair` state folder. Tests: `station-plan.test.ts` (the flag and its two refusals, the
+      argv, the ports, the banner; CONTROLS: no pair, no `--backup-*`), `station-sequence.test.ts` (the start
+      handed the backup), `fake-station.integration.test.ts` (each password and each token refused at the
+      other engine; CONTROL: each served at its own). Run for real on 2026-10-04 and driven in Chrome:
+      first-run, «Sign in CG Bridge…» naming both engines, the primary's password refused on the backup, both
+      signed in, `BACKUP B HEALTHY`, no engine chip
+- [x] 6.2 `B-314` — first-run's channel pick kept no server B (found reading `firstRunConnection` while
+      building 6.1: it wrote server A alone over a pair). Red first in `firstRunStation.test.ts`, which
+      received server A alone where A and B were expected; `firstRunConnection` keeps a declared server B; the
+      old "ONE server" expectation replaced, not left beside it; CONTROL: no server B, none written. In 6.1's
+      run the connection in force and the one saved both kept server B after first-run
+- [x] 6.3 `B-315` — a channel heard before the first declaration aged into `NOT PRODUCING`: 6.1's run read
+      `⚠ A NOT PRODUCING · CH 2` on a healthy station; the one-engine comparison run did not show it only
+      because first-run rebuilt server A's session there (two `OSC SUBSCRIBE` lines against one). Red first
+      (`channel-ticks-served.integration.test.ts`: channel 2 still listed after declaring channel 1); R-058's
+      list filtered by `#servesOscChannel`; CONTROL: a served channel that stops is still reported. 6.1's run
+      again after the fix: `PRIMARY A HEALTHY · BACKUP B HEALTHY`, no chip, no problem
+- [ ] 6.4 Engine docs; `CG-BRIDGE-FOR-PLAYOUT.md` (the pair section; `/health`); the guide's "With a backup
       engine"
-- [ ] 6.3 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here
+- [ ] 6.5 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here

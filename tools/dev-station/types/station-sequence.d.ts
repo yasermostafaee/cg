@@ -27,7 +27,15 @@ declare module '*station-sequence.mjs' {
     };
     /** One line per part that could not start. */
     readonly notes?: readonly string[];
+    /** `RELEASE-0112-01` (`R-085`) — `--pair`: the backup engine, and its CasparCG `host:port`. */
+    readonly backup?: FakeBackupEngine;
     stop(): Promise<void>;
+  }
+  export interface FakeBackupEngine {
+    readonly address: string;
+    readonly username: string;
+    readonly password: string;
+    readonly caspar: string;
   }
   /**
    * 🔴 `CENTRAL-BRIDGE-01` — there is no `stop`: the sequence is given no way to end a process, so a
@@ -45,7 +53,8 @@ declare module '*station-sequence.mjs' {
     /** `--fake` only: move the last fake station aside and start from an empty one. */
     freshFakeState(): Promise<void> | void;
     startFake(): Promise<FakePlayout>;
-    start(playout: string): Promise<R>;
+    /** `RELEASE-0112-01` — the fake too (`undefined` without `--fake`), so `--pair` declares server B. */
+    start(playout: string, fake?: FakePlayout): Promise<R>;
     open(url: string): void;
     print(line: string): void;
   }
@@ -56,6 +65,8 @@ declare module '*station-sequence.mjs' {
   export function runDevStation(
     options: {
       fake: boolean;
+      /** `RELEASE-0112-01` — `--fake --pair`: two engines. */
+      pair?: boolean;
       playout: string | undefined;
       open: boolean;
       stateDir: string;

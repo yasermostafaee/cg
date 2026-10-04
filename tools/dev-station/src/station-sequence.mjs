@@ -17,7 +17,7 @@ import { CONSOLE_URL, banner, blockedLine } from './station-plan.mjs';
 const ASK_ADDRESS = 'Playout address (for example 192.168.21.111): ';
 
 /**
- * @param {{ fake: boolean, playout: string | undefined, open: boolean, stateDir: string, log?: string }} options
+ * @param {{ fake: boolean, pair?: boolean, playout: string | undefined, open: boolean, stateDir: string, log?: string }} options
  * @param {object} deps — see `types/station-sequence.d.ts`
  */
 export async function runDevStation(options, deps) {
@@ -95,10 +95,10 @@ export async function runDevStation(options, deps) {
     }
   }
 
-  // 4 — start, then say where it is.
+  // 4 — start, then say where it is. `RELEASE-0112-01` — with the fake, so `--pair` declares server B.
   let running;
   try {
-    running = await deps.start(playout);
+    running = await deps.start(playout, fake);
   } catch (err) {
     deps.print(err instanceof Error ? err.message : String(err));
     await fake?.stop();

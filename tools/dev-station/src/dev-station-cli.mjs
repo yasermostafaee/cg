@@ -8,6 +8,9 @@
  *   pnpm dev:station --playout <url>  change it
  *   pnpm dev:station --fake           a whole fake station on loopback — the Playout, CasparCG
  *                                     serving channels 1 and 2, and their programme feeds (Node 23+)
+ *   pnpm dev:station --fake --pair    the same with a BACKUP ENGINE beside it: a second fake Playout
+ *                                     (its own key and password) and its own CasparCG on 5251, the
+ *                                     bridge's server B — both passwords printed (RELEASE-0112-01)
  *   pnpm dev:station --fake --caspar 127.0.0.1:5250
  *                                     the fake Playout in front of THIS machine's own CasparCG: its
  *                                     channels, its media library, real video in its own window
@@ -50,6 +53,7 @@ import {
   setAddressArgs,
   stateOverlap,
   stationPaths,
+  stationPorts,
   viteArgs,
   viteEnv,
 } from './station-plan.mjs';
@@ -124,7 +128,7 @@ const load = (file) => import(pathToFileURL(file).href);
  * Playout's allow list, and the channels' programme feeds), with every port explicit. Nothing here
  * reaches the product: the bridge meets this station exactly as it meets a real one.
  */
-async function startFake() {
+async function startFake(pair = false) {
   const refusal = typeStrippingRefusal('--fake');
   if (refusal !== null) throw new Error(refusal);
   const [playoutMod, feedMod, stationMod, casparMod] = await Promise.all([
@@ -140,14 +144,35 @@ async function startFake() {
       startFakePgmFeed: feedMod.startFakePgmFeed,
     },
     stationMod.FAKE_STATION_PORTS,
+    // `RELEASE-0112-01` (`R-085`) — `--pair`: the backup engine, on server B's port, its own password.
+    pair
+      ? {
+          backup: {
+            amcp: stationMod.FAKE_BACKUP_AMCP_PORT,
+            password: stationMod.FAKE_BACKUP_PASSWORD,
+          },
+        }
+      : {},
   );
+  const host = stationMod.FAKE_STATION_HOST;
+  const backup = station.backup;
   return {
     address: station.playout.baseUrl,
     username: playoutMod.FAKE_ADMIN.username,
-    password: playoutMod.FAKE_PLAYOUT_PASSWORD,
-    caspar: `${stationMod.FAKE_STATION_HOST}:${String(station.caspar.amcpPort)}`,
+    password: station.playout.password,
+    caspar: `${host}:${String(station.caspar.amcpPort)}`,
     feeds: station.feeds.map((feed) => feed.port),
     notes: station.notes,
+    ...(backup === undefined
+      ? {}
+      : {
+          backup: {
+            address: backup.playout.baseUrl,
+            username: playoutMod.FAKE_ADMIN.username,
+            password: backup.playout.password,
+            caspar: `${host}:${String(backup.caspar.amcpPort)}`,
+          },
+        }),
     stop: () => station.stop(),
   };
 }
@@ -238,10 +263,10 @@ function gone(child) {
   return new Promise((resolve) => child.once('exit', () => resolve()));
 }
 
-function start(paths, playout) {
+function start(paths, playout, backup) {
   // The bridge's console listener needs an `index.html`; the console itself is Vite's, on 5174.
   writeConsoleStub(paths.consoleDir);
-  const bridge = spawn(process.execPath, [BRIDGE_CLI, ...bridgeArgs(paths, playout)], {
+  const bridge = spawn(process.execPath, [BRIDGE_CLI, ...bridgeArgs(paths, playout, {}, backup)], {
     cwd: repo,
     // stdin is the LIFELINE (`--exit-on-stdin-close`): if this launcher dies, the bridge stops.
     // stderr is where the bridge speaks: shown in the terminal AND kept in `bridge.log`.
@@ -396,14 +421,17 @@ async function main() {
   const result = await runDevStation(
     { ...options, stateDir, log: paths.bridgeLog },
     {
-      probe: () => probeStation(platform),
+      probe: () => probeStation(platform, stationPorts(options)),
       ask,
       build,
       readPlayoutAddress: () => readPlayoutAddress(paths),
       setPlayoutAddress: async (address) => setPlayoutAddress(paths, address),
       freshFakeState: () => freshFakeState(stateDir),
-      startFake: local === null ? startFake : () => startLocalCaspar(local.localMod, local.target),
-      start: (playout) => start(paths, playout),
+      startFake:
+        local === null
+          ? () => startFake(options.pair)
+          : () => startLocalCaspar(local.localMod, local.target),
+      start: (playout, fake) => start(paths, playout, fake?.backup),
       open: openBrowser,
       print: say,
     },

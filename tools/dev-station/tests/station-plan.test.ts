@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  BACKUP_AMCP_PORT,
+  BACKUP_OSC_PORT,
   BRIDGE_CONSOLE_PORT,
   CONSOLE_URL,
   PLAYOUT_ONLY_PORT,
@@ -26,6 +28,7 @@ import {
   setAddressArgs,
   stateOverlap,
   stationPaths,
+  stationPorts,
   viteArgs,
   viteEnv,
 } from '../src/station-plan.mjs';
@@ -403,6 +406,7 @@ describe('the flags', () => {
     expect(parseArgs([])).toEqual({
       playout: undefined,
       fake: false,
+      pair: false,
       open: true,
       playoutOnly: false,
     });
@@ -416,11 +420,88 @@ describe('the flags', () => {
   });
 });
 
+describe('`RELEASE-0112-01` (`R-085`) — `--fake --pair`: two engines on one PC', () => {
+  it('--pair goes with --fake, and not with --caspar — each refused in one line', () => {
+    expect(parseArgs(['--fake', '--pair'])).toMatchObject({ fake: true, pair: true });
+    expect(parseArgs(['--pair'])).toEqual({
+      error: '--pair goes with --fake: pnpm dev:station --fake --pair.',
+    });
+    expect(parseArgs(['--fake', '--pair', '--caspar', '127.0.0.1:5250'])).toEqual({
+      error:
+        "--pair runs two fake engines, each with its own CasparCG stand-in — not this machine's (--caspar).",
+    });
+    // Control: a one-engine run carries no pair.
+    expect(parseArgs(['--fake'])).toMatchObject({ pair: false });
+  });
+
+  it('a pair keeps its own state folder, and binds server B’s OSC port too', () => {
+    expect(fakeStateName({ caspar: undefined, pair: true })).toBe('fake-pair');
+    expect(stationPorts({ pair: true })).toEqual([
+      ...STATION_PORTS,
+      { proto: 'udp', port: BACKUP_OSC_PORT },
+    ]);
+    expect(BACKUP_OSC_PORT).toBe(6252);
+    // Control: a one-engine run probes the station's ports, exactly.
+    expect(stationPorts({ pair: false })).toBe(STATION_PORTS);
+  });
+
+  it('the bridge is told server B and the backup engine’s address — and server A stays the fake station’s', () => {
+    const backup = {
+      address: 'http://127.0.0.1:63200',
+      caspar: `127.0.0.1:${String(BACKUP_AMCP_PORT)}`,
+    };
+    const args = bridgeArgs(stationPaths('/s', 'linux'), 'http://127.0.0.1:63114', {}, backup);
+    const value = (flag: string): string | undefined => args[args.indexOf(flag) + 1];
+    expect(value('--backup-host')).toBe('127.0.0.1');
+    expect(value('--backup-amcp-port')).toBe('5251');
+    expect(value('--backup-playout-address')).toBe('http://127.0.0.1:63200');
+    expect(value('--playout-address')).toBe('http://127.0.0.1:63114');
+    // Server A is the flags' default, which IS the fake station's — no A flag is passed.
+    for (const flag of ['--caspar-host', '--amcp-port', '--osc-port', '--backup-osc-port']) {
+      expect(args).not.toContain(flag);
+    }
+    for (const flag of ['--first-run', '--exit-on-stdin-close']) expect(args).toContain(flag);
+    // Control: without a backup the bridge is told no server B at all.
+    const single = bridgeArgs(stationPaths('/s', 'linux'), 'http://127.0.0.1:63114');
+    expect(single.filter((a) => a.startsWith('--backup-'))).toEqual([]);
+  });
+
+  it('the banner prints both engines, each with its own password', () => {
+    const lines = banner({
+      stateDir: 'C:\\x\\fake-pair',
+      playout: 'http://127.0.0.1:63114',
+      fake: {
+        username: 'cg-admin',
+        password: 'pw-a',
+        caspar: '127.0.0.1:5250',
+        feeds: [9250, 9251],
+        notes: [],
+        backup: {
+          address: 'http://127.0.0.1:63200',
+          username: 'cg-admin',
+          password: 'pw-b',
+          caspar: '127.0.0.1:5251',
+        },
+      },
+    });
+    expect(lines).toContain(
+      '  Playout  http://127.0.0.1:63114  (fake · sign in as cg-admin / pw-a)',
+    );
+    expect(lines).toContain(
+      '  backup   http://127.0.0.1:63200  (fake backup engine · sign in as cg-admin / pw-b)',
+    );
+    expect(lines).toContain(
+      "  server B 127.0.0.1:5251  (fake · the backup engine's CasparCG, channels 1 and 2)",
+    );
+  });
+});
+
 describe('`DEV-LOCAL-CASPAR-01` — `--fake --caspar <host:port>`', () => {
   it('--caspar carries its value as typed, in either spelling, with --fake', () => {
     expect(parseArgs(['--fake', '--caspar', '127.0.0.1:5250'])).toEqual({
       playout: undefined,
       fake: true,
+      pair: false,
       open: true,
       caspar: '127.0.0.1:5250',
       playoutOnly: false,

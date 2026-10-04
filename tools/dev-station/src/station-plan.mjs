@@ -56,6 +56,22 @@ export const STATION_PORTS = [
 ];
 
 /**
+ * `RELEASE-0112-01` (`R-085`) — `--pair`'s server B: the bridge binds the next UDP port for server B's
+ * OSC (`withBridgeOscPort`: A's + 1), and the backup engine's CasparCG stand-in listens beside the
+ * primary's. The stand-in's port, like the primary's 5250, is not probed: a taken one is the
+ * stand-in's own one-line refusal.
+ */
+export const BACKUP_OSC_PORT = OSC_PORT + 1;
+export const BACKUP_AMCP_PORT = 5251;
+
+/** The ports this run binds: the station's, and with `--pair` server B's OSC port too. */
+export function stationPorts(options) {
+  return options.pair === true
+    ? [...STATION_PORTS, { proto: 'udp', port: BACKUP_OSC_PORT }]
+    : STATION_PORTS;
+}
+
+/**
  * CG Bridge's process image: `node.exe` renamed, run by the service host `shawl.exe` as
  * `NT SERVICE\CGBridge` — and the name an older CG Control's own bridge ran under, too.
  */
@@ -213,7 +229,9 @@ export function fakeModulePaths(repo) {
  * replace each other's `.previous`.
  */
 export function fakeStateName(options) {
-  return options.caspar === undefined ? 'fake' : 'fake-local';
+  if (options.caspar !== undefined) return 'fake-local';
+  // `RELEASE-0112-01` — and `fake-pair` for two engines, so a pair never replaces a one-engine run's.
+  return options.pair === true ? 'fake-pair' : 'fake';
 }
 
 /**
@@ -273,12 +291,19 @@ function pathFlags(paths) {
  * CasparCG connection from flags and ignore the one first-run writes from the Playout's channel
  * list. OSC's 6251 comes from that connection, and the bridge asks the core for it with
  * `OSC SUBSCRIBE` (`CENTRAL-BRIDGE-01` rule 7).
+ *
+ * `RELEASE-0112-01` (`R-085`) — `--pair` is the one exception, and the reason is that it must be:
+ * server B exists only when a `--backup-*` flag declares it (`B-046`). Its flags give server A the
+ * defaults (`127.0.0.1:5250`, OSC 6251), which are the fake station's own, and first-run's channel
+ * pick keeps the declared server B (`B-314`). `--backup-playout-address` names the backup engine
+ * outright, because the two fakes share `127.0.0.1` and differ by port.
  */
-export function bridgeArgs(paths, playoutAddress, ports = {}) {
+export function bridgeArgs(paths, playoutAddress, ports = {}, backup = undefined) {
   return [
     ...pathFlags(paths),
     '--playout-address',
     playoutAddress,
+    ...(backup === undefined ? [] : backupArgs(backup)),
     '--port',
     String(ports.bridge ?? BRIDGE_PORT),
     '--template-serve-port',
@@ -289,6 +314,19 @@ export function bridgeArgs(paths, playoutAddress, ports = {}) {
     String(ports.bridgeConsole ?? BRIDGE_CONSOLE_PORT),
     '--first-run',
     '--exit-on-stdin-close',
+  ];
+}
+
+/** `--pair`'s server B and backup engine, from the fake's `host:port` and the engine's address. */
+function backupArgs(backup) {
+  const at = backup.caspar.lastIndexOf(':');
+  return [
+    '--backup-host',
+    backup.caspar.slice(0, at),
+    '--backup-amcp-port',
+    backup.caspar.slice(at + 1),
+    '--backup-playout-address',
+    backup.address,
   ];
 }
 
@@ -434,6 +472,14 @@ export function banner({ stateDir, playout, fake, log }) {
       `  CasparCG ${fake.caspar}  (fake · channels 1 and 2${feeds.length > 0 ? ` · programme feeds on ${feeds.join(', ')}` : ''})`,
     );
   }
+  // `RELEASE-0112-01` (`R-085`) — `--pair`: the backup engine, its own password, its own CasparCG.
+  const backup = fake?.backup;
+  if (backup !== undefined) {
+    lines.push(
+      `  backup   ${backup.address}  (fake backup engine · sign in as ${backup.username} / ${backup.password})`,
+      `  server B ${backup.caspar}  (fake · the backup engine's CasparCG, channels 1 and 2)`,
+    );
+  }
   if (fake?.caspar !== undefined) {
     lines.push(
       '  check    "The Playout and CasparCG run on this machine" is expected here: they do.',
@@ -490,8 +536,11 @@ export function playoutOnlyLines(fake) {
 }
 
 /**
- * The launcher's own flags: `--playout <url>`, `--fake`, `--caspar <host:port>`, `--no-open`,
- * `--playout-only`, `--playout-port <port>`. Anything else is refused.
+ * The launcher's own flags: `--playout <url>`, `--fake`, `--pair`, `--caspar <host:port>`,
+ * `--no-open`, `--playout-only`, `--playout-port <port>`. Anything else is refused.
+ *
+ * `RELEASE-0112-01` (`R-085`) — `--pair` goes with `--fake` alone: two fake engines, each with its own
+ * CasparCG stand-in. This machine's own CasparCG (`--caspar`) is one core, so it is no pair.
  *
  * `DEV-LOCAL-CASPAR-01` — `--caspar` is carried as TYPED, and goes with `--fake` only. Whether it
  * names this machine is not decided here: the ONE loopback rule is `parseCasparTarget` in
@@ -501,6 +550,7 @@ export function parseArgs(argv) {
   const out = {
     playout: undefined,
     fake: false,
+    pair: false,
     open: true,
     caspar: undefined,
     playoutOnly: false,
@@ -511,6 +561,7 @@ export function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--') continue;
     if (arg === '--fake') out.fake = true;
+    else if (arg === '--pair') out.pair = true;
     else if (arg === '--no-open') out.open = false;
     else if (arg === '--playout-only') out.playoutOnly = true;
     else if (arg === '--playout-port') {
@@ -537,12 +588,19 @@ export function parseArgs(argv) {
     else
       return {
         error:
-          `${arg} is not a dev:station flag (--playout <url>, --fake, --caspar <host:port>, ` +
+          `${arg} is not a dev:station flag (--playout <url>, --fake, --pair, --caspar <host:port>, ` +
           '--no-open, --playout-only, --playout-port <port>).',
       };
   }
   if (out.fake && out.playout !== undefined)
     return { error: '--fake and --playout are one or the other.' };
+  if (out.pair && !out.fake)
+    return { error: '--pair goes with --fake: pnpm dev:station --fake --pair.' };
+  if (out.pair && out.caspar !== undefined)
+    return {
+      error:
+        "--pair runs two fake engines, each with its own CasparCG stand-in — not this machine's (--caspar).",
+    };
   if (out.caspar !== undefined && !out.fake)
     return { error: '--caspar goes with --fake: pnpm dev:station --fake --caspar 127.0.0.1:5250.' };
   if (out.playoutOnly && out.caspar === undefined)

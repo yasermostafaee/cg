@@ -9,8 +9,17 @@ import { inputSourceId, type ConnectionHealth } from '@cg/shared-ipc';
 import { createBridge, realProbes, type BridgeHandle, type CheckProbes } from '../src/index.js';
 import { openClient, waitFor, type Client } from './support/auth-harness.js';
 import { startFakePgmFeed } from './support/fake-pgm-feed.js';
-import { startFakePlayout, type FakePlayout } from './support/fake-playout.js';
-import { startFakeStation, type FakeStation } from './support/fake-station.js';
+import {
+  FAKE_ADMIN,
+  FAKE_PLAYOUT_PASSWORD,
+  startFakePlayout,
+  type FakePlayout,
+} from './support/fake-playout.js';
+import {
+  FAKE_BACKUP_PASSWORD,
+  startFakeStation,
+  type FakeStation,
+} from './support/fake-station.js';
 import { FURNITURE, standardBank } from './support/two-channel-rig.js';
 import { recvLines } from './support/wire-trace.js';
 
@@ -310,5 +319,61 @@ describe('A1 — `--fake` is a whole station', () => {
     } finally {
       await new Promise<void>((resolve) => taken.close(() => resolve()));
     }
+  });
+});
+
+/** D1 with a password: the access token, or the HTTP status that refused it. */
+async function d1(p: FakePlayout, password: string): Promise<string | number> {
+  const response = await fetch(p.tokenUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: FAKE_ADMIN.username, password }),
+  });
+  if (response.status !== 200) return response.status;
+  const body = (await response.json()) as { access_token?: unknown };
+  return typeof body.access_token === 'string' ? body.access_token : response.status;
+}
+
+describe('RELEASE-0112-01 (R-085) — `--fake --pair` is two engines', () => {
+  it('each engine signs in with its own password and refuses the other’s, and each refuses the other’s token — control: each token at its own engine is served', async () => {
+    station = await startFakeStation(
+      MODULES,
+      { amcp: 0, osc: await freeUdpPort(), pgm: [] },
+      { backup: { amcp: 0, password: FAKE_BACKUP_PASSWORD } },
+    );
+    const a = station.playout;
+    const b = station.backup?.playout;
+    if (b === undefined) throw new Error('--pair started no backup engine');
+    expect(FAKE_BACKUP_PASSWORD).not.toBe(FAKE_PLAYOUT_PASSWORD);
+    expect(b.baseUrl).not.toBe(a.baseUrl);
+    // Its own CasparCG stand-in, on its own port.
+    expect(station.backup?.caspar.amcpPort).toBeGreaterThan(0);
+    expect(station.backup?.caspar.amcpPort).not.toBe(station.caspar.amcpPort);
+
+    // Each password opens its own engine only.
+    const tokenA = await d1(a, FAKE_PLAYOUT_PASSWORD);
+    const tokenB = await d1(b, FAKE_BACKUP_PASSWORD);
+    expect(typeof tokenA).toBe('string');
+    expect(typeof tokenB).toBe('string');
+    expect(await d1(a, FAKE_BACKUP_PASSWORD)).toBe(401);
+    expect(await d1(b, FAKE_PLAYOUT_PASSWORD)).toBe(401);
+
+    // Each engine's key is its own: the other's token is refused, and counted as foreign.
+    const channels = (p: FakePlayout, token: string | number): Promise<number> =>
+      fetch(p.channelsUrl, { headers: { Authorization: `Bearer ${String(token)}` } }).then(
+        (r) => r.status,
+      );
+    expect(await channels(a, tokenA)).toBe(200);
+    expect(await channels(b, tokenB)).toBe(200);
+    expect(await channels(a, tokenB)).toBe(401);
+    expect(await channels(b, tokenA)).toBe(401);
+    expect(a.foreignRefusals).toBe(1);
+    expect(b.foreignRefusals).toBe(1);
+  });
+
+  it('CONTROL — a one-engine station starts no backup engine and keeps today’s primary', async () => {
+    station = await startFakeStation(MODULES, { amcp: 0, osc: await freeUdpPort(), pgm: [] });
+    expect(station.backup).toBeUndefined();
+    expect(typeof (await d1(station.playout, FAKE_PLAYOUT_PASSWORD))).toBe('string');
   });
 });
