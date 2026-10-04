@@ -624,7 +624,14 @@ async function phaseDrive() {
       30_000,
     ).catch(() => null);
     await page.screenshot(`drive-${mode}-3-channel.png`);
-    check('…Use this channel', await press(page, '[data-first-run]', 'Use this channel'));
+    check(
+      '…Use this channel',
+      await until(
+        'Use this channel to be pressable',
+        () => press(page, '[data-first-run]', 'Use this channel'),
+        30_000,
+      ).catch(() => false),
+    );
     const set = await until(
       'first-run to close',
       () => page.evaluate(() => document.querySelector('[data-first-run]') === null),
@@ -648,7 +655,7 @@ async function phaseDrive() {
     );
     check(
       'a template is imported on the channel',
-      imported?.accepted !== false,
+      imported?.registered === true,
       JSON.stringify(imported),
     );
     const loaded = await page.evaluate(
