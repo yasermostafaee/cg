@@ -1,6 +1,6 @@
 # CG Bridge — for the Playout team
 
-Release `0.11.0` (`RELEASE-0110-01`, 2026-10-04; first written for `0.10.0` by `CENTRAL-BRIDGE-01`). **One CG Bridge per Playout.** CG Bridge is a
+Release `0.11.1` (`RELEASE-0111-01`, 2026-10-04; first written for `0.10.0` by `CENTRAL-BRIDGE-01`, then `0.11.0`). **One CG Bridge per Playout.** CG Bridge is a
 Windows service on the Playout machine, or on a server beside it. Every CG Control is a console that
 connects to it; a console never talks to CasparCG. This document is what your engine and your installer
 need from us, and what we promise. It answers your letter (`PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md`) and
@@ -50,7 +50,7 @@ Example (a fresh install, no CasparCG yet, no station-admin sign-in yet):
 ```json
 {
   "app": "cg-bridge",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "startedAt": "2026-09-30T10:48:34.772Z",
   "uptimeS": 11,
   "casparcg": {
@@ -108,9 +108,18 @@ CG-Bridge_<version>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.
 - **On a server beside the Playout:** `/PLAYOUT=http://<Playout IP>:8080 /AMCPHOST=<Playout IP>
 /BRIDGEADDRESS=<this server's IP>`. `/BRIDGEADDRESS` is the address CasparCG fetches template pages
   from.
+- **From `0.11.1`, a person installing by hand on a separate server is not given this line.** CG
+  Setup's window has a page for it — a checkbox, "CG Bridge runs on a separate server (not on the
+  Playout machine)", unticked by default, then the Playout's address, CasparCG's host and this server's
+  address — and it runs the NSIS installer with exactly these three switches. The page refuses, in
+  words, every Playout address the bridge would refuse at start, and a loopback address for this
+  server; it never runs under `/S`. **Nothing in this section
+  changed for a silent install:** the same switches, the same defaults, the same exit codes.
 - `/OSCPORT=6250` is refused: that port is yours.
-- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.0_x64-setup.exe'), '/S', '', SW_HIDE,
-ewWaitUntilTerminated, ResultCode)`.
+- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.1_x64-setup.exe'), '/S', '', SW_HIDE,
+ewWaitUntilTerminated, ResultCode)`. Your letter (`PLAYOUT-CG-RESPONSE-0110-111-v1.md` §4) chains it
+  this way, from the Playout's own installer, behind the checkbox «CG Bridge هم نصب شود»; `0.11.1`
+  keeps every part of that line as it was.
 
 **Exit codes:** `0` installed (warnings, if any, are written to `install.log` under `WARNINGS:`); `1`
 cancelled by the user (an interactive run only); `2` failed (`install.log` says why).
@@ -214,7 +223,7 @@ uninstaller deletes ours; **no other rule is touched**, and nothing binds UDP `6
 | 3              | After a core restart it reconnects, sends `OSC SUBSCRIBE` again and says which rows went off air (§5).                                                                                                                                                                                                                                   |
 | 4              | AMCP goes to `127.0.0.1` over IPv4, never `::1`. We never ask you to put `127.0.0.1` in your allow list.                                                                                                                                                                                                                                 |
 | 5              | Our send guard is the only fence: layers 50–99 only; no channel-wide `CLEAR`, no `MIXER <ch> CLEAR`, no `SET MODE`, no consumer `ADD`/`REMOVE`. We never send `X-Apasai-Mirrored`.                                                                                                                                                       |
-| 6              | D4, D9, D10 and D11 use the same `iss`/`aud`; no request carries `Origin`. Rate: D4 at most once per 5 s, D9 at most once per 60 s, D10 and D11 every 30 s, D2 once per token lifetime — far under 600 a minute.                                                                                                                         |
+| 6              | D4, D9, D10 and D11 use the same `iss`/`aud`; no request carries `Origin`. Rate: D4 at most once per 5 s, D9 at most once per 60 s, D10 and D11 every 30 s, D2 once per token lifetime, `/api/v1/system/version` (no token) at most once per 60 s — far under 600 a minute.                                                              |
 | 7              | We never bind `127.0.0.1:6250`. Our OSC port is `6251` (`6252` for a backup), asked for with `OSC SUBSCRIBE <port>` after every connect, filtered to the channels this station serves.                                                                                                                                                   |
 | 8              | Consoles post D1 themselves, from CG Control's own process, with no `Origin`. CG Bridge keeps its own session as `cg-admin`; its rotating refresh token is written to disk before it is used; the password is never stored. A lost session shows `CG Bridge needs a station admin to sign in`.                                           |
 | 8 (`2.9.2` §8) | Refreshes are serial and never shared between processes. A "refresh in flight" mark is written before each D2 and cleared with the successor. A mark found at start, or an outcome not known (a timeout, a dropped connection), means the old token is never sent again: the station shows `CG Bridge needs a station admin to sign in`. |
@@ -231,12 +240,16 @@ lost session. The same at D1: your `message` is shown in one line, and the form 
 
 ## 4. Versions
 
-- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.0`).
+- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.1`).
+- CG Bridge reads YOUR version from `GET /api/v1/system/version` (your §3.1; no token, so no
+  `Authorization` header): at start, then at most once a minute. CG Control shows it under `Versions`
+  in its connection check. An answer that is missing or not a version is said as "not served" and
+  refuses nothing.
 - A console and CG Bridge must share `major.minor`. On a mismatch the console shows one line — CG
   Control's version, CG Bridge's, and "Install the same release of both" — and sends nothing but its
   sign-in. A patch release (`0.11.x`) never breaks that; a `0.10` console or bridge meets a `0.11` one only with that line.
-- `0.11.0` is the compatibility floor — the first release a client receives (`0.10.0` and earlier were never delivered): every later release opens what `0.11.0` wrote — the
-  configuration, the state, the template packages.
+- `0.11.1` is the compatibility floor — the first release a client receives (`0.11.0` and earlier were never delivered): every later release opens what `0.11.1` wrote — the
+  configuration, the state, the template packages. `0.11.1` writes them exactly as `0.11.0` did.
 - `/health.version` always names the running version.
 
 ## 5. Where we differ from your letter

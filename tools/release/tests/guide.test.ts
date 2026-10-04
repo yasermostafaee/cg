@@ -135,6 +135,24 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   { shown: 'Finish', text: '"Finish"', file: 'tools/setup-ui/src/layout.rs' },
   { shown: 'Launch when ready', file: 'tools/setup-ui/src/product.rs' },
   { shown: 'Open CG Bridge status', file: 'tools/setup-ui/src/product.rs' },
+  // `RELEASE-0111-01` Part A (`P-065`) — CG Bridge's Playout page: the checkbox and its three fields.
+  // The window draws a field's label in capitals; `server.rs` spells it in sentence case.
+  { shown: 'Playout', text: 'Page::Server => "Playout".into()', file: 'tools/setup-ui/src/model.rs' },
+  {
+    shown: 'CG Bridge runs on a separate server (not on the Playout machine)',
+    file: 'tools/setup-ui/src/server.rs',
+  },
+  { shown: 'PLAYOUT ADDRESS', text: '"Playout address"', file: 'tools/setup-ui/src/server.rs' },
+  {
+    shown: 'CASPARCG (AMCP) HOST',
+    text: '"CasparCG (AMCP) host"',
+    file: 'tools/setup-ui/src/server.rs',
+  },
+  {
+    shown: "THIS SERVER'S ADDRESS",
+    text: '"This server\'s address"',
+    file: 'tools/setup-ui/src/server.rs',
+  },
   {
     shown: `Update from 0.10.0 to ${VERSION}. Your settings are kept.`,
     text: 'Update from {from} to {v}. Your settings are kept.',
@@ -244,10 +262,11 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     }
   });
 
-  it('embeds at most six pictures, each a PNG that exists', () => {
-    // `RELEASE-0110-01` §2 — six at most: the two installers' Welcome joined the four.
+  it('embeds at most seven pictures, each a PNG that exists', () => {
+    // `RELEASE-0110-01` §2 — six: the two installers' Welcome joined the four. `RELEASE-0111-01` §D2 —
+    // seven: CG Bridge's separate-server page, ticked and filled, replaced a PowerShell line.
     expect(PICTURES.length).toBeGreaterThan(0);
-    expect(PICTURES.length).toBeLessThanOrEqual(6);
+    expect(PICTURES.length).toBeLessThanOrEqual(7);
     const pictures = PICTURES;
     for (const src of pictures) {
       const file = path.resolve(path.dirname(GUIDE), src);
@@ -260,11 +279,26 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     expect(source).not.toMatch(/password\s*[:=]/i);
   });
 
-  it('`RELEASE-0110-01` §2 — carries no unconfirmed Playout-side point: the approve action is «تأیید»', () => {
+  it('`RELEASE-0110-01` §2 — the approve action is «تأیید», in the Playout team’s words', () => {
     // The Playout team confirmed the button's label (`PLAYOUT-CG-RESPONSE-PLAYLIST-AUDIO-v1.md` §3), so
     // the one point `0.10.0`'s guide marked is a fact now, and the guide says it in their words.
-    expect(source.split(CONFIRM_MARKER).length - 1).toBe(0);
     expect(source).toContain('«تأیید»');
+    expect(source.split('\n').find((line) => line.includes('«تأیید»'))).not.toContain(CONFIRM_MARKER);
+  });
+
+  it('`RELEASE-0111-01-A` A2 — ONE unconfirmed Playout-side point, marked: their installer’s checkbox', () => {
+    // Quoted from their letter (`docs/integration/playout/`, §4.2), not seen in their UI — so it is
+    // marked until we see it, on the line that names it and on no other.
+    expect(source.split(CONFIRM_MARKER).length - 1).toBe(1);
+    const marked = source.split('\n').find((line) => line.includes(CONFIRM_MARKER));
+    expect(marked).toContain('«CG Bridge هم نصب شود»');
+  });
+
+  it('`RELEASE-0111-01` §D2 — a separate server is the installer’s page, never a PowerShell line', () => {
+    // `0.11.0`'s step 4 handed the client a command line; the page replaced it. Pinned as an ABSENCE.
+    expect(source).not.toContain('/BRIDGEADDRESS=');
+    expect(source).not.toContain('PowerShell');
+    expect(source).toContain('`CG Bridge runs on a separate server (not on the Playout machine)`');
   });
 });
 

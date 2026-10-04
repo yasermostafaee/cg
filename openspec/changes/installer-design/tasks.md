@@ -73,3 +73,19 @@ Lane: FULL (delivery source: what the installer gives its engine).
       the Playout host the rewrite keys on (control: the unticked file rewrites nothing); the rewrite
       itself is `playout-address.integration.test.ts` A4 and `central-bridge-service.integration.test.ts`
       §5
+
+## 5. `RELEASE-0111-01` Part D — the release that carries the page (`0.11.1`, 2026-10-04)
+
+Lane: FULL (delivery: the version, the floor and the guide a client follows).
+
+- [x] 5.1 `0.11.1` set through `tools/release` (nine sources, one version); `P-031`'s floor moved to
+      `0.11.1` — `0.11.0` was never delivered — with an empty `git diff v0.11.0` over the five floor files
+- [x] 5.2 `docs/release/0.11.1/install-guide.fa.md`: the separate server is the page (picture 2, CG
+      Setup's own painter with documentation addresses — a runner's capture would carry its real ones),
+      not a PowerShell line; the Playout's own checkbox «CG Bridge هم نصب شود» marked
+      `[confirm with the Playout team]`; the one side step left (a static IP, in Windows' settings)
+- [ ] 5.3 The Welcome and console pictures re-captured at `0.11.1` (CI artifacts) and committed
+- [ ] 5.4 The clean-Windows acceptance at `0.11.1`: fresh, from `0.10.0`, from `0.11.0`; the payload scan
+      reading every file (count in the job log) — each job RAN (URLs)
+- [ ] 5.5 `v0.11.1` tagged on a commit whose PR run and Desktop run COMPLETED GREEN, every job RAN; the
+      draft "APASAI CG 0.11.1", five files, read back and re-downloaded; `v0.11.0` retitled superseded

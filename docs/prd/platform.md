@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.0`** — `0.9.0`, `0.9.1` and `0.10.0` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30) and `RELEASE-0110-01` moves it to `0.11.0`, the first build the client receives (2026-10-04 — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.1`** — `0.9.0`, `0.9.1`, `0.10.0` and `0.11.0` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, and `RELEASE-0111-01` moves it to `0.11.1`, the build the client receives (2026-10-04 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1847,6 +1847,27 @@ a `0.10` console or bridge meets a `0.11` one only with the one refusal line, pi
 **The `0.10.0` installs are still carried forward, without being a floor:** the owner's own machines
 and the test plant hold `0.10.0`, and `0.11.0`'s installers are to upgrade them in place, settings
 kept — `RELEASE-0110-01` §3 tests that on a clean runner, from the `v0.10.0` draft's own installers. That is a test of this release, not a promise to `0.10.0`'s formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.1` (2026-10-04, `RELEASE-0111-01` §D1)
+
+**Why:** `0.11.0` was never delivered either. Its draft was cut, and the owner's decisions of
+2026-10-04 put three more things in front of the client before anything is handed over — CG Bridge's
+separate-server page ([[P-065]]), the operator sentences that still carried ids (`B-309`) and the Log
+page a rotation emptied (`B-310`). So the first build a client holds is `0.11.1`, and the floor is
+`0.11.1`. The `v0.11.0` draft is retitled "superseded, do not use" and stays a draft.
+
+**What it means:** the same list as the two sections above, read at `0.11.1`. Nothing it covers
+moved: the five files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's
+`cg-bridge.json` and CG Control's station record read an empty `git diff v0.11.0` (2026-10-04, against
+a control file in the same command that did change), so a `0.11.0` file and a `0.11.1` file are the
+same file. The separate-server page writes `cg-bridge.json` only through the engine's existing
+`/PLAYOUT=`, `/AMCPHOST=` and `/BRIDGEADDRESS=` options — no new key. The console ↔ CG Bridge protocol
+is one release line (`0.11`), so a `0.11.0` and a `0.11.1` meet with no refusal.
+
+**The `0.11.0` and `0.10.0` installs are carried forward, without being a floor:** `0.11.1`'s
+installers upgrade both in place, settings kept, tested on a clean runner from each draft's own
+installers (`RELEASE-0111-01` §D3). That is a test of this release, not a promise to either one's
+formats.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
