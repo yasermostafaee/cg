@@ -39,6 +39,27 @@ export const TEXT_EXTENSIONS = new Set([
 /** Secrets the suites use, which must never ride into an installer. ASCII, so a bundle keeps them verbatim. */
 export const TEST_SECRETS = ['test-only-not-a-secret', 'sample-token', 'rtsp://cam:secret@'];
 
+/**
+ * 🔴 `RELEASE-0110-01` §3 — **DEV-ONLY CODE**, by the names it carries: the dev station's flags
+ * (`pnpm dev:station --fake --caspar … --playout-only`) and the test suite's fakes. None of them is in
+ * any source an installer is built from (measured 2026-10-04: zero files under the apps', the
+ * packages' and CG Bridge's `src` and `bin`), so a hit is a leak, never a word an app uses. The flags
+ * are matched whole: CG Bridge's own `--caspar-host` is not `--caspar`.
+ */
+export const DEV_ONLY_MARKERS = [
+  { label: '--fake', re: /--fake(?![\w-])/g },
+  { label: '--playout-only', re: /--playout-only(?![\w-])/g },
+  { label: '--caspar', re: /--caspar(?![\w-])/g },
+  { label: 'fake-playout', re: /fake-playout/g },
+  { label: 'fake-station', re: /fake-station/g },
+  { label: 'startFakePlayout', re: /startFakePlayout/g },
+  { label: 'FAKE_ADMIN', re: /FAKE_ADMIN/g },
+  { label: 'FAKE_PLAYOUT_PASSWORD', re: /FAKE_PLAYOUT_PASSWORD/g },
+];
+
+/** A signed token's shape (a JWT: three base64url parts, the first two JSON) — never shipped. */
+const TOKEN = /eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g;
+
 /** A dotted quad not inside a longer dotted number (so `1.10.0.0.1` is not read as `10.0.0.1`). */
 const DOTTED_QUAD = /(?<![\d.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?!\.?\d)/g;
 
@@ -63,7 +84,47 @@ export function findingsIn(text) {
       found.push({ kind: 'test secret', value: secret, line: lineAt(at) });
     }
   }
+  for (const match of text.matchAll(TOKEN)) {
+    found.push({ kind: 'token', value: `${match[0].slice(0, 16)}…`, line: lineAt(match.index) });
+  }
+  for (const { label, re } of DEV_ONLY_MARKERS) {
+    for (const match of text.matchAll(re)) {
+      found.push({ kind: 'dev-only code', value: label, line: lineAt(match.index) });
+    }
+  }
   return found;
+}
+
+/**
+ * The printable runs of a BINARY — its ASCII strings of six or more characters, and its UTF-16LE
+ * ones — one per line, so {@link findingsIn} can read what a program we build carries uncompressed.
+ * Used for CG Setup's own front end (`--binaries`), never for a third party's program.
+ */
+export function stringsOf(bytes) {
+  const runs = [];
+  let ascii = '';
+  for (const byte of bytes) {
+    if (byte >= 0x20 && byte < 0x7f) ascii += String.fromCharCode(byte);
+    else {
+      if (ascii.length >= 6) runs.push(ascii);
+      ascii = '';
+    }
+  }
+  if (ascii.length >= 6) runs.push(ascii);
+  // UTF-16LE at BOTH alignments: a string need not start on an even offset of the file.
+  for (const start of [0, 1]) {
+    let wide = '';
+    for (let i = start; i + 1 < bytes.length; i += 2) {
+      const lo = bytes[i];
+      if (bytes[i + 1] === 0 && lo >= 0x20 && lo < 0x7f) wide += String.fromCharCode(lo);
+      else {
+        if (wide.length >= 6) runs.push(wide);
+        wide = '';
+      }
+    }
+    if (wide.length >= 6) runs.push(wide);
+  }
+  return runs.join('\n');
 }
 
 /** Every text file under `dir`, in a stable order. */
@@ -100,12 +161,27 @@ const invokedAsScript =
   process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (invokedAsScript) {
-  const dirs = process.argv.slice(2);
-  if (dirs.length === 0) {
-    console.error('usage: node tools/release/src/scan-payload.mjs <dir> [<dir> …]');
+  // `--binaries <file>[,<file>…]`: programs WE build, read for their printable strings (`stringsOf`).
+  const rest = process.argv.slice(2);
+  const at = rest.indexOf('--binaries');
+  const binaries = at < 0 ? [] : (rest[at + 1] ?? '').split(',').filter(Boolean);
+  const dirs = at < 0 ? rest : [...rest.slice(0, at), ...rest.slice(at + 2)];
+  if (dirs.length === 0 && binaries.length === 0) {
+    console.error(
+      'usage: node tools/release/src/scan-payload.mjs <dir> [<dir> …] [--binaries <exe>[,<exe>…]]',
+    );
     process.exit(2);
   }
-  const { files, findings } = scanPayload(dirs);
+  const report = scanPayload(dirs);
+  for (const file of binaries) {
+    if (!fs.existsSync(file)) {
+      report.findings.push({ file, kind: 'missing file', value: file, line: 0 });
+      continue;
+    }
+    report.files += 1;
+    for (const hit of findingsIn(stringsOf(fs.readFileSync(file)))) report.findings.push({ file, ...hit });
+  }
+  const { files, findings } = report;
   for (const hit of findings) {
     console.error(`${hit.file}:${String(hit.line)}: ${hit.kind} ${hit.value}`);
   }
@@ -118,6 +194,7 @@ if (invokedAsScript) {
     process.exit(1);
   }
   process.stdout.write(
-    `Scanned ${String(files)} text files in ${dirs.join(', ')}: no private address, no test secret.\n`,
+    `Scanned ${String(files)} files in ${[...dirs, ...binaries].join(', ')}: no private address, ` +
+      'no test secret, no token, no dev-only code.\n',
   );
 }

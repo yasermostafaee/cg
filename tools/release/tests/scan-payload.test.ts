@@ -2,7 +2,50 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { TEST_SECRETS, findingsIn, isPrivateV4, scanPayload } from '../src/scan-payload.mjs';
+import {
+  DEV_ONLY_MARKERS,
+  TEST_SECRETS,
+  findingsIn,
+  isPrivateV4,
+  scanPayload,
+  stringsOf,
+} from '../src/scan-payload.mjs';
+
+/**
+ * 🔴 `RELEASE-0110-01` §3 — and no token and no dev-only code: the dev station's flags and the suite's
+ * fakes. Proven both ways, as the rules above are.
+ */
+describe('RELEASE-0110-01 §3 — no token, no dev-only code', () => {
+  it.each(DEV_ONLY_MARKERS.map((m) => [m.label]))('finds the dev-only marker %s', (label) => {
+    expect(findingsIn(`run(['${label}']);`)).toContainEqual({
+      kind: 'dev-only code',
+      value: label,
+      line: 1,
+    });
+  });
+
+  it('CONTROL — CG Bridge’s own flags are not the dev station’s: --caspar-host and --playout-address pass', () => {
+    expect(findingsIn("args = ['--caspar-host', '127.0.0.1', '--playout-address', x];")).toEqual([]);
+  });
+
+  it('finds a signed token by its shape, and nothing that merely starts like one', () => {
+    // Built here, so this file carries no token-shaped literal of its own.
+    const token = [`eyJ${'a'.repeat(12)}`, `eyJ${'b'.repeat(12)}`, 'c'.repeat(12)].join('.');
+    expect(findingsIn(`const t = "${token}";`)).toEqual([
+      { kind: 'token', value: `${token.slice(0, 16)}…`, line: 1 },
+    ]);
+    expect(findingsIn('const header = "eyJhbGciOi";')).toEqual([]);
+  });
+
+  it('reads a binary’s printable strings, ASCII and UTF-16, for what a program we build carries', () => {
+    const ascii = Buffer.from('\u0000\u0001plain 192.168.1.20 text\u0000', 'latin1');
+    const wide = Buffer.from('wide --fake word', 'utf16le');
+    const strings = stringsOf(Buffer.concat([ascii, Buffer.from([0, 0, 0]), wide]));
+    expect(findingsIn(strings).map((f) => f.kind)).toEqual(['private address', 'dev-only code']);
+    // A run shorter than six characters is noise, not a string.
+    expect(stringsOf(Buffer.from('\u0000abc\u0000', 'latin1'))).toBe('');
+  });
+});
 
 /**
  * 🔴 `CLIENT-TEST-RELEASE-01` — the scan that stands between the installers and a real address or a
