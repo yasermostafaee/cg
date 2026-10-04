@@ -335,6 +335,70 @@ describe('CENTRAL-BRIDGE-01 — the release line is checked at connect: one line
     expect(written).toContain(ipc.BridgeCapabilitiesChannel.name);
   });
 
+  /**
+   * `RELEASE-0110-01` §1 — a console of `consoleVersion` against a REAL bridge of `bridgeVersion`,
+   * every frame the console writes recorded by channel.
+   */
+  async function againstRealBridge(
+    consoleVersion: string,
+    bridgeVersion: string,
+  ): Promise<{ runtime: WebSocketRuntime; written: string[] }> {
+    handle = await createBridge({
+      port: 0,
+      version: bridgeVersion,
+      connection: {
+        servers: { A: { host: '127.0.0.1', amcpPort: 1, oscPort: 0 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+    });
+    const written: string[] = [];
+    const cg = new WebSocketRuntime(`ws://127.0.0.1:${String(handle.port)}`, {
+      consoleVersion,
+      createWebSocket: (url) => {
+        const ws = wsFactory(url);
+        const send = ws.send.bind(ws);
+        ws.send = (data: string): void => {
+          written.push((JSON.parse(data) as { channel?: string }).channel ?? '');
+          send(data);
+        };
+        return ws;
+      },
+    });
+    runtime = cg;
+    return { runtime: cg, written };
+  }
+
+  for (const [consoleVersion, bridgeVersion] of [
+    ['0.11.0', '0.10.0'],
+    ['0.10.0', '0.11.0'],
+  ] as const) {
+    it(`🔴 RELEASE-0110-01 §1 — a ${consoleVersion} console against a REAL ${bridgeVersion} bridge: refused in words, nothing sent`, async () => {
+      const { runtime: cg, written } = await againstRealBridge(consoleVersion, bridgeVersion);
+      await waitFor(() => cg.link.versionMismatch() !== null);
+      const line = cg.link.versionMismatch();
+      expect(line).toBe(
+        `CG Control ${consoleVersion} and CG Bridge ${bridgeVersion} are different releases, so ` +
+          'nothing is sent. Install the same release of both.',
+      );
+      await expect(cg.stack.take({ itemId: 'row-1' })).rejects.toThrow(line ?? '');
+      await expect(cg.stack.snapshot()).rejects.toThrow(line ?? '');
+      expect(written).not.toContain('stack.take');
+      expect(written).not.toContain('stack.snapshot');
+      // CONTROL — the socket and the bridge work: the handshake went out and was answered.
+      expect(written).toContain(ipc.BridgeCapabilitiesChannel.name);
+    });
+  }
+
+  it('CONTROL — RELEASE-0110-01 §1: a 0.11.0 console and a REAL 0.11.2 bridge are one release', async () => {
+    const { runtime: cg, written } = await againstRealBridge('0.11.0', '0.11.2');
+    await waitFor(() => written.includes(ipc.BridgeCapabilitiesChannel.name));
+    await new Promise((r) => setTimeout(r, 200)); // the handshake answered
+    expect(cg.link.versionMismatch()).toBeNull();
+    await expect(cg.stack.snapshot()).resolves.toBeDefined();
+    expect(written).toContain('stack.snapshot');
+  });
+
   it('a bridge that names NO release predates 0.10 — another release, and it says so', async () => {
     const sent: string[] = [];
     runtime = new WebSocketRuntime('ws://fake', {

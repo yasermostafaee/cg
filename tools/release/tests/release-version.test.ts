@@ -8,6 +8,8 @@ import {
   isReleaseVersion,
   readVersions,
   releaseVersion,
+  replaceVersion,
+  setVersion,
   tagRefusal,
   versionIn,
 } from '../src/release-version.mjs';
@@ -20,8 +22,8 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 // The release this tree is — moved by hand with each bump (`P-060`: `0.9.1`; `CENTRAL-BRIDGE-01`:
-// `0.10.0`), which is the point.
-const RELEASE = '0.10.0';
+// `0.10.0`; `RELEASE-0110-01`: `0.11.0`), which is the point.
+const RELEASE = '0.11.0';
 
 let scratch: string | null = null;
 
@@ -99,6 +101,45 @@ describe('CLIENT-TEST-RELEASE-01 B1 — one version for CG Control, CG Designer 
     expect(isReleaseVersion('0.9.0-rc.1')).toBe(false);
     expect(isReleaseVersion('0.9')).toBe(false);
     expect(isReleaseVersion('0.0.0')).toBe(false);
+  });
+
+  it('🔴 `RELEASE-0110-01` §1 — SET writes the one version into all nine, and only the version', () => {
+    const root = copyOfTheSources();
+    const before = new Map(
+      VERSION_SOURCES.map(({ file }) => [file, fs.readFileSync(path.join(root, file), 'utf8')]),
+    );
+    const written = setVersion(root, '7.8.9');
+    // Eight files (Cargo.lock carries two of the nine), each written once.
+    expect(new Set(written)).toEqual(new Set(VERSION_SOURCES.map(({ file }) => file)));
+    expect(releaseVersion(root)).toBe('7.8.9');
+    // Only the version moved: every other line of every file is byte-identical.
+    for (const [file, text] of before) {
+      const after = fs.readFileSync(path.join(root, file), 'utf8');
+      expect(after.replaceAll('7.8.9', RELEASE), file).toBe(text);
+    }
+  });
+
+  it('CONTROL — SET refuses a non-release version, and a file it cannot find a version in', () => {
+    const root = copyOfTheSources();
+    expect(() => setVersion(root, '0.11.0-rc.1')).toThrow(/not a release version/);
+    expect(() => setVersion(root, '0.0.0')).toThrow(/not a release version/);
+    const lock = VERSION_SOURCES.find((s) => s.kind === 'cargo-lock' && s.crate === 'cg-control');
+    if (lock === undefined) throw new Error('the lock source is listed');
+    expect(() => replaceVersion('[[package]]\nname = "other"\n', lock, '1.0.0')).toThrow(
+      /Cargo\.lock: no version found to set for cg-control/,
+    );
+    // A dependency's version is never the one set.
+    const toml = VERSION_SOURCES.find((s) => s.kind === 'cargo-toml');
+    if (toml === undefined) throw new Error('the toml source is listed');
+    expect(
+      replaceVersion(
+        '[package]\nname = "x"\nversion = "1.2.3"\n\n[dependencies]\ntauri = { version = "2.11" }\n',
+        toml,
+        '9.9.9',
+      ),
+    ).toBe(
+      '[package]\nname = "x"\nversion = "9.9.9"\n\n[dependencies]\ntauri = { version = "2.11" }\n',
+    );
   });
 
   it('the release tag is v + the version, and nothing else is', () => {

@@ -18,5 +18,7 @@ declare module '*release-version.mjs' {
     root: string,
   ): { readonly part: string; readonly file: string; readonly version: string | null }[];
   export function releaseVersion(root: string): string;
+  export function setVersion(root: string, version: string): string[];
+  export function replaceVersion(text: string, source: VersionSource, version: string): string;
   export function tagRefusal(tag: string, version: string): string | null;
 }

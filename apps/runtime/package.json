@@ -1,6 +1,6 @@
 {
   "name": "@cg/runtime",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "description": "Playout controller for CasparCG (AMCP + OSC) — browser SPA. Transport bridge pending.",
   "type": "module",

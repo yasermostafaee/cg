@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.10.0`** — `0.9.0` and `0.9.1` were never delivered; `CENTRAL-BRIDGE-01` sets it at `0.10.0` (2026-09-30 — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.0`** — `0.9.0`, `0.9.1` and `0.10.0` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30) and `RELEASE-0110-01` moves it to `0.11.0`, the first build the client receives (2026-10-04 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1829,6 +1829,24 @@ Every record or comment that cites this item's licence ("nothing has shipped", "
 owed") was written before `0.10.0` and is history from this date. `CG_RUNTIME_VERSION`
 (`packages/shared-schema/src/runtime-version.ts`) is a rendering-CONTRACT version and is untouched by
 this release, as its header prescribes for an ordinary release.
+
+### 🔴 THE FLOOR MOVES — `0.11.0` (2026-10-04, `RELEASE-0110-01` §1)
+
+**Why:** the owner's decision of 2026-10-03 — `0.11.0` is the build the client gets, and `0.9.0`, `0.9.1`
+and `0.10.0` were never delivered to the client. The floor is the first release a client holds, so it
+is `0.11.0`, not `0.10.0`: `0.10.0` lived only on the owner's own machines and the `.111` test plant.
+
+**What it means:** everything `0.11.0` opens must keep opening in every later release, with the same
+list as the `0.10.0` section above, read at `0.11.0` — the five files that define the `.vcg` manifest
+and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's station record are unchanged
+since `v0.10.0` (an empty `git diff v0.10.0` over them, 2026-10-04) — and the console ↔ CG Bridge
+protocol within `0.11.x` (`sameReleaseLine`:
+a `0.10` console or bridge meets a `0.11` one only with the one refusal line, pinned both ways in
+`apps/runtime/tests/bridgeSkew.test.ts`).
+
+**The `0.10.0` installs are still carried forward, without being a floor:** the owner's own machines
+and the test plant hold `0.10.0`, and `0.11.0`'s installers are to upgrade them in place, settings
+kept — `RELEASE-0110-01` §3 tests that on a clean runner, from the `v0.10.0` draft's own installers. That is a test of this release, not a promise to `0.10.0`'s formats.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 

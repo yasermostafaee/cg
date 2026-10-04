@@ -1,6 +1,6 @@
 # CG Bridge — for the Playout team
 
-Release `0.10.0` (`CENTRAL-BRIDGE-01`, 2026-09-30). **One CG Bridge per Playout.** CG Bridge is a
+Release `0.11.0` (`RELEASE-0110-01`, 2026-10-04; first written for `0.10.0` by `CENTRAL-BRIDGE-01`). **One CG Bridge per Playout.** CG Bridge is a
 Windows service on the Playout machine, or on a server beside it. Every CG Control is a console that
 connects to it; a console never talks to CasparCG. This document is what your engine and your installer
 need from us, and what we promise. It answers your letter (`PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md`) and
@@ -50,7 +50,7 @@ Example (a fresh install, no CasparCG yet, no station-admin sign-in yet):
 ```json
 {
   "app": "cg-bridge",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "startedAt": "2026-09-30T10:48:34.772Z",
   "uptimeS": 11,
   "casparcg": {
@@ -109,7 +109,7 @@ CG-Bridge_<version>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.
 /BRIDGEADDRESS=<this server's IP>`. `/BRIDGEADDRESS` is the address CasparCG fetches template pages
   from.
 - `/OSCPORT=6250` is refused: that port is yours.
-- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.10.0_x64-setup.exe'), '/S', '', SW_HIDE,
+- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.0_x64-setup.exe'), '/S', '', SW_HIDE,
 ewWaitUntilTerminated, ResultCode)`.
 
 **Exit codes:** `0` installed (warnings, if any, are written to `install.log` under `WARNINGS:`); `1`
@@ -231,11 +231,11 @@ lost session. The same at D1: your `message` is shown in one line, and the form 
 
 ## 4. Versions
 
-- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.10.0`).
+- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.0`).
 - A console and CG Bridge must share `major.minor`. On a mismatch the console shows one line — CG
   Control's version, CG Bridge's, and "Install the same release of both" — and sends nothing but its
-  sign-in. A patch release (`0.10.x`) never breaks that.
-- `0.10.0` is the compatibility floor: every later release opens what `0.10.0` wrote — the
+  sign-in. A patch release (`0.11.x`) never breaks that; a `0.10` console or bridge meets a `0.11` one only with that line.
+- `0.11.0` is the compatibility floor — the first release a client receives (`0.10.0` and earlier were never delivered): every later release opens what `0.11.0` wrote — the
   configuration, the state, the template packages.
 - `/health.version` always names the running version.
 

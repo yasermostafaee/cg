@@ -17,6 +17,7 @@
  *
  *   node tools/release/src/release-version.mjs                 prints the version
  *   node tools/release/src/release-version.mjs --tag v0.9.0    and refuses a tag that is not it
+ *   node tools/release/src/release-version.mjs --set 0.11.0    sets it in all nine, then prints it
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -91,6 +92,53 @@ export function releaseVersion(root) {
   return only;
 }
 
+/**
+ * 🔴 `RELEASE-0110-01` §1 — **SET the one version in every file that carries it**, so a release bump
+ * is one command here rather than nine hand edits. Each file keeps its own shape: only the version
+ * value is replaced (a JSON `"version"`, the `[package]` `version` of a crate, the crate's own
+ * `[[package]]` block in `Cargo.lock`), and a file whose version could not be found is a throw that
+ * names it — never a silent skip. Returns the files written.
+ */
+export function setVersion(root, version) {
+  if (!isReleaseVersion(version)) {
+    throw new Error(`${String(version)} is not a release version (three numbers, not 0.0.0)`);
+  }
+  const texts = new Map();
+  for (const source of VERSION_SOURCES) {
+    const file = path.join(root, source.file);
+    const text = texts.get(file) ?? fs.readFileSync(file, 'utf8');
+    texts.set(file, replaceVersion(text, source, version));
+  }
+  for (const [file, text] of texts) fs.writeFileSync(file, text);
+  return [...texts.keys()].map((file) => path.relative(root, file).split(path.sep).join('/'));
+}
+
+/** `text` with this source's version replaced by `version`; a throw when it carries none. */
+export function replaceVersion(text, source, version) {
+  const replaced = (() => {
+    if (source.kind === 'package-json' || source.kind === 'tauri-conf') {
+      // The top-level `"version"` only: the first one, at two spaces of indent.
+      return text.replace(/^(\s{2}"version":\s*")[^"]*(")/m, `$1${version}$2`);
+    }
+    if (source.kind === 'cargo-toml') {
+      return text.replace(
+        /(^\[package\]\s*$[\s\S]*?^version\s*=\s*")[^"]*(")/m,
+        `$1${version}$2`,
+      );
+    }
+    // `Cargo.lock`: inside the `[[package]]` block named for this crate.
+    const crate = source.crate.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(
+      new RegExp(`(^\\[\\[package\\]\\]\\s*\\r?\\nname\\s*=\\s*"${crate}"\\s*\\r?\\nversion\\s*=\\s*")[^"]*(")`, 'm'),
+      `$1${version}$2`,
+    );
+  })();
+  if (versionIn(replaced, source) !== version) {
+    throw new Error(`${source.file}: no version found to set${source.crate ? ` for ${source.crate}` : ''}`);
+  }
+  return replaced;
+}
+
 /** `null` when `tag` names this version (`v` + the version), else why it does not. */
 export function tagRefusal(tag, version) {
   return tag === `v${version}`
@@ -104,7 +152,12 @@ const invokedAsScript =
 if (invokedAsScript) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const tagAt = process.argv.indexOf('--tag');
+  const setAt = process.argv.indexOf('--set');
   try {
+    if (setAt >= 0) {
+      const written = setVersion(root, process.argv[setAt + 1] ?? '');
+      for (const file of written) process.stdout.write(`set ${file}\n`);
+    }
     const version = releaseVersion(root);
     const refusal = tagAt < 0 ? null : tagRefusal(process.argv[tagAt + 1] ?? '', version);
     if (refusal !== null) {
