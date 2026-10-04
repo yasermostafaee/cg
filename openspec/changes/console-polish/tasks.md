@@ -183,4 +183,9 @@ proved by recorded wire, below.
       control: the e2e fails on the old build at `plate "l1"`
 - [x] 10.5 Filed `B-309`: the look id in `seatCollisionMessage`, the console's audio toast, the swap
       picker's accessible name, the assignment validator (found by the sweep; not built)
-- [ ] 10.6 Gate, push, and the CI run (e2e RAN) recorded here
+- [x] 10.6 Gate 99/99 uncached; pushed `ae9f9c25`. PR run
+      <https://github.com/yasermostafaee/cg/actions/runs/37183048263> COMPLETED green on the first
+      attempt, `E2E (Playwright)` RAN (job log: runtime 328 passed, `live-source-swap-names.spec.ts:285`
+      `B-308` among them in 10.7 s, no flaky test; designer 293), unit job green. Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37183048264> green (Installers, both smokes,
+      both setup windows)
