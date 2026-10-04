@@ -123,12 +123,19 @@ settings are kept.`, its silent upgrade (`/S`) exits 0, and the service's accoun
 ### Requirement: The built installers SHALL carry no token and no dev-only code
 
 Beyond the scan of what the installers are built from, the workflow SHALL open each BUILT installer's
-engine and read every text file it holds, and read CG Setup's own front end for its strings, for a
-private address, a test secret, a signed token's shape, and dev-only code — the development station's
-flags (`--fake`, `--caspar`, `--playout-only`) and the test suite's fakes, by the names they carry. A
-flag the product owns (`--caspar-host`) SHALL pass.
+engine, list every file it holds, read every text file, and read every program we build — CG Setup's
+front end and each app's own executable — for its strings, for a private address, a test secret, a
+signed token's shape, and dev-only code — the development station's flags (`--fake`, `--caspar`,
+`--playout-only`) and the test suite's fakes, by the names they carry. A flag the product owns
+(`--caspar-host`) SHALL pass. A third party's program (Node, shawl, the NSIS plug-ins, the WebView2
+installer) is listed and not read.
 
 #### Scenario: A leak inside a built installer stops the build
 
 - **WHEN** a file inside an installer carries a token or a dev-only marker
 - **THEN** the build stops, naming the file, the line and what was found
+
+#### Scenario: An app's executable that cannot be read stops the build
+
+- **WHEN** an engine yields no `cg-control.exe` or `cg-designer.exe`, or an empty one
+- **THEN** the build stops, because a scan of nothing proves nothing

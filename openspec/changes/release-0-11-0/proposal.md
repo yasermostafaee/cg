@@ -29,8 +29,9 @@ is proved here, on clean Windows, before the draft opens.
   take ON AIR, a clear); the real upgrade from the `v0.10.0` draft's own installers with a row ON AIR
   through it — the Welcome's update line, `/S` exiting 0, the service, settings, session and station
   kept, and no `CLEAR` reaching CasparCG; the uninstall.
-- **The built installers are scanned** — each engine opened, every text file read, CG Setup's own strings
-  read — for tokens and dev-only code as well as private addresses and test secrets.
+- **The built installers are scanned** — each engine opened and listed, every text file read, and the
+  strings of every program we build read (CG Setup, `cg-control.exe`, `cg-designer.exe`) — for tokens
+  and dev-only code as well as private addresses and test secrets.
 - **The draft waits for both acceptances**, and is titled `APASAI CG <version>`.
 
 ## What does not change

@@ -190,9 +190,12 @@ jobs:
 
       # RELEASE-0110-01 §3 — and what the BUILT installers carry, not only what they are built from:
       # each engine opened with 7-Zip and every text file in it scanned — no private address, no test
-      # secret, no token, no dev-only code (the dev station's flags, the suite's fakes) — and CG Setup's
-      # own front end read for its strings. A Tauri app embeds its page compressed inside its exe; that
-      # page is `apps/*/dist`, scanned above before it was built in.
+      # secret, no token, no dev-only code (the dev station's flags, the suite's fakes) — and every
+      # program WE build read for its strings: CG Setup's front end, and each app's own exe. A Tauri app
+      # embeds its page compressed inside its exe; that page is `apps/*/dist`, scanned above before it
+      # was built in, so the exe's strings are its shell's. Third-party programs (Node as
+      # `cg-bridge.exe`, shawl, NSIS plug-ins, the WebView2 installer) are listed, never read: their own
+      # documentation carries example private addresses (Node's `BlockList` docs: `192.168.1.0/24`).
       - name: Scan the built installers
         shell: pwsh
         run: |
@@ -202,10 +205,19 @@ jobs:
             $to = Join-Path 'installer-contents' ($engine.BaseName -replace '\s', '-')
             & $sevenZip x $engine.FullName "-o$to" -y | Out-Null
             if ($LASTEXITCODE -ne 0) { "7-Zip could not open $($engine.Name)"; exit 1 }
+            $root = (Resolve-Path $to).Path
             "$($engine.Name): $((Get-ChildItem $to -Recurse -File).Count) files"
+            Get-ChildItem $to -Recurse -File | ForEach-Object { "  $($_.Length)  $($_.FullName.Substring($root.Length + 1))" }
             $dirs += $to
           }
-          node tools/release/src/scan-payload.mjs @dirs --binaries target/i686-pc-windows-msvc/release/cg-setup.exe
+          # Each app's own exe, found in its engine — one, and not empty: a scan of nothing proves nothing.
+          $ours = @('target/i686-pc-windows-msvc/release/cg-setup.exe')
+          foreach ($app in 'cg-control.exe', 'cg-designer.exe') {
+            $found = @(Get-ChildItem installer-contents -Recurse -File -Filter $app)
+            if ($found.Count -ne 1 -or $found[0].Length -eq 0) { "Expected one non-empty $app in the engines; found $($found.Count)."; exit 1 }
+            $ours += $found[0].FullName
+          }
+          node tools/release/src/scan-payload.mjs @dirs --binaries ($ours -join ',')
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Upload CG Control

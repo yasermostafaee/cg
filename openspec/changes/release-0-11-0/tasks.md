@@ -39,6 +39,8 @@ Part A (`B-308`) is `console-polish` §10. Lanes: §1 FULL (shared config — th
 - [x] 3.2 Two Desktop jobs; the draft release waits for both
 - [x] 3.3 The built installers scanned (engines opened with 7-Zip; CG Setup's strings); tokens and dev-only
       code
+- [ ] 3.3a The apps' own executables read too (`cg-control.exe`, `cg-designer.exe` — the first cut read
+      only CG Setup's, so 3 of the engines' files were scanned), each engine's files listed in the log
 - [ ] 3.4 Both acceptance jobs COMPLETED green, every phase RUN — the run URL here
 
 ## 4. The release
