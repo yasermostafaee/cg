@@ -36,6 +36,30 @@ export function loadPersistedConnection(persistPath: string): ConnectionConfig |
   }
 }
 
+/**
+ * 🔴 `B-312` (`RELEASE-0112-01` §0.1) — **THE SERVICE'S CONNECTION, WITH THE BACKUP STATION SETUP SAVED.**
+ *
+ * CG Bridge the service takes server A from its configuration file (`serviceFlags` always passes
+ * `--caspar-host`), so the CLI builds the connection from flags — and a given connection wins over this
+ * file at boot. That dropped Station setup's server B at every restart: a reboot or an upgrade silently
+ * stopped every line to the backup core. This puts the SAVED server B back, with the strategy and
+ * auto-failover saved beside it. Server A stays the flags' (the configuration file's, so an installer
+ * `/AMCPHOST=` still takes effect); a connection that already declares a server B (a typed `--backup-*`
+ * flag) is returned as it is; no saved server B, nothing changes.
+ */
+export function withSavedBackup(
+  fromFlags: ConnectionConfig,
+  saved: ConnectionConfig | null,
+): ConnectionConfig {
+  if (fromFlags.servers.B !== undefined || saved?.servers.B === undefined) return fromFlags;
+  return {
+    ...fromFlags,
+    servers: { A: fromFlags.servers.A, B: saved.servers.B },
+    strategy: saved.strategy,
+    autoFailoverEnabled: saved.autoFailoverEnabled,
+  };
+}
+
 /** Atomically persist the config (mkdir -p + tmp + rename). Non-fatal on error. */
 export function savePersistedConnection(persistPath: string, config: ConnectionConfig): void {
   try {

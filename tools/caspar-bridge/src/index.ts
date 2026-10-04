@@ -50,6 +50,8 @@ export {
   writeServiceConfig,
 } from './service-config.js';
 export type { LoadedServiceConfig, ServiceConfig } from './service-config.js';
+// `B-312` — the service's connection keeps Station setup's server B across a restart.
+export { loadPersistedConnection, withSavedBackup } from './connection-store.js';
 export { BridgeHealthSchema, HEALTH_APP, HEALTH_PATH, bridgeHealth } from './health.js';
 export type { BridgeHealth } from './health.js';
 export { checkReservedPorts, parseExcludedPortRanges } from './reserved-ports.js';

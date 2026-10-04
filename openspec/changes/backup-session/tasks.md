@@ -12,10 +12,16 @@ is sent to a core); §5 the console FULL (it reads a new channel and decides wha
 
 ## 1. `B-312` — the backup survives a restart
 
-- [ ] 1.1 Red first: the installed service, server B set in Station setup, restarted — server B is gone
-- [ ] 1.2 `withSavedBackup`: the saved server B merged into the service's flag-built connection; server A
-      the configuration file's; a typed `--backup-*` flag wins
-- [ ] 1.3 Tests: the pure function; the restart through the real CLI
+- [x] 1.1 Red first: the installed service, server B set in Station setup, restarted — server B is gone.
+      Measured through the real CLI with the fix bypassed: `/health` answered
+      `expected [ [ 'A', '127.0.0.1', 3 ] ] to deeply equal [ [ 'A', '127.0.0.1', 3 ], …(1) ]`
+- [x] 1.2 `withSavedBackup` (`connection-store.ts`): the saved server B (and its strategy and
+      auto-failover) merged into the service's flag-built connection in `bin/caspar-bridge.mjs`; server A
+      the configuration file's; a typed `--backup-*` flag wins; a bridge that is not the service is
+      unchanged. The start says `server B from Station setup: <host>:<port>`
+- [x] 1.3 Tests: `connection-store.test.ts` (the merge; CONTROL: nothing saved, no saved B; a typed B
+      wins) and `service-cli.integration.test.ts` (the restart through the real CLI; CONTROL: nothing
+      saved — A alone; `--backup-amcp-port 4` beats the saved `2`)
 
 ## 2. `R-085` — one session per engine (CG Bridge)
 

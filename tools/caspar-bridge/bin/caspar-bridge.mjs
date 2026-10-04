@@ -121,9 +121,11 @@ import {
   defaultPlayoutConfigPath,
   findPerUserStates,
   importStateOnce,
+  loadPersistedConnection,
   loadServiceConfig,
   parseReservedLayersFlag,
   resolveLiveLayersPath,
+  withSavedBackup,
   withServiceFlags,
   writePlayoutAddress,
   writeServiceConfig,
@@ -638,6 +640,22 @@ const connection =
         autoFailoverEnabled: true,
       }
     : undefined;
+/*
+  🔴 `B-312` (`RELEASE-0112-01` §0.1) — THE SERVICE KEEPS STATION SETUP'S SERVER B ACROSS A RESTART.
+  The service's flags name server A, so the connection above is the flags' — and it wins over the
+  saved file in `createBridge`, which dropped the backup at every reboot and upgrade. The saved server
+  B (and the strategy saved beside it) goes back in; server A stays the configuration file's, and a
+  typed `--backup-*` flag still wins. A bridge that is not the service is unchanged.
+*/
+const bootConnection =
+  serviceConfig !== null && connection !== undefined && !hasBackupFlags
+    ? withSavedBackup(connection, loadPersistedConnection(persistPath))
+    : connection;
+if (bootConnection !== connection) {
+  console.error(
+    `[caspar-bridge] server B from Station setup: ${bootConnection.servers.B.host}:${String(bootConnection.servers.B.amcpPort)}`,
+  );
+}
 
 /*
   🔴 `C-037` — THE PLAYOUT LINK. Same precedence as every other group: flags > file >
@@ -737,7 +755,7 @@ const bridgePort = args.port !== undefined ? Number(args.port) : undefined;
 const bridgeOptions = {
   host: args.host,
   port: bridgePort,
-  connection,
+  connection: bootConnection,
   // `CENTRAL-BRIDGE-01` — the release every console compares at connect (the bundle's inlined
   // version; from source, this package's manifest).
   ...(bridgeVersion() !== 'unknown' ? { version: bridgeVersion() } : {}),

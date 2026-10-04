@@ -235,3 +235,109 @@ describe('🔴 a service start', () => {
     }
   });
 });
+
+/** Start the service on `file` and answer its `/health` once it listens; `stop` ends it. */
+async function startService(
+  file: string,
+  extra: readonly string[] = [],
+): Promise<{ health: () => Promise<unknown>; out: () => string; stop: () => void }> {
+  const home = scratch();
+  const child = spawn(process.execPath, [CLI, '--service-config', file, ...QUIET, ...extra], {
+    env: { ...process.env, HOME: home, USERPROFILE: home },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let out = '';
+  const port = await new Promise<number>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`no listening line. stderr:\n${out}`));
+    }, 30_000);
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      out += chunk;
+      const m = /WS listening on ws:\/\/127\.0\.0\.1:(\d+)/.exec(out);
+      if (m !== null) {
+        clearTimeout(timer);
+        resolve(Number(m[1]));
+      }
+    });
+    child.on('exit', (code) => {
+      clearTimeout(timer);
+      reject(new Error(`exited (${String(code)}). stderr:\n${out}`));
+    });
+  });
+  return {
+    health: async () => (await fetch(`http://127.0.0.1:${String(port)}/health`)).json(),
+    out: () => out,
+    stop: () => child.kill(),
+  };
+}
+
+/**
+ * 🔴 `B-312` (`RELEASE-0112-01` §0.1) — **STATION SETUP'S SERVER B SURVIVES A RESTART OF THE SERVICE.**
+ *
+ * Station setup saves server B in `.cg-runtime/bridge-connection.json` beside the configuration. The
+ * service's flags named server A, so the flag-built connection won over that file at every start and
+ * the backup was gone after a reboot. Red before the fix: `/health` listed server A alone.
+ */
+describe('🔴 B-312 — the service keeps Station setup’s backup across a restart', () => {
+  const saved = (dir: string, b: { host: string; amcpPort: number }): void => {
+    fs.mkdirSync(path.join(dir, '.cg-runtime'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, '.cg-runtime', 'bridge-connection.json'),
+      JSON.stringify({
+        servers: {
+          A: { host: '127.0.0.1', amcpPort: 1, oscPort: 6251 },
+          B: { host: b.host, amcpPort: b.amcpPort, oscPort: 6252 },
+        },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      }),
+    );
+  };
+  const servers = (body: unknown): { label: string; host: string; amcpPort: number }[] =>
+    (body as { casparcg: { servers: { label: string; host: string; amcpPort: number }[] } })
+      .casparcg.servers;
+
+  it('the saved server B is declared again at the next start — server A stays the configuration file’s', async () => {
+    const playout = await startFakePlayout();
+    playouts.push(playout);
+    const file = configIn({ playoutAddress: playout.issuer, amcpHost: '127.0.0.1', amcpPort: 3 });
+    saved(path.dirname(file), { host: '127.0.0.1', amcpPort: 2 });
+    const service = await startService(file);
+    try {
+      const rows = servers(await service.health());
+      expect(rows.map((r) => [r.label, r.host, r.amcpPort])).toEqual([
+        ['A', '127.0.0.1', 3],
+        ['B', '127.0.0.1', 2],
+      ]);
+      expect(service.out()).toContain('server B from Station setup: 127.0.0.1:2');
+    } finally {
+      service.stop();
+    }
+  });
+
+  it('CONTROL — with nothing saved there is no server B; a typed --backup-* flag wins over the saved one', async () => {
+    const playout = await startFakePlayout();
+    playouts.push(playout);
+    const bare = configIn({ playoutAddress: playout.issuer, amcpHost: '127.0.0.1', amcpPort: 3 });
+    const alone = await startService(bare);
+    try {
+      expect(servers(await alone.health()).map((r) => r.label)).toEqual(['A']);
+    } finally {
+      alone.stop();
+    }
+    const file = configIn({ playoutAddress: playout.issuer, amcpHost: '127.0.0.1', amcpPort: 3 });
+    saved(path.dirname(file), { host: '127.0.0.1', amcpPort: 2 });
+    const typed = await startService(file, [
+      '--backup-host',
+      '127.0.0.1',
+      '--backup-amcp-port',
+      '4',
+    ]);
+    try {
+      expect(servers(await typed.health()).find((r) => r.label === 'B')?.amcpPort).toBe(4);
+    } finally {
+      typed.stop();
+    }
+  });
+});
