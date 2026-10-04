@@ -3726,7 +3726,7 @@ and every station port, and no CasparCG was running. Recorded by `CLIENT-TEST-RE
   <https://github.com/yasermostafaee/cg/actions/runs/36546022440>,
   <https://github.com/yasermostafaee/cg/actions/runs/36550551264>.
 
-## [~] P-059 — The first client test release, `0.9.0`: one version, two installers with no manual side step, a Persian install guide, a draft release ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `CLIENT-TEST-RELEASE-01` (v1) · `openspec/changes/client-test-release/` · tag `v0.9.0` on `aba3c8fa`; the DRAFT release opened by run 36583156212 — publishing it is the owner's
+## [x] P-059 — The first client test release, `0.9.0`: one version, two installers with no manual side step, a Persian install guide, a draft release ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-29 by `CLIENT-TEST-RELEASE-01` (v1) · `openspec/changes/client-test-release/` · tag `v0.9.0` on `aba3c8fa`; the DRAFT release opened by run 36583156212 — publishing it is the owner's · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-client-test-release/`, `RELEASE-0110-01` §0.3) — `0.9.0` was never delivered (`P-060`); the delivery build is `0.11.0`
 
 **What.** The first build a client installs by itself, on its own machines and addresses, with nobody
 from our side there (the owner's decisions of 2026-09-23). **B1** — one version, `0.9.0`, for CG

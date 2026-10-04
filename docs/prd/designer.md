@@ -3650,7 +3650,7 @@ the clock renders that offset's time.
 **Notes:** additive field alongside `timezone` (`ClockElementSchema`); countdown/countup ignore it
 like they ignore `timezone`.
 
-## [~] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all FIVE §9 decisions ANSWERED** — §9.1–§9.4 on 2026-08-12, §9.5 on 2026-08-13: (a), position everywhere — **BOTH halves are BUILT**; [[D-133]]'s §1–§3 are now built too, so the item stays `[~]` only pending the owner's archive confirmation)
+## [x] D-135 — SCRUBBING **and PLAYING** the timeline drive Lottie AND video frames on the canvas ⟨priority: high — client-required⟩ — DESIGN authored: `openspec/changes/timeline-drives-loop-and-media/` (with [[D-133]] as ONE change; §5 answers play-and-re-anchor vs position-by-`currentTime`; **all FIVE §9 decisions ANSWERED** — §9.1–§9.4 on 2026-08-12, §9.5 on 2026-08-13: (a), position everywhere — **BOTH halves are BUILT**; [[D-133]]'s §1–§3 are now built too, so the item stays `[~]` only pending the owner's archive confirmation) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-timeline-drives-loop-and-media/`, `RELEASE-0110-01` §0.3)
 
 > **Owner decisions (`design.md` §9), answered 2026-08-12 — the two that bind this item:**
 > **§9.4 — EVERY Lottie and EVERY video follows the playhead, regardless of `drivesHold`.** The
@@ -5072,7 +5072,7 @@ PAIR — a different job on a different surface, and out of scope.
 
 ---
 
-## [~] D-157 — a blocked Export goes GREY and names nothing: the offending box is not marked, the only string that names the Issues panel is unreachable, and the tooltip is on a disabled button that cannot show one ⟨priority: high⟩
+## [x] D-157 — a blocked Export goes GREY and names nothing: the offending box is not marked, the only string that names the Issues panel is unreachable, and the tooltip is on a disabled button that cannot show one ⟨priority: high⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-designer-export-block-visible/`, `RELEASE-0110-01` §0.3) (with `fix-overlap-float-residue`)
 
 **What:** the owner reports —
 

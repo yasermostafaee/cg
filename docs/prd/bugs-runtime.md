@@ -7744,7 +7744,7 @@ that were never checked):
 
 ---
 
-## [~] B-179 — `expectedAspect` is dropped for every look-group template, which DISARMS the aspect-mismatch refusal, and the aspect that reaches air is the CATALOG's guess with nothing checking it ⟨priority: high — FIXED by `derive-look-sources`; the CHOICE between (a) and (b) was settled by the owner, and one Acceptance bullet is REJECTED with it⟩
+## [x] B-179 — `expectedAspect` is dropped for every look-group template, which DISARMS the aspect-mismatch refusal, and the aspect that reaches air is the CATALOG's guess with nothing checking it ⟨priority: high — FIXED by `derive-look-sources`; the CHOICE between (a) and (b) was settled by the owner, and one Acceptance bullet is REJECTED with it⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-derive-look-sources/`, `RELEASE-0110-01` §0.3)
 
 **What:** two joined findings from the [[B-178]] investigation, filed here rather than folded into
 it because their fix is a different shape and touches a refusal that stops takes on air.

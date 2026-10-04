@@ -56,6 +56,30 @@ governs the pixel-grid snapping at high zoom (see "Pixel-snap moves to the grid
 at high zoom"), and holding **Alt** during a drag momentarily bypasses ALL
 snapping (free placement) regardless of the preference or the zoom.
 
+**`B-181` — a RESIZE gesture SHALL decide its snap on the rect it is about to commit, never on the
+pointer.** The candidate rect SHALL be solved from the raw pointer with any aspect lock already
+applied; the coordinates tested against the snap targets SHALL be the MOVING EDGE(S) of that
+candidate — the ones the grabbed handle actually drives; and a snap SHALL be realised by re-solving
+through the same resize solver so the edge lands exactly on the target with the lock still
+satisfied, never by displacing the pointer and accepting whatever rect follows.
+
+This distinction is invisible for an unlocked resize, where the solver places the grabbed edge at
+the pointer and the two are identically equal. It is the whole defect under an aspect lock, where
+the solver returns a rect satisfying the ratio and a CORNER handle's extents are projected onto the
+locked diagonal, separating pointer from edge by construction.
+
+🔴 **The guide a resize draws SHALL be a function of the COMMITTED rect.** It SHALL be emitted only
+for an axis whose committed edge is genuinely ON a target — within the floating-point noise floor,
+not merely within the snap threshold — so the canvas can never announce a snap the geometry
+refused. A snap that the `MIN_SIZE` clamp or the lock prevents SHALL therefore produce no guide.
+
+**Where an aspect lock ties the two extents and a corner handle is in range of targets on both
+axes, the NEARER target SHALL win**, with a deterministic tie to the horizontal axis. The axis the
+lock then FORCES SHALL NOT be given a guide merely for landing near a target; it SHALL be given one
+only if it lands on one. Snapping SHALL remain gated on an unrotated element, the threshold SHALL
+remain a constant screen-space distance, and **Shift** SHALL remain this gesture's bypass for both
+the snap and the whole-pixel quantise.
+
 #### Scenario: Element snaps to canvas center with a guide
 
 - **WHEN** snapping is on and the operator drags an element so its center nears
@@ -75,6 +99,48 @@ snapping (free placement) regardless of the preference or the zoom.
   including pixel-grid zoom)
 - **THEN** the element follows the cursor with no snapping of any kind (neither
   smart guides nor the pixel grid) and no guide lines
+
+#### Scenario: An aspect-locked corner lands its edge exactly on the target
+
+- **WHEN** snapping is on and the operator drags the corner handle of a plate whose
+  aspect is locked, so that the resulting box's moving edge comes within the snap
+  threshold of a neighbour's edge
+- **THEN** the committed rect's moving edge is exactly on that target, the aspect is
+  still satisfied, and the corner opposite the handle has not moved
+
+#### Scenario: The guide is drawn where the box is, not where the pointer is
+
+- **WHEN** an aspect-locked corner is dragged with the pointer sitting on a target
+  but the locked solution placing the box's edge away from it
+- **THEN** the guide is drawn at the committed edge's coordinate, and no guide is
+  drawn at the pointer's
+
+#### Scenario: A snap the geometry cannot take draws nothing
+
+- **WHEN** a resize is within the snap threshold of a target but the committed edge
+  does not reach it — because the lock forced the other axis, or the minimum-size
+  clamp overrode the extent
+- **THEN** no guide line is drawn for that axis
+
+#### Scenario: A locked corner in range on both axes takes the nearer target
+
+- **WHEN** an aspect-locked corner's committed edges are within the threshold of a
+  target on both axes
+- **THEN** the nearer target is the one satisfied, the other axis follows from the
+  lock, and only the satisfied axis is given a guide unless the forced axis also
+  lands exactly on a target
+
+#### Scenario: An unlocked resize is unchanged
+
+- **WHEN** the operator resizes an element that has no aspect lock
+- **THEN** the grabbed edge lands on the target exactly as it did before, because the
+  solver places that edge at the pointer and the two are identically equal
+
+#### Scenario: Shift bypasses the resize snap entirely
+
+- **WHEN** the operator holds Shift while dragging a resize handle
+- **THEN** nothing snaps, no guide line is drawn, and the placement keeps its
+  fractional part
 
 ### Requirement: Ruler guides
 
@@ -165,8 +231,19 @@ Specifically:
 Holding **Alt** during the drag or nudge SHALL bypass the snap (free sub-pixel
 drag / relative ±step nudge that preserves the fractional part). Values typed in
 the Inspector SHALL always be stored as typed (fractional allowed) — they never
-route through the move path. Below the grid threshold, drag and nudge SHALL
-behave exactly as before (no pixel snapping).
+route through the move path.
+
+**`B-180` — BELOW the grid threshold, a DRAG or RESIZE SHALL ALSO commit whole scene pixels**, so the
+committed coordinate is a number the author can see, read back and type. This supersedes the earlier
+"below the grid threshold, drag and nudge behave exactly as before" scope, and only for the drag and
+resize COMMIT: the arrow NUDGE below the threshold SHALL remain a relative ±step that preserves the
+fractional part. Below the threshold the quantise SHALL run AFTER smart-guide snapping and SHALL apply
+only to the axes NO guide claimed — a guide has landed the box on a real target, which inside a scaled
+composition instance is very often legitimately fractional, and rounding after it would pull the box
+back off that target. Holding **Alt** SHALL bypass the quantise on both axes at every zoom, making it
+the only way to place sub-pixel by drag; the resize gesture's existing **Shift** modifier SHALL be its
+bypass. The Snapping preference SHALL NOT gate the quantise — turning smart guides off is a request
+about being pulled toward other things, not a request for a coordinate the author cannot read.
 
 #### Scenario: A drag lands on whole pixels at grid zoom
 
@@ -187,9 +264,51 @@ behave exactly as before (no pixel snapping).
 - **THEN** the grabbed anchor lands on whole pixels and every other member moves
   by the same (snapped) delta, so the selection's relative offsets are preserved
 
-#### Scenario: Below the grid threshold a drag is unchanged
+#### Scenario: A drag below the grid threshold also commits whole pixels
+
+- **WHEN** the zoom is below the grid threshold (no pixel grid), Alt is not held,
+  and the operator drags an element
+- **THEN** the committed position is whole-integer scene X and Y — the same value
+  the Inspector displays — rather than `startPos + clientDelta / zoom`
+
+#### Scenario: Alt below the threshold still places sub-pixel
+
+- **WHEN** the operator holds Alt while dragging below the grid threshold
+- **THEN** the committed position keeps its fractional part, and this is the only
+  drag gesture that produces one
+
+#### Scenario: A guide-snapped axis is left exactly on its target
+
+- **WHEN** a drag below the grid threshold snaps to a smart guide whose target is
+  fractional (for example an edge inside a scaled composition instance)
+- **THEN** that axis is committed exactly on the guide's target, un-rounded, and
+  only the other axis is quantised
+
+#### Scenario: A resize below the grid threshold commits whole pixels
+
+- **WHEN** the operator drags a resize handle of an UNROTATED element below the
+  grid threshold without holding Shift
+- **THEN** the committed position and size are whole scene pixels, and holding
+  Shift bypasses it
+
+#### Scenario: A resize never moves the fixed corner to achieve the quantise
+
+- **WHEN** the resized element is rotated, non-uniformly scaled, or centre-anchored,
+  so its `position` and `size` are not independent of where the pinned corner lands
+- **THEN** the corner opposite the grabbed handle stays EXACTLY where it was — the
+  quantise SHALL be applied to the pointer that drives the resize solver, never to
+  the rect the solver returns, because the pin is the stronger invariant and
+  rounding `position` and `size` separately breaks it
+
+#### Scenario: Below the grid threshold a NUDGE is unchanged
 
 - **WHEN** the zoom is below the grid threshold (no pixel grid) and the operator
-  drags an element
-- **THEN** the move is not pixel-snapped — smart-guide snapping applies exactly as
-  before (subject to the Snapping preference)
+  nudges the selection with an arrow key
+- **THEN** the nudge is a relative ±step that preserves any fractional part,
+  exactly as before
+
+#### Scenario: An Inspector-typed fractional value is not quantised
+
+- **WHEN** the operator types a fractional coordinate into the Inspector at any zoom
+- **THEN** it is stored exactly as typed — the quantise gates the drag/resize
+  commit, never the model

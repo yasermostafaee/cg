@@ -560,6 +560,25 @@ SHALL bind a routable interface **only by explicit opt-in** and the `CG ADD` URL
 host SHALL be the bridge's address as CasparCG sees it (configured, or a guessed
 LAN IPv4), logged loudly.
 
+The advertised host and port SHALL resolve through **three layers, in this
+order: explicit command-line flag > persisted connection config > built-in
+derivation.** A `--template-serve-host` / `--template-serve-port` flag SHALL
+therefore override a stored value for the whole life of that process, so a boot
+script or automation that passes the flag cannot be silently overridden by a
+value an operator saved from a panel.
+
+A stored serve host that is ABSENT and one that is an EMPTY STRING SHALL both
+resolve to the derivation and SHALL behave identically. Neither SHALL ever be
+advertised as an address. The same SHALL hold for the port, where the derived
+value is the ephemeral bind (`0`).
+
+The bridge SHALL report, alongside the serve address in force, (a) which of
+those fields a command-line flag is currently forcing and to what value, and
+(b) the addresses of this machine's non-internal IPv4 interfaces as CANDIDATES.
+Candidates SHALL be presented as candidates and never as a verdict: the bridge
+cannot know which interface the plant can reach, and asserting one is the
+failure the derivation already has.
+
 #### Scenario: Local CasparCG stays loopback
 
 - **WHEN** CasparCG runs on the same machine **THEN** the template server serves on
@@ -572,6 +591,40 @@ LAN IPv4), logged loudly.
   routable interface by explicit configuration and the `CG ADD` URL uses the
   bridge's CasparCG-reachable address (configured or guessed), while the control
   WebSocket stays loopback
+
+#### Scenario: A stored serve host survives a bridge restart
+
+- **WHEN** a serve host is saved into the connection config and the bridge is
+  restarted with no `--template-serve-host` flag **THEN** the stored value is the
+  advertised host **AND** it is the host in the `CG ADD` template URL
+
+#### Scenario: A command-line flag overrides the stored serve host
+
+- **WHEN** the bridge is started with `--template-serve-host` while a DIFFERENT
+  serve host is stored in the connection config **THEN** the flag's value is
+  advertised and used in the `CG ADD` URL, the stored value is not **AND** the
+  bridge reports that the flag is forcing that field, naming the flag and the
+  value in effect
+
+#### Scenario: An empty stored serve host derives, exactly as an absent one does
+
+- **WHEN** the stored serve host is an empty string **THEN** the advertised host
+  is the derived one **AND** it is byte-identical to what an ABSENT stored value
+  produces for the same connection config; no empty host is ever advertised
+
+#### Scenario: A pinned serve port appears in the served URL, an empty one is ephemeral
+
+- **WHEN** a serve port is stored **THEN** the template server binds that port and
+  the `CG ADD` URL carries it
+- **WHEN** the stored serve port is absent or empty **THEN** the bind is ephemeral
+  and the `CG ADD` URL carries the actually-bound port
+
+#### Scenario: The bridge offers this machine's interfaces as candidates
+
+- **WHEN** the serve configuration is read **THEN** the response carries this
+  machine's non-internal IPv4 addresses as candidates **AND** the surface
+  presenting them states that they are candidates rather than a determination of
+  which one the plant can reach
 
 ### Requirement: Template resolution is validated, not blind-acked
 
@@ -1395,50 +1448,69 @@ in a state where a later intent is refused because an earlier command failed.
 
 ### Requirement: The browser retains stack intent and restores it on reconnect
 
-Stack items MUST survive a restart of the bridge process. The stack SHALL NOT live only in the
-bridge's memory: the browser SHALL retain the operator's stack INTENT — for each item its id,
-template id, current field values, play evidence (whether it had been taken to air), the slot it
-occupied, and any position override, in stack order — in a **persistent, browser-local** store
-(the same file-backed ownership model [[B-085]] gave the template library), so the intent survives
-both the bridge's death and a page reload.
+Stack items MUST survive a restart of the bridge process, and the stack SHALL NOT live only in the
+bridge's memory. ⚠ **Amended 2026-09-30 by `CENTRAL-BRIDGE-01` (`B-294`, change `central-bridge`):
+the BRIDGE keeps the stack — its own persisted file, restored at its start — and the browser SHALL
+NOT re-deliver a stack, a restore or a template on any connect.** With one bridge per Playout serving
+several consoles, a re-delivery (local-wins) let an older browser copy overwrite newer state. The
+browser MAY keep a DISPLAY copy (the next requirement), and SHALL never send it. What follows, the
+retained record's STATE rules, now governs the bridge's own file: for each item its id, template
+id, current field values, **the STATE the row was actually in**, any error code that state carries,
+the slot it occupied, and any position override, in stack order.
 
-On EVERY (re)connect the browser SHALL reconcile the bridge to that retained intent **before** it
-re-pulls the stack snapshot, and it SHALL re-deliver the retained templates first so each restored
-item resolves against a populated template registry. Because the restore precedes the re-pull, the
-snapshot the SPA adopts is the RESTORED stack — never the empty one a freshly booted bridge would
-otherwise report. A restore that fails SHALL leave the retained intent intact for the next connect
-and SHALL NOT be allowed to blank the retained stack.
+The retained STATE SHALL be a closed set that answers exactly one question — may this row's producer
+be re-seated? — and SHALL distinguish at minimum:
 
-Conflict policy is local-wins, with one exception: an item the connected bridge ALREADY holds SHALL
-NOT be clobbered by the retained copy (a page reload against a healthy bridge changes nothing). An
-item whose template is not registered, or for which no layer can be obtained, SHALL be skipped
-rather than failing the whole restore.
+- an item that was ON AIR when last observed, or may still be (the bridge died under it);
+- an item whose producer was RESIDENT but not on air;
+- an item whose layer is KNOWN EMPTY because the operator deliberately CLEARed it (or a reconcile
+  proved the layer empty);
+- an item whose last operation FAILED.
 
-The restored rows SHALL appear as soon as the intent is delivered, without waiting for CasparCG:
-restoring an item SHALL seed the bridge's stack state and publish it immediately, and SHALL send
-NOTHING to CasparCG at that moment.
+A deliberate CLEAR and a bridge death SHALL be distinguishable in the retained record. Play evidence
+SHALL be DERIVED from the retained state rather than stored beside it, so the two cannot disagree.
+The mapping from a reconciled status to a retained state SHALL exist in exactly ONE place, shared by
+every consumer; a second copy SHALL NOT be derived locally.
+
+The bridge SHALL restore its own file at start, before its control socket accepts a console, so no
+console ever sees the bridge without its stack. An item whose template is not registered, or for
+which no layer can be obtained, SHALL be skipped rather than failing the whole restore, and an
+unusable file SHALL be said and the bridge started empty, the file kept.
+
+The restored rows SHALL appear at once, without waiting for CasparCG: restoring an item SHALL seed the
+bridge's stack state and SHALL send NOTHING to CasparCG at that moment. A restored item SHALL be
+seeded at the state it was retained in — a failed row comes back FAILED, a cleared row comes back
+cleared — and a restore SHALL NEVER seed a state better than the one that was retained.
 
 #### Scenario: The stack survives a bridge restart
 
 - **WHEN** the bridge process is killed and restarted while the operator has items on the stack
-- **THEN** the items are still on the stack after the SPA reconnects — the list is NOT emptied
+- **THEN** the items are on the stack of the restarted bridge, from its own file — the list is NOT
+  emptied, and no console had to deliver anything
 
-#### Scenario: The retained intent is delivered before the snapshot is re-pulled
+#### Scenario: A console re-delivers nothing
 
-- **WHEN** the SPA reconnects to a freshly booted, empty bridge
-- **THEN** it re-delivers the retained templates and then the retained stack intent, and the stack
-  snapshot it subsequently adopts contains the restored items rather than an empty list
+- **WHEN** a console connects to a bridge — freshly booted or long running — holding a display copy
+  of an older stack
+- **THEN** it sends no stack restore and no template re-delivery, and the bridge's stack is unchanged
 
-#### Scenario: A live bridge's own stack is never clobbered
+#### Scenario: An unusable file is said, and nothing is deleted
 
-- **WHEN** the SPA connects (e.g. after a page reload) to a bridge that still holds those items
-- **THEN** the bridge keeps its own item state and the retained copy is skipped
+- **WHEN** the bridge starts and its stack file is not a stack
+- **THEN** it says so and starts with an empty stack, and the file is left as it was
 
-#### Scenario: A failed restore does not destroy the retention
+#### Scenario: A deliberate CLEAR and a bridge death are distinguishable in the retention
 
-- **WHEN** the restore of a retained item is rejected by the bridge
-- **THEN** the retained stack intent is preserved for the next connect, and the SPA does not adopt
-  an empty stack in its place
+- **WHEN** one item is CLEARed by the operator and another is left on air, and the bridge then dies
+- **THEN** the two retained records differ in their retained state — the cleared one records that
+  its layer is deliberately empty, the other that it was on air
+- **AND** neither record is reduced to the same value as the other
+
+#### Scenario: A failed row is restored as failed, not as ready
+
+- **WHEN** an item whose retained state records a FAILED operation is restored into a fresh bridge
+- **THEN** the bridge seeds it at its failed state, carrying its error code
+- **AND** it is not seeded as loaded, playable, or on air
 
 ### Requirement: The stack is visible while the bridge is unreachable
 
@@ -1453,11 +1525,21 @@ library is served locally. This is **display only** — it SHALL send no command
 restore-vs-reset decision. The occupancy-aware restore remains the bridge's, on reconnect, and once
 the link is usable the authoritative snapshot SHALL replace the locally-served view.
 
-Rows served from local intent while the bridge is down MUST be honest about what cannot be verified.
-A row whose retained intent records that it had been taken to air SHALL render in the muted
-UNVERIFIABLE state ("was on air, cannot confirm now") and SHALL NOT render a confident on-air claim
-— with no bridge the SPA has no conduit to CasparCG at all. A row that had not been taken SHALL
-render as a non-air-claiming resting state. No such row SHALL be shown as pending.
+Rows served from local intent while the bridge is down MUST be honest about what cannot be verified,
+**and losing the link SHALL NEVER IMPROVE a row's status.** A row whose retained state records that
+it had been taken to air SHALL render in the muted UNVERIFIABLE state ("was on air, cannot confirm
+now") and SHALL NOT render a confident on-air claim — with no bridge the SPA has no conduit to
+CasparCG at all. A row that had not been taken SHALL render as a non-air-claiming resting state. No
+such row SHALL be shown as pending.
+
+Distinct retained states SHALL stay distinct in that view. A row whose last operation FAILED SHALL
+be published as failed, carrying its error code, and SHALL NOT be published as loaded or ready. A
+row whose layer is known empty SHALL be published as such, and SHALL NOT be published as loaded. The
+projection SHALL NOT collapse a failed row, a known-empty row and a genuinely loaded row onto the
+same published status.
+
+The projection SHALL round-trip: re-mirroring a locally-served snapshot back into the retention
+SHALL yield the same retained states, so displaying the stack offline can never corrupt it.
 
 The locally-served view SHALL also count as the current stack for the offline
 refuse-while-referenced check, so a template used by visible retained rows cannot be removed while
@@ -1473,6 +1555,17 @@ disconnected.
 - **WHEN** a retained row that had been taken to air is displayed with the bridge down
 - **THEN** it renders as UNVERIFIABLE ("was on air"), never as a confident on-air claim, and never
   as pending
+
+#### Scenario: An errored row does not become READY when the bridge dies
+
+- **WHEN** a row whose reconciled status is a failure is displayed after the bridge process dies
+- **THEN** it is published as failed, with the error code it carried
+- **AND** it is NOT published as loaded, and the row does not read READY
+
+#### Scenario: A cleared row does not become READY when the bridge dies
+
+- **WHEN** a row the operator CLEARed is displayed after the bridge process dies
+- **THEN** it is published as its known-empty resting status, not as loaded
 
 #### Scenario: The offline view commands nothing
 
@@ -1498,27 +1591,41 @@ layer before its first `CG ADD` on the layer ("adoption"): on a bridge-ONLY rest
 died while CasparCG kept rendering — that CLEAR would land on the LIVE layer and take the graphic
 OFF AIR before re-adding it as merely loaded. A restore SHALL therefore be **occupancy-aware**.
 
+**A restore SHALL re-seat a producer ONLY for an item whose retained state says a producer belongs
+on its layer.** An item retained as deliberately CLEARed, or as FAILED, SHALL NOT have a producer
+re-seated onto its layer under any occupancy verdict — its row is restored, and its layer is left
+exactly as it is. Occupancy SHALL NOT be consulted for such an item at all: silence on a layer the
+operator emptied is the EXPECTED reading, not evidence that a producer was lost.
+
 Because the occupancy tap only populates once the fresh session reaches `healthy` and OSC is
-flowing, the adopt-vs-re-ADD decision for a restored item SHALL be taken at the moment occupancy is
-knowable — at the session's transition INTO `healthy` (the same drained-occupancy point the
+flowing, the adopt-vs-re-ADD decision for a restorable item SHALL be taken at the moment occupancy
+is knowable — at the session's transition INTO `healthy` (the same drained-occupancy point the
 CasparCG-link-loss reconcile of [[B-086]] samples), or immediately when the intent is restored onto
 an already-healthy session whose tap is already warm. Until that decision is taken the restored item
 SHALL simply sit on the stack with nothing sent for it.
 
-For each restored item, consulting the observed occupancy of its layer (silence means unoccupied —
+For each RESTORABLE item, consulting the observed occupancy of its layer (silence means unoccupied —
 real CasparCG goes silent for a cleared layer rather than reporting `empty`):
 
 - **Occupied layer** → the bridge SHALL ADOPT THE LAYER WITHOUT CLEARING IT: it marks the layer
   adopted so no later adoption can clear it, and sends NOTHING. The resumed OSC re-derives the
   item's real air state on its own — a still-playing graphic reads ON AIR again and is never
   interrupted.
-- **Silent layer** → the producer is gone, so the bridge SHALL re-ADD the item as `loaded` with the
-  ordinary `CG ADD` (carrying its retained fields and position) and SHALL NOT precede it with an
-  adopt-CLEAR.
+- **Silent layer** → the producer is gone. ⚠ **Amended 2026-09-30 by `CENTRAL-BRIDGE-01` (`C-047`,
+  change `central-bridge`): the bridge SHALL send NOTHING for it** (it used to re-ADD it as `loaded`)
+  — the owner's standing decision for our layers is detect and say. An item restored ON AIR SHALL
+  leave ON AIR and be named by the restart notice (PUT BACK ON AIR is the operator's); an item
+  restored `loaded` SHALL stay `loaded`, not resident, so its next take re-ADDs it.
 
-No restore path SHALL emit a layer CLEAR, and no restore path SHALL emit a channel-level CLEAR. The
-adopt-CLEAR of the ORDINARY load path is unchanged — only the restore path adopts without clearing,
-and only for a layer OBSERVED occupied.
+No restore path SHALL emit a layer CLEAR, a `CG ADD`, or a channel-level CLEAR. The adopt-CLEAR of the
+ORDINARY load path is unchanged — only the restore path adopts without clearing, and only for a layer
+OBSERVED occupied.
+
+**A restore SHALL report what it did NOT restore, per item and with a reason**, and the caller SHALL
+NOT be able to discard that report by accident: a bare count is not sufficient, because the operator
+needs to know WHICH rows are gone and WHY. The reason SHALL distinguish the benign case — an item
+the live bridge already holds, which loses no row — from the cases where a row the operator was
+looking at has genuinely disappeared.
 
 #### Scenario: A bridge-only restart keeps the graphic on air, with no flash
 
@@ -1526,13 +1633,29 @@ and only for a layer OBSERVED occupied.
 - **WHEN** the retained item is restored and its layer is observed occupied
 - **THEN** NO CLEAR is issued for that layer and the item reads ON AIR again from resumed OSC
 
-#### Scenario: A bridge + CasparCG restart returns the items as loaded
+#### Scenario: A bridge + CasparCG restart takes the items off air, with the notice, sending nothing
 
 - **GIVEN** an item was ON AIR and BOTH the bridge and CasparCG are restarted, so the layers are
   empty
 - **WHEN** the retained item is restored and its layer is observed silent
-- **THEN** the item is re-ADDed onto the empty layer and rests at `loaded` — not a resurrected
-  ON AIR claim
+- **THEN** nothing is sent for it (amended 2026-09-30, `CENTRAL-BRIDGE-01`): it leaves ON AIR and the
+  restart notice names it — not a resurrected ON AIR claim, and not a re-ADD
+
+#### Scenario: A deliberately cleared graphic is NOT put back on its layer
+
+- **GIVEN** the operator took a graphic off air with CLEAR, keeping its row on the stack, and the
+  bridge process is then restarted
+- **WHEN** the retained item is restored and its layer is silent
+- **THEN** NO `CG ADD` is issued for that layer — the silence is not read as a lost producer
+- **AND** the row comes back on the stack in its known-empty state, off air, until the operator
+  re-takes it
+
+#### Scenario: A failed row is not repaired by a restart
+
+- **GIVEN** an item whose last operation failed
+- **WHEN** the bridge is restarted and the item is restored
+- **THEN** no producer is re-seated for it and no command is sent for it
+- **AND** it is published as failed rather than as loaded
 
 #### Scenario: Observed occupancy suppresses the adopt-CLEAR
 
@@ -1544,6 +1667,19 @@ and only for a layer OBSERVED occupied.
 - **WHEN** retained intent is restored while no declared CasparCG server is reachable
 - **THEN** the items appear on the stack and no AMCP command is sent for them, and the on-air verbs
   stay refused (R-006)
+
+#### Scenario: Rows the restore could not re-seat are surfaced, with the reason
+
+- **WHEN** a restore skips items that were on the operator's stack and are now gone — their
+  template is no longer registered, or no layer could be obtained
+- **THEN** the operator is told, in a surface on the layers list, how many rows did not come back
+  and why
+
+#### Scenario: The benign skip raises no alarm
+
+- **WHEN** a restore skips ONLY items the live bridge already holds — a page reload against a
+  healthy bridge, which loses no row
+- **THEN** nothing is surfaced to the operator
 
 ### Requirement: ON AIR is honest across a CasparCG link-loss
 
@@ -3920,3 +4056,167 @@ over the control socket only to consoles whose sign-in holds that channel.
 - **WHEN** two consoles listen to CH 1's sound **THEN** the core sees one `GET /audio.wav`, and each listener's
   stream begins with the 44-byte header followed by whole frames, even when the core's writes split a frame
 - **AND** a sound ticket opens `/pgm/1/sound` only, and a picture ticket does not open it
+
+### Requirement: The bridge reads what casparcg.config declares and what the channel runs, and publishes a missing-output verdict
+
+The bridge SHALL read, over the AMCP axis, the consumers `casparcg.config` DECLARES for each
+declared channel (`INFO CONFIG`) and the consumers actually RUNNING on that channel (the
+`<output>` block of `INFO <channel>`), and SHALL publish per channel, in the server's health
+snapshot, the declared set, the running set and every declared consumer KIND with fewer running
+instances than declared. The declaration SHALL be read once per connection; the running set
+SHALL be read from the reply the video-mode read already sends, re-read on a slow interval while
+the server is reachable, and re-read after a reconnect. The verdict SHALL be published when its
+content changes and SHALL be written to stderr on the transition into `missing` and once when it
+clears.
+
+A declaration that answers but cannot be read as a configuration SHALL be recorded as unreadable
+and SHALL NOT be asked again on that connection; an unreadable declaration is a gap in the check,
+never an alarm. A channel reply carrying no `<output>` element SHALL be treated as "could not
+check", never as an empty channel.
+
+The verdict SHALL be KEPT across a disconnect. The one predicate `outputVerdictOf` in
+`@cg/shared-ipc` SHALL decide, from the kept verdict and the server's reachability, whether the
+server is `ok`, `missing`, `unverifiable` (unreachable after a `missing` verdict) or `unknown`; no
+surface SHALL re-derive that decision.
+
+#### Scenario: The plant's fixture raises the verdict, named by device
+
+- **WHEN** `INFO CONFIG` declares `<decklink><device>23487013</device>`, `<screen/>` and
+  `<system-audio/>` for channel 1 and `INFO 1`'s `<output>` carries only `system-audio` and
+  `screen`
+- **THEN** the health snapshot's check for channel 1 lists the three declared consumers, the two
+  running ones, and `missing: [{ kind: 'decklink', declared: 1, running: 0, devices: ['23487013'] }]`,
+  the verdict is `missing`, and the declaration was read exactly once for the connection
+
+#### Scenario: The verdict clears without a reconnect when the consumer is seen running
+
+- **WHEN** a later re-read of `INFO 1` reports a `decklink` consumer at any port
+- **THEN** the check's `missing` is empty and the verdict is `ok`
+
+#### Scenario: A reconnect re-reads both halves
+
+- **WHEN** the AMCP connection drops and the session comes back healthy
+- **THEN** the declaration is read again and the verdict is recomputed from the new readings,
+  so a CasparCG restarted after a config fix clears the alarm on the next tick
+
+#### Scenario: An unreadable declaration is a gap, asked once
+
+- **WHEN** `INFO CONFIG` answers with a document that has no `<channels>` block
+- **THEN** the check records `declared: null`, `missing` is empty, the verdict is `unknown`, and
+  no further `INFO CONFIG` is sent on that connection
+
+#### Scenario: The server dies after a missing verdict — kept, and unverifiable
+
+- **WHEN** the verdict is `missing` and the server becomes unreachable
+- **THEN** the health snapshot still carries the check, and `outputVerdictOf` answers
+  `unverifiable` with the last observation, never `unknown` and never `ok`
+
+### Requirement: A missing consumer is reported and never created
+
+The bridge SHALL NOT send any consumer `ADD` on account of a missing consumer, whatever flag it
+was started with, and the output check SHALL carry no creation record. A consumer `ADD` on a
+programme channel is one of the Playout's C5 commands this station never sends (`FOLLOWUPS-01` A,
+the owner's decision of 2026-09-28, superseding the bounded, off-by-default re-creation this
+change first shipped behind `--create-missing-consumers`).
+
+The retired `--create-missing-consumers` flag, bare or with a value, SHALL NOT stop the bridge
+booting; the bridge SHALL say once on stderr that the flag is retired and ignored.
+
+#### Scenario: No ADD, however long the output stays missing — even to a server that would accept
+
+- **WHEN** a declared DeckLink is missing and the server would answer an `ADD` with `202`
+- **THEN** no `ADD` is ever sent, the verdict stays `missing`, and the check has no `creation` key
+
+#### Scenario: The retired flag still boots, and says so
+
+- **WHEN** `bin/caspar-bridge.mjs` starts with `--create-missing-consumers` or
+  `--create-missing-consumers=<value>`
+- **THEN** it prints that `--create-missing-consumers is retired and ignored` and reaches its
+  listening line; started without the flag, it says nothing about it
+
+### Requirement: The serve address is configured in the app, and a masked field says so
+
+The operator SHALL be able to set the template serve host and port from the
+Runtime's server settings panel, beside the server hosts it is a fact about, and
+Apply SHALL persist them and put them in force on the RUNNING bridge through
+`connections.set-config`. No bridge restart SHALL be required, and the app SHALL
+NOT offer to start, stop or restart the bridge.
+
+WHEN a command-line flag is forcing a field, the panel SHALL show the value
+actually in effect, SHALL name the flag responsible, and SHALL mark the stored
+value as _not in force_. The control SHALL REMAIN EDITABLE and SHALL NOT be
+greyed out or disabled: the stored value is what takes over at the next boot
+without the flag, so it must stay editable, and grey reads as "you cannot change
+this", which is false.
+
+WHEN an Apply succeeds but leaves configured CasparCG servers unable to fetch the
+address, the dialog SHALL NAME those servers, SHALL state that they will show
+live sources with NO TEMPLATE, and SHALL state that `CG ADD` will still report
+success. That message is about the CONFIGURATION and SHALL NOT be worded as
+evidence that any template page loaded — nothing on this path measures a fetch.
+
+#### Scenario: The serve host is set and applied without restarting the bridge
+
+- **WHEN** the operator types a serve host in the panel and presses Apply with
+  nothing on air **THEN** the config is persisted, the running bridge re-derives
+  template serving with that host, and the panel reports the result **AND** no
+  restart is requested or required
+
+#### Scenario: A masked field shows the flag's value and keeps the stored one editable
+
+- **WHEN** the panel opens while `--template-serve-host` is in force **THEN** the
+  field shows the value actually in effect, names `--template-serve-host` as the
+  reason, shows the stored value struck through and labelled _not in force_
+  **AND** the input remains editable and is not disabled
+
+#### Scenario: Apply names the servers that cannot fetch the address
+
+- **WHEN** Apply succeeds with a loopback serve address while a REMOTE CasparCG
+  server is configured **THEN** the dialog names that server, says it will show
+  live sources with no template, and says `CG ADD` will still report success
+
+#### Scenario: The candidate list does not claim to know the answer
+
+- **WHEN** the panel offers detected addresses **THEN** they are labelled as
+  candidates, and choosing one is an operator decision the surface does not make
+  on their behalf
+
+### Requirement: A refused command is recorded beside its code
+
+When an operator action is refused by CasparCG, the audit entry the bridge records SHALL carry,
+beside the refusal code, the AMCP line that was refused — its verb, its target and its first
+quoted argument intact, later quoted arguments elided, capped at 200 characters. An action
+refused by the bridge before any line reached the wire SHALL record no command. An accepted
+action SHALL record no command.
+
+#### Scenario: A take whose CG ADD is refused names the ADD
+
+- **WHEN** a take's pre-roll `CG 1-72 ADD 0 "tpl" 0 "…"` is answered `404` **THEN** the audit
+  entry reads `outcome: failed`, `errorCode: amcp-404` and `command` beginning
+  `CG 1-72 ADD 0 "tpl" 0 `
+
+#### Scenario: A refusal before the wire carries no command
+
+- **WHEN** a take is refused `unknown-item` **THEN** the audit entry carries no `command`
+
+#### Scenario: The payload is elided, the URL is kept
+
+- **WHEN** the refused line is `CG 1-99 ADD 0 "http://host:port/template/id?cw=1920&ch=1080" 0
+"{…}"` **THEN** the recorded command keeps the URL and replaces the data argument with `"…"`
+
+### Requirement: The boot line names the template count
+
+At boot the bridge SHALL report how many templates its registry hydrated from the persist
+directory, how many persisted files it skipped as unusable, and the directory, on the CLI's boot
+line beside the bank, the sources and the ledger. The bridge handle SHALL expose the same
+reading.
+
+#### Scenario: Two records and one unusable file
+
+- **WHEN** the templates directory holds two valid records and one file that is not a record
+  **THEN** the handle reports `loaded: 2, skipped: 1` with the directory, and the boot line says so
+
+#### Scenario: A first boot
+
+- **WHEN** the templates directory does not exist yet **THEN** the handle reports
+  `loaded: 0, skipped: 0` and the boot line says nothing can go to air until a `.vcg` is imported

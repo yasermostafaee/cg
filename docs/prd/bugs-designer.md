@@ -1596,7 +1596,7 @@ Any fix must say what happens to those.
 **Related:** [[D-039]] is the feature that introduced image/logo separators. Source:
 `DEBT.md` sweep, external report (no `DEBT.md` line — reported directly by the owner).
 
-## [~] B-129 — the Designer canvas background colour reaches the OUTPUT: air must stay transparent unless a real element was placed ⟨priority: high — reaches air⟩
+## [x] B-129 — the Designer canvas background colour reaches the OUTPUT: air must stay transparent unless a real element was placed ⟨priority: high — reaches air⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-designer-export-fidelity/`, `RELEASE-0110-01` §0.3)
 
 **What:** the canvas backdrop the author sees while editing is carried into the rendered output.
 Output must be **transparent** unless the author deliberately placed a large rectangle — which is
@@ -2804,7 +2804,7 @@ residual defect.
 
 ---
 
-## [~] B-181 — resize snapping is computed on the POINTER, not on the box edge, so under an aspect lock the box lands nowhere near the guide the canvas drew ⟨priority: high — it breaks the one gesture a multibox layout is built with⟩ — FIXED on `dev` (`openspec/changes/resize-snaps-the-edge`)
+## [x] B-181 — resize snapping is computed on the POINTER, not on the box edge, so under an aspect lock the box lands nowhere near the guide the canvas drew ⟨priority: high — it breaks the one gesture a multibox layout is built with⟩ — FIXED on `dev` (`openspec/changes/resize-snaps-the-edge`) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-resize-snaps-the-edge/`, `RELEASE-0110-01` §0.3)
 
 **What:** one defect with two faces, both reported by the owner, both in the Designer canvas.
 
@@ -3027,7 +3027,7 @@ half — the promise that what a gesture commits is a number the author can read
 
 ---
 
-## [~] B-183 — a new Live Source plate is born pointing at `live-1`, a name the author never chose and nothing declares, so drawing a box creates a preflight error and blames the author for it ⟨priority: high⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`)
+## [x] B-183 — a new Live Source plate is born pointing at `live-1`, a name the author never chose and nothing declares, so drawing a box creates a preflight error and blames the author for it ⟨priority: high⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-plate-source-unassigned/`, `RELEASE-0110-01` §0.3)
 
 **What:** the owner opened a template on the root composition and found a plate flagged
 `look-source-undeclared`: its `routeKey` was `live-1` while the group declared `l1` and `l2`.
@@ -3141,7 +3141,7 @@ that the offending plate in his template genuinely is full-frame.
 
 ---
 
-## [~] B-184 — one fact, two colours: the Looks panel draws an EXPORT REFUSAL in amber while the status bar draws the same refusal in red ⟨priority: medium⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`)
+## [x] B-184 — one fact, two colours: the Looks panel draws an EXPORT REFUSAL in amber while the status bar draws the same refusal in red ⟨priority: medium⟩ — FIXED on `dev` (`openspec/changes/plate-source-unassigned`) · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-plate-source-unassigned/`, `RELEASE-0110-01` §0.3)
 
 **What:** the right-hand Looks panel printed `1 ISSUE — EXPORT WILL REFUSE` with its issue rows in
 `colors.caution` (amber), while `StatusBar.tsx` printed `1 error` in red for the same preflight
@@ -3453,7 +3453,7 @@ reproduced from its stated fields rather than read from the ZIP:
 
 ---
 
-## [~] B-188 — the group's source DECLARATION stores a fact the plates already carry, and `look-source-undeclared` is the cost of storing it twice ⟨priority: medium — ADOPTED and IMPLEMENTED; `openspec/changes/derive-look-sources`⟩
+## [x] B-188 — the group's source DECLARATION stores a fact the plates already carry, and `look-source-undeclared` is the cost of storing it twice ⟨priority: medium — ADOPTED and IMPLEMENTED; `openspec/changes/derive-look-sources`⟩ · ARCHIVED 2026-10-04 (`openspec/changes/archive/2026-10-04-derive-look-sources/`, `RELEASE-0110-01` §0.3)
 
 **The proposal, in the owner's words:**
 

@@ -86,7 +86,8 @@
       **93 passed**, 23/23 tasks
 - [x] 6.3 Pushed to `dev` as **`05318016`** (`053180168de345a0739674ad9e174deb8fe485ff`);
       `git ls-remote origin dev` matches local `HEAD`
-- [ ] 6.4 ⚠ **The push run for `05318016` did NOT discharge anything.**
+- [ ] 6.4 (HISTORICAL — answered by 6.5 below; kept unticked because the run it names discharged
+      nothing.) ⚠ **The push run for `05318016` did NOT discharge anything.**
       <https://github.com/yasermostafaee/cg/actions/runs/32984155276> came back
       **`startup_failure`** with both heavy jobs **`skipped`**. Under the discharge rule that is
       neither a pass nor a fail and proves nothing — a SKIPPED `e2e` is a statement about the run,

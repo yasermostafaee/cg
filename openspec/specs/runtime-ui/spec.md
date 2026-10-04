@@ -2039,3 +2039,670 @@ no loudness has arrived for a second. Nothing SHALL be metered per box.
 
 - **WHEN** eighty readings arrive for the channel on screen **THEN** the bars and the badge show the last of
   them and React commits nothing; a reading for another channel draws nothing
+
+### Requirement: The audit record is on disk and survives a bridge restart
+
+Auditable operator actions SHALL be appended to a durable record, so that "who put what on air, and
+did the server accept it" can be answered the next day.
+
+The record's location SHALL follow the existing bridge store convention — a CLI flag with a default
+under the bridge's own configuration directory — and SHALL NOT live where the template registry
+reads every file as a template.
+
+#### Scenario: An action recorded before a restart is still there after it
+
+- **WHEN** an auditable action occurs, the bridge is restarted, and the Audit log is opened
+- **THEN** the action is still listed
+
+#### Scenario: The action set has ONE definition
+
+- **WHEN** the operator filters the Audit log by action
+- **THEN** the options offered are derived from the one schema action set, so an action cannot be
+  writable but unfilterable
+
+### Requirement: Every operator action records exactly one entry, at its real outcome
+
+Each of the bridge's operator actions SHALL append exactly ONE audit entry, written where the
+operation's outcome is KNOWN and carrying the outcome that operation actually took.
+
+An entry SHALL NOT be written before the outcome is determined, and a refused operation SHALL NOT be
+recorded as accepted. A record that misreports an on-air action is worse than no record, because it
+is trusted.
+
+The guarantee SHALL be structural rather than a convention: an operator action SHALL NOT be able to
+return — by any branch, including an exception — without its entry having been written.
+
+#### Scenario: An accepted action records one `ok` entry
+
+- **WHEN** the operator loads, takes, updates, stops, advances, clears or removes an item and the
+  server accepts it
+- **THEN** exactly one entry is appended, with outcome `ok`, naming the item, its template and the
+  layer the operator acted on
+
+#### Scenario: A refused action records the code that refused it
+
+- **WHEN** an operator action is refused
+- **THEN** exactly one entry is appended, with outcome `failed` and the refusal's own `errorCode`,
+  rather than a bare failure
+
+#### Scenario: An unanswered command records a timeout, not a failure
+
+- **WHEN** a command is accepted by the server and no response ever arrives
+- **THEN** the entry's outcome is `timeout`, distinguishing "nothing came back" from "it was
+  refused"
+
+#### Scenario: An action whose response cannot express its outcome still records the truth
+
+- **GIVEN** an action whose response is unconditionally successful because its caller-visible effect
+  always happens
+- **WHEN** the wire step that action also performs fails
+- **THEN** the entry records the failure and its code, even though the response reported success
+
+#### Scenario: The record's order is the order outcomes happened
+
+- **WHEN** several actions complete close together
+- **THEN** their entries appear in the record in the order the outcomes landed, and a failed write
+  for one of them does not drop the entries that follow it
+
+#### Scenario: Only actions the bridge really performs are recorded
+
+- **WHEN** an action in the schema's set has no operation in this process
+- **THEN** no entry is invented for it, and its absence is named rather than left to be discovered
+
+### Requirement: A failed audit write never takes the station off air
+
+An audit write that fails SHALL NOT refuse, delay or alter the operation being recorded. The writer
+SHALL report the failure and keep trying, and the operation SHALL proceed.
+
+This is deliberately the OPPOSITE of the configuration stores, where an unusable file is a hard boot
+failure: those files are preconditions for correct playout, while an audit entry is a record of what
+already happened and nothing downstream reads it to decide what to send.
+
+#### Scenario: A take succeeds while the audit log cannot be written
+
+- **GIVEN** the audit file cannot be written (permission denied, disk full)
+- **WHEN** the operator takes a graphic to air
+- **THEN** the take proceeds normally, and the write failure is reported rather than raised
+
+### Requirement: The Audit log tells its three empty states apart
+
+An empty Audit log SHALL distinguish **no writer configured**, **the writer is failing**, and
+**readable and genuinely empty**. The wording "No audit entries yet" SHALL appear only in the third.
+
+A surface that cannot tell those apart asserts a fact it cannot know: a negative observation is not a
+result until the instrument is proven live.
+
+#### Scenario: No writer is configured
+
+- **WHEN** the bridge runs without an audit path and the operator opens the Audit log
+- **THEN** it says no audit record is configured, and does NOT say there are no entries
+
+#### Scenario: The writer is failing
+
+- **WHEN** the writer has recorded write failures and the operator opens the Audit log
+- **THEN** it surfaces that the record is failing, with the reason, and does NOT say there are no
+  entries
+
+#### Scenario: The record is readable and genuinely empty
+
+- **WHEN** the record is readable and contains nothing
+- **THEN** — and only then — the panel says there are no audit entries yet
+
+#### Scenario: A filter that matches nothing is not an empty record
+
+- **WHEN** the record contains entries but the active filter matches none of them
+- **THEN** the panel says no entries match the filter, and does NOT say there are no entries yet
+
+### Requirement: A state hue is never borrowed by a control that cannot be in that state
+
+A colour that carries a STATE meaning on this surface SHALL NOT be worn by a control for which that
+state cannot be true, in ANY interactive state — rest, hover, active or focus.
+
+The rule SHALL be enforced by the treatment being SCOPED to the controls it belongs to, not by a
+comment asking future code not to inherit it. Where a shared rule paints a state hue, the weights
+SHALL be named tokens rather than literals, so that a reader can see whose colour they are.
+
+#### Scenario: The maximised-panel toggle keeps its own hue while hovered
+
+- **WHEN** the operator hovers or presses the maximised-panel toggle
+- **THEN** it stays in the sky accent family and never paints the REHEARSING violet, because a
+  "this row is on PVW" claim cannot be true of a panel header
+
+#### Scenario: The rehearsing weights are legible as rehearsing
+
+- **WHEN** a developer reads the shared `.is-on` hover and active rules
+- **THEN** the colours are named as the rehearsing family, so a control inheriting them is visibly
+  inheriting a state hue rather than an anonymous literal
+
+### Requirement: The status bar's fault colours mean a fault
+
+In the status bar, `--r-caution` and `--r-danger` SHALL mark faults only. A control that performs an
+ACTION SHALL NOT wear a fault role colour, so that an alarm beside it keeps its meaning.
+
+#### Scenario: The failover control is not coloured at rest
+
+- **WHEN** the status bar renders with a backup configured
+- **THEN** the manual failover control carries no role colour and reads as a peer of the other
+  status-bar buttons, while the `NO OSC` alarm beside it remains the only amber
+
+#### Scenario: The failover control still says why it cannot be pressed
+
+- **WHEN** no backup is configured
+- **THEN** the control is disabled and its title names the reason, unchanged by the colour decision
+
+### Requirement: The reserved-layer tab is named for what it lists
+
+The tab listing the declared reserved layers SHALL be named for whose layers they are — the
+station's own playout system's — rather than for this console's playout.
+
+The renderer-local identifiers behind it SHALL match that name. Wire names — IPC channel strings,
+the shared contract type and the bridge surface — SHALL be left unchanged, because renaming them
+churns the protocol for no user-visible gain.
+
+#### Scenario: The tab names whose layers it lists
+
+- **WHEN** the operator looks at the layer surfaces
+- **THEN** the reserved-layer tab reads `Station layers`, and nothing in the product still calls it
+  the console's playout
+
+#### Scenario: The wire is untouched by the rename
+
+- **WHEN** the renderer asks the bridge for reserved-layer state after the rename
+- **THEN** it uses the same channel names as before, so no bridge or protocol change is implied
+
+### Requirement: A missing program output is a one-line full-width alarm that does not go quiet when its source dies
+
+The Runtime SHALL render a full-width, persistent, `role="alert"` banner, in the same strip
+language and banner region as the connection and raster-mismatch banners, whenever the
+primary server's output verdict is `missing` AND at least one missing consumer kind is a
+PROGRAM output — a kind whose output leaves the playout machine (`decklink`, `bluefish`, `ndi`,
+`ffmpeg`, `artnet`, and any kind the console does not recognise). The banner SHALL say that
+nothing on the channel reaches air, and SHALL carry, per channel, exactly ONE line the operator
+can act on: the declared consumer kind and the device its declaration names, that CasparCG is
+not running it, that the fix is on the playout machine, and where the detail is (the Server
+connection dialog's Outputs section). The banner SHALL NOT carry the engineering detail — the
+addressing form of the declared number, how CasparCG reads it, the startup-log recipe, the
+restart paragraph, the creation outcome.
+
+When the bridge cannot reach CasparCG after such a verdict, the banner SHALL stay, re-labelled
+as UNVERIFIED, saying when the output was last seen missing and that it cannot be re-checked
+until CasparCG is reachable. The banner SHALL render nothing on an `ok` or `unknown` verdict, and
+nothing while the browser→bridge link is not live (the connection banner owns that state). The
+verdict SHALL come from the one predicate `outputVerdictOf` and the severity from the one
+predicate `outputSeverityOf` / `checksLosingAir`; the banner SHALL NOT re-derive either.
+
+#### Scenario: The fixture raises the alarm, in words an operator can act on
+
+- **WHEN** the primary is reachable and its check for channel 1 says the declared
+  `decklink` (device `23487013`) is not running while `system-audio` and `screen` are
+- **THEN** a `role="alert"` banner named "Program output missing" reads PROGRAM OUTPUT MISSING,
+  names channel 1 and `decklink (device 23487013)`, says CasparCG is not running it and that the
+  fix is on the playout machine, points at Server connection ▸ Outputs, and says nothing about
+  persistent IDs, slot indexes, the server log or restarting
+
+#### Scenario: Nothing lights when every declared consumer is running
+
+- **WHEN** the verdict is `ok`, or no check has completed, or the declaration was unreadable
+- **THEN** no output banner is rendered
+
+#### Scenario: The alarm clears when the declared consumer is seen running
+
+- **WHEN** a later check reports the `decklink` consumer running
+- **THEN** the banner disappears on its own
+
+#### Scenario: The bridge loses CasparCG after a missing verdict
+
+- **WHEN** the primary becomes unreachable while its kept verdict is `missing` for a program output
+- **THEN** a banner named "Program output unverified" stays on screen, names the server as
+  unreachable and the kind last seen missing, and says it cannot re-check
+
+#### Scenario: An unknown consumer kind is treated as a program output
+
+- **WHEN** a check reports a declared kind the console does not recognise as missing
+- **THEN** the banner alarms for it exactly as for a DeckLink
+
+#### Scenario: The browser→bridge link is down
+
+- **WHEN** the link is `disconnected` or in test mode
+- **THEN** the output banner renders nothing; the connection banner is the alarm there
+
+### Requirement: A missing local monitor raises no operator alarm, and the technical surface carries every check in full
+
+The Runtime SHALL classify a consumer kind that renders on the playout machine itself — `screen`
+(a preview window) and `system-audio` (the machine's own sound device) — as `local`. A channel
+whose missing set contains only local kinds SHALL raise NO operator banner, whatever the verdict,
+and SHALL disable no control, refuse no action and trigger no failover. The Server connection dialog
+SHALL carry a read-only Outputs section that shows, per server and per checked channel, what
+`casparcg.config` declares, what runs, when it was checked, one row per missing kind labelled by
+severity — an AIR row with the full remedy (the addressing reading and the rule CasparCG reads
+the number by, the startup-log recipe, the restart paragraph, the creation outcome when there is
+one) and a preview / local-monitor row saying it has no effect on air — and, for an unreachable
+server, its last verdict dated and marked as not re-checkable. The bridge's own log line SHALL
+follow the same severity: a 🔴 OUTPUT MISSING line for a program output, a plain note for a
+local monitor.
+
+#### Scenario: A missing screen consumer raises nothing for the operator
+
+- **WHEN** the primary is reachable and its check for channel 1 says the declared `screen` is not
+  running while the `decklink` is
+- **THEN** no output banner is rendered, no control is disabled, and the bridge's log carries a
+  plain note rather than the OUTPUT MISSING line
+
+#### Scenario: The technical surface carries the check in full
+
+- **WHEN** the Server connection dialog is open with a `missing` verdict for `decklink` (device
+  `23487013`)
+- **THEN** its Outputs section shows the declared and running sets, an AIR row naming
+  `decklink (device 23487013)`, the words "hardware persistent ID 23487013", how CasparCG reads
+  the number, the startup-log recipe, the restart paragraph and the creation outcome when one was
+  recorded
+
+#### Scenario: A missing screen is noted on the technical surface only
+
+- **WHEN** the Server connection dialog is open with a verdict missing only `screen`
+- **THEN** its Outputs section shows a preview row saying the screen consumer is declared and not
+  running, is a preview window on the playout machine, and has no effect on air — with no remedy
+  paragraph
+
+### Requirement: PVW marks every live plate with a labelled placeholder drawn OVER the rehearse frame
+
+The Runtime's PVW panel SHALL draw a **labelled placeholder** over the rect of every Live Source
+plate declared by a rehearsing row's template.
+
+The placeholder SHALL be an **overlay composited by the Runtime on top of the rehearsal frame**.
+The rendered page SHALL NOT change: rehearse continues to render the retained exported page
+verbatim, that page continues to paint zero pixels where a Live Source is
+(`live-source-multibox` design.md §12.2), and no `.vcg`, exporter or third render mode is
+introduced. `buildScene`'s `mode: 'author' | 'output'` seam SHALL remain unused by this feature.
+
+The placeholder SHALL be drawn even when the template's live plates are entirely unassigned, since
+"there is a frame here" is the first of the two questions it exists to answer.
+
+#### Scenario: A rehearsing template's live plate is marked in PVW
+
+- **WHEN** a row whose template declares a Live Source plate is put into REHEARSE
+- **THEN** PVW draws a placeholder over that plate's rect, so the operator can see at a glance that
+  a live region exists there rather than a failed render
+
+#### Scenario: The exported page is not changed by the placeholders
+
+- **WHEN** a template carrying a Live Source is exported
+- **THEN** the built page's Live Source element paints nothing — no background, no children — in
+  `output` mode, exactly as before, and the placeholders exist only in the Runtime's own overlay
+
+### Requirement: The two plate states are distinguishable WITHOUT reading the label
+
+A placeholder SHALL render in one of exactly two visually distinct states, because they demand
+different operator actions and an unassigned plate REFUSES the take:
+
+- **ASSIGNED** — full-saturation colour bars, carrying the **plate's** name and the **assigned
+  source's** operator-facing name.
+- **UNASSIGNED** — a **desaturated** variant, carrying the plate's name and an explicit
+  **"no source assigned"**.
+
+The distinction SHALL be legible from colour and framing alone, before any text is read.
+
+The source shown SHALL be the **APPLIED** assignment — what a take would actually resolve — never a
+staged, unapplied draft. A draft that has not been applied still refuses the take, so showing it as
+assigned would defeat the one question this surface exists to answer.
+
+#### Scenario: An assigned plate names its source
+
+- **WHEN** a plate has an applied assignment to a catalog entry named `Studio A`
+- **THEN** its placeholder renders full-saturation bars and shows both the plate identifier and
+  `Studio A`
+
+#### Scenario: An unassigned plate says so, in a visually distinct state
+
+- **WHEN** a plate has no applied assignment
+- **THEN** its placeholder renders desaturated, is framed in the palette's attention colour, and
+  carries the words `no source assigned`
+
+#### Scenario: A staged but unapplied plate assignment does not read as assigned
+
+- **WHEN** an operator has staged a source for a plate in the Inspector but has not applied it
+- **THEN** the placeholder still renders the UNASSIGNED state, because a take at that moment would
+  be refused
+
+### Requirement: A placeholder can never be mistaken for the real picture
+
+A placeholder SHALL be unmistakably NOT a preview of the live feed. A browser cannot display SDI or
+NDI, so a placeholder that reads as a picture is worse than the blank region it replaces: it
+converts "I can't see it" into "I saw it and it was fine".
+
+Every placeholder, in both states, SHALL therefore carry non-photographic markings — procedural
+colour bars, hazard striping and the word `PLACEHOLDER` — and SHALL state that the live picture is
+not shown here.
+
+#### Scenario: The placeholder declares what it is
+
+- **WHEN** any placeholder is drawn
+- **THEN** it carries the word `PLACEHOLDER`, procedural bars and hazard striping, so no state of
+  it resembles an incoming camera feed
+
+### Requirement: The placeholder is visible before Play and unchanged through it
+
+A placeholder SHALL be drawn as soon as the row's page is available in PVW — BEFORE the operator
+presses Play — and SHALL persist, unchanged, while the graphic plays and after it stops.
+
+This is deliberate and is NOT a weakening of D-087's blank-until-play contract. That contract is a
+property of the RENDERED PAGE (`body.cg-pending` hides its stage until `play()` clears it), the
+rehearse frame inherits it verbatim, and the placeholder is not page content: it is a Runtime layer
+composited over the frame, which reaches into no document. The page SHALL still paint nothing
+before Play.
+
+Before Play is exactly when the marker is needed: an unassigned plate REFUSES the take, and PVW is
+the operator's last chance to see that before air, so a marker that appeared only after Play would
+be absent at the moment it exists to serve. It persists DURING play for the "never mistakable for
+the real picture" requirement: the hole is still a hole while the graphic runs, and removing the
+marker then would restore the original defect at the moment the frame most resembles air.
+
+The placeholder SHALL therefore take no lifecycle input — not readiness, not playing, not the
+transport.
+
+#### Scenario: The page is blank before Play and the marker is already up
+
+- **WHEN** a row carrying live plates is put into REHEARSE and Play has not been pressed
+- **THEN** the rendered page paints nothing, and the plate's placeholder is nonetheless visible and
+  states its assignment
+
+#### Scenario: Play changes the page and does not change the marker
+
+- **WHEN** the operator presses PLAY on the rehearsal transport
+- **THEN** the page's own elements paint, and each placeholder remains at the same box, in the same
+  state, with the same words
+
+#### Scenario: Stop settles the page blank and the marker remains
+
+- **WHEN** the operator presses STOP
+- **THEN** the page settles blank again and the placeholders are still drawn, because the live
+  region is still there
+
+### Requirement: Placeholder geometry rides the stage's own fit transform
+
+A placeholder's rect SHALL be derived from the plate rect the template declares in SCENE pixels,
+mapped to raster pixels by the SAME arithmetic the exported page applies to itself — the uniform
+output scale, the letterbox padding and the anchor translate — and then displayed through the SAME
+fit transform the rehearsal frames use.
+
+No second scale factor SHALL be derived beside the stage's own: deriving one is how an overlay
+drifts off the page beneath it, and the drift is invisible until the raster changes.
+
+The mapping SHALL be pinned by a test over at least one NON-16:9 raster. On a 16:9 raster the
+uniform scale is 1 and the letterbox is (0,0), so every term collapses and a wrong implementation
+returns the right answer.
+
+#### Scenario: A plate lands on its hole on a raster that letterboxes vertically
+
+- **WHEN** a 960×540 scene is centred on a 1440×1080 channel and declares a plate at scene x=100
+- **THEN** the placeholder's left edge is at raster x=435 — the value the page's own
+  `translate(pad) scale(s) translate(anchor)` chain puts that scene pixel at
+
+#### Scenario: A plate lands on its hole on a raster that pads horizontally
+
+- **WHEN** the same scene is placed on a 2048×1080 channel, whose padding falls on the other axis
+- **THEN** the placeholder is offset by that horizontal padding, and not by a vertical one
+
+#### Scenario: The operator's placement override moves the placeholder with the graphic
+
+- **WHEN** an operator applies a placement override to a rehearsing row
+- **THEN** the row's placeholders move with its graphic, because both resolve the same
+  override-else-authored-default position chain
+
+### Requirement: PVW's stated caveats match what PVW now draws
+
+The caveats PVW states in the panel SHALL describe what is actually drawn. The panel SHALL no
+longer describe a Live Source region as showing nothing; it SHALL say that the Runtime draws a
+placeholder there, that the placeholder is not the feed, and that what fills the region on air is a
+CasparCG layer composited behind the template which no browser preview can show.
+
+#### Scenario: The caveats name the placeholder
+
+- **WHEN** the operator opens PVW's caveats disclosure
+- **THEN** the text states that a Live Source region shows a Runtime-drawn placeholder rather than
+  the live picture
+
+### Requirement: A dialog's action button declares a ROLE, and the role decides its treatment
+
+Every action in a Runtime dialog's footer SHALL declare one of exactly three roles, and the
+role SHALL determine the button's treatment. A dialog SHALL NOT choose a button's colour or
+variant directly, and a caller that cannot use the shared action component SHALL resolve its
+variant from the same table rather than re-picking one.
+
+The three roles and what each ASSERTS:
+
+- `primary` — **this is the action the dialog exists to perform**, and pressing it COMMITS
+  something. Exactly one action per dialog may claim it, and a dialog that commits nothing
+  has none.
+- `destructive` — **this removes something or takes it off air.** It carries the loudest
+  resting treatment in the palette, because a confirm dialog is the one place a destructive
+  control should read destructive before it is pressed.
+- `cancel` — **this leaves without committing.** It is a peer of the action beside it and is
+  never borderless: neutral must not mean invisible.
+
+#### Scenario: One role resolves to one treatment across every dialog
+
+- **WHEN** two different dialogs each render an action of the same role **THEN** both buttons
+  carry the same treatment, and neither dialog specifies a colour of its own
+
+#### Scenario: A caller that cannot use the shared component resolves from the same table
+
+- **WHEN** an action must render its own busy or error state and therefore cannot be the
+  shared action component **THEN** it resolves its variant from the shared role table, and
+  the result matches what the component would have produced for that role
+
+### Requirement: A footer button that dismisses and commits nothing is `cancel`
+
+A dialog's footer action whose only effect is to close the dialog SHALL declare the `cancel`
+role, whatever word it is labelled with. It SHALL NOT declare `primary`.
+
+This holds for a read-only dialog, which has no primary action at all, and equally for a
+dialog that COMMITS AS YOU GO — where each change reaches the bridge on its own control, so
+that by the time the footer is reached there is nothing left to commit. The rule is about
+what the button DOES, not what it is called: a dialog may still label such a button `Done`.
+
+A dialog whose footer action DOES commit something SHALL keep the `primary` role. The rule
+withholds the primary treatment from dismissals; it does not neutralise real actions.
+
+#### Scenario: A dismiss-only footer does not wear the primary treatment
+
+- **WHEN** a dialog's footer action's only effect is to close the dialog **THEN** it carries
+  the `cancel` role and the neutral treatment, and pressing it closes the dialog and does
+  nothing else
+
+#### Scenario: A committing action keeps its primary treatment
+
+- **WHEN** a dialog's footer action sends a change to the bridge **THEN** it carries the
+  `primary` role, even where a sibling dialog built from the same component does not
+
+### Requirement: A dialog's WIDTH follows whether its content must be compared across rows
+
+Every Runtime dialog SHALL take one of exactly two widths. A dialog SHALL be `wide` if and
+only if its content puts several values per row that the operator reads DOWN A COLUMN,
+comparing one row against another; every other dialog SHALL be `prose`.
+
+The criterion is the comparison, not the markup. A dialog that lists one item and one action
+per row — read one row at a time and never compared column-wise — is `prose` however many
+rows it has, and it may stack those rows into a column at prose width. A dialog whose columns
+must stay aligned across rows cannot do that, because the alignment IS what the operator is
+reading.
+
+#### Scenario: A per-row comparison table is wide
+
+- **WHEN** a dialog lists rows carrying several aligned values the operator compares down a
+  column **THEN** it renders at the wide width
+
+#### Scenario: A list read one row at a time is prose
+
+- **WHEN** a dialog lists items with one name and one action each, read individually rather
+  than compared **THEN** it renders at the prose width, and stacking its rows into a column
+  is not a reason to widen it
+
+### Requirement: A dialog's message is pinned outside its scrolling body
+
+Every Runtime dialog SHALL surface a message about an action — why it was refused, or what
+happened when it succeeded — through the `Modal` primitive's MESSAGE REGION, which SHALL be
+rendered outside the dialog's scrolling body and immediately above the action row. A dialog
+SHALL NOT render such a message into its own body content.
+
+The region SHALL NOT move the body's scroll position when it appears, and a long message SHALL
+NOT push the action row out of reach.
+
+#### Scenario: A refusal is visible without scrolling
+
+- **WHEN** a dialog whose body genuinely overflows shows a refusal, and the operator has
+  scrolled that body back to the top **THEN** the message is fully within the viewport, and so
+  is the action row it is pinned to
+
+#### Scenario: A message never lives in the scroll container
+
+- **WHEN** any Runtime dialog renders a message **THEN** the message element is a descendant of
+  the pinned region and is not a descendant of the scrolling body, and the body contains no
+  announcement of its own
+
+#### Scenario: Showing a message does not move the operator's place
+
+- **WHEN** a message appears while the operator has the dialog body scrolled **THEN** the body's
+  scroll position is unchanged
+
+### Requirement: A message's ROLE decides its treatment
+
+A dialog SHALL declare what KIND of thing it is telling the operator and SHALL NOT declare how
+it looks. The `message` contract SHALL accept DATA — a role, a sentence, and optionally the
+specifics — and SHALL NOT accept caller-supplied markup or styling. Each role SHALL resolve to
+exactly ONE treatment across every dialog, and that treatment SHALL be written down in exactly
+one module.
+
+Two roles exist: `refusal`, for why an action did not happen, and `notice`, for the neutral
+outcome of one that did. Every foreground/background pairing SHALL meet WCAG AA (4.5:1) against
+the surface it is drawn on.
+
+#### Scenario: One role, one treatment, every dialog
+
+- **WHEN** two different dialogs each show a message of the same role **THEN** both render the
+  identical treatment, resolved from the shared table rather than chosen locally
+
+#### Scenario: A refusal is announced; a neutral outcome is not
+
+- **WHEN** a dialog shows a `refusal` **THEN** it is in the assertive announcement channel
+  (`role="alert"`), because it is always the consequence of something the operator just did
+- **WHEN** a dialog shows a `notice` **THEN** it is a `status`, not an alert
+
+#### Scenario: A message's direction follows the message
+
+- **WHEN** a message's text is Persian and the surrounding chrome is not **THEN** the message
+  line renders right-to-left, because direction is resolved from the text (`dir="auto"`) rather
+  than from the dialog
+
+### Requirement: A modal message region cannot be bypassed silently
+
+The repository SHALL enforce the message region structurally rather than by convention, in the
+same way it already enforces its control primitives.
+
+#### Scenario: A styled message cannot reach the region
+
+- **WHEN** a dialog passes caller-supplied markup to the `message` contract **THEN** the build
+  fails to typecheck
+
+#### Scenario: A message rendered into a dialog's body is rejected at lint
+
+- **WHEN** a renderer file outside `ui/` writes an assertive announcement inside a `<Modal>`
+  subtree **THEN** lint reports an error naming the message region as the required path
+
+### Requirement: The audit log is read in the operator's terms
+
+The Audit log panel SHALL show each entry's time as the console's LOCAL wall-clock time to the
+second, with the record's own UTC stamp available on hover, and SHALL show the local date once
+per day as a band where it changes down the list rather than on every row. It SHALL name the
+layer an entry concerns as the Layers table names that row (the configured alias, else the
+default `Layer N` / `Bed N`), or — for a layer outside the declared bank — as CasparCG names it
+with the fact that it is not a row stated, and SHALL name the template as the picker names it.
+The item id and the template id SHALL remain on the row: shortened for display, complete in the
+element's title, and copyable to the clipboard. The record on disk SHALL be unchanged.
+
+⚠ **This requirement used to also pin the sentence qualifying the console name as unchanged.
+`OPERATOR-NAME-SWEEP-01` retired that sentence and the field behind it (identity is proven —
+`C-037`/`C-038`), so the clause is removed here rather than left to fold into the living spec
+on archive. Nothing else in this requirement moves: naming the ROW and the TEMPLATE better was
+always a separate question from naming the PERSON.**
+
+#### Scenario: The incident stamp reads as the control room clock
+
+- **WHEN** an entry stamped `2026-09-04T12:18:47.561Z` is shown on a console in `Asia/Tehran`
+  **THEN** its time cell reads `15:48:47` and its title carries the UTC stamp
+
+#### Scenario: The date appears once per local day
+
+- **WHEN** the list holds entries from two local days **THEN** exactly two date bands appear,
+  each above the first entry of its day, and no row carries a date
+
+#### Scenario: The row and the template are named
+
+- **WHEN** an entry names layer 9 in a bank whose beds are 1–9 and the template whose file was
+  `3ghab.vcg` **THEN** the row reads `Bed 1 · 3ghab`
+
+#### Scenario: A layer no row shows is named as CasparCG names it
+
+- **WHEN** an entry names layer 60 outside every half of the bank **THEN** the row reads
+  `layer 60 (not a row)`
+
+#### Scenario: The ids are kept, shortened and copyable
+
+- **WHEN** an entry is shown **THEN** its item id and template id appear shortened with the full
+  id in the title, and a copy control writes the full id to the clipboard
+
+#### Scenario: A refused command is shown beside its code
+
+- **WHEN** an entry carries `errorCode: amcp-404` and a recorded `command` **THEN** the row shows
+  the code and the command line
+
+### Requirement: The in-use refusal names where each item is and offers the way there
+
+When a template deletion is refused because stack items still use it, the refusal SHALL name
+each item's place — a declared row by the name the Layers table gives it, a layer outside the
+bank as CasparCG names it with the fact that it is not a row stated, or "no layer bound" — and
+SHALL NOT mention Remove All. For each item on a declared row the picker SHALL offer a control
+that closes the picker, scrolls the Layers table to that row, focuses it and selects it. For
+each item on no row the picker SHALL offer a confirm-gated removal of that one item, naming its
+layer and stating that removal takes it off air if it is on air.
+
+#### Scenario: A row-bound item is named and can be shown
+
+- **WHEN** the deletion is refused because an item is on the row `Bed 1` (layer 9) **THEN** the
+  refusal reads "on the row “Bed 1” (layer 9)" and a `Show Bed 1` control closes the picker and
+  leaves that row selected
+
+#### Scenario: An item no row shows gets a targeted removal
+
+- **WHEN** the deletion is refused because an item holds CasparCG layer 60, which is not a row
+  **THEN** the refusal says so, a `Remove item` control opens a confirm naming layer 60, and
+  confirming removes exactly that item and nothing else
+
+#### Scenario: Remove All is not the offered remedy
+
+- **WHEN** a deletion is refused as in-use **THEN** neither the sentence nor the controls mention
+  Remove All
+
+### Requirement: The layer table's tally says what it counts
+
+The Layers table header SHALL show the number of rows this console believes are on air or
+unsettled as `(N on air)` in the air colour, derived from each item's reconciled status through
+the same on-air-or-unsettled predicate the Server settings gate uses, and SHALL show the number
+of rows whose last command was refused as `(N in error)` in the error colour. The two numbers
+SHALL never be added, and neither SHALL be shown when it is zero. STOP ALL SHALL keep its own
+predicate, which offers STOP to a row that may be showing something.
+
+#### Scenario: Two refused rows are not two on air
+
+- **WHEN** two rows are in `error` and no row is on air **THEN** the header shows `(2 in error)`
+  and no air count
+
+#### Scenario: One on air from elsewhere, two refused here
+
+- **WHEN** one row is `on-air` and two are in `error` **THEN** the header shows `(1 on air)` and
+  `(2 in error)`
+
+#### Scenario: The unverifiable grey is kept
+
+- **WHEN** CasparCG cannot be reached and one row is believed on air **THEN** `(1 on air)` is
+  shown greyed with the unverifiable marker, as before
