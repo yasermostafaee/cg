@@ -189,3 +189,28 @@ proved by recorded wire, below.
       `B-308` among them in 10.7 s, no flaky test; designer 293), unit job green. Desktop
       <https://github.com/yasermostafaee/cg/actions/runs/37183048264> green (Installers, both smokes,
       both setup windows)
+
+## 11. `RELEASE-0111-01` Parts B and C — `B-309`, `B-310` (2026-10-04)
+
+Lanes: C (`B-310`) FULL — it decides what the Log shows; B (`B-309`) FAST, copy only.
+
+- [x] 11.1 §C0: the cause is NOT the one filed. `auditFiles` lists in two reads — the rotated names, then
+      the current file's first row — and the writer's rename landing between them gives an EMPTY list: the
+      page was `{ entries: [], next: null }` and no file was opened, so no `MOVED` was raised. The filed
+      paths cannot give 0 with one rotation: `MOVED` is raised at most once (the retry lists after the
+      rename), and the in-memory fallback holds the operator's sign-in row (measured: a sign-in row is on
+      the operator's page). The integration test raced its own sign-in: unfiltered, it passed only when its
+      read beat the rotation that sign-in causes
+- [x] 11.2 Fix (`@cg/audit` `readAuditPage`): the list is taken again once the page is read, and the page is
+      kept only when nothing moved; else read again (5 reads, waits of 10–40 ms). Still moving after that:
+      `AuditRecordMovedError`, which `CasparRuntime.auditPage` lets through so the console's Log says the
+      read failed — never the in-memory tail in its place
+- [x] 11.3 Tests, deterministic (a `readdir` spy answers, then the rotation runs before the reader's next
+      step; no timeout raised): `page.test.ts` — the rename inside the listing (old: `[]`; new: the 100
+      rows), the whole rotation inside it (old: one row, `next: null`), a cursor taken before it (old: `[]`),
+      a record that never holds still (old: resolves empty; new: the error). `audit-page.integration` —
+      the same rename through the real socket (old: `expected [] to have a length of 100 but got +0`, CI's
+      own words; new: 100), and the refusal in words. `:66` asks for the takes, which every order of its
+      sign-in's rotation answers the same
+- [ ] 11.4 `B-309` (Part B)
+- [ ] 11.5 Gate, push, CI COMPLETED green with the jobs RAN (URLs here)

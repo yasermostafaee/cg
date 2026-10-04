@@ -63,7 +63,10 @@ the request's filters (channel, user, action, result) and its search — and the
 BEFORE the page is cut. It SHALL read only as far back as the page needs. It SHALL push each new row to every
 console told that row's channel (`audit.appended`). The audit file SHALL rotate at local midnight and at 20 MB,
 each rotated file named by the time of its first row so a cursor survives a rotation, and SHALL keep 90 days
-and at most 200 MB in all, deleting the oldest first. `Download logs` SHALL carry every kept audit file.
+and at most 200 MB in all, deleting the oldest first. `Download logs` SHALL carry every kept audit file. A
+page read that a rotation crosses SHALL return the rows the record holds, its cursor walking on into the
+rotated file — never an empty page, a partial one, or the in-memory tail in its place; a record that does not
+hold still across a few reads SHALL make the read fail in words (`B-310`).
 
 #### Scenario: Pages and a filter
 
@@ -74,6 +77,18 @@ and at most 200 MB in all, deleting the oldest first. `Download logs` SHALL carr
 
 - **WHEN** the audit rotates between two pages **THEN** the second page continues where the first ended **AND**
   a rotated file older than 90 days, or past 200 MB in all, is deleted
+
+#### Scenario: A rotation inside one page read
+
+- **WHEN** the writer renames the current file between the reader's two reads of the record's file list
+  **THEN** the page is the newest 100 rows the record holds, its cursor in the rotated file **AND** a page asked
+  with a cursor taken before the rotation continues in that file — control: the reader before `B-310` answered
+  an empty page with no cursor (CI run 37185337111: 0 rows of 100)
+
+#### Scenario: A record that never holds still
+
+- **WHEN** the record rotates across every read of one page **THEN** the console is answered that the read
+  failed, and is never handed the in-memory tail as the page
 
 #### Scenario: The zip
 

@@ -129,23 +129,64 @@ const CHUNK_BYTES = 64 * 1024;
  * one's name. So each file is read through ONE handle (which keeps reading the file it opened, renamed
  * or not), and the current file's first row is checked through that handle: a file that is no longer
  * the one listed means the list is stale, and the page is read again from a fresh list.
+ *
+ * 🔴 `B-310` — **AND THE LIST ITSELF CAN BE TORN.** It is two reads — the rotated names, then the
+ * current file's first row — and a rename landing between them gives a list with neither the file
+ * just rotated nor (until the writer opens its fresh one) any current file: an EMPTY list, so the
+ * page was empty with `next: null` and no file was ever opened for the check above to catch (CI run
+ * 37185337111: 0 rows of 100). No single read can see that, so the list is taken AGAIN once the page
+ * is read, and the page is kept only when nothing moved in between — a rename always adds a rotated
+ * name and changes the current file's first row, so a list that is unchanged across the read is one
+ * no rotation crossed. Otherwise the page is read again, a few times with a short wait (a rotation is
+ * once a day or once per 20 MB); a record still moving after that is {@link AuditRecordMovedError} —
+ * a read the console reports as failed, never an empty or a partial page.
  */
 export async function readAuditPage(
   options: ReadAuditPageOptions,
 ): Promise<{ entries: AuditEntry[]; next: AuditPageCursor | null }> {
-  for (let attempt = 0; ; attempt++) {
-    const page = await readOnce(options);
-    if (page !== MOVED || attempt === 2) return page === MOVED ? { entries: [], next: null } : page;
+  for (let attempt = 0; attempt < PAGE_ATTEMPTS; attempt++) {
+    if (attempt > 0) await wait(RETRY_WAIT_MS * attempt);
+    const files = await auditFiles(options.filePath);
+    const page = await readOnce(options, files);
+    if (page === MOVED) continue;
+    if (sameFiles(files, await auditFiles(options.filePath))) return page;
   }
+  throw new AuditRecordMovedError(
+    'The audit record kept rotating while it was read. Read it again.',
+  );
+}
+
+/** `B-310` — how many reads one page may take, and the wait before each re-read (times the attempt). */
+const PAGE_ATTEMPTS = 5;
+const RETRY_WAIT_MS = 10;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** The same files, by the same names, in the same order. */
+function sameFiles(a: readonly AuditFile[], b: readonly AuditFile[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((f, i) => {
+      const g = b[i];
+      return g !== undefined && g.stamp === f.stamp && g.path === f.path && g.current === f.current;
+    })
+  );
 }
 
 /** The list a page was read from no longer names the current file: read it again. */
 const MOVED: unique symbol = Symbol('moved');
 
+/** `B-310` — the record rotated across every read of one page: there is no page to give. */
+export class AuditRecordMovedError extends Error {
+  override readonly name = 'AuditRecordMovedError';
+}
+
 async function readOnce(
   options: ReadAuditPageOptions,
+  files: readonly AuditFile[],
 ): Promise<{ entries: AuditEntry[]; next: AuditPageCursor | null } | typeof MOVED> {
-  const files = await auditFiles(options.filePath);
   const entries: AuditEntry[] = [];
   if (options.limit <= 0) return { entries, next: null };
 

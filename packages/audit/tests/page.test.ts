@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuditEntry } from '@cg/shared-schema';
-import { auditFiles, rotatedFiles, stampOf } from '../src/files.js';
-import { readAuditPage, type AuditPageCursor } from '../src/reader.js';
+import { auditFiles, rotatedFiles, rotatedPath, stampOf } from '../src/files.js';
+import { AuditRecordMovedError, readAuditPage, type AuditPageCursor } from '../src/reader.js';
 import { AuditWriter, type AuditRotation } from '../src/writer.js';
 
 /**
@@ -14,6 +14,7 @@ import { AuditWriter, type AuditRotation } from '../src/writer.js';
 let tmpDir: string | undefined;
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   if (tmpDir !== undefined) await fs.promises.rm(tmpDir, { recursive: true, force: true });
   tmpDir = undefined;
 });
@@ -338,5 +339,109 @@ describe('AuditWriter rotation and retention', () => {
       ),
     );
     expect(firsts.map((e) => e.itemId)).toEqual(['item-5', 'item-4', 'item-3']);
+  });
+});
+
+/**
+ * 🔴 `B-310` — **A PAGE READ THAT OVERLAPS A ROTATION.** The record's list is two reads: the rotated
+ * names (`readdir`), then the current file's first row. The writer's rename can land between them, and
+ * then the list holds neither the file just rotated nor — until the writer opens its fresh file — any
+ * current file at all: an EMPTY list, so the page was `{ entries: [], next: null }` with no file ever
+ * opened (CI run 37185337111, `audit-page.integration.test.ts:71`, 0 rows of 100). These tests put the
+ * rotation exactly there: the folder's next `readdir` answers what it found, and the rotation runs
+ * before the reader takes its next step.
+ */
+describe('B-310 — a page read that overlaps a rotation', () => {
+  const realReaddir = fs.promises.readdir;
+
+  /** The next `times` listings of `folder` answer what they found, then `during` runs. */
+  function onListing(folder: string, during: () => Promise<void>, times = 1): void {
+    let left = times;
+    const listing = async (p: fs.PathLike, ...rest: unknown[]): Promise<unknown> => {
+      const names: unknown = await (
+        realReaddir as (p: fs.PathLike, ...r: unknown[]) => Promise<unknown>
+      ).call(fs.promises, p, ...rest);
+      if (left > 0 && path.resolve(String(p)) === path.resolve(folder)) {
+        left -= 1;
+        await during();
+      }
+      return names;
+    };
+    vi.spyOn(fs.promises, 'readdir').mockImplementation(listing as typeof fs.promises.readdir);
+  }
+
+  const newest = (from: number, count: number): string[] =>
+    Array.from({ length: count }, (_, i) => `item-${String(from - i)}`);
+
+  it('🔴 the writer’s rename lands between the two reads of the list: the page is the rotated rows, never an empty page', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    await seed(filePath, 300);
+    const stamp = stampOf(row(0).ts);
+    // The writer's first step of a rotation (`AuditWriter.rotate`): the current file takes its first
+    // row's name. Its fresh file is not there yet — the writer is still pruning.
+    onListing(d, () => fs.promises.rename(filePath, rotatedPath(filePath, stamp)));
+    const page = await readAuditPage({ filePath, limit: 100, accept: all });
+    expect(ids(page.entries)).toEqual(newest(299, 100));
+    expect(page.next?.file).toBe(stamp);
+  });
+
+  it('the whole rotation lands between them — a new day’s row in a fresh file: that row, then the rotated rows', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    await seed(filePath, 300);
+    const writer = new AuditWriter({ filePath, rotation: ROTATION });
+    const later = row(1000, Date.parse('2026-10-04T09:00:00.000Z'));
+    onListing(d, async () => {
+      await writer.append(later);
+    });
+    const page = await readAuditPage({ filePath, limit: 100, accept: all });
+    await writer.close();
+    expect(await rotatedFiles(filePath), 'control: it did rotate').toHaveLength(1);
+    expect(ids(page.entries)).toEqual(['item-1000', ...newest(299, 99)]);
+  });
+
+  it('🔴 the cursor survives it: a page asked with a cursor taken before the rotation continues in the rotated file', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    await seed(filePath, 300);
+    const first = await readAuditPage({ filePath, limit: 100, accept: all });
+    expect(ids(first.entries)).toEqual(newest(299, 100));
+    onListing(d, () => fs.promises.rename(filePath, rotatedPath(filePath, stampOf(row(0).ts))));
+    const second = await readAuditPage({
+      filePath,
+      cursor: first.next as AuditPageCursor,
+      limit: 100,
+      accept: all,
+    });
+    expect(ids(second.entries)).toEqual(newest(199, 100));
+    expect(second.next).not.toBeNull();
+  });
+
+  it('a record that never holds still across a read is an error the console can say — never an empty or a partial page', async () => {
+    const d = await dir();
+    const filePath = path.join(d, 'bridge-audit.ndjson');
+    await seed(filePath, 300);
+    // Every listing moves the record: the current file rotates away, or a fresh one appears.
+    let n = 0;
+    onListing(
+      d,
+      async () => {
+        n += 1;
+        if (fs.existsSync(filePath)) {
+          await fs.promises.rename(
+            filePath,
+            rotatedPath(filePath, `${stampOf(row(0).ts)}-${String(n)}`),
+          );
+        } else {
+          const fresh = row(n, Date.parse('2026-10-05T09:00:00.000Z'));
+          await fs.promises.writeFile(filePath, `${JSON.stringify(fresh)}\n`);
+        }
+      },
+      Number.POSITIVE_INFINITY,
+    );
+    await expect(readAuditPage({ filePath, limit: 100, accept: all })).rejects.toBeInstanceOf(
+      AuditRecordMovedError,
+    );
   });
 });

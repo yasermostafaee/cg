@@ -211,6 +211,7 @@ import {
   type NormalizedRect,
 } from './live-layers.js';
 import {
+  AuditRecordMovedError,
   AuditWriter,
   DEFAULT_AUDIT_ROTATION,
   auditFiles,
@@ -14248,7 +14249,13 @@ export class CasparRuntime {
           limit: AUDIT_PAGE_SIZE,
           accept,
         });
-      } catch {
+      } catch (err) {
+        /*
+          🔴 `B-310` — a record that rotated across every read of the page is a read that FAILED, said
+          as one: the in-memory tail is only the rows since this start, and paged in its place it would
+          be a wrong page (or an empty one) under a cursor that no longer walks the record.
+        */
+        if (err instanceof AuditRecordMovedError) throw err;
         // A read failure is reported through `auditHealth`; the in-memory tail still answers.
       }
     }

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuditEntry } from '@cg/shared-schema';
 import type { AuditCursor } from '@cg/shared-ipc';
 import { openClient, startAuthedBridge } from './support/auth-harness.js';
@@ -19,13 +19,16 @@ import { track } from './support/harness.js';
 
 const dirs: string[] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
+const ROWS_DAY = Date.parse('2026-10-01T08:00:00.000Z');
+
 /** Row `n`, newest last: a take on channel `1 + n % 2`, layer 80 (`زیرنویس` on channel 1). */
-function row(n: number): AuditEntry {
+function row(n: number, base = ROWS_DAY): AuditEntry {
   return {
-    ts: new Date(Date.parse('2026-10-01T08:00:00.000Z') + n * 1000).toISOString(),
+    ts: new Date(base + n * 1000).toISOString(),
     actor: n % 5 === 0 ? 'سارا' : 'Reza',
     action: 'take',
     itemId: `item-${String(n)}`,
@@ -34,13 +37,13 @@ function row(n: number): AuditEntry {
   };
 }
 
-async function station(rows: number) {
+async function station(rows: number, base = ROWS_DAY) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-audit-page-'));
   dirs.push(dir);
   const auditLogPath = path.join(dir, 'bridge-audit.ndjson');
   fs.writeFileSync(
     auditLogPath,
-    Array.from({ length: rows }, (_, n) => `${JSON.stringify(row(n))}\n`).join(''),
+    Array.from({ length: rows }, (_, n) => `${JSON.stringify(row(n, base))}\n`).join(''),
   );
   const started = await startAuthedBridge({
     auditLogPath,
@@ -54,7 +57,43 @@ async function station(rows: number) {
   });
   track(started.playout, (p) => p.stop());
   track(started.handle, (h) => h.close());
-  return started;
+  return { ...started, dir, auditLogPath };
+}
+
+/**
+ * `B-310` — the next `times` listings of `folder` answer what they found, then `during` runs: a
+ * rotation put exactly between the two reads of the record's list. The bridge runs in this process,
+ * so its reader lists through this `readdir`.
+ */
+function onListing(folder: string, during: () => void, times = 1): void {
+  const real = fs.promises.readdir;
+  let left = times;
+  const listing = async (p: fs.PathLike, ...rest: unknown[]): Promise<unknown> => {
+    const names: unknown = await (
+      real as (p: fs.PathLike, ...r: unknown[]) => Promise<unknown>
+    ).call(fs.promises, p, ...rest);
+    if (left > 0 && path.resolve(String(p)) === path.resolve(folder)) {
+      left -= 1;
+      during();
+    }
+    return names;
+  };
+  vi.spyOn(fs.promises, 'readdir').mockImplementation(listing as typeof fs.promises.readdir);
+}
+
+/** Wait until the record holds the operator's sign-in row: the writer is idle again. */
+async function signInRecorded(auditLogPath: string): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    if (
+      fs.existsSync(auditLogPath) &&
+      fs.readFileSync(auditLogPath, 'utf8').includes('"sign-in"')
+    ) {
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error('the sign-in row never reached the record');
 }
 
 interface Page {
@@ -67,12 +106,21 @@ describe('audit.page', () => {
     const { handle, playout } = await station(300);
     const operator = await openClient(handle);
     await operator.authenticate('a', (await playout.issueToken({ user: 'operator' })).token);
-    const first = (await operator.ask('p1', 'audit.page', {})).payload as Page;
+    /*
+      🔴 `B-310` — the TAKES are asked for. The operator's own sign-in row (on no channel, so told to
+      every console) lands in the record while this page is read, and — its day not being the rows'
+      — it ROTATES the record as it lands: before, during or after this read. Unfiltered, the page
+      held that row only when the rotation won, and the CI red (run 37185337111: 0 rows of 100) was
+      the read landing inside it. Every order now answers this the same.
+    */
+    const takes = { filter: { action: 'take' } };
+    const first = (await operator.ask('p1', 'audit.page', takes)).payload as Page;
     expect(first.entries).toHaveLength(100);
     expect(first.entries.every((e) => e.slot?.channel === 1)).toBe(true);
     // Row 299 is channel 2's; the newest of channel 1 is 298.
     expect(first.entries[0]?.itemId).toBe('item-298');
-    const second = (await operator.ask('p2', 'audit.page', { cursor: first.next })).payload as Page;
+    const second = (await operator.ask('p2', 'audit.page', { ...takes, cursor: first.next }))
+      .payload as Page;
     expect(second.entries).toHaveLength(50);
     expect(second.entries.at(-1)?.itemId).toBe('item-0');
     expect(second.next).toBeNull();
@@ -144,5 +192,52 @@ describe('audit.page', () => {
     // The same push loop told every socket it was going to; give a stray one time to arrive.
     await new Promise((r) => setTimeout(r, 150));
     expect(appended(operator)).toEqual([]);
+  });
+});
+
+describe('audit.page — B-310, a page read that overlaps a rotation', () => {
+  /** Rows dated just before now: the sign-in lands in the same file and rotates nothing. */
+  const recent = (): number => Date.now() - 10 * 60 * 1000;
+
+  it('🔴 the record rotates INSIDE the page’s listing: the console still gets its full page — the CI red got 0 of 100', async () => {
+    const { handle, playout, dir, auditLogPath } = await station(300, recent());
+    const operator = await openClient(handle);
+    await operator.authenticate('a', (await playout.issueToken({ user: 'operator' })).token);
+    await signInRecorded(auditLogPath);
+    // The writer's rename at midnight, between the reader's two reads of the list.
+    onListing(dir, () => {
+      fs.renameSync(auditLogPath, path.join(dir, 'bridge-audit.2026-10-01T08-00-00.000Z.ndjson'));
+    });
+    const page = (await operator.ask('r1', 'audit.page', { filter: { action: 'take' } }))
+      .payload as Page;
+    expect(page.entries).toHaveLength(100);
+    expect(page.entries[0]?.itemId).toBe('item-298');
+    expect(page.entries.every((e) => e.slot?.channel === 1)).toBe(true);
+  });
+
+  it('a record that never holds still across a read is refused in words — never the in-memory tail in its place', async () => {
+    const { handle, playout, dir, auditLogPath } = await station(300, recent());
+    const operator = await openClient(handle);
+    await operator.authenticate('a', (await playout.issueToken({ user: 'operator' })).token);
+    await signInRecorded(auditLogPath);
+    let n = 0;
+    onListing(
+      dir,
+      () => {
+        n += 1;
+        if (fs.existsSync(auditLogPath)) {
+          fs.renameSync(
+            auditLogPath,
+            path.join(dir, `bridge-audit.2026-10-01T08-00-00.000Z-${String(n)}.ndjson`),
+          );
+        } else {
+          fs.writeFileSync(auditLogPath, `${JSON.stringify(row(n, Date.now()))}\n`);
+        }
+      },
+      Number.POSITIVE_INFINITY,
+    );
+    const answer = await operator.ask('r2', 'audit.page', { filter: { action: 'take' } });
+    expect(answer.payload).toBeUndefined();
+    expect(answer.error).toMatch(/kept rotating while it was read/);
   });
 });

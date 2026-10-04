@@ -13223,7 +13223,7 @@ assignment validator names plate, template and source by id (`sources.ts:1059`, 
 message; the console shows its own words for `unknown-source`). **Expected:** golden rule 11 — `Plate N`, the
 look's name, the template's name. **Fix:** not built.
 
-## [ ] B-310 — A Log page read while the audit file rotates comes back EMPTY ⟨priority: low — a CI red once; on a station, the first row of a new day⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (CI run 37185337111)
+## [~] B-310 — A Log page read while the audit file rotates comes back EMPTY ⟨priority: low — a CI red once; on a station, the first row of a new day⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (CI run 37185337111); BUILT 2026-10-04 by `RELEASE-0111-01` Part C (change `console-polish`, tasks §11)
 
 **Repro:** CI run <https://github.com/yasermostafaee/cg/actions/runs/37185337111> (`c4933ece`):
 `audit-page.integration.test.ts:71` — "a console holding channel 1 gets a FULL page" — got **0** rows where
@@ -13237,3 +13237,22 @@ reading again from a fresh list, but only twice and with no wait, and then answe
 empty while rows exist. **Proposed fix:** retry `MOVED` with a short bounded wait (and say so in the page if
 it still cannot read), and date the test's rows from the test's own clock so the suite does not depend on
 the calendar. **Not fixed here:** `RELEASE-0110-01` changes no product behaviour beyond `B-308`.
+
+**Cause (proved by `RELEASE-0111-01` §C0 — not the one suspected above):** `auditFiles` builds the list in
+TWO reads — the rotated names (`readdir`), then the current file's first row — and the writer's rename landing
+between them gives a list holding neither the file just rotated nor (until the writer opens its fresh one) any
+current file. The list was EMPTY, so the page was `{ entries: [], next: null }` and no file was opened for the
+`MOVED` check to catch. The two suspected paths cannot give 0 with one rotation: `MOVED` is raised at most once
+(the retry lists after the rename), and the in-memory fallback holds the operator's own sign-in row, which a
+page shows (measured). The test raced its own sign-in: that row rotates the record as it lands, and the
+unfiltered page passed only when its read beat the rotation. **Fix:** `readAuditPage` takes the list again once
+the page is read and keeps the page only when nothing moved (a rename always adds a rotated name and changes
+the current file's first row); otherwise it reads again — five reads, waits of 10–40 ms — and a record still
+moving is `AuditRecordMovedError`, which `CasparRuntime.auditPage` lets through so the Log says the read
+failed, never pages the in-memory tail instead. **Regression tests (deterministic — a `readdir` spy answers,
+then the rotation runs; no timeout raised):** `packages/audit/tests/page.test.ts` (the rename inside the
+listing, the whole rotation inside it, a cursor taken before it, a record that never holds still — each red on
+the old reader: `[]`, one row with `next: null`, `[]`, an empty page instead of the error) and
+`tools/caspar-bridge/tests/audit-page.integration.test.ts` (the rename through the real socket: the old reader
+fails with CI's own words, `expected [] to have a length of 100 but got +0`; the refusal in words). The
+integration test's first case asks for the takes, which every order of its sign-in's rotation answers the same.
