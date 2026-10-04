@@ -61,4 +61,7 @@ Part A (`B-308`) is `console-polish` §10. Lanes: §1 FULL (shared config — th
       finding)
 - [x] 4.3 `v0.10.0` and `v0.9.1` retitled `v<x> — superseded, do not use` (as `v0.9.0` already was), kept
       as draft pre-releases, nothing deleted — read back
-- [ ] 4.4 The owner's own check on the draft; then archive (on the owner's word)
+- [ ] 4.4 Archive, on the owner's word. The owner's check moved to `0.11.1` (`RELEASE-0111-01`,
+      2026-10-04): `0.11.0` is never delivered — see `installer-design` §5
+- [x] 4.5 `v0.11.0` retitled `v0.11.0 — superseded, do not use`, kept as a draft pre-release with its five
+      files, nothing deleted — read back (2026-10-04, `RELEASE-0111-01` §D4)

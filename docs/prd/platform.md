@@ -3951,4 +3951,7 @@ the window THEN the page opens filled and the values are kept; WHEN any installe
 and exits exactly as before.
 
 **Built (2026-10-04)** — `tools/setup-ui` (`address.rs`, `field.rs`, `server.rs`, the page, the window, UI
-Automation); the engine unchanged. Evidence in `installer-design` tasks §4 and the `RELEASE-0111-01` report.
+Automation); the engine unchanged (`8e6b7796`). **Verified on clean Windows** — every acceptance bullet above,
+on `61026bc3` (tagged `v0.11.1`): the CG Bridge smoke 109/109 and both upgrade acceptances 75/75, Desktop
+<https://github.com/yasermostafaee/cg/actions/runs/37210021257>. Open: the owner's look at the page on his own
+Windows 11 at 200 % (CI has no rounded corners), then `installer-design` is his to archive.

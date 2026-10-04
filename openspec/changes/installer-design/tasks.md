@@ -66,7 +66,12 @@ Lane: FULL (delivery source: what the installer gives its engine).
       options); the Playout page in `layout.rs`; the painter; the window's keys, `WM_CHAR`, Ctrl+A/V;
       UI Automation Value and SelectionItem; this machine's IPv4 list (`GetAdaptersAddresses`)
 - [x] 4.4 Unit tests (`cargo test -p cg-setup`, 66): the table, the field, the page's model and layout
-- [ ] 4.5 The CG Bridge smoke (B–G) and both upgrade acceptances COMPLETED and GREEN, each job RAN (URLs)
+- [x] 4.5 The CG Bridge smoke (B–G) and both upgrade acceptances COMPLETED and GREEN, each job RAN — on
+      `61026bc3`, Desktop <https://github.com/yasermostafaee/cg/actions/runs/37210021257>: the CG Bridge
+      smoke 109/109 (its results files), the upgrade from `0.10.0` 75/75 and from `0.11.0` 75/75; PR
+      <https://github.com/yasermostafaee/cg/actions/runs/37210021254> (`e2e` RAN: runtime 328, designer 293
+      passed). The first run, `1adacf9a` (Desktop 37207692158), was red on ONE check — the smoke pressed a
+      Cancel the page does not have; the script was fixed (`683cb613`), not the page
 - [x] 4.6 The screens: unticked, ticked and filled, a refusal, and the upgrade from `0.11.0` opened
       pre-filled — captured on the clean runner by the CG Bridge smoke (Desktop
       <https://github.com/yasermostafaee/cg/actions/runs/37207692158>, `1adacf9a`, artifact `bridge-smoke`),
@@ -92,7 +97,16 @@ Lane: FULL (delivery: the version, the floor and the guide a client follows).
       (`bridge-smoke`) and CG Control's (`setup-window-windows-2025`), each cut to the 800 × 520 window at
       (28, 28); the four console pictures from `guide-shots`. `guide.test.ts` now refuses a picture that shows
       the version when it is byte for byte an earlier release's (red on the interim copies, measured)
-- [ ] 5.4 The clean-Windows acceptance at `0.11.1`: fresh, from `0.10.0`, from `0.11.0`; the payload scan
-      reading every file (count in the job log) — each job RAN (URLs)
-- [ ] 5.5 `v0.11.1` tagged on a commit whose PR run and Desktop run COMPLETED GREEN, every job RAN; the
-      draft "APASAI CG 0.11.1", five files, read back and re-downloaded; `v0.11.0` retitled superseded
+- [x] 5.4 The clean-Windows acceptance at `0.11.1`: fresh 74/74 (0.11.0's 73 and the Playout page), from
+      `0.10.0` 75/75, from `0.11.0` 75/75; the payload scan read 15 source files and 6 built ones, both apps'
+      exes among them (the Installers job's log) — Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37210021257>, `61026bc3`, every job RAN
+- [x] 5.5 `v0.11.1` (annotated, "APASAI CG 0.11.1") tagged on `61026bc3`, whose PR run
+      <https://github.com/yasermostafaee/cg/actions/runs/37210021254> and Desktop run
+      <https://github.com/yasermostafaee/cg/actions/runs/37210021257> COMPLETED GREEN, every job RAN. The
+      tag's own run <https://github.com/yasermostafaee/cg/actions/runs/37212150743> ran every job again and
+      opened the draft: "APASAI CG 0.11.1", a draft pre-release, exactly five files — read back,
+      re-downloaded, four `OK` against `SHA256SUMS.txt`, the delivered bytes scanned (8 files, no finding).
+      `v0.11.0` retitled `v0.11.0 — superseded, do not use`, still a draft. **Not published.**
+- [ ] 5.6 The owner's check on `0.11.1` (Windows 11's corners, 200 %, the page looked at); then archive, on
+      the owner's word
