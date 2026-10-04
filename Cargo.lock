@@ -481,6 +481,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cg-setup"
+version = "0.0.0"
+dependencies = [
+ "embed-manifest",
+ "serde",
+ "serde_json",
+ "windows",
+ "windows-core 0.61.2",
+ "windows-numerics",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -891,6 +903,12 @@ name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
+
+[[package]]
+name = "embed-manifest"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba92c8f4591bf29f89716b45e5f5f56577adbb81426e5620c6e994da7c88bb7a"
 
 [[package]]
 name = "embed-resource"

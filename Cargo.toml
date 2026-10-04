@@ -7,6 +7,14 @@
 # Development stays in the browser (`pnpm dev`); nothing here is needed to run either app.
 # The shells are built in CI on windows-latest, so no one needs Rust locally.
 
+#
+# INSTALLER-DESIGN-01 — `tools/setup-ui` (CG Setup) joins it: the setup window all three installers
+# open. It shares the `windows` crate the shells already lock, and nothing else of theirs.
+
 [workspace]
 resolver = "2"
-members = ["apps/runtime/src-tauri", "apps/designer/src-tauri"]
+members = ["apps/runtime/src-tauri", "apps/designer/src-tauri", "tools/setup-ui"]
+
+# CG Setup rides in front of every installer, so it is built for size; the shells keep the defaults.
+[profile.release.package.cg-setup]
+opt-level = "s"

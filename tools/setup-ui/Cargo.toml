@@ -1,0 +1,74 @@
+# INSTALLER-DESIGN-01 — CG Setup: the setup window all three installers open (P-063).
+#
+# One front end, three installers. Each installer is THIS program with the product's NSIS engine
+# (today's installer, unchanged) appended behind it by `cg-setup-pack`. Run with `/S` (or Tauri's
+# `/P`), it hands the command line to that engine untouched and returns the engine's exit code, so a
+# silent install, its arguments and its exit codes are the engine's own. Run without, it shows the
+# setup window — Welcome, Location, Installing, Done — and drives the same engine silently.
+#
+# Native Win32 + Direct2D + DirectWrite: no WebView2, no .NET, nothing fetched, so the first
+# screen appears on a clean Windows 10 that has no WebView2.
+
+[package]
+name = "cg-setup"
+# Not the release: the version every installer shows and states is stamped by `cg-setup-pack` from
+# `tools/release/src/release-version.mjs`. A release number here would be a tenth copy no one checks.
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "CG Setup: the setup window and silent pass-through of the CG Bridge, CG Control and CG Designer installers"
+
+[[bin]]
+name = "cg-setup"
+path = "src/main.rs"
+
+[[bin]]
+name = "cg-setup-pack"
+path = "src/bin/pack.rs"
+
+[lib]
+name = "cg_setup"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-core = "0.61"
+windows-numerics = "0.2"
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Direct2D",
+  "Win32_Graphics_Direct2D_Common",
+  "Win32_Graphics_DirectWrite",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Imaging",
+  "Win32_Security",
+  "Win32_Security_Cryptography",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Console",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Environment",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Ole",
+  "Win32_System_Registry",
+  "Win32_System_Services",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+  "Win32_System_Variant",
+  "Win32_UI_Accessibility",
+  "Win32_UI_Controls",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+embed-manifest = "1.4"
