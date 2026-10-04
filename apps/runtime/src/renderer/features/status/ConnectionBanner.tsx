@@ -14,10 +14,16 @@ import { setTestMode } from '../../../platform/testMode.js';
  * A pill is not enough for a state in which NOTHING CAN REACH AIR. Both not-live states get
  * a full-width, persistent, `role="alert"` banner at the top of the app:
  *
- * - **DISCONNECTED** — the bridge is unreachable. Commands are refused. Offers a retry and
- *   an explicit door into test mode (the ONLY door — it is never entered automatically).
+ * - **DISCONNECTED** — the bridge is unreachable. Commands are refused. Offers a retry (and,
+ *   inside CG Control, Set up again).
  * - **TEST MODE** — an explicit simulation. Says plainly that nothing is on air and no
  *   command reaches CasparCG, and offers an explicit way out.
+ *
+ * 🔴 `R-087` (`RELEASE-0112-01-A` A1, the owner 2026-10-04: "it has no use for now") — **THE
+ * OPERATOR HAS NO WAY INTO TEST MODE.** This banner offered "Enter test mode", the only door
+ * there ever was; it is gone. The mode's own code stays: every Playwright spec boots it through
+ * the harness flag (`window.CG_E2E`, `platform/testMode.ts`). The way OUT stays too, so a session
+ * left in test mode can still leave it.
  *
  * When the link is live this renders nothing: no banner is itself the signal that the
  * Runtime can actually reach air.
@@ -139,9 +145,6 @@ export function ConnectionBanner({
           Set up again
         </Button>
       )}
-      <Button variant="ghost" onClick={() => setTestMode(true)}>
-        Enter test mode
-      </Button>
     </div>
   );
 }

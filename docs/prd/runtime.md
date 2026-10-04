@@ -178,7 +178,8 @@ visibility nit:
    are refused (`errorCode: 'disconnected'`) BEFORE any intent is applied, so no
    optimistic status can exist. Refuse, never defer — a queued command would be
    stranded (reconnect-reconciliation replays template HTML, not stack intents).
-3. **Test mode is an EXPLICIT operator switch** with a loud, persistent indicator.
+3. **Test mode is an EXPLICIT operator switch** with a loud, persistent indicator. _(Superseded in part
+   2026-10-04 by `R-087`: the operator's switch into test mode is gone; the mode stays for the test harness.)_
    Never entered automatically, never mid-show.
 4. **No fake ON AIR / no fake HEALTHY.** A simulation may simulate playout; it may
    not claim the broadcast-red ON AIR badge or a healthy link to hardware that is
@@ -4450,3 +4451,23 @@ still needs the CG license; and AMCP's automatic acceptance of the first bridge 
 separate-server CG Bridge signed in as `cg-bridge` waits as pending for the admin's «تأیید» (a loopback CG Bridge
 needs nothing). **Waits on:** the Playout team serving the meters to `cg-bridge` (we ask), or a decision to read
 the meters with another token. **Not built now.**
+
+## [~] R-087 — The NOT CONNECTED banner: no way into test mode, and actions drawn for red ⟨priority: medium — before `0.11.2`'s tag⟩ — FILED 2026-10-04 by `RELEASE-0112-01-A` · `openspec/changes/console-polish/` (tasks §12)
+
+**What:** (A1) the red `NOT CONNECTED — NOTHING CAN REACH AIR.` banner no longer offers `Enter test mode` — the
+only operator door into the simulator there ever was. The mode's own code stays: every Playwright spec boots it
+through the harness flag (`window.CG_E2E`), and the TEST MODE banner keeps its way out. (A2) every action on a red
+(`alarm`) banner is drawn for red by one banner-scoped rule in the shared button declaration — the first action
+a white fill with dark-red ink, the others white text, a white focus ring, each state (hover, active,
+`focus-visible`, disabled) drawn for red — with existing tokens only and no blue anywhere on the red. **Why:** the
+owner, 2026-10-04 (`Claude outputs/BANNER-BUTTONS-owner-screenshot-2026-10-04.png`): test mode "has no use for
+now", and `Retry connection` was the console's blue outline on the red — hard to read and plainly not designed
+for it; `Set up again` was a muted grey not designed for red either. **Acceptance:**
+
+- WHEN the bridge is not reachable THEN the banner offers `Retry connection` (and, inside CG Control, `Set up
+again`), and nothing on the page names test mode
+- WHEN a red banner carries actions THEN none is blue in any state; text is ≥ 4.5 : 1 against what it stands on
+  and the focus ring ≥ 3 : 1 against the banner, measured in Chromium
+
+**Supersedes in part:** `R-006` bullet 3 ("Test mode is an EXPLICIT operator switch") — the switch is gone; the
+mode stays for the test harness.

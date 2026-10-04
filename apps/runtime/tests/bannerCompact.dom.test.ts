@@ -15,8 +15,9 @@ import { setupStub } from './support/authStub.js';
  * banner's own box so it cannot regress into a block — no fixed height, and `flexShrink: 0`
  * so it is neither inflated nor squeezed.
  *
- * Loud is not the same as large: the R-006 messages, roles and actions are asserted here
- * UNCHANGED, because the height was never what made them impossible to miss.
+ * Loud is not the same as large: the R-006 messages and roles are asserted here UNCHANGED,
+ * because the height was never what made them impossible to miss. (The actions changed once, on
+ * purpose: `R-087` took the way into test mode off the NOT CONNECTED banner.)
  */
 
 let container: HTMLDivElement | null = null;
@@ -87,8 +88,54 @@ describe('the banners stay loud — the R-006 message is unchanged', () => {
     expect(banner?.getAttribute('aria-label')).toBe('Bridge disconnected');
     expect(banner?.textContent).toContain('NOTHING CAN REACH AIR');
     expect(banner?.textContent).toContain('refused, not queued');
-    // Both doors are still there: retry, or an EXPLICIT entry to test mode.
+    // `R-087` (`RELEASE-0112-01-A` A1) — the retry is the one door here (a browser has no Set up
+    // again); the way INTO test mode is gone.
     const buttons = [...el.querySelectorAll('button')].map((b) => b.textContent);
-    expect(buttons).toEqual(['Retry connection', 'Enter test mode']);
+    expect(buttons).toEqual(['Retry connection']);
+  });
+});
+
+/**
+ * 🔴 `R-087` (`RELEASE-0112-01-A` A1, the owner 2026-10-04) — **NO WAY INTO TEST MODE ON THE NOT
+ * CONNECTED BANNER**, pinned as an ABSENCE (the direction it regresses in). The mode's code stays —
+ * every Playwright spec boots it through the harness flag — so only the operator's door is gone.
+ */
+describe('R-087 A1 — the NOT CONNECTED banner offers no test mode', () => {
+  it('no "Enter test mode" anywhere on the banner, by text or by name — CONTROL: Retry connection still reloads', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('refused'))),
+    );
+    const reload = vi.fn();
+    (window as unknown as { cg: unknown }).cg = {
+      link: {
+        status: () => 'disconnected',
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
+      setup: setupStub(),
+    };
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(StrictMode, null, createElement(ConnectionBanner, { reload })));
+    });
+    const el = container;
+    expect(el.textContent ?? '').not.toMatch(/test mode/i);
+    expect(
+      [...el.querySelectorAll('button')].some((b) =>
+        /test mode/i.test(`${b.textContent ?? ''} ${b.getAttribute('aria-label') ?? ''}`),
+      ),
+    ).toBe(false);
+    const retry = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Retry connection',
+    );
+    expect(retry, 'no Retry connection').toBeDefined();
+    await act(async () => {
+      retry?.click();
+    });
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });

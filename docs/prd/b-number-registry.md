@@ -3199,3 +3199,15 @@ no stash) covers `R-085`–`R-089`.
 Measured free before use: the `B-311` entry's measurement above covers `P-065`–`P-069`.
 
 ⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-066`**, **`R-087`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0112-01-A` takes `R-087`
+
+- `R-087` — the NOT CONNECTED banner: no way into test mode, and actions drawn for red — [runtime.md](runtime.md).
+
+Measured free before use: `git grep -n -E "^## \[.\] (B-31[2-6]|R-08[7-9]|P-06[6-9]) " <branch> -- docs` on every
+local and remote branch (`ai-stale`, `design/live-source-multibox`, `dev`, `main`, `origin/dev`, `origin/main`)
+returned nothing, and the same with `--untracked`; controls: `B-311`'s, `R-086`'s and `P-065`'s own headings are
+found on `dev`; no stash. The same measurement covers `B-312`–`B-316` and `P-066`–`P-069`, taken below by
+`RELEASE-0112-01`.
+
+⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-066`**, **`R-088`** and **`C-049`**.

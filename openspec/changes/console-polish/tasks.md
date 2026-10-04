@@ -248,3 +248,30 @@ Lanes: C (`B-310`) FULL — it decides what the Log shows; B (`B-309`) FAST, cop
       <https://github.com/yasermostafaee/cg/actions/runs/37203942453> (`e2e` — runtime 328 passed, the
       Versions line among them; designer 293 passed) and Desktop
       <https://github.com/yasermostafaee/cg/actions/runs/37203942485>
+
+## 12. Delta `RELEASE-0112-01-A` — `R-087` (2026-10-04)
+
+Lanes: A1 FAST (it removes only the operator's control; the mode's code stays for the test harness);
+A2 FAST (visual). One batch, one gate, one push — before `v0.11.2`'s tag.
+
+- [x] 12.1 §0: ONE operator surface offered `Enter test mode` — the NOT CONNECTED banner
+      (`ConnectionBanner.tsx`); `setTestMode(true)` had no other caller. The mode is the in-memory
+      `MockRuntime` (`createMockBridge`, chosen at boot by `isTestMode()`); every Playwright spec boots it
+      through `window.CG_E2E`, so its code stays. The dev station does not use it (a real bridge on fakes)
+- [x] 12.2 A1: the control removed; the TEST MODE banner's way out kept. `runtime-ui`'s banner
+      requirement MODIFIED here (no way into test mode on any operator surface). `runtime-caspar-bridge`
+      "Bridge selection at boot" is left as it is: its "only on an explicit request" still holds as a
+      restriction, and the pending `lan-dev-access` carries a MODIFIED copy of it — a second copy here
+      would collide when either archives. Sweep, two axes: by string `Enter test mode` (`-i`, tracked and
+      `--untracked`) and by handler/component (`setTestMode(` callers; every file naming
+      `ConnectionBanner`); pathspecs `243 / 358 / 1219 / 228 / 661 / 12` files (`apps/runtime/src`,
+      `apps/runtime/tests`, `openspec`, `docs`, `tools`, `apps/runtime/src-tauri`) — `apps/desktop*` matched
+      0 and was replaced by the real shell's path. Hits left: archived changes (history), the living spec
+      line this delta replaces, `R-006` (marked superseded in part). `bannerCompact.dom.test.ts` pins the
+      ABSENCE, with the control that `Retry connection` still reloads; `connectionBannerSetUpAgain` keeps
+      Set up again's
+- [ ] 12.3 A2: actions on a red (`alarm`) banner drawn for red in `controls.css` by a banner scope
+      (`[data-tone='alarm']`) — every state, existing tokens only, no `style` on a control, no blue
+- [ ] 12.4 A2 measured in Chromium (e2e): text ≥ 4.5 : 1, focus ring ≥ 3 : 1, every state; the amber
+      banners checked; screenshots before and after
+- [ ] 12.5 Gate, push, CI COMPLETED green with the jobs RAN (the banner's e2e among them)
