@@ -3244,3 +3244,13 @@ the 7 refs after `git fetch origin` (positive control: the same sweep found `B-3
 the only other `B-314` in the tree was this change's own new code.
 
 ⇒ **Next free after this entry is `B-316`**, **`D-162`**, **`P-066`**, **`R-089`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0112-01-C` takes `P-066`
+
+- `P-066` — CG Bridge's Installed-apps row is a contract with the Playout's engine installer —
+  [platform.md](platform.md).
+
+Measured free before use: the `R-087` entry's measurement above covers `P-066`–`P-069`; the only other `P-066`
+in the tree was this file's own "next free" lines.
+
+⇒ **Next free after this entry is `B-316`**, **`D-162`**, **`P-067`**, **`R-089`** and **`C-049`**.

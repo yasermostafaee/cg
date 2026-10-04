@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.1`** — `0.9.0`, `0.9.1`, `0.10.0` and `0.11.0` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, and `RELEASE-0111-01` moves it to `0.11.1`, the build the client receives (2026-10-04 — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.2`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0` and `0.11.1` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, and `RELEASE-0112-01` moves it to `0.11.2`, the build the client receives (2026-10-04 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1868,6 +1868,28 @@ is one release line (`0.11`), so a `0.11.0` and a `0.11.1` meet with no refusal.
 installers upgrade both in place, settings kept, tested on a clean runner from each draft's own
 installers (`RELEASE-0111-01` §D3). That is a test of this release, not a promise to either one's
 formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.2` (2026-10-04, `RELEASE-0112-01` Part D)
+
+**Why:** `0.11.1` was never delivered either. The client runs a primary and a backup Playout engine from
+day one, and `0.11.1` could not keep a session on the backup engine ([[R-085]]), kept no Station-setup
+server B across a restart (`B-312`), and could become a second sender on the backup core (`B-313`). So the
+first build a client holds is `0.11.2`, and the floor is `0.11.2`. The `v0.11.1` draft is retitled
+"superseded, do not use" and stays a draft.
+
+**What it means:** the same list as the sections above, read at `0.11.2`. Nothing it covers moved: the five
+files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's
+station record read an empty `git diff v0.11.1` (2026-10-04, against a control file in the same command —
+`bridge-session.ts` — that did change). CG Bridge's station files gain, and lose, nothing a `0.11.1` station
+holds: `bridge-session.json`'s record takes an OPTIONAL `address`, which only the backup engine's session
+binds (the primary's record is written and read exactly as before), and the backup's session is a NEW file
+beside it, `bridge-session-backup.json`. The console ↔ CG Bridge protocol stays one release line (`0.11`):
+the new channels are additive — a `0.11.1` console never asks for the new reads, and its publish switch
+drops the new engine feed as an unknown name.
+
+**The `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a floor:** `0.11.2`'s
+installers upgrade each in place, settings kept, tested on a clean runner from each draft's own installers.
+That is a test of this release, not a promise to any one's formats.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
@@ -3955,3 +3977,27 @@ Automation); the engine unchanged (`8e6b7796`). **Verified on clean Windows** �
 on `61026bc3` (tagged `v0.11.1`): the CG Bridge smoke 109/109 and both upgrade acceptances 75/75, Desktop
 <https://github.com/yasermostafaee/cg/actions/runs/37210021257>. Open: the owner's look at the page on his own
 Windows 11 at 200 % (CI has no rounded corners), then `installer-design` is his to archive.
+
+## [~] P-066 — CG Bridge's Installed-apps row is a contract with the Playout's engine installer ⟨priority: high — their `2.9.4` decides from it whether to run our file⟩ — FILED 2026-10-04 by `RELEASE-0112-01-C` C1 · `openspec/changes/backup-session/` (tasks §7)
+
+**What.** The Playout's `2.9.4` engine installer runs CG Bridge's installer with `/S` when its box
+«CG Bridge هم نصب شود» is ticked, and leaves an installed CG Bridge alone when the version it reads is the
+same or newer, or unreadable (`docs/integration/playout/PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2). It reads
+the row whose `DisplayName` is `CG Bridge`, and that row's `DisplayVersion`, in both the 64-bit and the 32-bit
+registry views. So those two values, the one row and its view, are promises to another team's installer, and
+a change to any of them is a contract change — never a silent one. **Why.** A second row, a renamed product or
+a four-part version would make their installer run our file over a newer CG Bridge, or never upgrade it.
+
+**Acceptance:** WHEN CG Bridge is installed on a clean Windows THEN exactly one Installed-apps row in either view
+resembles `CG Bridge`, its `DisplayName` is exactly `CG Bridge`, its `DisplayVersion` is the release in
+`major.minor.patch`, and it is in the 64-bit view; WHEN it is upgraded — over itself, and over each delivered or
+drafted release (`0.10.0`, `0.11.0`, `0.11.1`) — THEN the same holds with the new version; WHEN any of these
+changes THEN the smoke fails by name.
+
+**Built (2026-10-04, `a9bcfbd2`)** — `tools/bridge-installer/installed-apps.mjs`, the one reader; checked in the
+CG Bridge smoke after the install and after the upgrade, and in every release acceptance after the classic
+install and after the upgrade. **Read on the clean runner** (Desktop 37228341119, the build still `0.11.1`): the
+CG Bridge smoke and the classic installs of the `v0.10.0`, `v0.11.0` and `v0.11.1` drafts each left exactly one
+row — 64-bit view, key `CGBridge`, `DisplayName` `CG Bridge`, `DisplayVersion` `0.10.0` / `0.11.0` / `0.11.1` —
+and every upgrade left one row reading the build's version. The NSIS lines that write it are byte-identical at
+the three tags. Owed: the same read on the `0.11.2` build.

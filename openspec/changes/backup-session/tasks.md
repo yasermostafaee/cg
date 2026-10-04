@@ -112,3 +112,28 @@ connection), `B-315` FULL (a predicate that decides what an operator sees), then
 - [ ] 6.4 Engine docs; `CG-BRIDGE-FOR-PLAYOUT.md` (the pair section; `/health`); the guide's "With a backup
       engine"
 - [ ] 6.5 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here
+
+## 7. `RELEASE-0112-01` Part D and delta C — the release `0.11.2`
+
+Lane: FULL (delivery: the version, the installers' contract and the guide a client follows).
+
+- [x] 7.1 Delta C1 (`P-066`) — CG Bridge's Installed-apps row pinned: `installed-apps.mjs`, the one reader; the
+      CG Bridge smoke after the install and the upgrade; every release acceptance after the classic install and
+      the upgrade; a new `acceptance-upgrade-0111` job from the `v0.11.1` draft (the draft job waits for it).
+      Read on the clean runner (Desktop 37228341119): one row each, 64-bit view, key `CGBridge`, `CG Bridge`,
+      `0.10.0` / `0.11.0` / `0.11.1`. The `0.11.1` job's own six reds there were the same-version reinstall
+      ("Reinstall CG Bridge?") a `0.11.1` build meets over `0.11.1` — the premise of the bump below
+- [x] 7.2 `0.11.2` in all nine version sources (`release-version.mjs --set 0.11.2`); `P-031`'s floor moved to
+      `0.11.2` with an empty `git diff v0.11.1` over the five floor files (control: `bridge-session.ts`, 120
+      lines); the session record's optional `address` and the new backup file said there
+- [x] 7.3 The guide `docs/release/0.11.2/install-guide.fa.md`: «با موتورِ پشتیبان» (the separate server beside
+      both engines, the box unticked on both, server B in Station setup, the backup engine's sign-in, the
+      status bar's words); the Playout's two lines quoted exactly and unmarked; `/MERGETASKS="!cgbridge"` only
+      where a silent install is said; three marks, all the backup engine's. Their letter adopted into
+      `docs/integration/playout/`. `guide.test.ts`: ten sections, the new labels against their sources, the
+      marks counted and placed, their lines read from the letter
+- [ ] 7.4 The `0.11.2` pictures from a Desktop run of the bump; then gate, push, CI green with every job RAN
+- [ ] 7.5 `CG-BRIDGE-FOR-PLAYOUT.md` at `0.11.2`: the pair, `/health`'s new fields, D2's table (the disabled-user
+      sentence corrected), the Installed-apps guarantee, the version policy
+- [ ] 7.6 Tag `v0.11.2`; the draft "APASAI CG 0.11.2" read back, sums checked; `v0.11.1` retitled superseded;
+      NOT published

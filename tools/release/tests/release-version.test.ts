@@ -22,8 +22,8 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 // The release this tree is — moved by hand with each bump (`P-060`: `0.9.1`; `CENTRAL-BRIDGE-01`:
-// `0.10.0`; `RELEASE-0110-01`: `0.11.0`; `RELEASE-0111-01`: `0.11.1`), which is the point.
-const RELEASE = '0.11.1';
+// `0.10.0`; `RELEASE-0110-01`: `0.11.0`; `RELEASE-0111-01`: `0.11.1`; `RELEASE-0112-01`: `0.11.2`), which is the point.
+const RELEASE = '0.11.2';
 
 let scratch: string | null = null;
 

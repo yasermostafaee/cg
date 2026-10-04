@@ -217,10 +217,83 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     shown: 'Export (.vcg)',
     file: 'apps/designer/src/renderer/features/compositions/CompositionActionBar.tsx',
   },
+  // `RELEASE-0112-01` (`R-085`) — «با موتورِ پشتیبان»: server B in Station setup, the backup engine's
+  // sign-in, and the status bar's words beside `BACKUP B`.
+  {
+    shown: 'Backup server',
+    text: '<span className="cg-card__title">Backup server</span>',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: 'Add backup',
+    text: 'aria-label="Add backup"',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: 'Host address',
+    text: 'label="Host address"',
+    file: 'apps/runtime/src/renderer/features/stationSetup/BackupServerDialog.tsx',
+  },
+  {
+    shown: 'AMCP port',
+    text: 'label="AMCP port"',
+    file: 'apps/runtime/src/renderer/features/stationSetup/BackupServerDialog.tsx',
+  },
+  {
+    shown: 'OSC port',
+    text: 'label="OSC port"',
+    file: 'apps/runtime/src/renderer/features/stationSetup/BackupServerDialog.tsx',
+  },
+  {
+    shown: 'Add to draft',
+    text: 'confirmLabel="Add to draft"',
+    file: 'apps/runtime/src/renderer/features/stationSetup/BackupServerDialog.tsx',
+  },
+  {
+    shown: 'Apply servers',
+    text: '\n                Apply servers\n',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: 'Backup engine',
+    text: "backup: 'Backup engine'",
+    file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
+  },
+  {
+    shown: 'Account',
+    file: 'apps/runtime/src/renderer/features/status/BridgeSessionBanner.tsx',
+  },
+  { shown: 'cg-bridge', text: "CG_BRIDGE_ACCOUNT = 'cg-bridge'", file: 'packages/shared-ipc/src/channels/bridgeSession.ts' },
+  {
+    shown: 'PRIMARY A',
+    text: 'PRIMARY {health.primary.label}',
+    file: 'apps/runtime/src/renderer/features/status/StatusBar.tsx',
+  },
+  {
+    shown: 'BACKUP B',
+    text: 'BACKUP {health.backup.label}',
+    file: 'apps/runtime/src/renderer/features/status/StatusBar.tsx',
+  },
+  { shown: 'HEALTHY', text: "text: 'HEALTHY'", file: 'apps/runtime/src/renderer/features/status/StatusBar.tsx' },
+  {
+    shown: 'B: SIGN IN CG BRIDGE',
+    text: '${server}: SIGN IN CG BRIDGE',
+    file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
+  },
+  {
+    shown: 'B: CG NOT LICENSED',
+    text: '${server}: CG NOT LICENSED',
+    file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
+  },
+  {
+    shown: 'B: HELD — ANOTHER CG BRIDGE',
+    text: '${server}: HELD — ANOTHER CG BRIDGE',
+    file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
+  },
 ];
 
 describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
-  it('carries its nine sections, in the prompt’s order — CG Bridge before CG Control, CG Designer last', () => {
+  it('carries its ten sections, in the prompt’s order — CG Bridge before CG Control, the backup engine after the first run, CG Designer last', () => {
     const headings = [...source.matchAll(/^##\s+(.*)$/gm)].map((m) => m[1]);
     expect(headings).toEqual([
       '۱. در بسته چه هست',
@@ -228,11 +301,13 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
       '۳. نصب CG Bridge',
       '۴. نصب CG Control',
       '۵. اجرای نخست',
-      '۶. نصب CG Designer',
-      '۷. پیغام‌های CG Control',
-      '۸. گزارش مشکل',
+      // `RELEASE-0112-01` Part B — "With a backup engine": the client runs a pair from day one.
+      '۶. با موتورِ پشتیبان',
+      '۷. نصب CG Designer',
+      '۸. پیغام‌های CG Control',
+      '۹. گزارش مشکل',
       // `RELEASE-0110-01` — `0.11.0` is the build the client gets: no longer "the test build's".
-      '۹. محدودیت‌های این نسخه',
+      '۱۰. محدودیت‌های این نسخه',
     ]);
   });
 
@@ -311,12 +386,59 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     expect(source.split('\n').find((line) => line.includes('«تأیید»'))).not.toContain(CONFIRM_MARKER);
   });
 
-  it('`RELEASE-0111-01-A` A2 — ONE unconfirmed Playout-side point, marked: their installer’s checkbox', () => {
-    // Quoted from their letter (`docs/integration/playout/`, §4.2), not seen in their UI — so it is
-    // marked until we see it, on the line that names it and on no other.
-    expect(source.split(CONFIRM_MARKER).length - 1).toBe(1);
-    const marked = source.split('\n').find((line) => line.includes(CONFIRM_MARKER));
-    expect(marked).toContain('«CG Bridge هم نصب شود»');
+  /** The guide's lines inside one `## ` section, by its heading. */
+  const sectionLines = (heading: string): string[] => {
+    const lines = source.split('\n');
+    const start = lines.indexOf(`## ${heading}`);
+    const end = lines.findIndex((line, i) => i > start && line.startsWith('## '));
+    expect(start, `the guide has "## ${heading}"`).toBeGreaterThanOrEqual(0);
+    return lines.slice(start + 1, end < 0 ? undefined : end);
+  };
+  const BACKUP_SECTION = '۶. با موتورِ پشتیبان';
+  /** Their installer's two lines, exactly as their letter gives them (`RELEASE-0112-01-C` C1). */
+  const THEIR_CHECKBOX = 'CG Bridge هم نصب شود';
+  const THEIR_LINE_ABOVE = 'CG Control (اگر CG Bridge روی سرورِ جداست، تیک را بردارید):';
+
+  it('`RELEASE-0112-01-C` C1 — their installer’s two lines, quoted exactly from their letter, and no longer marked', () => {
+    // `PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2 gives the label and the line above it as their
+    // installer shows them, so the point `0.11.1`'s guide marked is a fact now, said in their words.
+    const letter = fs.readFileSync(
+      path.join(REPO, 'docs/integration/playout/PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md'),
+      'utf8',
+    );
+    for (const words of [THEIR_CHECKBOX, THEIR_LINE_ABOVE]) {
+      expect(letter, `their letter gives «${words}»`).toContain(`\`${words}\``);
+      expect(source).toContain(`«${words}»`);
+    }
+    const install = sectionLines('۳. نصب CG Bridge').find((line) => line.includes(`«${THEIR_LINE_ABOVE}»`));
+    expect(install).toContain(`«${THEIR_CHECKBOX}»`);
+    expect(install).not.toContain(CONFIRM_MARKER);
+  });
+
+  it('`RELEASE-0112-01` Part B — the unconfirmed Playout-side points are the backup engine’s, marked, and only there', () => {
+    // Nobody has seen a backup engine's installer, approval or password page: each is marked on the
+    // line that says it, inside «با موتورِ پشتیبان», and nowhere else.
+    const marks = source.split(CONFIRM_MARKER).length - 1;
+    const backup = sectionLines(BACKUP_SECTION);
+    const markedThere = backup.filter((line) => line.includes(CONFIRM_MARKER));
+    expect(marks).toBe(3);
+    expect(markedThere).toHaveLength(3);
+    expect(markedThere[0]).toContain(`«${THEIR_CHECKBOX}»`);
+    expect(markedThere[1]).toContain('«تأیید»');
+    expect(markedThere[2]).toContain('`Backup engine`');
+  });
+
+  it('`RELEASE-0112-01-C` C1 — their silent switch appears only where a silent Playout install is described', () => {
+    const silent = '`/MERGETASKS="!cgbridge"`';
+    expect(source.split(silent).length - 1).toBe(1);
+    const line = sectionLines(BACKUP_SECTION).find((l) => l.includes(silent));
+    expect(line).toContain('بی‌صدا');
+  });
+
+  it('`RELEASE-0112-01` Part B — with a backup engine, CG Bridge goes on a separate server beside both engines', () => {
+    const backup = sectionLines(BACKUP_SECTION).join('\n');
+    expect(backup).toContain('روی سروری جدا، کنارِ هر دو موتور');
+    expect(backup).toContain('**هر دو** رایانهٔ موتور');
   });
 
   it('`RELEASE-0111-01` §D2 — a separate server is the installer’s page, never a PowerShell line', () => {
