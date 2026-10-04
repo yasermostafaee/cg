@@ -235,6 +235,7 @@ import {
 import {
   resolveSourceAssignments,
   saveSourceAssignments,
+  SourceAssignmentsConfigError,
   validateSourceAssignments,
   type SourceAssignmentsSource,
 } from './source-assignments-store.js';
@@ -2075,7 +2076,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // rule 14). A duplicated plate is still a refusal: two answers for one hole is not a state anything
   // downstream can read.
   const loadedAssignments = resolveSourceAssignments(options);
-  validateSourceAssignments(loadedAssignments.value, { catalog: null });
+  try {
+    validateSourceAssignments(loadedAssignments.value, { catalog: null });
+  } catch (err) {
+    // `B-309` — the refusal's sentence carries no id; the ids go to the log, beside it.
+    if (err instanceof SourceAssignmentsConfigError && err.detail !== undefined) {
+      process.stderr.write(`[caspar-bridge] source defaults refused at start: ${err.detail}\n`);
+    }
+    throw err;
+  }
   /*
     🔴 `CHANNEL-SOURCES-01` decision 2 (the owner, 2026-09-28) — **SOURCE DEFAULTS BELONG TO A
     CHANNEL, and the station's stored ones become every declared channel's own copy on the first

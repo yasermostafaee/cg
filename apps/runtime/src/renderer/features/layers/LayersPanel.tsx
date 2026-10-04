@@ -96,6 +96,7 @@ import { StationLayersPanel } from './StationLayersPanel.js';
 import { LiveSourcesPanel } from './LiveSourcesPanel.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio } from './plateAudio.js';
+import { plateLabelOf } from './takeRefusalLine.js';
 import {
   declaredFrameRows,
   hasStrandedLiveLayer,
@@ -2021,6 +2022,16 @@ export function LayersPanel({
               setActiveTab('layers');
             }}
             onApplyVolumes={applyPlateVolumes}
+            plateLabelOf={(itemId, plateId) => {
+              // `B-309` — `Plate N` from the row's own template, for the refused-audio toast.
+              const owner = itemById.get(itemId);
+              return owner === undefined
+                ? undefined
+                : plateLabelOf(
+                    templates.get(owner.templateId, boundChannelOf(owner, slots)),
+                    plateId,
+                  );
+            }}
             onOpenAudio={(itemId, plateId) => {
               if (itemById.get(itemId) === undefined) {
                 // The ledger names an item the stack no longer carries — the STRANDED case,

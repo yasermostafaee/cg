@@ -363,7 +363,36 @@ describe('the assignments — the join the operator makes', () => {
       { catalog },
     );
     expect(verdict).toMatchObject({ ok: false, reason: 'unknown-source' });
-    expect(verdict.ok ? '' : verdict.message).toContain('guest-1');
+    // 🔴 `B-309` — the sentence names nothing by its id; the ids are RELOCATED to `detail` (a log's).
+    expect(verdict.ok ? '' : verdict.message).toBe(
+      'A plate is assigned to a source this installation does not define — assign it to one of ' +
+        'the defined sources, or leave it unassigned',
+    );
+    expect(verdict.ok ? undefined : verdict.detail).toBe(
+      'plate "guest-1" of template "tpl-1", source "src-gone"',
+    );
+  });
+
+  it('🔴 `B-309` — a plate assigned twice is said in words; the ids are the log’s', () => {
+    const verdict = checkSourceAssignments(
+      {
+        assignments: [
+          { channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-aaa' },
+          { channel: 2, templateId: 'tpl-1', plateId: 'guest-1', sourceId: 'src-bbb' },
+        ],
+      },
+      { catalog: null },
+    );
+    expect(verdict).toMatchObject({ ok: false, reason: 'duplicate-plate' });
+    const message = verdict.ok ? '' : verdict.message;
+    expect(message).toBe(
+      'A plate of one template is assigned twice on channel 2 — which source it used would ' +
+        'depend on the order of the list',
+    );
+    expect(message).not.toMatch(/guest-1|tpl-1|src-/);
+    expect(verdict.ok ? undefined : verdict.detail).toBe(
+      'plate "guest-1" of template "tpl-1" on channel 2',
+    );
   });
 
   it('reads back which source a plate uses, and which plates have none', () => {

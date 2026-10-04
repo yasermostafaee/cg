@@ -13212,7 +13212,7 @@ lines) and the solo look switch with its plate releases (`live-look-reconcile`, 
 what the unchanged bridge sent, recorded before the change. **Positive control:** the e2e fails on the old
 build at `plate "l1"`.
 
-## [ ] B-309 — More operator sentences that name a plate, a look or a template by its id ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0110-01` Part A (found by `B-308`'s sweep)
+## [~] B-309 — More operator sentences that name a plate, a look or a template by its id ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0110-01` Part A (found by `B-308`'s sweep); BUILT 2026-10-04 by `RELEASE-0111-01` Part B (change `console-polish`, tasks §11)
 
 **Repro / Actual:** outside `B-308`'s scope (CG Bridge's live-plate sentences), the same sweep found:
 `seatCollisionMessage` names the LOOK by its id (`in look "two"`; a look has an authored `name`,
@@ -13222,6 +13222,31 @@ labelled `Live source for l1` (`LiveSourceSwapDialog.tsx:147`, an accessible nam
 assignment validator names plate, template and source by id (`sources.ts:1059`, `:1068` — a malformed-file
 message; the console shows its own words for `unknown-source`). **Expected:** golden rule 11 — `Plate N`, the
 look's name, the template's name. **Fix:** not built.
+
+**Built (`RELEASE-0111-01` Part B).** Two anchors above were wrong: the toast is fed from `LayersPanel.tsx`
+(`applyPlateVolumes`), not `LayerRow.tsx:1289`, which feeds the plate audio dialog's own sentence (now in
+`B-311`); and the validator's `unknown-source` cannot fire in production (every caller passes `catalog: null`),
+and no console ever shows its text — it reaches a boot failure in the service log and a wire field the console
+discards. The sweep found one more sentence of the same shape: an accepted take's message named the look by
+its id (`caspar-runtime.ts`, `B-191`'s). **Fix:** one helper, `lookLabel` (`@cg/shared-ipc`, beside
+`plateLabel`): a look is the name its author gave it. (1) `seatCollisionMessage` takes the template's looks
+and reads `… in look “<name>”`, the name in its own isolate, `in one of its looks` when the template no longer
+names it; (2) the take's message reads `… to punch look “<name>” …` the same way; both write the ids to a log
+line. (3) The Live plates toast reads `Audio not applied to Plate 1 and Plate 3 — those plates are unchanged.`
+through `LiveSourcesPanel`'s new `plateLabelOf` (the row's template, from `LayersPanel`), and counts the plates
+(`2 plates`) when it has no plate word — never the id; and the SOLO/ON/OFF buttons no longer follow it with
+`AsyncButton`'s generic `Not accepted.`, which replaced it (returned `cancelled`, as PANIC does). (4) The swap
+picker's accessible name is `Live source for Plate 1` (the label's `title` keeps the id). (5) The validator
+says `A plate of one template is assigned twice on channel 2 — …` / `A plate is assigned to a source this
+installation does not define — …`; the ids are RELOCATED to the error's `detail`, which the bridge logs at
+start and on a refused change. **Tests:** `operator-naming.test.ts` (`lookLabel`); `live-look-bindings.test.ts`
+(the collision sentence: `Plate 1 and Plate 2`, the Persian look and input names each in a right-to-left
+isolate, logical order, no id; a look no longer named); `look-switch-refusal.integration.test.ts` (a re-take
+whose look tell CasparCG refuses: on air, the Persian look name, no id); `liveSourcesPanel.dom.test.ts` (the
+toast, and its count control); `liveSourceSwap.dom.test.ts` (the picker's name); `sources.test.ts` (both
+validator sentences, and the ids in `detail`). **Control — the wire:** `live-look-reconcile.integration`
+(`B-308`'s recorded look switch, 18 lines, and the refused swap) is unchanged and green; a refused binding
+change sends nothing, as before.
 
 ## [~] B-310 — A Log page read while the audit file rotates comes back EMPTY ⟨priority: low — a CI red once; on a station, the first row of a new day⟩ — FILED 2026-10-04 by `RELEASE-0110-01` (CI run 37185337111); BUILT 2026-10-04 by `RELEASE-0111-01` Part C (change `console-polish`, tasks §11)
 
@@ -13256,3 +13281,25 @@ the old reader: `[]`, one row with `next: null`, `[]`, an empty page instead of 
 `tools/caspar-bridge/tests/audit-page.integration.test.ts` (the rename through the real socket: the old reader
 fails with CI's own words, `expected [] to have a length of 100 but got +0`; the refusal in words). The
 integration test's first case asks for the takes, which every order of its sign-in's rotation answers the same.
+
+## [ ] B-311 — The plate audio surfaces still name a plate by its id ⟨priority: low⟩ — FILED 2026-10-04 by `RELEASE-0111-01` Part B (found by `B-309`'s sweep)
+
+**Repro / Actual:** the two surfaces built around a plate's audio label each plate with its id, and their
+sentences follow. (1) The row's plate audio dialog (`LivePlateAudioDialog.tsx`): each plate row's label is
+`<bdi>guest-1</bdi>` with `Frame N` under it (`:371`, `:374` — the rest of the console says `Plate N`), the
+slider's accessible name is `Volume for guest-1` (`:389`), and a refusal reads `The change was refused for
+guest-1, guest-3 — those plates are unchanged.` (`:236`, pinned by `livePlateAudio.dom.test.ts:328`). (2) The
+Live plates tab (`LiveSourcesPanel.tsx`, `PlateAudioStrip.tsx`): the plate column shows the id as text with
+`title="Template plate handle"` (`:678`); the row's and the strip's accessible names (`Volume for guest-1`,
+`Silence guest-1`, `Solo guest-1 — …`, `Open the row that declares guest-1`); the release confirm (`This
+layer carries "guest-1" (route://1-1).`, `:407-408`); and PANIC's partial failure (`Silenced 3 plate(s), but
+guest-2 did not take — those may still be audible.`, `panicReport.ts:77-80`). (3) `LooksBindingsSection.tsx:585`
+puts the id in an accessible name ON PURPOSE (`Input for guest-1 in look …`, its comment: "every existing
+finder and every screen reader still names the plate") — the opposite of what `B-309` did for the swap picker.
+**Why it was not folded into `B-309`:** each surface is built on the id, so rewording one more sentence there
+would leave the surface disagreeing with itself — `B-309`'s toast already reads `Plate 1` beside a column that
+shows `guest-1`. The Live plates tab also shows each layer's producer (`route://1-1`), which reads as a
+TECHNICAL surface (golden rule 11's exemption) — the owner's call whether it is one. **Expected:** one pass per
+surface: `Plate N` in every label, accessible name and sentence (`plateLabelOf`), the id on a `title`, PANIC's
+failure naming the plate AND its layer (`R-028`: the layer number stays visible in a sentence), and one answer
+for `LooksBindingsSection`'s finders. **Fix:** not built.

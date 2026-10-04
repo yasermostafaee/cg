@@ -1950,3 +1950,70 @@ describe('the LIVE PLATES source column', () => {
     );
   });
 });
+
+describe('🔴 `B-309` — a refused audio change names the plates it left alone in the operator’s words', () => {
+  /** Mount the tab on three seated plates whose audio change the bridge refuses on two. */
+  async function refusedSolo(
+    plateLabelOf?: (itemId: string, plateId: string) => string | undefined,
+  ): Promise<string[]> {
+    const rows = liveLayerRows(
+      [
+        layer({ layer: 10, sourceId: 'guest-1' }),
+        layer({ layer: 11, sourceId: 'guest-2' }),
+        layer({ layer: 12, sourceId: 'guest-3' }),
+      ],
+      OWNED,
+      null,
+      () => 1,
+    );
+    const { el } = await render([], OWNED);
+    const r = root;
+    await act(async () => {
+      r?.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(LiveSourcesPanel, {
+            rows,
+            ledgerReady: true,
+            blind: null,
+            onSelectOwner: () => undefined,
+            onPanic: () =>
+              Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
+            onApplyVolumes: () => Promise.resolve({ ok: false, refused: ['guest-1', 'guest-3'] }),
+            ...(plateLabelOf !== undefined ? { plateLabelOf } : {}),
+            onOpenAudio: () => undefined,
+            panicChannel: null,
+          }),
+        ),
+      );
+    });
+    const errors: string[] = [];
+    const off = onCommandError((m) => errors.push(m));
+    await act(async () => {
+      buttonIn(stripIn(el, 'guest-2'), 'SOLO')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    off();
+    return errors;
+  }
+
+  it('each refused plate is `Plate N` — no plate id in the sentence', async () => {
+    const position: Record<string, string> = {
+      'guest-1': 'Plate 1',
+      'guest-2': 'Plate 2',
+      'guest-3': 'Plate 3',
+    };
+    const errors = await refusedSolo((_itemId, plateId) => position[plateId]);
+    expect(errors).toEqual([
+      'Audio not applied to Plate 1 and Plate 3 — those plates are unchanged.',
+    ]);
+    expect(errors.join(' ')).not.toMatch(/guest-/);
+  });
+
+  it('control: with no plate words to hand, the plates are COUNTED — still never named by id', async () => {
+    const errors = await refusedSolo();
+    expect(errors).toEqual(['Audio not applied to 2 plates — those plates are unchanged.']);
+  });
+});

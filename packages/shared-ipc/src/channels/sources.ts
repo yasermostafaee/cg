@@ -748,12 +748,20 @@ export class SourceCatalogConfigError extends Error {
   }
 }
 
-/** A refused assignment set. `code` is stable; the message names specifics. */
+/**
+ * A refused assignment set. `code` is stable; the message says what is wrong in words.
+ *
+ * 🔴 `B-309` — the sentence names no plate, template or source by its id (golden rule 11): the ids
+ * are RELOCATED to `detail`, which a log line carries (`plate "guest-1" of template "tpl-1" on
+ * channel 2`) and an operator's sentence never does.
+ */
 export class SourceAssignmentsConfigError extends Error {
   override readonly name = 'SourceAssignmentsConfigError';
   constructor(
     readonly code: SourcesSetAssignmentsReason,
     message: string,
+    /** The ids the sentence does not carry — for a log line. */
+    readonly detail?: string,
   ) {
     super(message);
   }
@@ -1053,21 +1061,24 @@ export function validateSourceAssignments(
     */
     // `CHANNEL-SOURCES-01` — one entry per plate PER CHANNEL; the station-wide entry is its own key.
     const key = `${String(assignment.channel ?? '*')}\u0000${assignment.templateId}\u0000${assignment.plateId}`;
+    const onChannel =
+      assignment.channel === undefined ? '' : ` on channel ${String(assignment.channel)}`;
+    const which = `plate "${assignment.plateId}" of template "${assignment.templateId}"${onChannel}`;
     if (seen.has(key)) {
       throw new SourceAssignmentsConfigError(
         'duplicate-plate',
-        `plate "${assignment.plateId}" of template "${assignment.templateId}" is assigned ` +
-          `twice${assignment.channel === undefined ? '' : ` on channel ${String(assignment.channel)}`} ` +
-          `— which source it used would depend on the order of the list`,
+        `A plate of one template is assigned twice${onChannel} — which source it used would ` +
+          `depend on the order of the list`,
+        which,
       );
     }
     seen.add(key);
     if (known !== null && !known.has(assignment.sourceId)) {
       throw new SourceAssignmentsConfigError(
         'unknown-source',
-        `plate "${assignment.plateId}" of template "${assignment.templateId}" is assigned to ` +
-          `source "${assignment.sourceId}", which this installation does not define — assign ` +
-          `it to one of the defined sources, or leave it unassigned`,
+        `A plate is assigned to a source this installation does not define — assign it to one ` +
+          `of the defined sources, or leave it unassigned`,
+        `${which}, source "${assignment.sourceId}"`,
       );
     }
   }
@@ -1077,13 +1088,20 @@ export function validateSourceAssignments(
 export function checkSourceAssignments(
   value: SourceAssignments,
   options: { catalog: SourceCatalog | null },
-): { ok: true } | { ok: false; reason: SourcesSetAssignmentsReason; message: string } {
+):
+  | { ok: true }
+  | { ok: false; reason: SourcesSetAssignmentsReason; message: string; detail?: string } {
   try {
     validateSourceAssignments(value, options);
     return { ok: true };
   } catch (err) {
     if (err instanceof SourceAssignmentsConfigError) {
-      return { ok: false, reason: err.code, message: err.message };
+      return {
+        ok: false,
+        reason: err.code,
+        message: err.message,
+        ...(err.detail !== undefined ? { detail: err.detail } : {}),
+      };
     }
     throw err;
   }

@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { SourceCatalog, TemplateLiveSources, TemplateLook } from '@cg/shared-ipc';
 import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
-import { framesOfLook, resolveLookBindings } from '../src/live-look-bindings.js';
+import {
+  framesOfLook,
+  resolveLookBindings,
+  seatCollisionMessage,
+} from '../src/live-look-bindings.js';
 
 /**
  * Session BM — **a seat is one producer per DISTINCT RESOLVED INPUT, per item.**
@@ -184,6 +188,56 @@ describe('§6.2 — two frames of ONE look on ONE input', () => {
   it('catches it across the catalog-alias spelling too', () => {
     const p = plan({ bindings: { three: { 'l-2': 'studio-3-alias', 'l-3': 'studio-3' } } });
     expect(p.collisions.map((c) => c.plateIds)).toEqual([['l-2', 'l-3']]);
+  });
+});
+
+describe('🔴 `B-309` — the collision sentence names the look by the name its author gave it', () => {
+  const RLI = String.fromCodePoint(0x2067);
+  const PDI = String.fromCodePoint(0x2069);
+  // The look's id is `three`; its author named it in Persian. The input's name is Persian too.
+  const named = carrier({
+    looks: [
+      {
+        ...look('three', { 'l-1': CELL(0), 'l-2': CELL(640), 'l-3': CELL(1280) }),
+        name: 'سه‌نفره',
+      },
+      look('two', { 'l-1': CELL(0), 'l-2': CELL(640) }),
+      look('solo', { 'l-3': FULL }),
+    ],
+  });
+  const persianCatalog: SourceCatalog = {
+    ...catalog,
+    sources: catalog.sources.map((s) => (s.id === 'studio-1' ? { ...s, name: 'استودیو ۱' } : s)),
+  };
+
+  it('`Plate N` for each frame, the look and the input each by name in its own isolate — no id', () => {
+    const p = plan({
+      carrier: named,
+      catalog: persianCatalog,
+      bindings: { three: { 'l-2': 'studio-1' } },
+    });
+    const collision = p.collisions[0];
+    if (collision === undefined) throw new Error('control: the binding must collide');
+    const sentence = seatCollisionMessage(collision, named);
+    expect(sentence).toBe(
+      `Plate 1 and Plate 2 would both show “${RLI}استودیو ۱${PDI}” in look “${RLI}سه‌نفره${PDI}”. ` +
+        'One source is ONE seat, so only one frame can show it and the other would go to air ' +
+        'empty. Point one of them at a different source.',
+    );
+    // No id of the look, the plates or the input; the payload keeps them.
+    expect(sentence).not.toMatch(/three|l-1|l-2|studio-1/);
+    expect(collision).toMatchObject({ lookId: 'three', plateIds: ['l-1', 'l-2'] });
+    // The Persian name is stored in logical order, inside its right-to-left isolate.
+    expect(sentence.indexOf(`${RLI}سه‌نفره${PDI}`)).toBeGreaterThan(0);
+  });
+
+  it('a look the template no longer names is said in words, never by its id', () => {
+    const p = plan({ bindings: { three: { 'l-2': 'studio-1' } } });
+    const collision = p.collisions[0];
+    if (collision === undefined) throw new Error('control: the binding must collide');
+    const sentence = seatCollisionMessage(collision, { ...named, looks: [] });
+    expect(sentence).toContain('in one of its looks.');
+    expect(sentence).not.toContain('three');
   });
 });
 

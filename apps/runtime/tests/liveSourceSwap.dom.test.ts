@@ -182,6 +182,20 @@ describe('6.9 — the dialog names each plate’s assignment, and commits in ONE
     expect(label?.getAttribute('title')).toBe('guest-1');
   });
 
+  it('🔴 `B-309` — the plate’s source picker is NAMED `Plate N` too: its accessible name carries no id', async () => {
+    await renderDialog(() => Promise.resolve({ ok: true }));
+    const picker = openDialog()?.querySelector<HTMLElement>('[aria-label^="Live source for"]');
+    expect(picker?.getAttribute('aria-label')).toBe('Live source for Plate 1');
+    // Control: the element found is the picker the operator opens, by its own handle.
+    expect(picker?.id).toBe('swap-item-1-guest-1');
+    expect(
+      [...(openDialog()?.querySelectorAll('[aria-label]') ?? [])].some((el) =>
+        (el.getAttribute('aria-label') ?? '').includes('guest-1'),
+      ),
+      'no accessible name in the dialog names the plate by its id',
+    ).toBe(false);
+  });
+
   it('a plate with no assignment, or one naming a source not listed, says so in the shared words', async () => {
     await renderDialog(() => Promise.resolve({ ok: true }), {}, 1, { assignments: [] });
     expect(openDialog()?.querySelector('[data-swap-assigned]')?.textContent).toBe(

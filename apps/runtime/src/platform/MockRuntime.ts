@@ -2496,7 +2496,8 @@ export class MockRuntime {
       if (!bound.ok) return { ok: false, reason: 'source-unusable', message: bound.message };
     }
     const shape = checkSourceAssignments(next, { catalog: null });
-    if (!shape.ok) return shape;
+    // `B-309` — the bridge's answer, field for field: the ids (`detail`) are a log's, not the reply's.
+    if (!shape.ok) return { ok: false, reason: shape.reason, message: shape.message };
     // `CHANNEL-SOURCES-01` parity — new or changed ON ITS CHANNEL, as the bridge keys it.
     const keyed = (a: TemplateSourceAssignment): { key: string; sourceId: string } => ({
       key: `${String(a.channel ?? '*')}\u0000${a.templateId}\u0000${a.plateId}`,

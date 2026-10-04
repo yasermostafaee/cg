@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { assignedSourceId, type TemplateInfo } from '@cg/shared-ipc';
+import { assignedSourceId, plateLabel, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -120,6 +120,8 @@ export function LiveSourceSwapDialog({
       {plates.map((plate, i) => {
         const assigned = assignedFor(plate.sourceId);
         const swapped = override[plate.sourceId];
+        // The one numbering (`plateLabel`); the id stays on the label's `title`.
+        const label = plateLabel(plates, plate.sourceId) ?? `Plate ${String(i + 1)}`;
         return (
           <div key={plate.sourceId} style={styles.row} data-swap-plate={plate.sourceId}>
             <label
@@ -127,7 +129,7 @@ export function LiveSourceSwapDialog({
               style={styles.plate}
               title={plate.sourceId}
             >
-              {`Plate ${String(i + 1)}`}
+              {label}
               <span style={styles.assigned} data-swap-assigned="">
                 <ChoiceLabel
                   choice={{ value: '', label: 'Template assignment', names: assigned ?? null }}
@@ -144,7 +146,8 @@ export function LiveSourceSwapDialog({
             */}
             <SourcePicker
               id={`swap-${item.itemId}-${plate.sourceId}`}
-              aria-label={`Live source for ${plate.sourceId}`}
+              // `B-309` — the picker's name is the plate's, in the operator's words — never its id.
+              aria-label={`Live source for ${label}`}
               value={swapped ?? ''}
               onChange={(sourceId) => change(plate.sourceId, sourceId)}
               // `B-303` — the words and the name kept apart: the name in its own isolate and direction.

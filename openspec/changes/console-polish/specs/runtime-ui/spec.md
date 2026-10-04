@@ -181,7 +181,8 @@ it names — each plate's template assignment and every choice — SHALL go thro
 source pickers use: the Playout's name in its own direction, `none set` for no assignment, `Not listed` with
 the id on its `title` for a source the catalogue does not know, and `Unavailable` for one the Playout no
 longer offers. It SHALL carry no explanatory paragraph: its title states the scope, and each plate states
-the assignment it returns to. What a swap sends SHALL NOT change.
+the assignment it returns to. Each plate's source picker SHALL be named `Live source for Plate N` — no plate
+id in any accessible name in the dialog (`B-309`). What a swap sends SHALL NOT change.
 
 #### Scenario: Names in the operator's words
 
@@ -197,3 +198,20 @@ the assignment it returns to. What a swap sends SHALL NOT change.
 
 - **WHEN** a plate is swapped to another source **THEN** CG Bridge sends exactly the AMCP lines it sent for
   the same swap before this change
+
+#### Scenario: The picker's name
+
+- **WHEN** the swap dialog opens on a template whose first plate is `guest-1` **THEN** that plate's picker is
+  named `Live source for Plate 1`, and no accessible name in the dialog carries `guest-1`
+
+### Requirement: A refused audio change on the Live plates tab SHALL name the plates it left alone as `Plate N`
+
+When CG Bridge refuses part of an audio change made on the Live plates tab, the toast SHALL name each plate
+that did not move `Plate N` (`plateLabelOf`, from the row's template), and SHALL count them when it has no
+plate word — never name a plate by its id. The control pressed SHALL NOT replace that sentence with a generic
+`Not accepted.` (`B-309`).
+
+#### Scenario: Two plates refused
+
+- **WHEN** a SOLO on a row's second plate is refused on its first and third **THEN** the one toast reads
+  `Audio not applied to Plate 1 and Plate 3 — those plates are unchanged.`

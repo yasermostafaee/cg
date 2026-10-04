@@ -21,6 +21,7 @@ import {
   type LiveLayerRowView,
 } from './liveLayerRows.js';
 import { PlateAudioStrip } from './PlateAudioStrip.js';
+import { refusedAudioSentence } from './plateAudio.js';
 import { nothingToSilence, readPanicReport, type PanicReport } from './panicReport.js';
 
 interface Props {
@@ -60,6 +61,12 @@ interface Props {
     itemId: string,
     volumes: Record<string, number>,
   ) => Promise<{ ok: boolean; refused: string[] }>;
+  /**
+   * 🔴 `B-309` — a plate in the operator's words, `Plate N` (`plateLabelOf`), for the sentence that
+   * says which plates a refused audio change left alone. Only the caller holds the row's template.
+   * Absent, or answering nothing, the plates are COUNTED — a plate is never named by its id there.
+   */
+  plateLabelOf?: (itemId: string, plateId: string) => string | undefined;
   /**
    * `RUNTIME-REDESIGN-01` Phase 6 — open the OWNING ROW's audio dialog on one plate. The
    * reference's right-click (and its keyboard twins, `ContextMenu` / `Shift+F10`) on a seated
@@ -240,6 +247,7 @@ export function LiveSourcesPanel({
   blind,
   onSelectOwner,
   onApplyVolumes,
+  plateLabelOf,
   onOpenAudio,
   onPanic,
   panicChannel,
@@ -312,7 +320,7 @@ export function LiveSourcesPanel({
     if (!res.ok) {
       reportCommandError(
         res.refused.length > 0
-          ? `Audio not applied to ${res.refused.join(', ')} — those plates are unchanged.`
+          ? refusedAudioSentence(res.refused.map((id) => plateLabelOf?.(itemId, id)))
           : 'The audio change was refused.',
       );
     }

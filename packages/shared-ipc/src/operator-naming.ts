@@ -158,6 +158,20 @@ export function plateList(labels: readonly string[]): string {
 }
 
 /**
+ * 🔴 `B-309` — **A LOOK IS ITS NAME**: the name its author gave it, the word the Look picker and the
+ * Inspector show. The look's id (`two`) is the scene's handle for it, not the operator's word (golden
+ * rule 11): it stays in a payload and in a log line. `undefined` when the template has no such look —
+ * the caller says it in words, never by falling back to the id.
+ */
+export function lookLabel(
+  looks: readonly { readonly id: string; readonly name: string }[] | undefined,
+  lookId: string,
+): string | undefined {
+  const name = (looks ?? []).find((l) => l.id === lookId)?.name.trim();
+  return name === undefined || name === '' ? undefined : name;
+}
+
+/**
  * The code points of the right-to-left LETTERS: Hebrew, Arabic (with Persian), Syriac, Thaana, NKo
  * and the presentation forms. The Arabic-Indic and Persian DIGITS are left out on purpose — a digit
  * is a number, not a letter, and `۱` alone does not make a name Persian.

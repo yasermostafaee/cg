@@ -129,6 +129,7 @@ import {
   // `B-308` — a plate is `Plate N` in every sentence, and every name in one is isolated.
   plateLabel,
   isolateText,
+  lookLabel,
   // `PLAYOUT-FEATURES-01` C — the playlist output's box is locked at volume 0.
   isPlaylistOutput,
   PLAYLIST_AUDIO_LOCKED_CODE,
@@ -5259,15 +5260,26 @@ export class CasparRuntime {
     }
     // `B-191` — the take LANDED, and the one thing that may still be wrong about it is said
     // rather than swallowed: the pictures are on the recorded look, the holes are not.
-    return lookTellFailed === undefined
-      ? { accepted: true }
-      : {
-          accepted: true,
-          message:
-            `The graphic is on air, but CasparCG refused the command that tells it to punch ` +
-            `look "${lookTellFailed}" — the pictures are in that look's places while the holes ` +
-            `are wherever the graphic last put them. Re-issue the look to converge.`,
-        };
+    if (lookTellFailed === undefined) return { accepted: true };
+    // `B-309` — the look by the name its author gave it, in its own isolate; its id goes to the log.
+    process.stderr.write(
+      `[caspar-bridge] ${itemId}: on air, but the look tell for look "${lookTellFailed}" was refused\n`,
+    );
+    const name = this.#lookNameOf(itemId, slot.channel, lookTellFailed);
+    return {
+      accepted: true,
+      message:
+        `The graphic is on air, but CasparCG refused the command that tells it to punch ` +
+        `${name === undefined ? 'its look' : `look “${isolateText(name)}”`} — the pictures are in ` +
+        `that look's places while the holes are wherever the graphic last put them. Re-issue the ` +
+        `look to converge.`,
+    };
+  }
+
+  /** `B-309` — a look of this row's template, by the name its author gave it (`lookLabel`). */
+  #lookNameOf(itemId: string, channel: number, lookId: string): string | undefined {
+    const templateId = this.#reconciler.get(itemId)?.templateId ?? itemId;
+    return lookLabel(this.#templates.getOn(channel, templateId)?.liveSources?.looks, lookId);
   }
 
   /**
@@ -7173,9 +7185,16 @@ export class CasparRuntime {
     });
     const collision = prospective.collisions[0];
     if (collision !== undefined) {
+      // `B-309` — the sentence names the look and the plates in the operator's words; the ids go here.
+      process.stderr.write(
+        `[caspar-bridge] ${itemId}: refused (live-source-duplicate) — plates ` +
+          `${collision.plateIds.map((id) => `"${id}"`).join(', ')} would both show ` +
+          `${collision.producerArg}` +
+          `${collision.lookId === undefined ? '' : ` in look "${collision.lookId}"`}\n`,
+      );
       return {
         reason: 'live-source-duplicate',
-        message: seatCollisionMessage(collision, carrier.sources),
+        message: seatCollisionMessage(collision, carrier),
       };
     }
     /*
@@ -14376,7 +14395,14 @@ export class CasparRuntime {
   } {
     // No plate twice — the shape rule, whatever the catalogue holds.
     const shape = checkSourceAssignments(next, { catalog: null });
-    if (!shape.ok) return shape;
+    if (!shape.ok) {
+      // `B-309` — the sentence carries no id; the ids go to the log.
+      process.stderr.write(
+        `[caspar-bridge] source defaults refused (${shape.reason})` +
+          `${shape.detail === undefined ? '' : `: ${shape.detail}`}\n`,
+      );
+      return { ok: false, reason: shape.reason, message: shape.message };
+    }
     /*
       🔴 `PLAYOUT-SOURCES-01` — ONLY A NEW OR CHANGED BINDING MUST BE BINDABLE. One left as it was
       passes whatever became of its entry (an input the Playout dropped, a hand-made `src-*` id that

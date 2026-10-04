@@ -2,6 +2,7 @@ import type { SourceCatalog, SourceDefinition, TemplateLiveSources } from '@cg/s
 import {
   effectiveOverridesForLook,
   isolateText,
+  lookLabel,
   lookPlateRects,
   plateLabel,
   resolvePlateSourcesForLook,
@@ -269,11 +270,22 @@ export function seatCollisionMessage(
   /**
    * 🔴 `B-308` — the template's declared plates, in order: each frame is named `Plate N`
    * (`plateLabel`), never by its id. `collision.plateIds` keeps the ids.
+   * 🔴 `B-309` — and its looks: the look is named by the name its author gave it (`lookLabel`), in
+   * its own isolate, never by its id. `collision.lookId` keeps the id, and the caller logs it.
    */
-  plates: readonly { readonly sourceId: string }[],
+  carrier: Pick<TemplateLiveSources, 'sources' | 'looks'>,
 ): string {
-  const frames = collision.plateIds.map((id) => plateLabel(plates, id) ?? 'a plate').join(' and ');
-  const look = collision.lookId === undefined ? 'this template' : `look "${collision.lookId}"`;
+  const frames = collision.plateIds
+    .map((id) => plateLabel(carrier.sources, id) ?? 'a plate')
+    .join(' and ');
+  const name =
+    collision.lookId === undefined ? undefined : lookLabel(carrier.looks, collision.lookId);
+  const look =
+    collision.lookId === undefined
+      ? 'this template'
+      : name === undefined
+        ? 'one of its looks'
+        : `look “${isolateText(name)}”`;
   return (
     `${frames} would both show “${isolateText(collision.sourceName)}” in ${look}. One source ` +
     `is ONE seat, so only one frame can show it and the other would go to air empty. Point one of them at ` +

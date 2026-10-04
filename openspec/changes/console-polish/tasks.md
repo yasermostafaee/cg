@@ -212,5 +212,12 @@ Lanes: C (`B-310`) FULL — it decides what the Log shows; B (`B-309`) FAST, cop
       the same rename through the real socket (old: `expected [] to have a length of 100 but got +0`, CI's
       own words; new: 100), and the refusal in words. `:66` asks for the takes, which every order of its
       sign-in's rotation answers the same
-- [ ] 11.4 `B-309` (Part B)
+- [x] 11.4 `B-309` (Part B, copy only): one helper `lookLabel` (`@cg/shared-ipc`); the collision sentence and
+      the take's refused-look-tell message (a fifth sentence the sweep found) name the look by its name, in
+      its own isolate, ids to a log line; the Live plates toast reads `Plate N` through `plateLabelOf` (counts
+      when it has none) and is no longer replaced by `AsyncButton`'s `Not accepted.` (returned `cancelled`);
+      the swap picker is named `Live source for Plate N`; the validator's sentences carry no id, the ids in
+      the error's `detail`, logged. Sweep: two axes, pathspecs `1166 / 500 / 654 / 220 / 1219 / 3 / 1`, no
+      zero. Filed `B-311`: the audio dialog and the Live plates tab are built on the plate id. Control: the
+      recorded wire (`live-look-reconcile`) unchanged
 - [ ] 11.5 Gate, push, CI COMPLETED green with the jobs RAN (URLs here)

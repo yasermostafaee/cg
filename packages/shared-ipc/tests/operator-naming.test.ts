@@ -5,6 +5,7 @@ import {
   directionOf,
   displayLabel,
   isolateText,
+  lookLabel,
   placeName,
   plateLabel,
   plateList,
@@ -32,6 +33,25 @@ describe('🔴 `B-308` — a plate’s name: `Plate N`, its position in its temp
     expect(plateList(['Plate 1'])).toBe('Plate 1');
     expect(plateList(['Plate 1', 'Plate 3'])).toBe('Plate 1 and Plate 3');
     expect(plateList(['Plate 1', 'Plate 2', 'Plate 3'])).toBe('Plate 1, Plate 2 and Plate 3');
+  });
+});
+
+describe('🔴 `B-309` — a look’s name: the name its author gave it', () => {
+  const LOOKS = [
+    { id: 'solo', name: 'تک‌نفره' },
+    { id: 'two', name: 'Two guests' },
+    { id: 'blank', name: '  ' },
+  ];
+
+  it('is the authored name, never the id', () => {
+    expect(lookLabel(LOOKS, 'solo')).toBe('تک‌نفره');
+    expect(lookLabel(LOOKS, 'two')).toBe('Two guests');
+  });
+
+  it('a look the template does not have, or a blank name, is undefined — never the id', () => {
+    expect(lookLabel(LOOKS, 'three')).toBeUndefined();
+    expect(lookLabel(LOOKS, 'blank')).toBeUndefined();
+    expect(lookLabel(undefined, 'two')).toBeUndefined();
   });
 });
 

@@ -1,4 +1,4 @@
-import { PLAYLIST_AUDIO_LOCKED_REASON } from '@cg/shared-ipc';
+import { PLAYLIST_AUDIO_LOCKED_REASON, plateList } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 
 /**
@@ -623,6 +623,28 @@ function soloTarget(requested: Record<string, number>): string | null {
   const only = up[0];
   if (up.length !== 1 || only === undefined) return null;
   return only[1] === 1 ? only[0] : null;
+}
+
+/**
+ * 🔴 `B-309` — **WHICH PLATES A REFUSED AUDIO CHANGE LEFT ALONE, in the operator's words**: each one
+ * `Plate N` (`plateLabelOf`), listed as a sentence lists them. When a plate has no position to name
+ * it by, the plates are COUNTED instead — a plate is never named by its id in a sentence (golden
+ * rule 11). The ids stay in the call's own result (`refused`).
+ */
+export function refusedPlatesPhrase(labels: readonly (string | undefined)[]): string {
+  const named = labels.filter((l): l is string => l !== undefined);
+  if (named.length > 0 && named.length === labels.length) return plateList(named);
+  return `${String(labels.length)} plate${labels.length === 1 ? '' : 's'}`;
+}
+
+/** `that plate is` / `those plates are` — `unchanged` follows. */
+export function platesUnchanged(count: number): string {
+  return count === 1 ? 'that plate is unchanged' : 'those plates are unchanged';
+}
+
+/** `B-309` — the Live plates tab's toast for a refused audio change. */
+export function refusedAudioSentence(labels: readonly (string | undefined)[]): string {
+  return `Audio not applied to ${refusedPlatesPhrase(labels)} — ${platesUnchanged(labels.length)}.`;
 }
 
 export function announcePlateAudio(

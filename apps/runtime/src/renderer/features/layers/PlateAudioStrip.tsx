@@ -108,10 +108,18 @@ export function PlateAudioStrip({
   */
   const inputId = `plate-vol-${row.itemId}-${row.plate}`;
 
-  const apply = async (volumes: Record<string, number>): Promise<{ accepted: boolean }> => {
+  const apply = async (
+    volumes: Record<string, number>,
+  ): Promise<{ accepted: boolean; cancelled?: boolean }> => {
     const res = await onApply(volumes);
     setDragging(null);
-    return { accepted: res.ok };
+    /*
+      🔴 `B-309` — a refusal is SAID by the caller (`applyAndReport`: which plates did not move, in the
+      operator's words), and returned here as `cancelled` — PANIC's own way out (`readPanicReport`). A
+      plain `accepted: false` sent `AsyncButton`'s generic `Not accepted.` straight after it, and that
+      toast replaced the sentence that says which plates were left alone.
+    */
+    return res.ok ? { accepted: true } : { accepted: false, cancelled: true };
   };
 
   return (

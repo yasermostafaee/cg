@@ -3169,3 +3169,15 @@ returned nothing, and the same with `--untracked`; control: `P-063`'s own headin
 stash.
 
 ⇒ **Next free after this entry is `B-311`**, **`D-162`**, **`P-065`**, **`R-085`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0111-01` takes `B-311`
+
+- `B-311` — the plate audio surfaces still name a plate by its id (found by `B-309`'s sweep) —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: `git grep -n -E "^## \[.\] (B-31[1-5]|R-08[5-9]|P-06[5-9]) " <branch> -- docs` on every
+local and remote branch returned nothing, and the same with `--untracked`; controls: `B-310`'s, `R-084`'s and
+`P-064`'s own headings are found on `dev`; no stash. The same measurement covers `P-065`, `R-085` and `R-086`,
+taken below by this session.
+
+⇒ **Next free after this entry is `B-312`**, **`D-162`**, **`P-065`**, **`R-085`** and **`C-049`**.

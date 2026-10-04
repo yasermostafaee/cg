@@ -101,7 +101,8 @@ function look(id: string, rects: Record<string, LiveSourceRect>): TemplateLook {
   return { id, name: id, entered: { mode: 'cut' }, rects };
 }
 
-function template(): TemplateInfo {
+function template(names: Record<string, string> = {}): TemplateInfo {
+  const named = (l: TemplateLook): TemplateLook => ({ ...l, name: names[l.id] ?? l.name });
   return {
     templateId: 'debate',
     templateType: 'debate',
@@ -116,7 +117,7 @@ function template(): TemplateInfo {
         dynamic: false,
       })),
       arrangements: [],
-      looks: [look('two', TWO), look('three', THREE)],
+      looks: [look('two', TWO), look('three', THREE)].map(named),
       defaultLookId: 'two',
     },
   } as unknown as TemplateInfo;
@@ -166,7 +167,7 @@ async function recvLines(): Promise<string[]> {
   return readWireLines(tracePath);
 }
 
-async function boot(): Promise<CasparRuntime> {
+async function boot(t: TemplateInfo = template()): Promise<CasparRuntime> {
   const oscPort = await freeUdpPort();
   tracePath = path.join(
     os.tmpdir(),
@@ -192,7 +193,7 @@ async function boot(): Promise<CasparRuntime> {
   runtime = r;
   r.start();
   await r.startServing();
-  r.templateImport(template(), '<!doctype html><html></html>');
+  r.templateImport(t, '<!doctype html><html></html>');
   await r.whenServerHealthy(HEALTH_MS);
   // 🔴 The baseline is only valid from a PROVEN-QUIESCENT wire: R-030's timer-driven one-shot
   // `INFO` has to have landed first, or a "nothing reached the wire" assertion is measuring a
@@ -424,5 +425,32 @@ describe('B-166 / B-167 — a refused look switch', () => {
       (r.liveLayers().get('item-1') ?? []).map((rec) => rec.producer).filter(Boolean),
     );
     expect(seatedOnThree).toEqual(seatedOnTwo);
+  });
+});
+
+describe('🔴 `B-309` — a re-take whose look tell CasparCG refuses', () => {
+  it('lands on air and says so, naming the look by the name its author gave it — never its id', async () => {
+    const RLI = String.fromCodePoint(0x2067);
+    const PDI = String.fromCodePoint(0x2069);
+    // The look the row is on is `two`; its author named it in Persian.
+    const r = await boot(template({ two: 'دو مهمان' }));
+    await onAirOnTwo(r);
+    // STOP leaves the producer resident: the next take tells the page its look (`B-191`) with a
+    // `CG … UPDATE` — and CasparCG refuses every one.
+    expect((await r.stopItem('item-1')).accepted).toBe(true);
+    mock?.setHandler('CG', (req: AmcpRequest): AmcpResponse => {
+      const sub = (req.args[1] ?? '').toUpperCase();
+      return sub === 'UPDATE'
+        ? { kind: 'err', code: 403, verb: 'CG' }
+        : { kind: 'ok', code: 202, verb: 'CG' };
+    });
+    const res = await r.take('item-1');
+    expect(res.accepted, 'a refused tell does not refuse the take').toBe(true);
+    expect(res.message).toBe(
+      `The graphic is on air, but CasparCG refused the command that tells it to punch look ` +
+        `“${RLI}دو مهمان${PDI}” — the pictures are in that look's places while the holes are ` +
+        `wherever the graphic last put them. Re-issue the look to converge.`,
+    );
+    expect(res.message).not.toMatch(/"two"|\btwo\b/);
   });
 });
