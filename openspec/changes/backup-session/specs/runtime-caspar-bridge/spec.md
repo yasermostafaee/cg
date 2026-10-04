@@ -196,3 +196,20 @@ channels a bridge drives (empty for a bridge in first-run), so an idle bridge ne
 - **WHEN** the CG Bridge on the backup engine's machine is in first-run (it drives no channel) **THEN** the
   primary's CG Bridge mirrors to the backup core as always
 - **AND** the idle bridge's own AMCP trace carries no layer write
+
+### Requirement: CG Bridge SHALL report a channel as not producing only while it serves that channel
+
+CG Bridge SHALL list, for each server in `connections.health`, only the channels this station serves when it
+says which channels are producing frames (`R-058`): every channel while none is declared, the declared channels
+after (`CENTRAL-BRIDGE-01` rule 7). A channel heard before the first declaration and not served since SHALL
+leave the list rather than age into "not producing" on a core that is healthy (`B-315`); a served channel whose
+ticks stop SHALL still be reported as not producing.
+
+#### Scenario: First-run declares one channel of a two-channel core
+
+- **WHEN** the station admin declares channel 1 on a core that serves channels 1 and 2 **THEN** server A's list
+  holds channel 1, producing, and no channel 2 — and the status bar shows no `NOT PRODUCING` chip
+
+#### Scenario: A served channel that stops is still said
+
+- **WHEN** the declared channel's ticks stop **THEN** it is listed as not producing

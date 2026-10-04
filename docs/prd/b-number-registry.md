@@ -3231,3 +3231,16 @@ Measured free before use: the `R-087` entry's measurement above covers `B-312`�
 Measured free before use: the `R-087` entry's measurement above covers `R-087`–`R-089`.
 
 ⇒ **Next free after this entry is `B-314`**, **`D-162`**, **`P-066`**, **`R-089`** and **`C-049`**.
+
+### 2026-10-04 — `RELEASE-0112-01` takes `B-314` and `B-315`
+
+- `B-314` — first-run's channel pick takes a declared server B out of the connection —
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-315` — a healthy station reads `NOT PRODUCING` for a channel it no longer serves —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use, again, at the moment of taking them: no `## [.] B-314` … `B-319` heading on any of
+the 7 refs after `git fetch origin` (positive control: the same sweep found `B-312` and `B-313`, 4 headings);
+the only other `B-314` in the tree was this change's own new code.
+
+⇒ **Next free after this entry is `B-316`**, **`D-162`**, **`P-066`**, **`R-089`** and **`C-049`**.

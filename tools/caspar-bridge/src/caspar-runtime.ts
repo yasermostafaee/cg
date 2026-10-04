@@ -13575,7 +13575,15 @@ export class CasparRuntime {
         published at all — see `OscChannelTickTap` and `ChannelTickSchema` for why that is
         structural rather than a check someone has to remember.
       */
-      const channels = session.osc.channelTicks.channels(this.#channelTickStaleMs);
+      /*
+        🔴 `B-315` — and only the channels this station SERVES (`CENTRAL-BRIDGE-01` rule 7). A channel
+        heard before the first declaration and not served since keeps its last tick in the tap — the
+        transport drops its OSC before the tap — so it would age into "not producing" on a healthy
+        core. The ONE served-channel rule, read here as the transport reads it.
+      */
+      const channels = session.osc.channelTicks
+        .channels(this.#channelTickStaleMs)
+        .filter((tick) => this.#servesOscChannel(tick.channel));
       // C-029 — the kept verdicts, whatever the state: `outputVerdictOf` decides the arm.
       const outputs = [...(this.#outputChecks.get(label)?.values() ?? [])].sort(
         (a, b) => a.channel - b.channel,

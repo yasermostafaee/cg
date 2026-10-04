@@ -13342,3 +13342,17 @@ way (`ChannelScopeCards.tsx:87-91`). The installer never writes a backup flag, s
 not meet the first half. The unit test pinned the drop as "ONE server", from before a backup was a product
 feature. **Expected:** first-run names server A — the host the Playout's list names — and leaves a declared
 server B as it is; removing server B stays Station setup's.
+
+## [~] B-315 — A healthy station reads `⚠ A NOT PRODUCING · CH 2` for a channel it no longer serves ⟨priority: medium — a false alarm on the primary's status bar⟩ — FILED 2026-10-04 by `RELEASE-0112-01` (found on `pnpm dev:station --fake --pair`) · `openspec/changes/backup-session/` (tasks §6)
+
+**Repro / Actual:** a bridge whose server A session lives through first-run — its connection named by flags
+that first-run writes back unchanged, as the installed service's `--caspar-host` and the dev station's
+`--pair` are — on a core with more than one channel. Before a channel is declared the bridge serves every
+channel (`#servesOscChannel`), so it hears channel 2 tick; the pick declares channel 1, and channel 2's OSC is
+dropped before the channel-tick tap (`CENTRAL-BRIDGE-01` rule 7, `transport.ts:240-248`). The tap keeps
+channel 2's last tick, which ages past `CHANNEL_TICK_STALE_MS` and is published as not producing
+(`caspar-runtime.ts`, the health snapshot): the status bar reads `⚠ A NOT PRODUCING · CH 2` over a core that
+is producing. Only a reconnect clears it. A channel that Change channel… removes does the same. Measured: the
+pair run showed it; a one-engine run did not, because its first-run write rebuilt server A's session (two
+`OSC SUBSCRIBE` lines against one). **Expected:** R-058's list holds only the channels the station serves; a
+served channel that stops is still said.
