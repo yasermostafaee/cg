@@ -710,8 +710,16 @@ async function clearRow(page, layer) {
 }
 
 /** Each `0.11.0` installer over the classic `0.10.0`: its Welcome, then `/S`; everything kept. */
+/** What the classic drive left ON AIR, or `null` (a failure said once; the upgrade is checked anyway). */
+function beforeUpgrade() {
+  const file = path.join(OUT, 'before-upgrade.json');
+  const found = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+  check('a row was taken ON AIR on the classic station before the upgrade', found !== null, file);
+  return found;
+}
+
 async function phaseUpgrade() {
-  const before = JSON.parse(fs.readFileSync(path.join(OUT, 'before-upgrade.json'), 'utf8'));
+  const before = beforeUpgrade();
   const service = serviceConfig();
   check(
     'the classic CG Bridge runs as a service, recovery set',
@@ -818,6 +826,7 @@ async function phaseUpgrade() {
     since.length > 0,
     `${String(since.length)} lines`,
   );
+  if (before === null) return;
   // What would take the row off air: a CLEAR of its layer or of its whole channel, a CG STOP/CLEAR/
   // REMOVE of it, a MIXER CLEAR of its geometry. Every clear-like line is written down either way.
   const target = `${String(CHANNEL)}-${String(before.layer)}`;
@@ -849,7 +858,8 @@ async function phaseUpgrade() {
 /** The upgraded CG Control: the station kept, the row still ON AIR, then cleared. */
 async function phaseDriveUpgraded() {
   const facts = station();
-  const before = JSON.parse(fs.readFileSync(path.join(OUT, 'before-upgrade.json'), 'utf8'));
+  const before = beforeUpgrade();
+  if (before === null) return;
   const page = await openControl(9250 + 71);
   if (page === null) return;
   try {
@@ -942,22 +952,30 @@ async function phaseUninstall() {
     const line = uninstallString('HKCU', product);
     check(`${product}: Installed apps names its uninstaller`, line !== null, String(line));
     if (line === null) continue;
+    // CONTROL — the shortcuts are there while it is installed, so "gone" below means it.
+    const before = shortcuts(product);
+    check(
+      `${product}: its shortcuts are there before the uninstall (the reader is live)`,
+      (before?.length ?? 0) > 0,
+      String(before),
+    );
+    const exe = product === 'CG Control' ? 'cg-control.exe' : 'cg-designer.exe';
+    const existed = [
+      path.join(LOCALAPPDATA, data),
+      path.join(process.env.APPDATA ?? '', product),
+    ].filter((d) => fs.existsSync(d));
     const code = spawnSync(`${line} /S`, { shell: true, windowsHide: true }).status;
     check(`${product}: the silent uninstall exits 0`, code === 0, String(code));
+    // An NSIS uninstaller copies itself to %TEMP% and returns at once: wait for the copy's work.
     await until(
-      `${product}'s files to go`,
+      `${product}'s uninstall to finish`,
       () =>
-        installedPerUser(
-          product,
-          product === 'CG Control' ? 'cg-control.exe' : 'cg-designer.exe',
-        ) === undefined,
-      60_000,
+        installedPerUser(product, exe) === undefined &&
+        displayVersion('HKCU', product) === null &&
+        (shortcuts(product)?.length ?? 1) === 0,
+      120_000,
     ).catch(() => null);
-    check(
-      `${product}: its program is gone`,
-      installedPerUser(product, product === 'CG Control' ? 'cg-control.exe' : 'cg-designer.exe') ===
-        undefined,
-    );
+    check(`${product}: its program is gone`, installedPerUser(product, exe) === undefined);
     check(
       `${product}: …and Installed apps no longer lists it`,
       displayVersion('HKCU', product) === null,
@@ -968,14 +986,12 @@ async function phaseUninstall() {
       left !== null && left.length === 0,
       String(left),
     );
-    const kept = [
-      path.join(LOCALAPPDATA, data),
-      path.join(process.env.APPDATA ?? '', product),
-    ].filter((d) => fs.existsSync(d));
+    // Kept: every per-user folder it had made — none, when it was never opened.
+    const kept = existed.filter((d) => fs.existsSync(d));
     check(
       `${product}: …its per-user data is kept (as documented)`,
-      kept.length > 0,
-      kept.join(', '),
+      kept.length === existed.length,
+      existed.length === 0 ? 'none was made (never opened)' : `kept ${kept.join(', ')}`,
     );
   }
 }

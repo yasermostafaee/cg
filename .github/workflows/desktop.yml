@@ -511,29 +511,12 @@ jobs:
           path: installers
           merge-multiple: true
 
-      - name: Start the fake station (the Playout on 127.0.0.1:8080, CasparCG's stand-in on 5250)
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force acceptance | Out-Null
-          Start-Process node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
-          $deadline = (Get-Date).AddSeconds(90)
-          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
-          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
-          Get-Content acceptance/station.json
-
-      - name: Install in the guide's order, each through its window, with the network cut (elevated)
-        shell: pwsh
-        run: |
-          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
-          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
-          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
-          node apps/runtime/tests/desktop/release-acceptance.mjs --phase install --bridge "$bridge" --control "$control" --designer "$designer" --version "${{ needs.installers.outputs.version }}" --out acceptance
-          exit $LASTEXITCODE
-
-      # WebView2 opens DevTools only in an unelevated process (see the smoke job): CG Control is driven at
-      # medium integrity, as an operator runs it.
-      - name: Drive CG Control end to end — sign in, channel 2, a take ON AIR, a clear (unelevated)
-        if: ${{ !cancelled() }}
+      # ONE step on purpose: the fake station must live from the first phase to the last, and the runner
+      # ends what a step started when the step ends (run 37186619456: the station was gone by the next
+      # step). The elevated phases run here; the drive runs at medium integrity through gsudo, because
+      # WebView2 opens DevTools only in an unelevated process (see the smoke job). Every phase runs;
+      # the summary decides.
+      - name: Install offline in the guide's order, drive CG Control end to end, uninstall
         shell: pwsh
         run: |
           winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
@@ -541,19 +524,31 @@ jobs:
           $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
           $node = (Get-Command node -ErrorAction Stop).Source
           icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
-          & $gsudo --integrity Medium $node apps/runtime/tests/desktop/release-acceptance.mjs --phase drive --mode fresh --version ${{ needs.installers.outputs.version }} --out acceptance
-          exit $LASTEXITCODE
-
-      - name: Uninstall all three (elevated)
-        if: ${{ !cancelled() }}
-        shell: pwsh
-        run: |
-          node apps/runtime/tests/desktop/release-acceptance.mjs --phase uninstall --version "${{ needs.installers.outputs.version }}" --out acceptance
-          exit $LASTEXITCODE
-
-      - name: Every phase, summed
-        if: ${{ !cancelled() }}
-        run: node apps/runtime/tests/desktop/release-acceptance.mjs --phase summary --expect install,drive,uninstall --out acceptance
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          "::group::install (elevated, the network cut)"
+          & $node $acceptance --phase install --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode fresh --version $v --out acceptance
+          "::endgroup::"
+          "::group::uninstall (elevated)"
+          & $node $acceptance --phase uninstall --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install,drive,uninstall --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
 
       - name: Upload the acceptance evidence
         if: ${{ !cancelled() }}
@@ -613,23 +608,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Get-ChildItem classic | Format-Table Name, Length
 
-      - name: Start the fake station (the Playout on 127.0.0.1:8080, CasparCG's stand-in on 5250)
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force acceptance | Out-Null
-          Start-Process node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
-          $deadline = (Get-Date).AddSeconds(90)
-          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
-          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
-          Get-Content acceptance/station.json
-
-      - name: Install the classic 0.10.0, silently (elevated)
-        shell: pwsh
-        run: |
-          node apps/runtime/tests/desktop/release-acceptance.mjs --phase install-classic --bridge (Resolve-Path classic/CG-Bridge_0.10.0_x64-setup.exe).Path --control (Resolve-Path classic/CG-Control_0.10.0_x64-setup.exe).Path --designer (Resolve-Path classic/CG-Designer_0.10.0_x64-setup.exe).Path --version "${{ needs.installers.outputs.version }}" --out acceptance
-          exit $LASTEXITCODE
-
-      - name: Set the classic station up and take a row ON AIR (unelevated)
+      # ONE step, for the reason the fresh job gives: the fake station — its Playout's signing keys, the
+      # bridge's trust and the stand-in's layer ON AIR — must live from the classic take to the upgraded
+      # drive. Elevated phases here; the two drives at medium integrity through gsudo.
+      - name: The classic 0.10.0 set up with a row ON AIR, each installer upgraded, the upgraded console
         shell: pwsh
         run: |
           winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
@@ -637,32 +619,35 @@ jobs:
           $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
           $node = (Get-Command node -ErrorAction Stop).Source
           icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
-          & $gsudo --integrity Medium $node apps/runtime/tests/desktop/release-acceptance.mjs --phase drive --mode classic --version ${{ needs.installers.outputs.version }} --out acceptance
-          exit $LASTEXITCODE
-
-      - name: Upgrade each to this release — its Welcome, then /S — and read what was kept (elevated)
-        if: ${{ !cancelled() }}
-        shell: pwsh
-        run: |
+          $v = '${{ needs.installers.outputs.version }}'
+          $acceptance = 'apps/runtime/tests/desktop/release-acceptance.mjs'
+          New-Item -ItemType Directory -Force acceptance | Out-Null
+          $station = Start-Process $node -ArgumentList 'apps/runtime/tests/desktop/acceptance-station.mjs', '--out', 'acceptance' -PassThru -RedirectStandardOutput acceptance/station.out.txt -RedirectStandardError acceptance/station.err.txt -WindowStyle Hidden
+          $deadline = (Get-Date).AddSeconds(90)
+          while (-not (Test-Path acceptance/station.json) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path acceptance/station.json)) { Get-Content acceptance/station.err.txt; exit 1 }
+          Get-Content acceptance/station.json
+          $old = @{ bridge = (Resolve-Path classic/CG-Bridge_0.10.0_x64-setup.exe).Path; control = (Resolve-Path classic/CG-Control_0.10.0_x64-setup.exe).Path; designer = (Resolve-Path classic/CG-Designer_0.10.0_x64-setup.exe).Path }
           $bridge = (Get-ChildItem installers -Filter 'CG-Bridge_*-setup.exe').FullName
           $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
           $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
-          node apps/runtime/tests/desktop/release-acceptance.mjs --phase upgrade --bridge "$bridge" --control "$control" --designer "$designer" --version "${{ needs.installers.outputs.version }}" --out acceptance
-          exit $LASTEXITCODE
-
-      - name: The upgraded CG Control — the station kept, the row still ON AIR, cleared (unelevated)
-        if: ${{ !cancelled() }}
-        shell: pwsh
-        run: |
-          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
-          $node = (Get-Command node -ErrorAction Stop).Source
-          & $gsudo --integrity Medium $node apps/runtime/tests/desktop/release-acceptance.mjs --phase drive-upgraded --version ${{ needs.installers.outputs.version }} --out acceptance
-          exit $LASTEXITCODE
-
-      - name: Every phase, summed
-        if: ${{ !cancelled() }}
-        run: node apps/runtime/tests/desktop/release-acceptance.mjs --phase summary --expect install-classic,drive,upgrade,drive-upgraded --out acceptance
+          "::group::install-classic (elevated)"
+          & $node $acceptance --phase install-classic --bridge $old.bridge --control $old.control --designer $old.designer --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the classic console, a row ON AIR (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive --mode classic --version $v --out acceptance
+          "::endgroup::"
+          "::group::upgrade (elevated)"
+          & $node $acceptance --phase upgrade --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
+          "::endgroup::"
+          "::group::drive the upgraded console (medium integrity)"
+          & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --version $v --out acceptance
+          "::endgroup::"
+          "station alive at the end: $(-not $station.HasExited)"
+          & $node $acceptance --phase summary --expect install-classic,drive,upgrade,drive-upgraded --out acceptance
+          $code = $LASTEXITCODE
+          Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
+          exit $code
 
       - name: Upload the acceptance evidence
         if: ${{ !cancelled() }}
