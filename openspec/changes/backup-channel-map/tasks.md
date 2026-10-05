@@ -75,12 +75,15 @@ delivery (`0.11.3`).
 
 ## 4. Docs and close
 
-- [ ] 4.1 The guide's "With a backup engine" (`0.11.3`); `CG-BRIDGE-FOR-PLAYOUT.md` at `0.11.3`
+- [x] 4.1 The guide's "With a backup engine" (`0.11.3`; `guide.test.ts` pins its labels, no mark, their sentence
+      from their letter, the `curl` line, the old sentence as an absence); `CG-BRIDGE-FOR-PLAYOUT.md` at `0.11.3`
+      (`950aa2a2`: §3 rewritten, §1 per-row `channels` and `backup-channels`, §2/§5 versions and the floor)
 - [ ] 4.2 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here
 
 ## 5. `RELEASE-0113-01` Part E — the release `0.11.3`
 
-- [ ] 5.1 `0.11.3` in every version source; `P-031`'s floor at `0.11.3`
+- [x] 5.1 `0.11.3` in every version source; `P-031`'s floor at `0.11.3` (an empty `git diff v0.11.2` over the
+      five floor files, against a control that changed)
 - [ ] 5.2 The `0.11.3` pictures from a Desktop run of the bump; clean-Windows acceptance (fresh; upgrades from `0.10.0`,
       `0.11.0`, `0.11.1`, `0.11.2`; the Installed-apps row; silent paths and exit codes)
 - [ ] 5.3 Tag `v0.11.3` on a commit whose runs are green with every job RAN; the draft read back, sums checked;
