@@ -185,6 +185,18 @@ machine; another bridge driving server A's core SHALL be said on the primary eng
 and SHALL hold nothing — the primary is never refused for it. `/health` SHALL carry `casparcg.channels`, the
 channels a bridge drives (empty for a bridge in first-run), so an idle bridge never holds anyone.
 
+_Amended 2026-10-05 (`RELEASE-0113-01`, `backup-channel-map`; the Playout team's §2: redundancy belongs to a
+CHANNEL, and one engine may hold standalone channels, primaries and mirrors at once):_ another CG Bridge SHALL
+count as driving a core only when the channels it drives THERE meet the channels this bridge writes there —
+server B's mirror channels in force (B's own numbers) for server B, the declared channels for server A. Each
+server row of `/health` SHALL carry its own `channels`; a `/health` with only the top-level list SHALL be read as
+before, and one with no list at all SHALL still count as driving.
+
+#### Scenario: Another bridge on the backup's own programme channel
+
+- **WHEN** a CG Bridge on the backup engine's machine drives the backup core's channel 1 (its own programme) and
+  this bridge mirrors to channel 2 there **THEN** server B is not held, and the mirror reaches channel 2
+
 #### Scenario: A second bridge on the backup machine is given a channel
 
 - **WHEN** the CG Bridge on the backup engine's machine drives the backup core **THEN** the primary's CG

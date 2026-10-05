@@ -14,6 +14,12 @@ C3: the account offered SHALL be `cg-bridge` when the chosen engine's version is
 carry every CG-licensed programme channel from then) and `cg-admin` otherwise — never `cg-bridge` for
 `2.9.3`; any account the admin types SHALL be accepted, and kept when another engine is chosen.
 
+_Amended 2026-10-05 (`RELEASE-0113-01` Part D; the Playout team's §5 — their «اتصال به CG Control» page shows the
+accounts of the engine the Playout client is connected to NOW):_ the password line SHALL be the Playout team's own
+sentence, «روی همان موتور: کلاینتِ Playout را به آن وصل کنید، سپس تنظیمات ← استودیوی کانفیگ ← (سرورِ همان موتور) ←
+اتصال به CG Control», inside a `<bdi>`. The AMCP-waiting state SHALL say what to do: «تأیید» on that engine's
+«اتصال به CG Control», with the Playout client connected to that engine.
+
 #### Scenario: Two engines, each with its own state
 
 - **WHEN** a station admin opens «Sign in CG Bridge…» on a station with a server B **THEN** it lists

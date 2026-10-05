@@ -13356,3 +13356,22 @@ is producing. Only a reconnect clears it. A channel that Change channel… remov
 pair run showed it; a one-engine run did not, because its first-run write rebuilt server A's session (two
 `OSC SUBSCRIBE` lines against one). **Expected:** R-058's list holds only the channels the station serves; a
 served channel that stops is still said.
+
+## [~] B-316 — Every line to the backup core carries the primary's channel number ⟨priority: critical — a graphic on another programme's air; every build up to `0.11.2` is unsafe with a server B⟩ — FILED 2026-10-05 by `RELEASE-0113-01` §0 · `openspec/changes/backup-channel-map/`
+
+**Repro / Actual:** a station with a server B. CG Bridge sends core B every line it sends core A, byte for byte
+but for a clip's file path (`B-286`): `CG 1-80 ADD …`, `PLAY 1-60 …`, `MIXER 1-60 FILL … DEFER`, `MIXER 1
+COMMIT`, `CLEAR 1-80`, the boot volume blanket, `INFO 1` — through the one seam (`RedundancyAdapter.send`,
+`lineFor`/`journalLineFor`), and again through the journal's failover catch-up and corrective resend. After a
+failover every line, the primary-only reads included, goes to B with the same numbers. A hand-made
+`route://H-L` is mirrored too, naming B's channel H. But on the Playout, redundancy belongs to a CHANNEL: a
+mirror is a NEW channel on the backup engine with the backup's own number — its largest channel + 1, so the
+mirror of A's channel 1 is usually B's channel 2 or higher, while B's channel 1 is its own default channel and
+may be airing another programme (`PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §2). So `PLAY 1-50 …` sent to B lands
+on B's channel 1. Reads are wrong the same way after a failover: B's OSC is filtered by A's numbers, `INFO 1`
+asks B's channel 1, and B's `NOT PRODUCING · CH 1` speaks of B's channel 1. **Why nothing caught it:** the fake
+pair gave B the same channels as A (`fake-station.ts`: channels 1 and 2 on both, the same catalogue), so every
+verbatim line landed on the right channel by coincidence, and the line-for-line wire test proved that
+coincidence. **Expected:** never A's channel number on B. Each channel's B number comes from a mapping — B's
+own D4 (`mirrorOf`, Playout `2.9.5`), or a station admin's explicit entry checked against B's D4 — and an
+unknown or invalid mapping sends B nothing for that channel, and says so (`R-089`).

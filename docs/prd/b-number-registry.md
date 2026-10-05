@@ -3254,3 +3254,17 @@ Measured free before use: the `R-087` entry's measurement above covers `P-066`�
 in the tree was this file's own "next free" lines.
 
 ⇒ **Next free after this entry is `B-316`**, **`D-162`**, **`P-067`**, **`R-089`** and **`C-049`**.
+
+### 2026-10-05 — `RELEASE-0113-01` takes `B-316` and `R-089`
+
+- `B-316` — every line to the backup core carries the primary's channel number — [bugs-runtime.md](bugs-runtime.md).
+- `R-089` — the backup core gets every line on its own mirror channel; an unknown mapping sends it nothing —
+  [runtime.md](runtime.md).
+
+Measured free before use: `git grep -n -E "^## \[.\] (B-31[6-9]|R-089|R-09[0-2]|P-06[7-9]) " <ref> -- docs` on
+all 8 refs (`ai-stale`, `design/live-source-multibox`, `dev`, `main`, `origin`, `origin/dev`, `origin/main`,
+`origin/wip/release-0112-pictures`) returned nothing, and the same with `--untracked`; control: the same sweep
+found the 3 headings `B-315`, `R-088` and `P-066` on `dev`; no stash. The same measurement covers `B-317`–`B-319`,
+`R-090`–`R-092` and `P-067`–`P-069`.
+
+⇒ **Next free after this entry is `B-317`**, **`D-162`**, **`P-067`**, **`R-090`** and **`C-049`**.

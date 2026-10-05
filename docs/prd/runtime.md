@@ -4510,3 +4510,37 @@ unknown outcome means the token is never sent again (`CENTRAL-BRIDGE-01-A`, kept
 **Acceptance (sketch):** WHEN a D2's answer is lost THEN the token is sent once more only if less than 10 s have
 passed since the first send, and never after; WHEN that second answer is lost too THEN the session is lost as
 today.
+
+## [~] R-089 — The backup core gets every line on its OWN mirror channel; an unknown mapping sends it nothing ⟨priority: critical — before any hand-over with a backup engine⟩ — FILED 2026-10-05 by `RELEASE-0113-01` Parts A–C · `openspec/changes/backup-channel-map/`
+
+**What:** for each channel N that CG declares on the primary engine (A), CG Bridge knows the number M of N's
+mirror on the backup engine (B), and sends B every line for N on M — layers unchanged — or, with no valid M,
+nothing for N at all. **The mapping's source, in this order:** (1) B's own D4, read with B's own token
+(`R-085`), by the Playout team's rule (`PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §3, Playout `2.9.5`): the rows
+whose `mirrorOf.id` is A's D4 id for N and whose `mirrorOf.playout` names A's engine — the HOST compared, the
+port ignored; an empty `playout` accepted only when exactly one row in B has that id; zero or more than one
+matching rows is no mapping; and never A's `mirrors[].casparChannel`, which is recorded at creation and never
+refreshed; (2) a station admin's explicit entry in Station setup → Servers → Backup engine (`CH N (primary) →
+CH M (backup)`), for engines before `2.9.5` or when D4 gives none, checked against B's D4; (3) when the two
+disagree, no mapping, said. **Valid only when** B's row is `cgLicensed: true`, has A's `videoMode`, and its
+`casparHost` (rule 9: loopback = B's machine) is server B. **Kept current:** B's D4 on its own cycle, at B's
+sign-in and on B's reconnect; a mapping that disappears or changes while CG has layers on that channel stops
+every line to B for it, sends no clean-up anywhere, and takes the new mapping at the channel's next take.
+**After a failover:** every send uses M; a take on a channel with no mapping is refused in words (`No backup
+channel is known for CH N`) with nothing sent; the programme return, sound and meters say plainly that they are
+not available on the backup engine. **Why:** `B-316`. **Acceptance:**
+
+- WHEN B's D4 (`2.9.5`) names A's channel 1 by `mirrorOf` at B's channel 2 THEN every line for A's channel 1 —
+  a take, an UPDATE, a look switch, a swap, a clear, a `CLEAR ALL`, a restore and a failover catch-up — reaches
+  B as `2-…`, and not one line reaches B's channel 1, a preview channel or any unmapped channel
+- WHEN `mirrorOf.playout` names A by another spelling (a name where CG knows an IP), or two rows name the same
+  id, or B publishes no `mirrorOf` at all THEN that channel has no mapping and B is sent nothing for it, unless
+  a station admin's entry is given and checked
+- WHEN an entry names a B channel whose `videoMode` differs or whose `cgLicensed` is false THEN it is refused in
+  words beside its line
+- WHEN a mapping changes while the channel is live THEN B is sent nothing more for it, and no line goes to a
+  guessed channel
+- WHEN B is the primary and a channel has no mapping THEN a take there is refused in words and nothing is sent
+- WHEN anything goes to A THEN its line is unchanged, line for line, against `0.11.2`'s wire
+- the status bar reads `BACKUP B · n of m channels mapped`; each channel's own view reads `Backup: CH M on
+<host>` or `Backup: not mapped — nothing is sent to the backup`
