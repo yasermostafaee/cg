@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { ENGINE_PASSWORD_WHERE } from '@cg/shared-ipc';
 import {
   startFakePlayout,
   FAKE_ADMIN,
@@ -159,9 +160,11 @@ test('🔴 «Sign in CG Bridge…» names both engines; each is signed in with i
   await expect(dialog.locator('[data-engine-row="backup"]')).toContainText(
     'Needs a station admin to sign in.',
   );
+  // `RELEASE-0113-01` Part D — the Playout team's own sentence, in its `<bdi>`, after the account's lead.
   await expect(dialog.locator('[data-password-where]')).toContainText(
-    "Each engine's password is on that engine's",
+    "Each engine's cg-admin password:",
   );
+  await expect(dialog.locator('[data-password-where] bdi')).toHaveText(ENGINE_PASSWORD_WHERE);
 
   // The primary, with its own password.
   await dialog.locator('#cg-bridge-signin-pass').fill(FAKE_PLAYOUT_PASSWORD);

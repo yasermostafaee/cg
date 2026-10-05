@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BRIDGE_NEEDS_ADMIN_LINE,
+  ENGINE_PASSWORD_WHERE,
   type BridgeSessionState,
   type EngineLine,
   type EngineSessions,
@@ -323,10 +324,10 @@ describe('RELEASE-0112-01 — one sign-in per engine', () => {
       'Primary enginehttp://192.0.2.10:8080Signed in as cg-admin.',
       'Backup enginehttp://192.0.2.20:8080Needs a station admin to sign in.',
     ]);
-    // The one line: where each engine's password is read.
-    expect(openDialog()?.querySelector('[data-password-where]')?.textContent).toContain(
-      "Each engine's password is on that engine's",
-    );
+    // The one line: where each engine's password is read — the Playout team's own sentence, in its `<bdi>`.
+    const where = openDialog()?.querySelector('[data-password-where]');
+    expect(where?.textContent).toContain("Each engine's cg-admin password:");
+    expect(where?.querySelector('bdi')?.textContent).toBe(ENGINE_PASSWORD_WHERE);
     // It opened on the engine that needs a sign-in.
     const password = openDialog()?.querySelector<HTMLInputElement>('#cg-bridge-signin-pass');
     if (password === null || password === undefined) throw new Error('no password field');
@@ -370,9 +371,9 @@ describe('RELEASE-0112-01 — one sign-in per engine', () => {
     expect(account()?.value, 'the primary at 2.9.3').toBe('cg-admin');
     await chooseTab('Backup engine');
     expect(account()?.value, 'the backup at 2.9.4').toBe('cg-bridge');
-    // The line names the cg-bridge account's own place when that is the account offered.
+    // The line names the cg-bridge account when that is the account offered.
     expect(openDialog()?.querySelector('[data-password-where]')?.textContent).toContain(
-      'CG Bridge',
+      "Each engine's cg-bridge password:",
     );
     // Typed, it stays — choosing another engine does not overwrite it.
     const input = account();

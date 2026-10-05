@@ -4,9 +4,9 @@ import {
   BRIDGE_NEEDS_ADMIN_LINE,
   BRIDGE_SESSION_DEFAULT_ACCOUNT,
   CG_BRIDGE_ACCOUNT,
-  ENGINE_BRIDGE_ACCOUNT_LINE,
   ENGINE_LABEL,
-  ENGINE_PASSWORD_LINE,
+  ENGINE_PASSWORD_WHERE,
+  enginePasswordLead,
   engineStateText,
   holdsPermissionClass,
   suggestedBridgeAccount,
@@ -334,8 +334,13 @@ function BridgeSignInDialog({
     return (
       <>
         {lines.length > 0 && (
+          /*
+            `RELEASE-0113-01` Part D — the Playout team's own sentence, isolated in its `<bdi>`: the line stays
+            LTR chrome around it (golden rule 11).
+          */
           <p style={styles.where} data-password-where="">
-            {offered === CG_BRIDGE_ACCOUNT ? ENGINE_BRIDGE_ACCOUNT_LINE : ENGINE_PASSWORD_LINE}
+            {enginePasswordLead(offered === CG_BRIDGE_ACCOUNT ? CG_BRIDGE_ACCOUNT : 'cg-admin')}{' '}
+            <bdi>{ENGINE_PASSWORD_WHERE}</bdi>
           </p>
         )}
         <label htmlFor="cg-bridge-signin-user" style={styles.field}>

@@ -186,16 +186,20 @@ export const BridgeBackupSignInChannel = defineChannel(
   BridgeSessionSignInChannel.response,
 );
 
-/** The Playout page where each engine's password is shown, in the Playout's own words (RTL isolate). */
-const PLAYOUT_CG_PAGE = '\u2067تنظیمات ← اتصال به CG Control\u2069';
+/**
+ * 🔴 `RELEASE-0113-01` Part D — **WHERE EACH ENGINE'S PASSWORD IS READ, IN THE PLAYOUT TEAM'S OWN SENTENCE**
+ * (`PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §5): their «اتصال به CG Control» page shows the accounts of the engine
+ * the Playout client is connected to NOW, so the way to another engine's password starts by connecting the
+ * client to it. Rendered inside a `<bdi>` after an English lead ({@link enginePasswordLead}), never joined
+ * into one text node with it (golden rule 11).
+ */
+export const ENGINE_PASSWORD_WHERE =
+  'روی همان موتور: کلاینتِ Playout را به آن وصل کنید، سپس تنظیمات ← استودیوی کانفیگ ← (سرورِ همان موتور) ← اتصال به CG Control';
 
-/** The dialog's one line: where each engine's password is read. */
-export const ENGINE_PASSWORD_LINE = `Each engine's password is on that engine's ${PLAYOUT_CG_PAGE}.`;
-
-/** `RELEASE-0112-01-C` C3 — the `cg-bridge` account's line (from `2.9.4`). */
-export const ENGINE_BRIDGE_ACCOUNT_LINE =
-  `Each engine's cg-bridge password is on that engine's ${PLAYOUT_CG_PAGE}, ` +
-  '\u2067حسابِ داخلیِ CG Bridge\u2069.';
+/** The dialog line's English lead, naming the account offered (`cg-bridge` from `2.9.4`, delta C3). */
+export function enginePasswordLead(account: string): string {
+  return `Each engine's ${account} password:`;
+}
 
 /** The account a sign-in is offered, by the engine's version (`RELEASE-0112-01-C` C3). */
 export const CG_BRIDGE_ACCOUNT = 'cg-bridge';
@@ -233,7 +237,11 @@ export function engineStateText(line: Pick<EngineLine, 'state' | 'name' | 'messa
     case 'refused':
       return `Refused: ${line.message ?? 'the engine refuses to renew its session.'}`;
     case 'amcp-pending':
-      return `AMCP waits for this engine's admin to approve this machine (\u2067تأیید\u2069), or its CasparCG is down.`;
+      // `RELEASE-0113-01` Part D — what to do, where: «تأیید» on THAT engine's page, with the client connected to it.
+      return (
+        `AMCP waits: press \u2067تأیید\u2069 on this engine's \u2067اتصال به CG Control\u2069, ` +
+        'with the Playout client connected to this engine — or its CasparCG is down.'
+      );
     case 'unreachable':
       return "The engine's API does not answer.";
     case 'core-held':
