@@ -1,12 +1,13 @@
 # CG Bridge — for the Playout team
 
-Release `0.11.2` (`RELEASE-0112-01`, 2026-10-04; first written for `0.10.0` by `CENTRAL-BRIDGE-01`, then
-`0.11.0` and `0.11.1`). **One CG Bridge per Playout client.** A station's Playout client may run a primary
-engine and a backup engine; one CG Bridge serves both (§3). CG Bridge is a Windows service on the primary
-engine's machine, or on a server beside the engines. Every CG Control is a console that connects to it; a
-console never talks to CasparCG. This document is what your engine and your installer need from us, and what
+Release `0.11.3` (`RELEASE-0113-01`, 2026-10-05; first written for `0.10.0` by `CENTRAL-BRIDGE-01`, then
+`0.11.0`, `0.11.1` and `0.11.2`). **One CG Bridge per Playout client.** A station's Playout client may run a
+primary engine and a backup engine; one CG Bridge serves both (§3). CG Bridge is a Windows service on the
+primary engine's machine, or on a server beside the engines. Every CG Control is a console that connects to it;
+a console never talks to CasparCG. This document is what your engine and your installer need from us, and what
 we promise. It answers your letters `PLAYOUT-CG-RESPONSE-BRIDGE-HOST-v1.md`, the `2.9.2` licence letter
-(`PLAYOUT-CG-RESPONSE-LICENSE-v1.md` §2, §8, §9) and `PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md`.
+(`PLAYOUT-CG-RESPONSE-LICENSE-v1.md` §2, §8, §9), `PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` and
+`PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` (§3 below: **never the primary's channel number on the backup core**).
 
 ## 1. `GET /health`
 
@@ -22,44 +23,46 @@ same port the consoles use.
 - Any other plain HTTP request on that port answers `426` (the port is the consoles' WebSocket).
 
 **The shape is fixed.** A field is added only with a line in this section, and none is renamed or removed
-without a version we tell you about. Our schema test refuses any field not listed here. `0.11.2` adds three:
-`casparcg.channels`, `playout.backup` and three problem codes.
+without a version we tell you about. Our schema test refuses any field not listed here. `0.11.2` added
+`casparcg.channels`, `playout.backup` and three problem codes; `0.11.3` adds `casparcg.servers[].channels` and
+the problem code `backup-channels`.
 
-| Field                                           | Meaning                                                                                                                                                                  |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `app`                                           | Always `"cg-bridge"` — how a reader knows it asked CG Bridge                                                                                                             |
-| `version`                                       | CG Bridge's version, `major.minor.patch`                                                                                                                                 |
-| `startedAt`                                     | When this process started (ISO 8601, UTC)                                                                                                                                |
-| `uptimeS`                                       | Seconds since then                                                                                                                                                       |
-| `casparcg.state`                                | The primary: `up` (commands land, OSC heard), `degraded` (commands land, OSC silent), `down`                                                                             |
-| `casparcg.servers[]`                            | One row per declared server                                                                                                                                              |
-| `casparcg.servers[].label`                      | `A` (declared first) or `B` (backup)                                                                                                                                     |
-| `casparcg.servers[].role`                       | The role NOW — after a failover `B` is `primary`                                                                                                                         |
-| `casparcg.servers[].host`, `.amcpPort`          | Where CG Bridge sends AMCP                                                                                                                                               |
-| `casparcg.servers[].amcp`                       | `up`, `connecting` or `down`                                                                                                                                             |
-| `casparcg.servers[].osc`                        | `subscribed` (our `OSC SUBSCRIBE` accepted), `refused`, `unbound` (our OSC port not bound), `none`                                                                       |
-| `casparcg.servers[].oscHeardAt`                 | When OSC was last heard from it (ISO 8601), or `null`                                                                                                                    |
-| `casparcg.channels`                             | `0.11.2` — the CasparCG channels this CG Bridge drives (its declared channels); `[]` while it is in first-run                                                            |
-| `playout.address`                               | The primary engine CG Bridge reads (D4, D9, D10, D11), or `null`                                                                                                         |
-| `playout.session`                               | CG Bridge's own session on the primary engine: `off`, `waiting`, `needs-admin`, `signed-in`, `refused`                                                                   |
-| `playout.lastReadAt`                            | The last good D4 read (ISO 8601), or `null`                                                                                                                              |
-| `playout.backup`                                | `0.11.2` — the backup engine (§3), or `null` with no server B                                                                                                            |
-| `playout.backup.address`                        | The backup engine's API address                                                                                                                                          |
-| `playout.backup.session`                        | CG Bridge's own session on the backup engine — the same five words as `playout.session`                                                                                  |
-| `playout.backup.state`                          | The backup engine's line in one word: `off`, `waiting`, `signed-in`, `needs-admin`, `not-licensed`, `refused`, `amcp-pending`, `unreachable`, `core-held`, `core-shared` |
-| `playout.backup.lastReadAt`                     | The last good D4 read of the backup engine, with its own token (ISO 8601), or `null`                                                                                     |
-| `consoles`                                      | Console connections open now, signed in or not                                                                                                                           |
-| `ports.control`, `ports.templates`, `ports.osc` | The ports in force                                                                                                                                                       |
-| `problems[]`                                    | What stops CG Bridge working, in words; empty when nothing does                                                                                                          |
-| `problems[].code`                               | `reserved-port`, `port-refused`, `osc-unbound`, `playout-session`; from `0.11.2` also `backup-engine`, `core-held` and `core-shared` (§3)                                |
-| `problems[].message`                            | One English sentence, e.g. `CG Bridge needs a station admin to sign in`                                                                                                  |
+| Field                                           | Meaning                                                                                                                                                                    |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`                                           | Always `"cg-bridge"` — how a reader knows it asked CG Bridge                                                                                                               |
+| `version`                                       | CG Bridge's version, `major.minor.patch`                                                                                                                                   |
+| `startedAt`                                     | When this process started (ISO 8601, UTC)                                                                                                                                  |
+| `uptimeS`                                       | Seconds since then                                                                                                                                                         |
+| `casparcg.state`                                | The primary: `up` (commands land, OSC heard), `degraded` (commands land, OSC silent), `down`                                                                               |
+| `casparcg.servers[]`                            | One row per declared server                                                                                                                                                |
+| `casparcg.servers[].label`                      | `A` (declared first) or `B` (backup)                                                                                                                                       |
+| `casparcg.servers[].role`                       | The role NOW — after a failover `B` is `primary`                                                                                                                           |
+| `casparcg.servers[].host`, `.amcpPort`          | Where CG Bridge sends AMCP                                                                                                                                                 |
+| `casparcg.servers[].amcp`                       | `up`, `connecting` or `down`                                                                                                                                               |
+| `casparcg.servers[].osc`                        | `subscribed` (our `OSC SUBSCRIBE` accepted), `refused`, `unbound` (our OSC port not bound), `none`                                                                         |
+| `casparcg.servers[].oscHeardAt`                 | When OSC was last heard from it (ISO 8601), or `null`                                                                                                                      |
+| `casparcg.servers[].channels`                   | `0.11.3` — the channels CG Bridge writes on THAT core, in that core's own numbers: server A the declared channels, server B the backup's mirror channels in force (§3)     |
+| `casparcg.channels`                             | `0.11.2` — the CasparCG channels this CG Bridge drives (its declared channels); `[]` while it is in first-run                                                              |
+| `playout.address`                               | The primary engine CG Bridge reads (D4, D9, D10, D11), or `null`                                                                                                           |
+| `playout.session`                               | CG Bridge's own session on the primary engine: `off`, `waiting`, `needs-admin`, `signed-in`, `refused`                                                                     |
+| `playout.lastReadAt`                            | The last good D4 read (ISO 8601), or `null`                                                                                                                                |
+| `playout.backup`                                | `0.11.2` — the backup engine (§3), or `null` with no server B                                                                                                              |
+| `playout.backup.address`                        | The backup engine's API address                                                                                                                                            |
+| `playout.backup.session`                        | CG Bridge's own session on the backup engine — the same five words as `playout.session`                                                                                    |
+| `playout.backup.state`                          | The backup engine's line in one word: `off`, `waiting`, `signed-in`, `needs-admin`, `not-licensed`, `refused`, `amcp-pending`, `unreachable`, `core-held`, `core-shared`   |
+| `playout.backup.lastReadAt`                     | The last good D4 read of the backup engine, with its own token (ISO 8601), or `null`                                                                                       |
+| `consoles`                                      | Console connections open now, signed in or not                                                                                                                             |
+| `ports.control`, `ports.templates`, `ports.osc` | The ports in force                                                                                                                                                         |
+| `problems[]`                                    | What stops CG Bridge working, in words; empty when nothing does                                                                                                            |
+| `problems[].code`                               | `reserved-port`, `port-refused`, `osc-unbound`, `playout-session`; from `0.11.2` also `backup-engine`, `core-held` and `core-shared`; from `0.11.3` `backup-channels` (§3) |
+| `problems[].message`                            | One English sentence, e.g. `CG Bridge needs a station admin to sign in`                                                                                                    |
 
 Example (a fresh install, no CasparCG yet, no station-admin sign-in yet, no backup):
 
 ```json
 {
   "app": "cg-bridge",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "startedAt": "2026-09-30T10:48:34.772Z",
   "uptimeS": 11,
   "casparcg": {
@@ -72,7 +75,8 @@ Example (a fresh install, no CasparCG yet, no station-admin sign-in yet, no back
         "amcpPort": 5250,
         "amcp": "down",
         "osc": "none",
-        "oscHeardAt": null
+        "oscHeardAt": null,
+        "channels": []
       }
     ],
     "channels": []
@@ -98,7 +102,7 @@ exits `2`). It asks for administrator rights. **What it is:** our setup program,
 Bridge's NSIS installer inside it. Double-clicked, it shows CG Setup's window. **Run with `/S`, it shows
 nothing: it runs the NSIS installer with exactly your command line and returns that installer's exit
 code — every switch, the uninstall line and every exit code in this section are the NSIS installer's
-own, unchanged in `0.11.2`.** Our clean-Windows test runs each silent path against the NSIS installer alone
+own, unchanged in `0.11.3`.** Our clean-Windows test runs each silent path against the NSIS installer alone
 and against the file you receive, and requires the same codes. It needs Windows 10 or later, as CG Bridge's
 own Node runtime does. **Size:** about 23.5 MB — `0.11.1`'s was 24,677,440 bytes, as your letter measured
 (the release lists the exact size and SHA-256 of each release's). It carries everything: the official
@@ -131,11 +135,12 @@ CG-Bridge_<version>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.
   server; it never runs under `/S`. **Nothing in this section changed for a silent install:** the same
   switches, the same defaults, the same exit codes.
 - `/OSCPORT=6250` is refused: that port is yours.
-- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.2_x64-setup.exe'), '/S', '', SW_HIDE,
+- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.3_x64-setup.exe'), '/S', '', SW_HIDE,
 ewWaitUntilTerminated, ResultCode)`. Your `2.9.4` chains it exactly this way, after your engine's service
   has started, behind «CG Bridge هم نصب شود» under «CG Control (اگر CG Bridge روی سرورِ جداست، تیک را
-  بردارید):» (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2); `0.11.2` keeps every part of that line as
-  it was.
+  بردارید):» (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2); `0.11.3` keeps every part of that line as
+  it was. **On a pair, untick it on both engine machines** (`/MERGETASKS="!cgbridge"` silently), as your
+  `PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §4 says, and install CG Bridge once, beside them (§3).
 
 **Exit codes:** `0` installed (warnings, if any, are written to `install.log` under `WARNINGS:`); `1`
 cancelled by the user (an interactive run only); `2` failed (`install.log` says why).
@@ -165,11 +170,11 @@ Your `2.9.4` reads it to decide whether to run our file at all, so it is a contr
   `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CGBridge`. Nothing of ours is written to the
   32-bit view, so your read of both views finds one row.
 - `DisplayName` = **`CG Bridge`**, exactly.
-- `DisplayVersion` = the release, **`major.minor.patch`** (`0.11.2`), never a fourth part or a suffix.
+- `DisplayVersion` = the release, **`major.minor.patch`** (`0.11.3`), never a fourth part or a suffix.
 - Publisher `APASAI`.
 
 Read on a clean Windows runner after the install and after every upgrade path we test — over the
-`0.10.0`, `0.11.0` and `0.11.1` installers and over itself — and pinned there: a change to any of these
+`0.10.0`, `0.11.0`, `0.11.1` and `0.11.2` installers and over itself — and pinned there: a change to any of these
 fails our build by name. If one ever has to change, we tell you in a letter before a release carries it.
 
 ### The service
@@ -183,8 +188,8 @@ fails our build by name. If one ever has to change, we tell you in a letter befo
 ### Upgrade
 
 Run the new installer (with `/S`; values optional). It stops our service, replaces the files, keeps the
-configuration and the state — a backup engine added in CG Control included (`0.11.2`) — and starts the
-service. **Nothing on air is cleared by an install, an upgrade or a service restart:** CG Bridge sends no
+configuration and the state — a backup engine added in CG Control included (`0.11.2`), and its channel
+entries (`0.11.3`) — and starts the service. **Nothing on air is cleared by an install, an upgrade or a service restart:** CG Bridge sends no
 `CLEAR` at start. After a start, CG Bridge reads each declared channel (`INFO <ch>`): a row whose page still
 plays is adopted; a row whose layer is empty is reported off air (§6).
 
@@ -203,7 +208,7 @@ plays is adopted; a row whose layer is empty is reported off air (§6).
 | `bridgeAddress`  | The host CasparCG fetches templates from (a separate server) | this machine       |
 
 The file is strict: an unknown key is refused, and the service then does not start; the log names the
-file. `0.11.2` adds no key. To change a value, re-run the installer with it, or edit the file and restart
+file. `0.11.3` adds no key. To change a value, re-run the installer with it, or edit the file and restart
 the service. The same values can be given on the command line (`cg-bridge.exe caspar-bridge.mjs
 --service-config <file> --port …`); the command line wins.
 
@@ -218,7 +223,8 @@ the service. The same values can be given on the command line (`cg-bridge.exe ca
 - `cg-bridge.json` — the configuration;
 - `.cg-runtime\` — the state (the stack, the layer ledger, the templates, the channels declared, the
   servers, and `bridge-session.json`: CG Bridge's own session on the primary engine — a refresh token, never
-  a password; from `0.11.2` `bridge-session-backup.json` beside it, the backup engine's);
+  a password; from `0.11.2` `bridge-session-backup.json` beside it, the backup engine's; from `0.11.3`
+  `bridge-backup-channels.json`, a station admin's backup channel entries);
 - `logs\` — `install.log`, `uninstall.log`, the service's output (daily, 14 days kept) and `amcp.log`
   (every AMCP command, its reply and its time; 5 MB, then one previous file). A station admin downloads
   them all as one zip from any CG Control (Audit log → `Download logs`).
@@ -246,10 +252,67 @@ uninstaller deletes ours; **no other rule is touched**, and nothing binds UDP `6
 - It removes our service, our three rules and our program files, and **keeps**
   `%ProgramData%\CG Bridge\` (the configuration, the state and the logs), so a reinstall carries on.
 
-## 3. A primary engine and a backup engine — `0.11.2`
+## 3. A primary engine and a backup engine — `0.11.3`
 
-One Playout client, two engines: CG Bridge sends the backup engine's core (server B) exactly what it sends the
-primary's (server A), line for line, so the backup holds the same CG layers when you fail over.
+One Playout client, two engines: CG Bridge sends the backup engine's core (server B) the same CG layers it
+sends the primary's (server A), **each on the backup's OWN mirror channel — never the primary's channel
+number** (your `PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §2). `0.11.2` sent server B the primary's lines as they
+were; on a pair whose mirror of channel 1 is the backup's channel 2 that wrote channel 1 of the backup — another
+channel, possibly another programme on air. `0.11.2` is therefore superseded and must not be installed with a
+backup engine; `0.11.3` replaces it.
+
+**The mapping — your rule, adopted.** For the station's channel N, whose row in the primary engine's D4 has
+`id` X:
+
+1. CG Bridge reads the **backup engine's own D4**, with the backup's own token. A row matches when its
+   `mirrorOf.id` is X and its `mirrorOf.playout` names the primary engine — the **host** compared, as a name or
+   an address, with or without a port or a scheme. Its form is what an admin typed; we never guess it.
+2. A row whose `mirrorOf.playout` is empty matches only when it is the **one** row in the backup's D4 with that
+   `mirrorOf.id`.
+3. **Zero matches or more than one = no mapping.** CG Bridge sends server B nothing for channel N, and says so.
+4. From the matched row: the backup's own `casparChannel` (M). It is used only when the row's `casparHost` is
+   server B's core (rule 9: loopback means the backup engine's machine), its `videoMode` is the primary row's,
+   and its `cgLicensed` is `true`.
+
+**The primary's `mirrors[].casparChannel` is never used** — CG Bridge does not even read it (your §3: recorded
+when the mirror was made, never refreshed).
+
+**A backup engine before `2.9.5`** publishes no `mirrorOf`, so nothing is mapped and nothing is sent to it until
+a station admin enters each channel by hand in CG Control: Station setup → Servers → Backup engine, one line
+per channel, `CH N (primary) → CH M (backup)`. Each entry is checked against the backup engine's D4, as your §2
+proposes — row M exists on server B, its `videoMode` is the primary's, `cgLicensed` is `true`, and it is not
+another channel's mirror — and a failed check is refused in words beside that line. The entries are kept with
+the station across a service restart and an upgrade, and only ever for the server B they were made for. On a
+`2.9.5` engine the D4 mapping is used; an entry that **disagrees** with it is no mapping — nothing is sent to
+server B for that channel — and both numbers are shown.
+
+**Kept current.** The backup's D4 is read again on our D4 cycle (rule 6), when CG Bridge signs in on the backup
+and when server B reconnects; a backup whose D4 has not answered for 30 s counts as no mapping. A mapping that
+disappears or changes while CG holds layers on that channel stops everything to server B for that channel at
+once — no line to the old number, none to the new one, **no clean-up on a number we would be guessing** — and the
+console says so; the restored or new mapping takes effect at that row's next take. A mapping that appears where
+there was none is in force at once; rows already on air reach the backup at their next take.
+
+**Where it is translated, and the fence on it.** One place in CG Bridge turns each line for server A into
+server B's line: the channel number becomes M, the layer stays. Then a send guard for server B alone refuses any
+line on a channel that is not a mapped mirror in force, any layer outside 50–99 other than the station's own
+configured layer (the one exception server A's guard makes too), any `route://` source (a route
+names server A's channel numbers, so route plates stay on the primary), and any channel-wide line other than
+`MIXER M COMMIT` and `INFO M`. Your preview, holder and guard channels on the backup are therefore never written.
+What CG Bridge reads from server B — OSC, `INFO`, layers it finds at start — is read on M and mapped back to N; a
+channel of the backup that is not a mirror in force is ignored and logged once.
+
+**After a failover** CG Bridge sends on M. A take on a channel with no backup channel is refused before anything
+is sent: `No backup channel is known for CH N.` CG Control's PROGRAM return, its sound and its loudness meter are
+read from the primary engine; on the backup they say `Not available on the backup engine` instead of reading
+another channel.
+
+**What `/health` says.** `casparcg.servers[].channels` lists, per core, the channels CG Bridge writes there in
+that core's own numbers — server A the declared channels, server B the mirrors in force. A declared channel with
+no backup channel adds the problem `backup-channels`: `No backup channel is known for CH N: nothing is sent to
+the backup engine for it.` CG Control shows `BACKUP B · n of m channels mapped` in its status bar (amber when
+some are not, red when none are), and each channel's own view shows `Backup: CH M on <host>` or
+`Backup: not mapped — nothing is sent to the backup`.
 
 **Where CG Bridge goes.** We recommend a separate server beside both engines, with «CG Bridge هم نصب شود»
 unticked on **both** engine machines (`/MERGETASKS="!cgbridge"` in a silent install). On the primary engine's
@@ -292,13 +355,13 @@ never held.
 | 2              | Start order does not matter: a refused `5250` is retried until the core answers.                                                                                                                                                                                                                                                         |
 | 3              | After a core restart it reconnects, sends `OSC SUBSCRIBE` again and says which rows went off air (§6).                                                                                                                                                                                                                                   |
 | 4              | AMCP goes to `127.0.0.1` over IPv4, never `::1`. We never ask you to put `127.0.0.1` in your allow list.                                                                                                                                                                                                                                 |
-| 5              | Our send guard is the only fence: layers 50–99 only; no channel-wide `CLEAR`, no `MIXER <ch> CLEAR`, no `SET MODE`, no consumer `ADD`/`REMOVE`. We never send `X-Apasai-Mirrored`.                                                                                                                                                       |
+| 5              | Our send guard is the only fence: layers 50–99 only; no channel-wide `CLEAR`, no `MIXER <ch> CLEAR`, no `SET MODE`, no consumer `ADD`/`REMOVE`. We never send `X-Apasai-Mirrored`. On the backup core a second guard admits only its mirror channels in force (§3).                                                                      |
 | 6              | D4, D9, D10 and D11 use the same `iss`/`aud` per engine; no request carries `Origin`. Rate: D4 at most once per 5 s, D9 at most once per 60 s, D10 and D11 every 30 s, D2 once per token lifetime, `/api/v1/system/version` (no token) at most once per 60 s — per engine, far under 600 a minute.                                       |
 | 7              | We never bind `127.0.0.1:6250`. Our OSC port is `6251` (`6252` for a backup), asked for with `OSC SUBSCRIBE <port>` after every connect, filtered to the channels this station serves.                                                                                                                                                   |
 | 8              | Consoles post D1 themselves, from CG Control's own process, with no `Origin`. CG Bridge keeps its own session on each engine (§3); each rotating refresh token is written to disk before it is used; a password is never stored. A lost session shows `CG Bridge needs a station admin to sign in`, naming the engine.                   |
 | 8 (`2.9.2` §8) | Refreshes are serial and never shared between processes. A "refresh in flight" mark is written before each D2 and cleared with the successor. A mark found at start, or an outcome not known (a timeout, a dropped connection), means the old token is never sent again: the station shows `CG Bridge needs a station admin to sign in`. |
 | 9              | A loopback `casparHost` means the machine of the Playout that listed it — in D4 and in a token's `cg_channels` alike (tested for a backup, and for CG Bridge on a separate server). So a separate server needs no `CasparHostOverride`. Confirmed by you (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §5).                                |
-| 10             | The backup is declared in CG Control and kept across restarts; its OSC arrives through its own subscription; CG Bridge signs in on it with its own account (§3).                                                                                                                                                                         |
+| 10             | The backup is declared in CG Control and kept across restarts; its OSC arrives through its own subscription; CG Bridge signs in on it with its own account; every line reaches it on its own mirror channel, from its own D4 (§3).                                                                                                       |
 | 11             | A take on a channel your D4 marks `unlicensed` is refused before anything is sent, with the reason.                                                                                                                                                                                                                                      |
 | 12             | Ports `5280` and `7911`. A new template version is served at a new URL, with cache headers. Reserved ranges are checked at start and never worked around.                                                                                                                                                                                |
 | 13             | `/health` as in §1.                                                                                                                                                                                                                                                                                                                      |
@@ -321,7 +384,7 @@ station admin signs in again once the user is enabled. That is safe, and it is w
 
 ## 5. Versions
 
-- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.2`).
+- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.3`).
 - CG Bridge reads each engine's version from `GET /api/v1/system/version` (your §3.1; no token, so no
   `Authorization` header): at start, then at most once a minute. CG Control shows the primary's under
   `Versions` in its connection check. An answer that is missing or not a version is said as "not served" and
@@ -338,9 +401,10 @@ station admin signs in again once the user is enabled. That is safe, and it is w
   station that installed a newer CG Bridge by hand keeps it, a CG Bridge is never downgraded, and an engine
   upgrade never restarts our service for nothing. A station that should have the newer CG Bridge gets it by
   running our installer.
-- `0.11.2` is the compatibility floor — the first release a client receives (`0.11.1` and earlier were never
-  delivered): every later release opens what `0.11.2` wrote — the configuration, the state, the template
-  packages. `0.11.2` reads what `0.11.1` wrote unchanged, and adds only the backup engine's own session file.
+- `0.11.3` is the compatibility floor — the first release a station installs (`0.11.2` and earlier were never
+  installed at a station, and are superseded: with a backup engine they write the backup core on the primary's
+  channel numbers; your `2.9.5` carries `0.11.2` and needs `0.11.3` in its place): every later release opens what `0.11.3` wrote — the configuration, the state, the template
+  packages. `0.11.3` reads what `0.11.2` wrote unchanged, and adds only the backup channel entries' file.
 - `/health.version` always names the running version.
 
 ## 6. Where we differ from your letter
