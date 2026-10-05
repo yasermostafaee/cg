@@ -302,6 +302,37 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     text: '${server}: HELD — ANOTHER CG BRIDGE',
     file: 'packages/shared-ipc/src/channels/bridgeSession.ts',
   },
+  // `RELEASE-0113-01` (`R-089`) — each channel's mirror on the backup engine: the Station setup card a station
+  // admin fills for a backup before `2.9.5`, the status bar's count, and the PROGRAM pane after a failover.
+  {
+    shown: 'Backup engine',
+    text: '<span className="cg-card__title">Backup engine</span>',
+    file: 'apps/runtime/src/renderer/features/stationSetup/BackupChannelsCard.tsx',
+  },
+  {
+    shown: 'CH 1 (primary) → CH',
+    text: '(primary) → CH`',
+    file: 'apps/runtime/src/renderer/features/stationSetup/BackupChannelsCard.tsx',
+  },
+  {
+    shown: 'Save backup channels',
+    file: 'apps/runtime/src/renderer/features/stationSetup/BackupChannelsCard.tsx',
+  },
+  {
+    shown: 'BACKUP B · 1 of 1 channels mapped',
+    text: 'BACKUP B · ${String(n)} of ${String(m)} channels mapped',
+    file: 'packages/shared-ipc/src/channels/backupChannels.ts',
+  },
+  {
+    shown: 'BACKUP B · 0 of 1 channels mapped',
+    text: 'BACKUP B · ${String(n)} of ${String(m)} channels mapped',
+    file: 'packages/shared-ipc/src/channels/backupChannels.ts',
+  },
+  {
+    shown: 'Not available on the backup engine',
+    text: "NOT_ON_BACKUP_ENGINE_WORDS = 'Not available on the backup engine'",
+    file: 'packages/shared-ipc/src/channels/backupChannels.ts',
+  },
 ];
 
 describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
@@ -427,17 +458,51 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     expect(install).not.toContain(CONFIRM_MARKER);
   });
 
-  it('`RELEASE-0112-01` Part B — the unconfirmed Playout-side points are the backup engine’s, marked, and only there', () => {
-    // Nobody has seen a backup engine's installer, approval or password page: each is marked on the
-    // line that says it, inside «با موتورِ پشتیبان», and nowhere else.
-    const marks = source.split(CONFIRM_MARKER).length - 1;
+  /** The Playout team's letter on the engine pair, as adopted (`RELEASE-0113-01`). */
+  const PAIR_LETTER = fs.readFileSync(
+    path.join(REPO, 'docs/integration/playout/PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md'),
+    'utf8',
+  );
+
+  it('`RELEASE-0113-01` Part D — the backup engine’s three points are the Playout team’s answers now: no mark anywhere', () => {
+    // `0.11.2`'s guide marked the backup's installer box, its password page and its approval. Their pair
+    // letter answers all three (§4 the box on a pair, §5 the password page, §7 the approval), so
+    // the guide says them as facts — and nothing in it is marked.
+    expect(source.split(CONFIRM_MARKER).length - 1).toBe(0);
     const backup = sectionLines(BACKUP_SECTION);
-    const markedThere = backup.filter((line) => line.includes(CONFIRM_MARKER));
-    expect(marks).toBe(3);
-    expect(markedThere).toHaveLength(3);
-    expect(markedThere[0]).toContain(`«${THEIR_CHECKBOX}»`);
-    expect(markedThere[1]).toContain('`Backup engine`');
-    expect(markedThere[2]).toContain('«تأیید»');
+    expect(backup.find((line) => line.includes(`«${THEIR_CHECKBOX}»`))).toContain('**هر دو**');
+    expect(PAIR_LETTER).toContain('`/MERGETASKS="!cgbridge"`');
+  });
+
+  it('`RELEASE-0113-01` Part D — each engine’s password path, in the Playout team’s own sentence (their §5)', () => {
+    // Read from their letter, never retyped: the one copy of their words is theirs (as the console's
+    // sign-in line, `ENGINE_PASSWORD_WHERE`, is read against the same letter).
+    const at = PAIR_LETTER.indexOf('«روی همان موتور');
+    const theirs = PAIR_LETTER.slice(at, PAIR_LETTER.indexOf('»', at) + 1).replace(/\s*\n\s*/g, ' ');
+    expect(at, 'the instrument found their sentence').toBeGreaterThan(0);
+    const step = sectionLines(BACKUP_SECTION).find((line) => line.includes('`Sign in CG Bridge…`'));
+    expect(step).toContain(theirs);
+  });
+
+  it('`RELEASE-0113-01` Part D — «تأیید» on EACH engine, and the one line that a local `curl` can close the automatic way', () => {
+    const backup = sectionLines(BACKUP_SECTION);
+    const approve = backup.find((line) => line.includes('`B: AMCP NOT APPROVED`') && line.includes('«تأیید»'));
+    expect(approve).toContain('با کلاینتِ Playout ِ وصل به همان موتور');
+    // Their §7, correction 2: a loopback request with no `Origin` — a technician's `curl` — closes it for good.
+    const curl = backup.filter((line) => line.includes('`curl`'));
+    expect(curl).toHaveLength(1);
+    expect(curl[0]).toContain('برای همیشه');
+  });
+
+  it('`RELEASE-0113-01` (`B-316`) — never «the same commands to the backup»: each channel on its mirror, automatic from `2.9.5`, else one line per channel', () => {
+    const backup = sectionLines(BACKUP_SECTION).join('\n');
+    // `0.11.2`'s sentence — every command sent to the backup as it is — pinned as an ABSENCE.
+    expect(backup).not.toContain('هر فرمانی را که به موتورِ اصلی می‌فرستد، به موتورِ پشتیبان هم می‌فرستد');
+    expect(backup).toContain('**کانالِ آینه**');
+    expect(backup).toContain('هرگز روی کانالی که فقط شماره‌اش یکی است');
+    const mapping = sectionLines(BACKUP_SECTION).find((line) => line.includes('`Save backup channels`'));
+    expect(mapping).toContain('`2.9.5`');
+    expect(mapping).toContain('`CH 1 (primary) → CH`');
   });
 
   it('`RELEASE-0112-01-C` C1 — their silent switch appears only where a silent Playout install is described', () => {

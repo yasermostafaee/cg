@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.2`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0` and `0.11.1` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, and `RELEASE-0112-01` moves it to `0.11.2`, the build the client receives (2026-10-04 — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.3`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0`, `0.11.1` and `0.11.2` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, `RELEASE-0112-01` to `0.11.2`, and `RELEASE-0113-01` moves it to `0.11.3`, the build the client receives (2026-10-05 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1890,6 +1890,33 @@ drops the new engine feed as an unknown name.
 **The `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a floor:** `0.11.2`'s
 installers upgrade each in place, settings kept, tested on a clean runner from each draft's own installers.
 That is a test of this release, not a promise to any one's formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.3` (2026-10-05, `RELEASE-0113-01` Part E)
+
+**Why:** `0.11.2` was never installed at a station either, and it is unsafe with a backup engine: it sent the
+backup's core every line on the PRIMARY's channel numbers, which on a real pair is another channel of the
+backup — possibly another programme on air (`B-316`, the Playout team's `PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md`
+§2). So the first build a client holds is `0.11.3`, and the floor is `0.11.3`. The `v0.11.2` draft is retitled
+"superseded, do not use (unsafe with a backup engine)" and stays a draft.
+
+**What it means:** the same list as the sections above, read at `0.11.3`. Nothing it covers moved: the five
+files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's
+station record read an empty `git diff v0.11.2` (2026-10-05, against a control file in the same command —
+`redundancy-adapter.ts`, 71 insertions and 31 deletions — that did change). CG Bridge's station files gain one
+and lose none: a station admin's backup channel entries are a NEW file, `bridge-backup-channels.json`, beside
+the connection file, written only when an admin saves one; a `0.11.2` station has none and needs none. The
+console ↔ CG Bridge protocol stays one release line (`0.11`): the `backupChannels.*` channels are additive — a
+`0.11.2` console never asks for them, and its publish switch drops `backupChannels.changed` as an unknown name.
+⚠ **One read is not additive, and is said rather than shimmed:** the audit log gains the action
+`set-backup-channels`, and a console checks every audit row against its own CLOSED list of actions. A `0.11.2`
+console reading a Log page that holds such a row therefore gets `invalid response for audit.page` for that
+page only, worded by `bridgeSkew.ts` as "This bridge is running an older build than this page…" — a sentence
+whose direction is backwards for this case (the CONSOLE is the older one). No station holds a `0.11.2`
+console, and the floor's own consoles read the row; a wording for the older-console direction is not filed.
+
+**The `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a floor:**
+`0.11.3`'s installers upgrade each in place, settings kept, tested on a clean runner from each draft's own
+installers. That is a test of this release, not a promise to any one's formats.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 
