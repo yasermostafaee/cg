@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
 import {
+  backupMappedSummary,
   ENGINE_LABEL,
   ENGINE_SERVER,
   engineChipText,
   engineNeedsAttention,
   engineStateText,
   stoppedChannelsOf,
+  type BackupChannelsState,
   type EngineLine,
   type EngineSessions,
 } from '@cg/shared-ipc';
@@ -318,9 +320,17 @@ function engineChips(
     .map((line) => ({ server: ENGINE_SERVER[line.engine], line }));
 }
 
+/** `RELEASE-0113-01` — the count's ink by its tone: the alarm when none is mapped, the warning when some. */
+const MAPPED_TONE_STYLE = {
+  ok: { color: colors.textMuted },
+  warn: { color: colors.pending, fontWeight: 700 },
+  alarm: { color: colors.errorText, fontWeight: 700 },
+} as const;
+
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
 export function StatusBar({
   engines,
+  backupChannels,
 }: {
   /**
    * `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, handed down by the shell (a prop,
@@ -328,6 +338,11 @@ export function StatusBar({
    * below). Absent: no engine chip.
    */
   engines?: EngineSessions | null;
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — where each channel's lines go on the backup engine, handed down
+   * by the shell as `engines` is. Absent or no server B: no count.
+   */
+  backupChannels?: BackupChannelsState | null;
 }): JSX.Element {
   const health = useConnections();
   // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
@@ -509,6 +524,26 @@ export function StatusBar({
               <span style={styles.backup}>○ NO BACKUP</span>
             </Tag>
           )}
+          {/*
+            🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — HOW MANY CHANNELS REACH THE BACKUP, beside its pill. A
+            channel with no backup channel sends the backup NOTHING, so the count is a fact about air after a
+            failover: the alarm ink when none is mapped, the warning when some are not. Words only; which
+            channel and why is in each channel's own view. While the link is down it cannot be read: nothing.
+          */}
+          {(() => {
+            const mapped =
+              stale ||
+              health.backup === undefined ||
+              backupChannels === null ||
+              backupChannels === undefined
+                ? null
+                : backupMappedSummary(backupChannels);
+            return mapped === null ? null : (
+              <Tag className="cg-pill" data-backup-mapped={mapped.tone}>
+                <span style={MAPPED_TONE_STYLE[mapped.tone]}>{mapped.text}</span>
+              </Tag>
+            );
+          })()}
           {/*
             🔴 `RELEASE-0112-01` (`R-085`) — AN ENGINE'S CG BRIDGE SESSION, BESIDE ITS SERVER: a chip
             for an engine that needs a person (a sign-in, a license, an approval, an engine that does

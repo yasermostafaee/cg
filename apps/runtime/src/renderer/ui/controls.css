@@ -5813,6 +5813,32 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-muted);
 }
 
+/* ── `RELEASE-0113-01` — THE BACKUP ENGINE'S CHANNELS: `CH N (primary) → CH [M] (backup)` · its state ── */
+.cg-setup-backup-row {
+  display: grid;
+  grid-template-columns: max-content 7ch max-content minmax(0, 1fr);
+  align-items: center;
+  gap: var(--r-setup-band-fields-gap);
+}
+
+.cg-setup-backup-row + .cg-setup-backup-row {
+  margin-top: var(--r-setup-band-summary-gap);
+}
+
+.cg-setup-backup-state {
+  min-width: 0;
+  font-size: var(--r-setup-band-summary-text);
+  color: var(--r-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* Nothing for this channel reaches the backup: the warning ink, as the status bar's count. */
+.cg-setup-backup-state[data-state='not-mapped'],
+.cg-setup-backup-state[data-state='held'] {
+  color: var(--r-caution);
+  font-weight: 700;
+}
+
 /* ── THE DELIMITER TABLE — a mono chip and its plain-English name in one cell ────────── */
 .cg-delimiter-table td {
   padding-block: var(--r-setup-delimiter-td-pad-y);

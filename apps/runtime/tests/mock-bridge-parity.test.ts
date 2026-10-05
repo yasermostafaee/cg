@@ -135,6 +135,8 @@ const BRIDGE_SURFACE: {
     bridgeSession: ['state', 'onChanged', 'signIn', 'engines', 'onEnginesChanged', 'signInBackup'],
     // `PLAYOUT-FEATURES-01` D — the CG license (the mock: nothing read).
     license: ['state', 'onChanged'],
+    // `RELEASE-0113-01` (`R-089`) — each channel's backup line (the mock: no backup engine).
+    backupChannels: ['state', 'onChanged', 'setEntries'],
     // `PLAYOUT-FEATURES-01` E — the Playout's meters (the mock: none).
     meters: ['onReading'],
     /*

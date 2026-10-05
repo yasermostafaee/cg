@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import { MonitorOff, Volume2, VolumeX } from 'lucide-react';
+import { NOT_ON_BACKUP_ENGINE_WORDS } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -84,6 +85,18 @@ const styles = {
     letterSpacing: '0.08em',
     textTransform: 'uppercase' as const,
   },
+  /** `RELEASE-0113-01` — this channel's backup line: one line under the screen, muted while it is mapped. */
+  backupLine: {
+    margin: 0,
+    padding: '0.25rem 0.5rem 0',
+    fontSize: '0.72rem',
+    color: colors.textMuted,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  /** …and in the warning ink while nothing for this channel reaches the backup. */
+  backupLineWarn: { color: colors.pending, fontWeight: 700 },
 } as const satisfies Record<string, CSSProperties>;
 
 /** The ONE place the pane's signal is put into words — the strip and the screen both read it. */
@@ -117,6 +130,16 @@ interface Props {
    * nothing). `output` alone colours the head; the playlist is a neutral tag and never a colour.
    */
   air: ChannelAir;
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — THIS channel's backup line (`Backup: CH M on <host>`, or that
+   * nothing reaches the backup), with its reason on `title`; `null` with no server B. Only this channel's.
+   */
+  backupLine?: { readonly text: string; readonly title?: string; readonly mapped: boolean } | null;
+  /**
+   * `RELEASE-0113-01` — server B is the primary (a failover): the return, its sound and its meter are read
+   * from the PRIMARY engine, so here they are not available — said plainly, and nothing is requested.
+   */
+  onBackupEngine?: boolean;
 }
 
 /** The head's neutral tags: `Output unknown` when it is, then the playlist's state in its words. */
@@ -136,9 +159,12 @@ export function MonitorPanel({
   programReturn,
   programSound,
   air,
+  backupLine = null,
+  onBackupEngine = false,
 }: Props): JSX.Element {
   const { src, signal, onError } = programReturn;
-  const words = PROGRAM_SIGNAL_WORDS[signal];
+  // `RELEASE-0113-01` — after a failover none of the three is read: said, not shown as a dead feed.
+  const words = onBackupEngine ? NOT_ON_BACKUP_ENGINE_WORDS : PROGRAM_SIGNAL_WORDS[signal];
   return (
     <Panel
       id={id}
@@ -181,26 +207,34 @@ export function MonitorPanel({
       */}
       <MonitorSignalStrip
         signal={words}
-        tone={signal}
-        /* `PLAYOUT-FEATURES-01` E — the Playout's short-term loudness for this channel. */
-        reading={<LoudnessBadge channel={channel} />}
+        tone={onBackupEngine ? 'none' : signal}
+        /*
+          `PLAYOUT-FEATURES-01` E — the Playout's short-term loudness for this channel. `RELEASE-0113-01`:
+          absent on the backup engine, where it is not read — not a reading at the floor.
+        */
+        {...(onBackupEngine ? {} : { reading: <LoudnessBadge channel={channel} /> })}
         /*
           🔴 `PLAYOUT-FEATURES-01` E — THE PROGRAMME'S SOUND, at THIS console only: off by default, a
           pressed toggle while on (`data-toggle-on`, as PVW's guides), remembered per console.
+          `RELEASE-0113-01`: ABSENT on the backup engine — a toggle that could play nothing is no control.
         */
-        action={
-          <Button
-            variant="ghost"
-            aria-pressed={programSound.on}
-            data-toggle-on={programSound.on ? '' : undefined}
-            data-pgm-audio={programSound.status}
-            aria-label="Programme sound"
-            title="Programme sound — this console only"
-            onClick={programSound.toggle}
-          >
-            <Icon icon={programSound.on ? Volume2 : VolumeX} size={13} />
-          </Button>
-        }
+        {...(onBackupEngine
+          ? {}
+          : {
+              action: (
+                <Button
+                  variant="ghost"
+                  aria-pressed={programSound.on}
+                  data-toggle-on={programSound.on ? '' : undefined}
+                  data-pgm-audio={programSound.status}
+                  aria-label="Programme sound"
+                  title="Programme sound — this console only"
+                  onClick={programSound.toggle}
+                >
+                  <Icon icon={programSound.on ? Volume2 : VolumeX} size={13} />
+                </Button>
+              ),
+            })}
         fact={
           <MonitorHeadFact
             testId="data-monitor-air-count"
@@ -216,10 +250,10 @@ export function MonitorPanel({
       */}
       <div style={styles.stage} data-pgm-stage="">
         <div style={styles.screen} role="img" aria-label={`${title} — ${words}`} data-pgm-screen="">
-          {src !== null && (
+          {src !== null && !onBackupEngine && (
             <ProgramPicture key={src} src={src} visible={signal === 'live'} onError={onError} />
           )}
-          {signal !== 'live' && (
+          {(signal !== 'live' || onBackupEngine) && (
             <>
               <Icon icon={MonitorOff} size={22} />
               <span style={styles.label}>{words}</span>
@@ -227,8 +261,26 @@ export function MonitorPanel({
           )}
         </div>
         {/* `PLAYOUT-FEATURES-01` E — the programme meter, the Playout's own levels, beside the picture. */}
-        <VuMeter channel={channel} />
+        {!onBackupEngine && <VuMeter channel={channel} />}
       </div>
+      {/*
+        🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHERE THIS CHANNEL'S LINES GO ON THE BACKUP ENGINE, in this
+        channel's own view and nobody else's: its mirror's own number and host, or that nothing reaches the
+        backup. Words only; the reason rides the `title`.
+      */}
+      {backupLine !== null && (
+        <p
+          style={
+            backupLine.mapped
+              ? styles.backupLine
+              : { ...styles.backupLine, ...styles.backupLineWarn }
+          }
+          data-backup-channel-line={backupLine.mapped ? 'mapped' : 'not-mapped'}
+          {...(backupLine.title !== undefined ? { title: backupLine.title } : {})}
+        >
+          {backupLine.text}
+        </p>
+      )}
     </Panel>
   );
 }

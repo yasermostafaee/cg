@@ -46,6 +46,8 @@ import {
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
 import { BackupServerDialog } from './BackupServerDialog.js';
+import { BackupChannelsCard } from './BackupChannelsCard.js';
+import { useBackupChannels } from '../../hooks/useBackupChannels.js';
 import { ChannelSection } from './ChannelSection.js';
 import {
   DEFAULT_STATION_SETUP_SECTION,
@@ -539,6 +541,8 @@ export function StationSetupDialog({
     is its own piece of work.
   */
   const holdsStationAdmin = useHoldsStationAdmin();
+  // `RELEASE-0113-01` (`R-089`) — each channel's backup line, for the Backup engine card.
+  const backupChannels = useBackupChannels();
   // `DESKTOP-APPS-01` — the Playout this station trusts, as the bridge advertises it.
   const playoutOrigin = playoutOriginOf(useAuthCapabilities()?.signInUrl);
   const footerSlot = holdsStationAdmin ? footerSlotEl : null;
@@ -1425,6 +1429,15 @@ export function StationSetupDialog({
                   </div>
                 )}
               </section>
+
+              {/*
+                  🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — WHICH OF THE BACKUP ENGINE'S OWN CHANNELS MIRRORS EACH OF
+                  THIS STATION'S, for the server B IN FORCE (never a draft): from its D4 (`2.9.5`), or a station
+                  admin's entry checked against it. Its own save — it does not wait for anything to leave air.
+              */}
+              {loaded?.servers.B !== undefined && (
+                <BackupChannelsCard state={backupChannels} mayChange={holdsStationAdmin} />
+              )}
 
               {/*
                   `C-024` — BESIDE THE SERVER HOSTS: a fact ABOUT the two servers above — the

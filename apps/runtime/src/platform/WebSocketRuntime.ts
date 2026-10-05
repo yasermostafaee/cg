@@ -508,6 +508,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #enginesSubs = new Subs<ipcChannels.EngineSessions>();
   /** `PLAYOUT-FEATURES-01` D — the CG license as CG Bridge last read it. */
   readonly #licenseSubs = new Subs<ipcChannels.LicenseState>();
+  /** `RELEASE-0113-01` (`R-089`) — each channel's backup line, pushed on change. */
+  readonly #backupChannelsSubs = new Subs<ipcChannels.BackupChannelsState>();
   /** `PLAYOUT-FEATURES-01` E — the Playout's meters, one reading at a time. */
   readonly #meterSubs = new Subs<ipcChannels.PgmMeterReading>();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
@@ -1209,6 +1211,17 @@ export class WebSocketRuntime implements RuntimeBridge {
         return;
       }
     }
+    // `RELEASE-0113-01` (`R-089`) — and each channel's backup line, by the same rule.
+    try {
+      this.#backupChannelsSubs.emit(
+        await this.#invoke(ipcChannels.BackupChannelsStateChannel, undefined),
+      );
+    } catch (err) {
+      if (err instanceof BridgeDisconnectedError) {
+        this.#setResyncing(false);
+        return;
+      }
+    }
 
     // First connect: the renderer's `useBridgeSnapshot` pulls the initial
     // stack/health/lock, so only a RECONNECT re-pulls them here.
@@ -1459,6 +1472,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         break;
       }
       // `PLAYOUT-FEATURES-01` D — the CG license moved.
+      case ipcChannels.BackupChannelsChangedChannel.name: {
+        const p = ipcChannels.BackupChannelsChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#backupChannelsSubs.emit(p.data);
+        break;
+      }
       case ipcChannels.LicenseStateChangedChannel.name: {
         const p = ipcChannels.LicenseStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#licenseSubs.emit(p.data);
@@ -1982,6 +2000,15 @@ export class WebSocketRuntime implements RuntimeBridge {
     state: () => this.#invoke(ipcChannels.LicenseStateChannel, undefined),
     onChanged: (handler: (state: ipcChannels.LicenseState) => void) =>
       this.#licenseSubs.add(handler),
+  };
+
+  /** `RELEASE-0113-01` (`R-089`) — each channel's backup line, and a station admin's entries. */
+  readonly backupChannels = {
+    state: () => this.#invoke(ipcChannels.BackupChannelsStateChannel, undefined),
+    onChanged: (handler: (state: ipcChannels.BackupChannelsState) => void) =>
+      this.#backupChannelsSubs.add(handler),
+    setEntries: (req: ChannelRequest<typeof ipcChannels.BackupChannelEntriesSetChannel>) =>
+      this.#invoke(ipcChannels.BackupChannelEntriesSetChannel, req),
   };
 
   /** `PLAYOUT-FEATURES-01` E — the Playout's meters, pushed by CG Bridge for this socket's channels. */

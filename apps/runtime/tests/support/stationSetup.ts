@@ -18,7 +18,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import type { AuthSessionState } from '../../src/shared/runtime-bridge.js';
-import { authStub, bridgeSessionStub, setupStub } from './authStub.js';
+import { authStub, backupChannelsStub, bridgeSessionStub, setupStub } from './authStub.js';
 import { StationSetupDialog } from '../../src/renderer/features/stationSetup/StationSetupDialog.js';
 import {
   DEFAULT_STATION_SETUP_SECTION,
@@ -256,6 +256,8 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     },
     // `RELEASE-0112-01` (`R-085`) — the check's per-engine line reads each engine's session (quiet).
     bridgeSession: bridgeSessionStub(),
+    // `RELEASE-0113-01` (`R-089`) — Servers' `Backup engine` lines read the mapping (no server B: none).
+    backupChannels: backupChannelsStub(),
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return {

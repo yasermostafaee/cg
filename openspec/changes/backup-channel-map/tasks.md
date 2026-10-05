@@ -62,10 +62,14 @@ delivery (`0.11.3`).
 
 ## 3. The console (`apps/runtime`)
 
-- [ ] 3.1 The status bar's `BACKUP B · n of m channels mapped`; the channel view's backup line; the PROGRAM pane's
-      `Not available on the backup engine` while B is the primary
-- [ ] 3.2 Station setup → Servers → `Backup engine`: one line per declared channel, the entry and its state
-- [ ] 3.3 Part D: the password line in the Playout team's words inside `<bdi>`; the AMCP-pending line says what to do
+- [x] 3.1 The status bar's `BACKUP B · n of m channels mapped`; the channel view's backup line; the PROGRAM pane's
+      `Not available on the backup engine` while B is the primary (its sound toggle and loudness meter absent
+      there) — `useBackupChannels`, the bridge contract's `backupChannels` (WebSocket, mock, parity)
+- [x] 3.2 Station setup → Servers → `Backup engine`: one line per declared channel, the entry and its state
+      (`BackupChannelsCard`; a field and `Save backup channels` for a station admin only)
+- [x] 3.3 Part D: the password line in the Playout team's words inside `<bdi>` (`ENGINE_PASSWORD_WHERE`, read
+      against their letter by `bridge-engines.test.ts`), led by the account offered; the AMCP-pending line says what
+      to do — «تأیید» on that engine's «اتصال به CG Control», the Playout client connected to it
 - [ ] 3.4 dom tests; e2e: the Station setup lines, the status bar's `n of m`, the channel view's backup line — run, and
       the Linux run's URL here
 

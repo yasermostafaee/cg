@@ -116,6 +116,23 @@ export function bridgeSessionStub(): {
   };
 }
 
+/**
+ * `RELEASE-0113-01` (`R-089`) — where each channel's lines go on the backup engine, the QUIET answer: no
+ * server B, so no surface says anything about it. A stub that fills this measures exactly what it
+ * measured before the mapping existed.
+ */
+export function backupChannelsStub(): {
+  state: () => Promise<{ backup: null }>;
+  onChanged: () => () => void;
+  setEntries: () => Promise<{ ok: false; error: string }>;
+} {
+  return {
+    state: () => Promise.resolve({ backup: null }),
+    onChanged: () => () => undefined,
+    setEntries: () => Promise.resolve({ ok: false, error: 'this stub has no backup engine' }),
+  };
+}
+
 export function fillBridgeStub<T extends object>(stub: T): T {
   const cg = stub as Record<string, unknown>;
   cg['auth'] ??= authStub();
@@ -200,6 +217,8 @@ export function fillBridgeStub<T extends object>(stub: T): T {
   bridgeSession['engines'] ??= quiet.engines;
   bridgeSession['onEnginesChanged'] ??= quiet.onEnginesChanged;
   bridgeSession['signInBackup'] ??= quiet.signInBackup;
+  // `RELEASE-0113-01` (`R-089`) — no server B: the quiet answer, so a filled stub measures what it did.
+  cg['backupChannels'] ??= backupChannelsStub();
   /*
     `CENTRAL-BRIDGE-01` — the restore-notice dismiss buttons dismiss on the BRIDGE too. Filled into
     a `stack` a spec states itself (only the absent member), answering as a bridge with nothing left

@@ -7,6 +7,9 @@
  * the contract.
  */
 import type {
+  BackupChannelEntriesSetChannel,
+  BackupChannelsState,
+  BackupChannelsStateChannel,
   BridgeBackupSignInChannel,
   BridgeEnginesChannel,
   BridgeSessionSignInChannel,
@@ -1031,6 +1034,21 @@ export interface RuntimeBridge {
   license: {
     state(): Promise<ChannelResponse<typeof LicenseStateChannel>>;
     onChanged(handler: (state: LicenseState) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — **WHERE EACH CHANNEL'S LINES GO ON THE BACKUP ENGINE.** Never on
+   * the primary's channel number: on the mirror's own (from the backup engine's D4, or a station admin's
+   * entry checked against it), or nowhere. `backup: null` — no server B. A bridge too old to answer rejects,
+   * and the console says nothing about it.
+   */
+  backupChannels: {
+    state(): Promise<ChannelResponse<typeof BackupChannelsStateChannel>>;
+    onChanged(handler: (state: BackupChannelsState) => void): Unsubscribe;
+    /** A station admin's entries, complete: `CH N (primary) → CH M (backup)`. */
+    setEntries(
+      req: ChannelRequest<typeof BackupChannelEntriesSetChannel>,
+    ): Promise<ChannelResponse<typeof BackupChannelEntriesSetChannel>>;
   };
 
   /**

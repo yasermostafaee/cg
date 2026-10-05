@@ -336,6 +336,13 @@ export function createMockBridge(): RuntimeBridge {
       onChanged: () => () => undefined,
     },
 
+    // `RELEASE-0113-01` (`R-089`) — test mode has no backup engine: `null`, which draws nothing.
+    backupChannels: {
+      state: () => Promise.resolve({ backup: null }),
+      onChanged: () => () => undefined,
+      setEntries: () => Promise.resolve({ ok: false, message: 'Test mode has no backup engine.' }),
+    },
+
     // `PLAYOUT-FEATURES-01` E — test mode has no Playout, so no meters: the meter sits at the floor.
     meters: {
       onReading: () => () => undefined,

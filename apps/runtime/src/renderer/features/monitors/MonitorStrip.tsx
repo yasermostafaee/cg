@@ -1,4 +1,7 @@
+import { backupChannelLineText } from '@cg/shared-ipc';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
+import { useBackupChannels } from '../../hooks/useBackupChannels.js';
+import { useConnections } from '../../hooks/useConnections.js';
 import { useChannelAir, useChannelBankState } from '../channels/useSelectedChannel.js';
 import { useProgramReturn } from '../../hooks/useProgramReturn.js';
 import { usePgmAudio } from '../../hooks/usePgmAudio.js';
@@ -46,13 +49,32 @@ export function MonitorStrip(): JSX.Element {
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
   /*
+    🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — THIS channel's backup line, and whether the backup engine is on
+    air now (server B the primary): then the return, its sound and its meter — read from the PRIMARY engine —
+    are not available, and nothing is requested for them.
+  */
+  const backupState = useBackupChannels();
+  const health = useConnections();
+  const onBackupEngine = health?.currentPrimary === 'B';
+  const backupLine = ((): { text: string; title?: string; mapped: boolean } | null => {
+    const backup = backupState?.backup ?? null;
+    if (backup === null) return null;
+    const line = backup.channels.find((c) => c.channel === viewChannel);
+    if (line === undefined) return null;
+    return {
+      text: backupChannelLineText(line, backup.backupHost),
+      ...(line.reason !== undefined ? { title: line.reason } : {}),
+      mapped: line.state === 'mapped',
+    };
+  })();
+  /*
     `C-016` — the programme return, lifted here beside the air count for the same reason. A
     PROGRAM pane that is not rendered asks for NOTHING: the channel is `null` while it is folded
     away, so no picture is requested and the bridge pulls nothing from the Playout for it.
   */
-  const programReturn = useProgramReturn(showPgm ? viewChannel : null);
+  const programReturn = useProgramReturn(showPgm && !onBackupEngine ? viewChannel : null);
   // `PLAYOUT-FEATURES-01` E — and its SOUND, on the same rule: a folded PROGRAM plays nothing.
-  const programSound = usePgmAudio(showPgm ? viewChannel : null);
+  const programSound = usePgmAudio(showPgm && !onBackupEngine ? viewChannel : null);
 
   return (
     /*
@@ -102,6 +124,8 @@ export function MonitorStrip(): JSX.Element {
           programReturn={programReturn}
           programSound={programSound}
           air={air}
+          backupLine={backupLine}
+          onBackupEngine={onBackupEngine}
         />
       )}
     </div>
