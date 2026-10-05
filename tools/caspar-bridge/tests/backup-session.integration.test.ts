@@ -1,5 +1,6 @@
 import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
+import * as http from 'node:http';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -531,6 +532,83 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
     });
   }, 60_000);
 
+  /**
+   * A CG Bridge's `/health` on the backup core's machine, played by a plain HTTP server: it drives that core's
+   * `channels`, and answers after `delayMs()` — so a test can hold the guard's reading open as long as it likes.
+   */
+  async function neighbourHealth(
+    coreB: Core,
+    channels: readonly number[],
+    delayMs: () => number,
+  ): Promise<{ port: number; reads: () => number }> {
+    let reads = 0;
+    const server = http.createServer((_req, res) => {
+      reads += 1;
+      const body = JSON.stringify({
+        app: 'cg-bridge',
+        startedAt: '2026-10-05T00:00:00.000Z',
+        ports: { control: 1 },
+        casparcg: {
+          servers: [{ host: '127.0.0.1', amcpPort: coreB.mock.amcpPort, channels }],
+          channels,
+        },
+      });
+      setTimeout(() => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(body);
+      }, delayMs());
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    track(server, (s) => new Promise<void>((resolve) => s.close(() => resolve())));
+    const address = server.address();
+    if (address === null || typeof address === 'string') throw new Error('no port');
+    return { port: address.port, reads: () => reads };
+  }
+
+  it('🔴 RELEASE-0113-01 — a mapping that appears is NOT used until the guard has read the backup core’s machine WITH it: a neighbour driving our new mirror, answering slowly, holds it — not one layer write in between', async () => {
+    const coreA = await core();
+    const coreB = await core();
+    // The neighbour drives the backup core's channel 2 — which becomes OUR mirror only once B's D4 is read.
+    // At start ours on B is nothing, so it holds nobody and server B connects; then it answers SLOWLY, so the
+    // window between our mapping appearing and the guard's reading of it is open on every run.
+    let delay = 0;
+    const neighbour = await neighbourHealth(coreB, [2], () => delay);
+    const e = await engines();
+    e.a.setChannels(pairPrimaryCatalogue(e.b.baseUrl));
+    e.b.setChannels(pairBackupCatalogue(e.a.baseUrl));
+    const logFile = path.join(scratch(), 'amcp.log');
+    const handle = await bridgeOn(e, { coreA, coreB }, scratch(), {
+      coreGuardPort: neighbour.port,
+      amcpLogPath: logFile,
+    });
+    expect(handle.runtime.serverBHeld(), 'server B connected: nothing of ours there yet').toBe(
+      false,
+    );
+    delay = 2_500;
+    const admin = await adminConsole({ a: e.a, handle });
+    await signInBoth(admin);
+    await mappedTo(admin, 2);
+    // Inside the window: the mapping is in force, the guard has not read the neighbour with it.
+    await take(handle, 'logo-6');
+    await new Promise((r) => setTimeout(r, 300));
+    const inWindow = await sentToB(handle, logFile);
+    expect(inWindow.length, 'the instrument sees this bridge’s lines to server B').toBeGreaterThan(
+      0,
+    );
+    expect(
+      inWindow.filter((l) => LAYER_WRITE.test(l)),
+      'no layer write reached server B before the guard read the neighbour with our channel 2',
+    ).toEqual([]);
+    // The reading lands: the neighbour drives OUR channel 2 — server B is held, and still nothing reached it.
+    await until(
+      async () => (await enginesOf(admin)).backup?.state === 'core-held',
+      'the guard’s verdict: core-held',
+    );
+    expect(handle.runtime.serverBHeld()).toBe(true);
+    expect((await sentToB(handle, logFile)).filter((l) => LAYER_WRITE.test(l))).toEqual([]);
+    expect(await coreA.lines()).toContain('CG 1-99 PLAY 0');
+  }, 60_000);
+
   it('🔴 RELEASE-0113-01 — a CG Bridge driving the backup core’s OWN programme channel (1) holds nobody: our mirror reaches channel 2, and nothing reaches 1', async () => {
     const coreA = await core();
     const coreB = await core();
@@ -551,8 +629,12 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
       async () => handle.runtime.health().backup?.state === 'healthy',
       'server B healthy',
     );
-    // Give the guard its reading with our channel 2 in force: the other bridge's 1 is not ours.
-    await new Promise((r) => setTimeout(r, 400));
+    // The guard's reading WITH our channel 2 in force clears it: the other bridge's 1 is not ours. (The
+    // runtime's map answers 2 only once it is cleared.)
+    await until(
+      async () => handle.runtime.backupChannelMap().channelOnB(1) === 2,
+      'the guard to clear the backup core’s channel 2',
+    );
     expect(handle.runtime.serverBHeld()).toBe(false);
     expect((await enginesOf(admin)).backup?.state).not.toBe('core-held');
     await take(handle, 'logo-5');
@@ -592,6 +674,10 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
     await until(
       async () => handle.runtime.health().backup?.state === 'healthy',
       'server B healthy',
+    );
+    await until(
+      async () => handle.runtime.backupChannelMap().channelOnB(1) === 2,
+      'the guard to clear the backup core’s channel 2',
     );
     const before = (await coreB.lines()).length;
     await take(handle, 'logo-4');

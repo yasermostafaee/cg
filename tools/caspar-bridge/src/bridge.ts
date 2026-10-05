@@ -2398,7 +2398,29 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     liveOn: (channel) => runtime.holdsLiveLayersOn(channel),
   });
   // TEST-ONLY — a wire test on a pair with no Playout hands the runtime its own map instead.
-  runtime.useBackupChannels(options.backupChannelMap ?? backupChannels);
+  const backupChannelsInForce: BackupChannelMap = options.backupChannelMap ?? backupChannels;
+  /*
+    🔴 `RELEASE-0113-01` + `B-313` — THE RUNTIME USES A BACKUP CHANNEL ONLY ONCE THE GUARD HAS CLEARED IT. The
+    mapping is in force the moment it resolves, but the guard reads server B's machine for another CG Bridge
+    driving THAT channel only on its next reading — and every line in between went to the core unguarded (red on
+    `950aa2a2`'s CI: `MIXER 2-88 VOLUME 1` to a core another bridge drove). So the seam's map answers a channel
+    only when the guard's last COMPLETED reading was made with it and found nobody driving it
+    (`CoreGuard.clearsB`); until then server B gets nothing for it, as for an unmapped one. `/health` and the
+    guard itself read the mapping in force (`backupChannelsInForce`) — what this bridge INTENDS to write there —
+    so another CG Bridge's guard sees it before we clear it, and two bridges mapping one channel hold each other.
+  */
+  let coreGuard: CoreGuard | null = null;
+  const clearedOnB = (onB: number | null): number | null =>
+    onB !== null && coreGuard?.clearsB(onB) === true ? onB : null;
+  runtime.useBackupChannels({
+    channelOnB: (channel) => clearedOnB(backupChannelsInForce.channelOnB(channel)),
+    channelOnBAtTake: (channel) => clearedOnB(backupChannelsInForce.channelOnBAtTake(channel)),
+    stationChannelOf: (onB) =>
+      coreGuard?.clearsB(onB) === true ? backupChannelsInForce.stationChannelOf(onB) : null,
+    release: (channel) => {
+      backupChannelsInForce.release(channel);
+    },
+  });
   const recomputeBackupChannels = (): void => {
     backupChannels.recompute();
   };
@@ -2448,9 +2470,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     the session, the last sign-in's code, the license, whether the engine's API answers, the core's
     AMCP, and the guard's verdict (`B-313`, assigned before the runtime connects). Pushed to every
     console on change (`bridgeSession.engines-changed`); re-judged every 5 s so the AMCP trust window
-    is crossed on time. The backup's line never refuses anything on the primary.
+    is crossed on time. The backup's line never refuses anything on the primary. (`coreGuard` is declared
+    above, with the backup channel map that reads it.)
   */
-  let coreGuard: CoreGuard | null = null;
   let primarySignedInAtMs: number | null =
     bridgeSession?.state().state === 'signed-in' ? Date.now() : null;
   bridgeSession?.onChanged((state) => {
@@ -3242,14 +3264,14 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       };
     },
     peerPort: () => options.coreGuardPort ?? port,
-    // `RELEASE-0113-01` — what this bridge writes on each core, in that core's own numbers.
+    // `RELEASE-0113-01` — what this bridge writes on each core, in that core's own numbers: on B the mapping IN
+    // FORCE, not the cleared one — a reading must be made WITH a channel before that channel is cleared.
     channels: () => {
-      const map = runtime.backupChannelMap();
       const declared = runtime.declaredChannels();
       return {
         A: declared,
         B: declared.flatMap((channel) => {
-          const onB = map.channelOnB(channel);
+          const onB = backupChannelsInForce.channelOnB(channel);
           return onB === null ? [] : [onB];
         }),
       };
@@ -3387,13 +3409,14 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       lastPlayoutReadAtMs: playoutCatalogue?.lastGoodReadAtMs() ?? null,
       // `RELEASE-0112-01` — what this bridge drives (`B-313` reads it), and the engines' lines.
       channels: runtime.declaredChannels(),
-      // `RELEASE-0113-01` — each declared channel's backup channel in force, on server B's own numbers.
+      // `RELEASE-0113-01` — each declared channel's backup channel in force, on server B's own numbers: what
+      // this bridge intends to write there, which another CG Bridge's guard must see before we clear it.
       ...(servers.B !== undefined
         ? {
             backupChannels: new Map(
               runtime
                 .declaredChannels()
-                .map((channel) => [channel, runtime.backupChannelMap().channelOnB(channel)]),
+                .map((channel) => [channel, backupChannelsInForce.channelOnB(channel)]),
             ),
           }
         : {}),

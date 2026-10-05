@@ -190,7 +190,18 @@ CHANNEL, and one engine may hold standalone channels, primaries and mirrors at o
 count as driving a core only when the channels it drives THERE meet the channels this bridge writes there —
 server B's mirror channels in force (B's own numbers) for server B, the declared channels for server A. Each
 server row of `/health` SHALL carry its own `channels`; a `/health` with only the top-level list SHALL be read as
-before, and one with no list at all SHALL still count as driving.
+before, and one with no list at all SHALL still count as driving. A backup channel newly in force SHALL carry no
+line to server B until a COMPLETED reading of server B's machine, made WITH that channel among this bridge's, found
+no other CG Bridge driving it; a reading asked for while one runs SHALL be one more reading after it, never the
+running one's answer. `/health` SHALL report the mapping in force — what this bridge intends to write — so another
+bridge's guard sees a channel before this one clears it.
+
+#### Scenario: A mirror channel newly in force waits for the guard
+
+- **WHEN** the mapping of the station's channel 1 to the backup core's channel 2 comes into force while the CG
+  Bridge on the backup engine's machine, which drives channel 2, has not yet answered a reading made with it
+  **THEN** a take on channel 1 sends the backup core no layer write, and once the reading lands server B is held
+  (`core-held`)
 
 #### Scenario: Another bridge on the backup's own programme channel
 

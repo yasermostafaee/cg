@@ -136,6 +136,13 @@ export class CoreGuard {
   #answeredFor: string | null = null;
   #ticker: ReturnType<typeof setInterval> | null = null;
   #inFlight: Promise<void> | null = null;
+  /** One more read, after the one in flight — asked for while it ran ({@link refresh}). */
+  #again: Promise<void> | null = null;
+  /**
+   * 🔴 `RELEASE-0113-01` — the backup core's channels a COMPLETED reading of server B's machine was made WITH
+   * and found no other CG Bridge driving. Only these may carry a line ({@link clearsB}).
+   */
+  #clearedB: ReadonlySet<number> = new Set();
   #probes = 0;
   readonly #handlers = new Set<(verdict: CoreGuardVerdict) => void>();
 
@@ -146,6 +153,17 @@ export class CoreGuard {
 
   verdict(): CoreGuardVerdict {
     return this.#verdict;
+  }
+
+  /**
+   * 🔴 `RELEASE-0113-01` — **MAY A LINE GO TO THE BACKUP CORE'S `channel`?** Only when the last completed
+   * reading of server B's machine was made with that channel among ours and found no other CG Bridge driving
+   * it. A mirror channel newly in force is therefore NOT usable until the guard has looked at it: the redundancy
+   * seam reads this through the bridge's map, so the window between a mapping appearing and the guard's reading
+   * of it sends that channel nothing — the hole `B-313`'s CI run found on `950aa2a2`.
+   */
+  clearsB(channel: number): boolean {
+    return this.#clearedB.has(channel);
   }
 
   /** `/health` reads made — a test's positive control. */
@@ -182,6 +200,7 @@ export class CoreGuard {
     const b = this.#opts.servers().B;
     const key = b === undefined ? null : `${b.host}:${String(b.amcpPort)}`;
     if (key !== null && key !== this.#answeredFor) {
+      this.#clearedB = new Set();
       await this.#opts.holdB(true);
       this.#set({ ...this.#verdict, answeredB: false, heldB: null });
     }
@@ -193,9 +212,19 @@ export class CoreGuard {
     this.#ticker = null;
   }
 
-  /** Read every server's machine once (a read in flight is shared). Never rejects. */
+  /**
+   * Read every server's machine once. Never rejects. A read in flight was made with what was ours when it
+   * STARTED, so a refresh asked for while it runs is ONE more read after it (shared by every such ask) — a
+   * channel newly in force is read, never answered by a reading that did not include it.
+   */
   refresh(): Promise<void> {
-    if (this.#inFlight !== null) return this.#inFlight;
+    if (this.#inFlight !== null) {
+      this.#again ??= this.#inFlight.then(() => {
+        this.#again = null;
+        return this.refresh();
+      });
+      return this.#again;
+    }
     this.#inFlight = this.#read().finally(() => {
       this.#inFlight = null;
     });
@@ -217,6 +246,8 @@ export class CoreGuard {
     const stillB = nowB === undefined ? null : `${nowB.host}:${String(nowB.amcpPort)}`;
     if (stillB !== keyB) return;
     this.#answeredFor = keyB;
+    // What this reading cleared: the channels it was made WITH, and only when nobody else drives them.
+    this.#clearedB = B !== undefined && bDriver === null ? new Set(ours.B) : new Set();
     const next: CoreGuardVerdict = { heldB: bDriver, sharedA: aDriver, answeredB: B !== undefined };
     if (B !== undefined) await this.#opts.holdB(bDriver !== null);
     if (bDriver !== null && bDriver !== this.#verdict.heldB) {

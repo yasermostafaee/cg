@@ -345,7 +345,9 @@ server B's machine, on its own control port. If one answers that drives server B
 `casparcg.servers` row naming that core, with a channel in `casparcg.channels`), this CG Bridge sends that
 core **nothing** — no line, no failover onto it — and says so (`core-held`). A CG Bridge in first-run drives
 no channel and holds nobody. The same read of server A's machine only says it (`core-shared`); the primary is
-never held.
+never held. From `0.11.3` the comparison is per channel, in that core's own numbers: a neighbour holds server B
+only when it drives one of OUR mirror channels there (one on the backup's own programme channel holds nobody),
+and a mirror channel newly in force carries no line until a reading made with it has come back clean.
 
 ## 4. What CG Bridge guarantees
 

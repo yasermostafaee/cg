@@ -60,6 +60,14 @@ delivery (`0.11.3`).
       entry refused then accepted, audited, kept across a restart); the existing pair tests given explicit maps —
       the media wire tests now at B's own channel 4, the `B-313` tests per channel
 
+- [x] 2.10 🔴 The guard's window (red on `950aa2a2`'s PR run 37323750849, green locally by timing): a mapping that
+      appeared reached core B before `B-313`'s guard had read the neighbour WITH it. A backup channel now carries a
+      line only once a completed reading made with it came back clean (`CoreGuard.clearsB`, the runtime's map
+      gated by it; `/health` and the guard read the mapping in force); a refresh during a reading is one more
+      after it. `backup-session.integration.test.ts` — a neighbour answering 2.5 s late: red on the old seam
+      (`MIXER 2-99 VOLUME 0` and three more to B), none now; `core-guard.test.ts` (4 new; the follow-up read's
+      test red, by name, with the old `refresh`)
+
 ## 3. The console (`apps/runtime`)
 
 - [x] 3.1 The status bar's `BACKUP B · n of m channels mapped`; the channel view's backup line; the PROGRAM pane's

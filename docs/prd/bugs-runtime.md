@@ -13375,3 +13375,13 @@ verbatim line landed on the right channel by coincidence, and the line-for-line 
 coincidence. **Expected:** never A's channel number on B. Each channel's B number comes from a mapping — B's
 own D4 (`mirrorOf`, Playout `2.9.5`), or a station admin's explicit entry checked against B's D4 — and an
 unknown or invalid mapping sends B nothing for that channel, and says so (`R-089`).
+
+**Found by CI before release, fixed (2026-10-05, `RELEASE-0113-01`):** the first fix (`63307bca`) made
+`B-313`'s guard compare per channel, but the guard read server B's machine for a channel only on its NEXT reading,
+while the mapping was in force the moment it resolved — so a mapping that appeared sent core B its lines
+(`MIXER 2-88 VOLUME 1`) before the guard had looked for another CG Bridge driving that channel. A `B-313` test
+reddened on `950aa2a2`'s PR run ([37323750849](https://github.com/yasermostafaee/cg/actions/runs/37323750849)) and
+was green locally by timing. Now a backup channel carries a line only once a COMPLETED reading made WITH it came
+back clean (`CoreGuard.clearsB`), and a refresh asked for during a reading is one more reading after it. Pinned
+deterministically: a neighbour whose `/health` answers 2.5 s late holds the window open, and the old seam sends
+core B four layer lines inside it (red), the new one none.
