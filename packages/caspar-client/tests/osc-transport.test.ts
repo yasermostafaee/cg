@@ -107,6 +107,33 @@ describe('OscTransport', () => {
     ]);
   });
 
+  /*
+    🔴 `B-316` — on a backup engine the core's channel 2 is the mirror of the station's channel 1, and the
+    core's channel 1 is another programme. The map re-keys BEFORE the taps and the interest filter, so the
+    occupancy tap, the reconciler and R-058 all speak of the station's channel; a channel the map does not
+    name is dropped.
+  */
+  it('🔴 B-316 setChannelMap re-keys the core’s channel to the station’s before every tap, and drops an unmapped one', async () => {
+    const { transport, mock } = await setup({ interest: [{ channel: 1, layer: 80 }] });
+    transport.setChannelMap((core) => (core === 2 ? 1 : null));
+    const eventsP = waitForEvent(transport);
+    mock.emitOsc('/channel/2/stage/layer/80/foreground/producer', ['html']);
+    expect(await eventsP).toEqual([
+      { kind: 'osc.layer.foreground.producer', channel: 1, layer: 80, producer: 'html' },
+    ]);
+    expect(transport.occupancy.occupied(60_000).map((o) => [o.channel, o.layer])).toEqual([
+      [1, 80],
+    ]);
+    // The core's own channel 1 — another programme — never reaches anything.
+    const droppedP = waitForEvent(transport);
+    mock.emitOsc('/channel/1/stage/layer/80/foreground/producer', ['ffmpeg']);
+    expect(await droppedP).toEqual([]);
+    expect(transport.foreignChannelDroppedCount).toBe(1);
+    expect(transport.occupancy.occupied(60_000).map((o) => [o.channel, o.producer])).toEqual([
+      [1, 'html'],
+    ]);
+  });
+
   it('drops events for out-of-interest layers', async () => {
     const { transport, mock } = await setup({ interest: [{ channel: 1, layer: 20 }] });
     const eventsP = waitForEvent(transport);

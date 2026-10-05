@@ -6,6 +6,7 @@ import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { OwnedOccupancyWarning, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 
 /**
  * B-056 — the owned-slot occupancy warning. Mirror pair where the PRIMARY's
@@ -134,7 +135,8 @@ async function bootMirrorWithDeadPrimary(opts: { foreignOnPrimary: boolean }): P
       autoFailoverEnabled: false,
     },
     {},
-    { layerPolicy: TEST_LAYER_POLICY },
+    // `B-316` — the backup-only path needs B's channel; the mocks share numbers by construction.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
   );
   runtime = r;
   const emissions: OwnedOccupancyWarning[][] = [];

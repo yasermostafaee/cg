@@ -135,13 +135,19 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly thirteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, and its logs', () => {
+  it('exactly fourteen routes are station-admin: the configuration verbs, the unjoined catalogue, the two channel-scope doors, the bridge’s own sign-in on each engine, the backup channel entries, and its logs', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
       .sort();
 
     expect(admin).toEqual([
+      /*
+        `RELEASE-0113-01` (`R-089`) — which of the backup engine's channels mirrors each of this station's,
+        for a backup engine that publishes no mirror: a station's configuration, on the rung of the
+        backup's own sign-in. An entry is used only once the backup engine's D4 confirms it.
+      */
+      'backupChannels.set-entries',
       /*
         `CENTRAL-BRIDGE-01` §1 A — CG Bridge's logs, downloaded (they live on the Playout machine
         now): what an engineer reads, and what a support call is sent. A station admin's.
@@ -225,6 +231,11 @@ describe('C-038 — the census: every route, classified', () => {
       */
       'auth.sign-out',
       'auth.state',
+      /*
+        `RELEASE-0113-01` (`R-089`) — where each channel's lines go on the backup engine, as every console
+        says it (the status bar's count, each channel's line). A read: it names mappings and decides nothing.
+      */
+      'backupChannels.state',
       'bridge.capabilities',
       /*
         `RELEASE-0112-01` (`R-085`) — each engine's CG Bridge session, as every console says it (the

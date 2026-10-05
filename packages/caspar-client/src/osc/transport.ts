@@ -62,10 +62,11 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
   readonly clipTimes: OscClipTimeTap;
   private readonly expectedSourceHost: string | undefined;
   /**
-   * `CENTRAL-BRIDGE-01` rule 7 — the channels this transport takes in; `null` takes every channel.
-   * See {@link setServedChannels}.
+   * `CENTRAL-BRIDGE-01` rule 7 / `B-316` — the core's channel → the station's channel this transport
+   * takes it in as, or `null` (dropped); `null` as a whole takes every channel as it is. See
+   * {@link setChannelMap}.
    */
-  private servedChannel: ((channel: number) => boolean) | null = null;
+  private channelMap: ((coreChannel: number) => number | null) | null = null;
   private foreignDropped = 0;
 
   constructor(options: OscTransportOptions = {}) {
@@ -180,7 +181,19 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
    * changes takes effect on the next packet. `null` takes every channel (the default).
    */
   setServedChannels(accept: ((channel: number) => boolean) | null): void {
-    this.servedChannel = accept;
+    this.setChannelMap(accept === null ? null : (channel) => (accept(channel) ? channel : null));
+  }
+
+  /**
+   * 🔴 `B-316` (`RELEASE-0113-01`) — **THE CORE'S CHANNEL, READ AS THE STATION'S.** On a backup engine the
+   * mirror of the station's channel N is the core's own channel M, and the core's channel N is something
+   * else — another programme, a preview, a holder. `map(M)` answers N, and every message is RE-KEYED to it
+   * before the occupancy, channel-tick and clip-time taps and before any consumer, so everything kept or
+   * shown speaks of the station's channel; `null` drops the message there, as an unserved channel's is.
+   * Read per message. `null` as a whole takes every channel as it is (the default).
+   */
+  setChannelMap(map: ((coreChannel: number) => number | null) | null): void {
+    this.channelMap = map;
   }
 
   /** Telemetry: OSC messages dropped because their channel is not served. */
@@ -237,14 +250,20 @@ export class OscTransport extends EventEmitter<OscTransportEvents> {
       if (this.isExpectedSource(rinfo.address)) this.occupancy.noteTraffic(recvAt);
       const messages = flatten(packet);
       const events: OscEvent[] = [];
-      const served = this.servedChannel;
+      const map = this.channelMap;
       for (const msg of messages) {
-        const event = messageToEvent(msg);
-        if (event === null) continue;
-        // `CENTRAL-BRIDGE-01` rule 7 — a channel this station does not serve stops here.
-        if (served !== null && event.kind !== 'osc.health' && !served(event.channel)) {
-          this.foreignDropped++;
-          continue;
+        const parsed = messageToEvent(msg);
+        if (parsed === null) continue;
+        let event: OscEvent = parsed;
+        // `CENTRAL-BRIDGE-01` rule 7 — a channel this station does not serve stops here; `B-316` — and a
+        // served one is re-keyed to the station's number first.
+        if (map !== null && event.kind !== 'osc.health') {
+          const station = map(event.channel);
+          if (station === null) {
+            this.foreignDropped++;
+            continue;
+          }
+          if (station !== event.channel) event = { ...event, channel: station };
         }
         // R-009 — the passive occupancy tap sees EVERY parsed producer
         // event, BEFORE the interest drop; it never adds to `events`.

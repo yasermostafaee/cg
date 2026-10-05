@@ -13,7 +13,11 @@ import {
   type BridgeSignInResult,
   type VerifyAccess,
 } from './bridge-session.js';
-import { PlayoutCatalogue, type PlayoutCatalogueOptions } from './playout-catalogue.js';
+import {
+  PlayoutCatalogue,
+  type CatalogueRow,
+  type PlayoutCatalogueOptions,
+} from './playout-catalogue.js';
 import { playout292Url, playoutEndpointsFor, type PlayoutEndpoints } from './playout-config.js';
 import { playoutFetch } from './playout-http.js';
 import { PlayoutLicenseReader, type PlayoutLicenseReaderOptions } from './playout-license.js';
@@ -223,6 +227,20 @@ export class BackupEngine {
     return this.#parts?.catalogue.lastGoodReadAtMs() ?? null;
   }
 
+  /**
+   * 🔴 `RELEASE-0113-01` (`R-089`) — **THE BACKUP ENGINE'S OWN D4**, read with its own token, each row's
+   * loopback `casparHost` read as the backup engine's machine (rule 9) — the ONLY reference for B's channel
+   * numbers (`mirrorOf`, `2.9.5`). `null` — absent now (no session, a failed read).
+   */
+  rows(): readonly CatalogueRow[] | null {
+    return this.#parts?.catalogue.rows() ?? null;
+  }
+
+  /** `R-089` — read B's D4 now (the 5 s floor still holds): on B's reconnect, and when asked. */
+  refreshChannels(): Promise<void> {
+    return this.#parts?.catalogue.refresh() ?? Promise.resolve();
+  }
+
   signedInAtMs(): number | null {
     return this.#signedInAtMs;
   }
@@ -265,6 +283,8 @@ export class BackupEngine {
     };
     // Declared first: every reader's bearer is THIS session's token, read when the reader asks.
     let session: BridgeSession | null = null;
+    // `R-089` — B's D4 is read again the moment a token is gained (B's sign-in), not a period later.
+    let channels: PlayoutCatalogue | null = null;
     const bearer = (): string | null => session?.accessToken() ?? null;
     const license = new PlayoutLicenseReader(playout292Url(endpoints, 'license'), bearer, {
       ...(this.#opts.licenseOptions ?? {}),
@@ -287,6 +307,7 @@ export class BackupEngine {
             onAccess: (accessToken) => {
               void this.#introduce(endpoints.revokedUrl, accessToken);
               void license.refresh({ soon: true });
+              void channels?.refresh();
             },
             log,
           });
@@ -295,6 +316,7 @@ export class BackupEngine {
       ...(this.#opts.readFetch !== undefined ? { fetchImpl: this.#opts.readFetch } : {}),
       playoutHost,
     });
+    channels = catalogue;
     const version = new PlayoutVersionReader(playoutVersionUrl(address), {
       ...(this.#opts.versionOptions ?? {}),
       ...(this.#opts.readFetch !== undefined ? { fetchImpl: this.#opts.readFetch } : {}),
@@ -315,6 +337,8 @@ export class BackupEngine {
       license.onChanged(emit),
       version.onChanged(emit),
       version.onReachChanged(emit),
+      // `R-089` — B's channel list is what its mapping is made of.
+      catalogue.onChanged(emit),
     ];
     license.start();
     catalogue.start();

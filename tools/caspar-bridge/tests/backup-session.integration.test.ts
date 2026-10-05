@@ -4,13 +4,14 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type { EngineSessions } from '@cg/shared-ipc';
+import type { BackupChannelsState, EngineSessions } from '@cg/shared-ipc';
 import type { AuditEntry } from '@cg/shared-schema';
 import { loadBridgeSession } from '../src/bridge-session.js';
 import { createBridge, type BridgeHandle, type BridgeOptions } from '../src/bridge.js';
 import { openClient, waitFor, type Client } from './support/auth-harness.js';
 import { FAKE_ADMIN, startFakePlayout, type FakePlayout } from './support/fake-playout.js';
 import { HEALTH_MS, awaitChannelModeRead, track } from './support/harness.js';
+import { pairBackupCatalogue, pairPrimaryCatalogue } from './support/fake-station.js';
 import { FURNITURE, standardBank } from './support/two-channel-rig.js';
 import { recvLines } from './support/wire-trace.js';
 
@@ -405,7 +406,10 @@ describe('🔴 R-085 — one Playout session per engine, each with its own accou
 });
 
 describe('🔴 B-313 — never a second sender on the backup core', () => {
-  async function secondBridgeOn(coreB: Core, opts: { drives: boolean }): Promise<BridgeHandle> {
+  async function secondBridgeOn(
+    coreB: Core,
+    opts: { drives: 'nothing' | number },
+  ): Promise<BridgeHandle> {
     return track(
       await createBridge({
         port: 0,
@@ -416,7 +420,9 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
           strategy: 'mirror-sync',
           autoFailoverEnabled: false,
         },
-        ...(opts.drives ? { fixedLayers: [standardBank(1)] } : { firstRun: true }),
+        ...(opts.drives === 'nothing'
+          ? { firstRun: true }
+          : { fixedLayers: [standardBank(opts.drives)] }),
       }),
       (h) => h.close(),
     );
@@ -424,13 +430,66 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
 
   const portOf = (h: BridgeHandle): number => Number(new URL(h.url).port);
 
-  it('a CG Bridge on the backup engine’s machine that DRIVES its core holds this bridge’s mirror there: not one connection, not one line — server A untouched', async () => {
+  /**
+   * Every command THIS bridge sent server B, from its own AMCP log (`<at> B <host> <ms>ms >> <line> << …`) —
+   * core B's own trace also holds the other bridge's lines.
+   */
+  async function sentToB(handle: BridgeHandle, logFile: string): Promise<string[]> {
+    await handle.amcpLog?.flush();
+    return fs
+      .readFileSync(logFile, 'utf8')
+      .split('\n')
+      .filter((l) => / B 127\.0\.0\.1:/.test(l))
+      .map((l) => / >> (.*) << /.exec(l)?.[1] ?? '')
+      .filter((l) => l !== '');
+  }
+
+  /** The channel a line names (`CG 2-99 PLAY 0` → 2), or `null` for a line that names none. */
+  const namesChannel = (line: string): number | null => {
+    const m =
+      /^(?:CG|PLAY|LOAD|LOADBG|STOP|CLEAR|PAUSE|RESUME|CALL|MIXER|INFO) (\d+)(?:-\d+)?(?:\s|$)/.exec(
+        line,
+      );
+    return m === null ? null : Number(m[1]);
+  };
+
+  async function signInBoth(admin: Client): Promise<void> {
+    expect(
+      (await admin.ask(id(), 'bridgeSession.sign-in', { username: 'cg-admin', password: PASS_A }))
+        .payload,
+    ).toEqual({ ok: true });
+    expect(
+      (
+        await admin.ask(id(), 'bridgeSession.backup.sign-in', {
+          username: 'cg-admin',
+          password: PASS_B,
+        })
+      ).payload,
+    ).toEqual({ ok: true });
+  }
+
+  async function mappedTo(admin: Client, onB: number): Promise<void> {
+    await until(
+      async () => {
+        const state = (await admin.ask(id(), 'backupChannels.state'))
+          .payload as BackupChannelsState;
+        const line = state.backup?.channels.find((c) => c.channel === 1);
+        return line?.state === 'mapped' && line.backupChannel === onB;
+      },
+      `the station's CH 1 mapped to the backup core's ${String(onB)}`,
+    );
+  }
+
+  it('a CG Bridge on the backup engine’s machine that drives OUR mirror channel there holds this bridge’s mirror: not one layer write — server A untouched', async () => {
     const coreA = await core();
     const coreB = await core();
-    const other = await secondBridgeOn(coreB, { drives: true });
+    // The other bridge drives the backup core's channel 2 — the mirror of OUR channel 1.
+    const other = await secondBridgeOn(coreB, { drives: 2 });
     await waitFor(() => coreB.connections() === 1, 8_000);
     const logFile = path.join(scratch(), 'amcp.log');
     const e = await engines();
+    e.a.setChannels(pairPrimaryCatalogue(e.b.baseUrl));
+    e.b.setChannels(pairBackupCatalogue(e.a.baseUrl));
     const handle = await bridgeOn(
       e,
       { coreA, coreB },
@@ -438,9 +497,11 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
       { coreGuardPort: portOf(other), amcpLogPath: logFile },
       { backupHeld: true },
     );
-    // ⚠ Server B is held from the start until the guard has LOOKED, so `serverBHeld()` alone proves
-    // nothing: wait for the guard's verdict itself, the backup line reading `core-held`.
     const admin = await adminConsole({ a: e.a, handle });
+    await signInBoth(admin);
+    await mappedTo(admin, 2);
+    // ⚠ Our channel on that core is 2 only once the mapping exists; the guard then reads the other
+    // bridge's channels and finds ours among them.
     await until(
       async () => (await enginesOf(admin)).backup?.state === 'core-held',
       'the guard’s verdict: core-held',
@@ -449,13 +510,12 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
     // Give a mirror every chance to happen: a take on A.
     await take(handle, 'logo-3');
     await new Promise((r) => setTimeout(r, 500));
-    expect(coreB.connections(), 'this bridge never connected to the held core').toBe(1);
-    await handle.amcpLog?.flush();
-    const sentToB = fs
-      .readFileSync(logFile, 'utf8')
-      .split('\n')
-      .filter((l) => / B 127\.0\.0\.1:/.test(l));
-    expect(sentToB, 'no line went to server B').toEqual([]);
+    const toB = await sentToB(handle, logFile);
+    expect(toB.length, 'the instrument sees this bridge’s reads to server B').toBeGreaterThan(0);
+    expect(
+      toB.filter((l) => LAYER_WRITE.test(l)),
+      'no layer write went to server B',
+    ).toEqual([]);
     // Server A is untouched: the take is on it.
     expect(await coreA.lines()).toContain('CG 1-99 PLAY 0');
     // Every surface says it.
@@ -469,12 +529,48 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
       state: 'core-held',
       message: `127.0.0.1:${String(portOf(other))}`,
     });
-  }, 40_000);
+  }, 60_000);
 
-  it('CONTROL — an IDLE bridge there (first-run, no channel) holds nobody: this bridge mirrors to the backup core; and the idle bridge itself writes no layer', async () => {
+  it('🔴 RELEASE-0113-01 — a CG Bridge driving the backup core’s OWN programme channel (1) holds nobody: our mirror reaches channel 2, and nothing reaches 1', async () => {
     const coreA = await core();
     const coreB = await core();
-    const idle = await secondBridgeOn(coreB, { drives: false });
+    const other = await secondBridgeOn(coreB, { drives: 1 });
+    await waitFor(() => coreB.connections() === 1, 8_000);
+    const e = await engines();
+    e.a.setChannels(pairPrimaryCatalogue(e.b.baseUrl));
+    e.b.setChannels(pairBackupCatalogue(e.a.baseUrl));
+    const logFile = path.join(scratch(), 'amcp.log');
+    const handle = await bridgeOn(e, { coreA, coreB }, scratch(), {
+      coreGuardPort: portOf(other),
+      amcpLogPath: logFile,
+    });
+    const admin = await adminConsole({ a: e.a, handle });
+    await signInBoth(admin);
+    await mappedTo(admin, 2);
+    await until(
+      async () => handle.runtime.health().backup?.state === 'healthy',
+      'server B healthy',
+    );
+    // Give the guard its reading with our channel 2 in force: the other bridge's 1 is not ours.
+    await new Promise((r) => setTimeout(r, 400));
+    expect(handle.runtime.serverBHeld()).toBe(false);
+    expect((await enginesOf(admin)).backup?.state).not.toBe('core-held');
+    await take(handle, 'logo-5');
+    await until(
+      async () => (await sentToB(handle, logFile)).includes('CG 2-99 PLAY 0'),
+      'the mirror on the backup core’s channel 2',
+    );
+    // 🔴 Every line this bridge sent the backup core that names a channel names 2 — never its own 1.
+    const named = new Set(
+      (await sentToB(handle, logFile)).map(namesChannel).filter((c): c is number => c !== null),
+    );
+    expect([...named]).toEqual([2]);
+  }, 60_000);
+
+  it('CONTROL — an IDLE bridge there (first-run, no channel) holds nobody: this bridge mirrors to the backup core’s channel 2; and the idle bridge itself writes no layer', async () => {
+    const coreA = await core();
+    const coreB = await core();
+    const idle = await secondBridgeOn(coreB, { drives: 'nothing' });
     await waitFor(() => coreB.connections() === 1, 8_000);
     await new Promise((r) => setTimeout(r, 600));
     // 🔴 The idle bridge's own AMCP: reads only — no layer write at all.
@@ -483,9 +579,14 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
     expect(idleLines.filter((l) => LAYER_WRITE.test(l))).toEqual([]);
 
     const e = await engines();
+    e.a.setChannels(pairPrimaryCatalogue(e.b.baseUrl));
+    e.b.setChannels(pairBackupCatalogue(e.a.baseUrl));
     const handle = await bridgeOn(e, { coreA, coreB }, scratch(), {
       coreGuardPort: portOf(idle),
     });
+    const admin = await adminConsole({ a: e.a, handle });
+    await signInBoth(admin);
+    await mappedTo(admin, 2);
     await waitFor(() => coreB.connections() === 2, 8_000);
     expect(handle.runtime.serverBHeld()).toBe(false);
     await until(
@@ -495,11 +596,11 @@ describe('🔴 B-313 — never a second sender on the backup core', () => {
     const before = (await coreB.lines()).length;
     await take(handle, 'logo-4');
     await until(
-      async () => (await coreB.lines()).slice(before).includes('CG 1-99 PLAY 0'),
+      async () => (await coreB.lines()).slice(before).includes('CG 2-99 PLAY 0'),
       'the mirror on the backup core',
     );
     expect((await coreB.lines()).slice(before), 'the mirror reached the backup core').toContain(
-      'CG 1-99 PLAY 0',
+      'CG 2-99 PLAY 0',
     );
-  }, 40_000);
+  }, 60_000);
 });

@@ -108,6 +108,12 @@ export const AuditEntrySchema = z.object({
       when and whether it took.
     */
     'bridge-sign-in',
+    /*
+      🔴 `RELEASE-0113-01` (`R-089`) — a station admin set the backup channel entries: which of the backup
+      engine's channels mirrors each of this station's (`backupChannels`, as ASKED — the complete list). A
+      CONFIGURATION verb: it seats nothing, and an entry is used only once the backup engine's D4 confirms it.
+    */
+    'set-backup-channels',
   ]),
   /**
    * 🔴 `C-037` / ADR 0010 rule 3 — the token's `sub`: an opaque, stable user id, kept
@@ -218,6 +224,19 @@ export const AuditEntrySchema = z.object({
       transport: z.enum(['play', 'pause', 'restart']).optional(),
       plateId: z.string().min(1).optional(),
     })
+    .optional(),
+  /**
+   * `RELEASE-0113-01` (`R-089`) — WHAT a `set-backup-channels` row carried: the entries as asked, each the
+   * station's channel and the backup engine's own channel for it. Absent on every other action.
+   */
+  backupChannels: z
+    .array(
+      z.object({
+        channel: z.number().int().positive(),
+        backupChannel: z.number().int().positive(),
+      }),
+    )
+    .max(64)
     .optional(),
 });
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;

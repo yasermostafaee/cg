@@ -168,7 +168,15 @@ import {
   templateAdmitsPassTiming,
   unlicensedTakeRefusal,
   CG_UNLICENSED_CODE,
+  BACKUP_UNMAPPED_CODE,
+  backupUnmappedRefusal,
 } from '@cg/shared-ipc';
+import {
+  NO_BACKUP_CHANNELS,
+  serverBLineFor,
+  type BackupChannelMap,
+  type ServerBLineVerdict,
+} from './server-b-line.js';
 import {
   operatorActor,
   operatorConsoleAddress,
@@ -2077,6 +2085,16 @@ export class CasparRuntime {
   };
   /** `DESKTOP-APPS-01-C` C6 — see the option: the address a session dials, per configured host. */
   readonly #amcpAddressFor: (host: string) => string;
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`) — **WHERE EACH CHANNEL'S LINES GO ON SERVER B.** Nothing mapped until the
+   * bridge hands in the backup engine's mapping ({@link useBackupChannels}): no line ever reaches server B
+   * with the primary's channel number, and with no mapping none reaches it at all.
+   */
+  #backupChannels: BackupChannelMap = NO_BACKUP_CHANNELS;
+  /** `B-316` — TEST-ONLY, see the constructor option: hand server B the station's line untranslated. */
+  readonly #serverBVerbatim: boolean;
+  /** `B-316` — server B refusals already logged (one line per kind and channel). */
+  readonly #serverBRefusalsSaid = new Set<string>();
 
   constructor(
     config: ConnectionConfig,
@@ -2146,7 +2164,18 @@ export class CasparRuntime {
          * nothing for this guard to do.
          */
         throwAfterMixerLines?: number;
+        /**
+         * 🔴 **TEST-ONLY (`B-316`) — hand server B the STATION's line, untranslated**, as a regression in
+         * the translation would. The guard for server B (`serverBLineRefusal`) must still refuse every such
+         * line that names a channel that is not one of B's mirrors; this is how a test proves it does.
+         */
+        serverBVerbatim?: boolean;
       };
+      /**
+       * `B-316` — TEST-ONLY: the backup channel map to start with (production: the bridge hands one in with
+       * {@link useBackupChannels}). Absent — nothing is mapped, and nothing reaches server B.
+       */
+      backupChannels?: BackupChannelMap;
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
       sessionTuning?: {
         oscDegradedAfterMs?: number;
@@ -2330,6 +2359,8 @@ export class CasparRuntime {
     this.#outputRecheckMs = options.outputRecheckMs ?? OUTPUT_RECHECK_MS;
     this.#mixerLineDelayMs = options.faultInjection?.mixerLineDelayMs ?? 0;
     this.#throwAfterMixerLines = options.faultInjection?.throwAfterMixerLines ?? 0;
+    this.#serverBVerbatim = options.faultInjection?.serverBVerbatim ?? false;
+    if (options.backupChannels !== undefined) this.#backupChannels = options.backupChannels;
     this.#sessionTuning = options.sessionTuning ?? {};
     this.#amcpAddressFor = options.amcpAddressFor ?? ((host: string): string => host);
     this.#templateServer =
@@ -2363,6 +2394,8 @@ export class CasparRuntime {
       sessions: this.#sessions,
       initialPrimary: 'A',
       autoFailoverEnabled: config.autoFailoverEnabled,
+      // 🔴 `B-316` — every road to server B asks this, and only this.
+      serverBLine: (line) => this.#serverBLine(line),
     });
   }
 
@@ -2405,7 +2438,16 @@ export class CasparRuntime {
         Playout's machine its previews, its holder and its guard among them): only the channels this
         station declares are taken in. While none is declared (first-run) every channel is.
       */
-      built.osc.setServedChannels((channel) => this.#servesOscChannel(channel));
+      /*
+        🔴 `B-316` — and server B's core speaks its OWN channel numbers: its M is read as the station's N
+        before any tap, and a channel of B's that is no mirror in force (its own programme, a preview, a
+        holder) is dropped — said once per channel.
+      */
+      built.osc.setChannelMap(
+        name === 'A'
+          ? (channel) => (this.#servesOscChannel(channel) ? channel : null)
+          : (channelOnB) => this.#stationChannelOfB(channelOnB, 'OSC'),
+      );
       const where = `${ep.host}:${String(ep.amcpPort)}`;
       built.on('oscSubscription', ({ port, outcome, detail }) => {
         this.#oscStatus.set(name, outcome);
@@ -2463,7 +2505,13 @@ export class CasparRuntime {
         if (this.#sessions[label] !== session) return; // torn-down era
         const cleared = acknowledgedClearOf(exchange.line, exchange.reply);
         if (cleared === null) return;
-        const event = session.osc.noteCleared(cleared.channel, cleared.layer);
+        // `B-316` — server B's line named B's own channel: read it as the station's.
+        const channel =
+          label === 'A'
+            ? cleared.channel
+            : this.#stationChannelOfB(cleared.channel, 'an acknowledged CLEAR');
+        if (channel === null) return;
+        const event = session.osc.noteCleared(channel, cleared.layer);
         if (this.#adapter.currentPrimary === label) this.#reconciler.applyOsc(event);
       });
       /*
@@ -2606,7 +2654,10 @@ export class CasparRuntime {
     this.#startChecked = true;
     const byKey = new Map<string, string>();
     for (const channel of this.#declaredChannels()) {
-      const response = await read(this.#builder.info(channel));
+      // `B-316` — on server B, the station's channel is asked at B's own number; none — no picture at all.
+      const onCore = label === 'A' ? channel : this.#backupChannels.channelOnB(channel);
+      if (onCore === null) return;
+      const response = await read(this.#builder.info(onCore));
       const xml =
         response.kind === 'ok-line'
           ? response.data
@@ -4736,6 +4787,77 @@ export class CasparRuntime {
     return false;
   }
 
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — the bridge hands in where each channel's lines go on server B
+   * (`BackupChannels`). The redundancy seam reads it on every line; B's OSC and clears are mapped back with it.
+   */
+  useBackupChannels(map: BackupChannelMap): void {
+    this.#backupChannels = map;
+    this.#serverBRefusalsSaid.clear();
+  }
+
+  /** `B-316` — the backup channel map in force (`/health` and `B-313`'s guard read it). */
+  backupChannelMap(): BackupChannelMap {
+    return this.#backupChannels;
+  }
+
+  /**
+   * `B-316` — does CG hold live layers on this channel: a row on air or unsettled there, or a seat of the
+   * ledger? The backup mapping's question when it changes — a change while live HOLDS the channel.
+   */
+  holdsLiveLayersOn(channel: number): boolean {
+    return this.#heldOnAirLayers().has(channel);
+  }
+
+  /**
+   * 🔴 `B-316` — **WHAT SERVER B GETS FOR A STATION LINE** (`server-b-line.ts`): its own channel number,
+   * checked by B's own guard, or a refusal. One function for every road, so the adapter's fan-out, its
+   * catch-up and resend, and `#send`'s refusal while B is the primary can never disagree.
+   */
+  #serverBVerdict(line: string): ServerBLineVerdict {
+    return serverBLineFor(
+      line,
+      {
+        map: this.#backupChannels,
+        isOwnLayer: (channel, layer) => this.#isOwnConfiguredLayer(channel, layer),
+      },
+      { verbatim: this.#serverBVerbatim },
+    );
+  }
+
+  /** The adapter's `serverBLine`: the verdict's line, or `null` — said once per kind and channel. */
+  #serverBLine(line: string): string | null {
+    const verdict = this.#serverBVerdict(line);
+    if ('line' in verdict) return verdict.line;
+    const key = `${verdict.refused}:${String(verdict.channel ?? '-')}:${verdict.reason}`;
+    if (!this.#serverBRefusalsSaid.has(key)) {
+      this.#serverBRefusalsSaid.add(key);
+      process.stderr.write(
+        `[caspar-bridge] 🔴 not sent to server B — ${verdict.reason}: ` +
+          `${redactUrlCredentials(summarizeWireLine(line))} (said once)\n`,
+      );
+    }
+    return null;
+  }
+
+  /**
+   * `B-316` — the station's channel for server B's own channel M (OSC, an acknowledged clear), or `null`:
+   * M is no mirror in force — B's own programme, a preview, a holder — and what it says is ignored, said once.
+   */
+  #stationChannelOfB(channelOnB: number, what: string): number | null {
+    const channel = this.#backupChannels.stationChannelOf(channelOnB);
+    if (channel !== null) return this.#servesOscChannel(channel) ? channel : null;
+    const key = `read:${String(channelOnB)}`;
+    if (!this.#serverBRefusalsSaid.has(key)) {
+      this.#serverBRefusalsSaid.add(key);
+      process.stderr.write(
+        `[caspar-bridge] server B's channel ${String(channelOnB)} is no mirror of this station's — ` +
+          `${what} from it is ignored (said once)\n`,
+      );
+    }
+    return null;
+  }
+
   async take(itemId: string): Promise<TakeVerdict> {
     const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
       this.#takeImpl(itemId),
@@ -4843,6 +4965,22 @@ export class CasparRuntime {
       return { accepted: false, errorCode: CG_UNLICENSED_CODE, message: reason };
     }
     /*
+      🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — SERVER B IS THE PRIMARY AND THIS CHANNEL HAS NO BACKUP CHANNEL.
+      Its number on B is unknown, and B's channel N is another channel — maybe another programme on air. So
+      the take is refused HERE, in words, before anything is sent and before anything mutates. A HELD channel
+      is judged by the mapping its take would put in force (`channelOnBAtTake`).
+    */
+    if (this.#adapter.currentPrimary === 'B') {
+      const unmapped = this.channelsForItem(itemId).find(
+        (channel) => this.#backupChannels.channelOnBAtTake(channel) === null,
+      );
+      if (unmapped !== undefined) {
+        const message = backupUnmappedRefusal(unmapped);
+        this.#recordTakeRefusal(itemId, { code: BACKUP_UNMAPPED_CODE, message });
+        return { accepted: false, errorCode: BACKUP_UNMAPPED_CODE, message };
+      }
+    }
+    /*
       🔴 `FIELD-FIXES-01-A` DECISION 2 — **A ROW ALREADY ON AIR IS NOT TAKEN, and neither is one
       whose previous take has not resolved.** Refused HERE, for every console, with nothing sent.
 
@@ -4864,6 +5002,12 @@ export class CasparRuntime {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+    /*
+      🔴 `B-316` — A TAKE IS WHERE A HELD CHANNEL'S NEW BACKUP CHANNEL COMES INTO FORCE: its mapping changed
+      while it was live, and nothing has been sent to server B for it since. From here this take's lines —
+      and every later one — reach B's newly resolved channel, or nothing.
+    */
+    for (const channel of this.channelsForItem(itemId)) this.#backupChannels.release(channel);
 
     /*
       C-015 phase 6 (6.0) — DECIDE THE LIVE PLATES HERE, WHERE A REFUSAL COSTS
@@ -13374,6 +13518,8 @@ export class CasparRuntime {
       sessions,
       initialPrimary: 'A',
       autoFailoverEnabled: next.autoFailoverEnabled,
+      // 🔴 `B-316` — every road to server B asks this, and only this.
+      serverBLine: (line) => this.#serverBLine(line),
     });
     // `B-313` — the hold outlives the rebuild.
     this.#adapter.setHeld('B', this.#serverBHeld);
@@ -14161,6 +14307,26 @@ export class CasparRuntime {
     server?: 'backup';
   }): void {
     this.#recordAudit({ action: 'bridge-sign-in', actor: operatorActor(), ...entry });
+  }
+
+  /**
+   * `RELEASE-0113-01` (`R-089`) — **A STATION ADMIN SET THE BACKUP CHANNEL ENTRIES**, or tried: the entries
+   * as asked, inside the admin's own request (so the actor and the console machine are that admin's).
+   */
+  recordBackupChannels(entry: {
+    outcome: 'ok' | 'failed';
+    backupChannels: readonly { channel: number; backupChannel: number }[];
+  }): void {
+    this.#recordAudit({
+      action: 'set-backup-channels',
+      actor: operatorActor(),
+      server: 'backup',
+      outcome: entry.outcome,
+      backupChannels: entry.backupChannels.map((e) => ({
+        channel: e.channel,
+        backupChannel: e.backupChannel,
+      })),
+    });
   }
 
   /**
@@ -15515,6 +15681,24 @@ export class CasparRuntime {
         errorCode: BACKUP_NO_COPY_CODE,
         command: summarizeWireLine(line),
       };
+    }
+    /*
+      🔴 `B-316` — SERVER B IS THE PRIMARY (after a failover) AND HAS NO LINE FOR THIS ONE: no backup channel
+      in force for its channel, a `route://`, or a line its guard refuses. Refused like a refused command,
+      with its own code, and NOTHING is sent — the adapter would refuse it too, but as a thrown error.
+    */
+    if (this.#adapter.currentPrimary === 'B') {
+      const onB = this.#serverBVerdict(options.serverB ?? line);
+      if ('refused' in onB) {
+        this.#clearExpiry(seq);
+        this.#reconciler.applyAck(seq, false, onB.refused);
+        return {
+          ok: false,
+          onPrimary: false,
+          errorCode: onB.refused,
+          command: summarizeWireLine(line),
+        };
+      }
     }
     const refusal =
       options.routeEpoch !== undefined && !this.#routeEpochIsCurrent(options.routeEpoch)

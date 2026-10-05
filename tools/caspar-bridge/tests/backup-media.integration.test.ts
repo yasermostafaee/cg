@@ -26,6 +26,13 @@ import {
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
 import { LocalPlayoutSources } from './support/local-playout-sources.js';
 import { recvLines } from './support/wire-trace.js';
+import { mirrorMap, onServerB } from './support/backup-map.js';
+
+/**
+ * `RELEASE-0113-01` (`B-316`) — the station's channel 2 is mirrored at server B's OWN channel 4, as on a real
+ * pair (B's lower channels are its own). Every line B receives here names 4, never 2.
+ */
+const MIRROR = { 2: 4 } as const;
 
 /**
  * 🔴 `PLAYOUT-FEATURES-01` A (`B-286`) — **SERVER B GETS THE BACKUP'S OWN CLIP, FOUND BY FINGERPRINT IN THE
@@ -141,7 +148,10 @@ const bind = (l1: string, l2: string): SourceAssignments => ({
   ],
 });
 
-async function newMock(oscPort: number): Promise<{ mock: MockHandle; trace: string }> {
+async function newMock(
+  oscPort: number,
+  channels = 2,
+): Promise<{ mock: MockHandle; trace: string }> {
   const trace = path.join(
     os.tmpdir(),
     `cg-backup-media-${String(process.pid)}-${String(Date.now())}-${String(Math.round(performance.now() * 1000))}.ndjson`,
@@ -151,7 +161,7 @@ async function newMock(oscPort: number): Promise<{ mock: MockHandle; trace: stri
     oscPort,
     oscHost: '127.0.0.1',
     oscHz: 40,
-    channels: 2,
+    channels,
     tracePath: trace,
   });
   mocks.push(mock);
@@ -225,7 +235,8 @@ async function boot(
 
   const [oscA, oscB] = [await freeUdpPort(), await freeUdpPort()];
   const a = await newMock(oscA);
-  const b = await newMock(oscB);
+  // `B-316` — server B's core has its own channels; the station's 2 is its 4.
+  const b = await newMock(oscB, 4);
   const config: ConnectionConfig = {
     servers: {
       A: { host: '127.0.0.1', amcpPort: a.mock.amcpPort, oscPort: oscA },
@@ -246,6 +257,8 @@ async function boot(
       sweepMs: 150,
       sourceCatalog: sources.catalog(),
       sourceAssignments: options.assignments ?? bind(PROMO.id, STING.id),
+      // `B-316` — the mirror, named: no Playout D4 here to read it from.
+      backupChannels: mirrorMap(MIRROR),
     },
   );
   runtimes.push(r);
@@ -283,6 +296,9 @@ async function boot(
 }
 
 const plays = (lines: readonly string[]): string[] => lines.filter((l) => /^PLAY 2-\d+ "/.test(l));
+/** `B-316` — server B's plays are on ITS channel 4; any `PLAY 2-` there would be the defect. */
+const playsB = (lines: readonly string[]): string[] =>
+  lines.filter((l) => /^PLAY [24]-\d+ "/.test(l));
 const item0 = (r: CasparRuntime) => r.stackSnapshot().find((i) => i.itemId === ROW);
 
 async function take(r: CasparRuntime): Promise<{ ms: number }> {
@@ -299,13 +315,13 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     const { r, aLines, bLines } = await boot();
     await take(r);
     const a = plays(await aLines());
-    const b = plays(await bLines());
+    const b = playsB(await bLines());
     // A: both clips at A's own paths.
     expect(a.some((l) => l.includes('"C:/Apasai CIaB/Promo/promo.mp4"'))).toBe(true);
     expect(a.some((l) => l.includes('"C:/Apasai CIaB/Promo/sting.mov"'))).toBe(true);
-    // B: PROMO at B's own path; STING — which B lacks — never.
+    // B: PROMO at B's own path, on B's OWN channel 4; STING — which B lacks — never.
     expect(b.filter((l) => l.includes('promo'))).toEqual([
-      expect.stringContaining('"E:/Backup Library/promo.mp4"'),
+      expect.stringMatching(/^PLAY 4-\d+ "E:\/Backup Library\/promo\.mp4"/),
     ]);
     expect(b.some((l) => l.includes('sting'))).toBe(false);
     // 🔴 No line B received ever carries a primary path.
@@ -325,7 +341,7 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
   it('🔴 a backup older than 2.9.1 (its items carry no fingerprint) refuses EVERY media plate on B, naming why', async () => {
     const { r, bLines } = await boot({ backupLegacy: true });
     await take(r);
-    expect(plays(await bLines())).toEqual([]);
+    expect(playsB(await bLines())).toEqual([]);
     expect(item0(r)?.backupNoCopy).toEqual([
       { plateId: 'l1', name: 'پرومو', reason: 'backup-old' },
       { plateId: 'l2', name: 'Sting', reason: 'backup-old' },
@@ -338,7 +354,7 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     // The lookup's own bound is 5 s; a take that waited on it could not be this fast.
     expect(ms, `measured: ${String(ms)} ms`).toBeLessThan(2_000);
     expect(plays(await aLines())).toHaveLength(2);
-    expect(plays(await bLines())).toEqual([]);
+    expect(playsB(await bLines())).toEqual([]);
     expect(item0(r)?.backupNoCopy?.map((e) => e.reason)).toEqual([
       'backup-unread',
       'backup-unread',
@@ -355,7 +371,7 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     await take(r);
     // A airs both clips; B is sent no clip at all — nothing guessed, no primary path.
     expect(plays(await aLines())).toHaveLength(2);
-    expect(plays(await bLines())).toEqual([]);
+    expect(playsB(await bLines())).toEqual([]);
     expect((await bLines()).filter((l) => l.includes('C:/Apasai CIaB'))).toEqual([]);
     expect(item0(r)?.backupNoCopy).toEqual([
       { plateId: 'l1', name: 'پرومو', reason: 'backup-unread' },
@@ -372,7 +388,7 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
       realBearer: async (backup) => (await backup.issueToken({ user: 'admin' })).token,
     });
     await take(own.r);
-    expect(plays(await own.bLines()).filter((l) => l.includes('promo'))).toEqual([
+    expect(playsB(await own.bLines()).filter((l) => l.includes('promo'))).toEqual([
       expect.stringContaining('"E:/Backup Library/promo.mp4"'),
     ]);
     expect(own.backupPlayout.foreignRefusals).toBe(0);
@@ -391,7 +407,7 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     ).toBeGreaterThan(0);
     expect(log).toContain('backup media list answered 401 — kept what was known');
     await take(crossed.r);
-    expect(plays(await crossed.bLines())).toEqual([]);
+    expect(playsB(await crossed.bLines())).toEqual([]);
     expect(item0(crossed.r)?.backupNoCopy?.map((e) => e.reason)).toEqual([
       'backup-unread',
       'backup-unread',
@@ -409,10 +425,14 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     item('b-sting', 'Sting', 'E:/Backup Library/sting.mov', fakeFingerprint('m-sting')),
   ];
   const LAYER_WRITE = /^(CG|PLAY|LOADBG|LOAD|STOP|CLEAR|MIXER|CALL|PAUSE|RESUME|SWAP)\b/;
+  // `RELEASE-0113-01` (`B-316`) — and on B's OWN channel: 2 → 4, every other byte A's.
   const toB = (line: string): string =>
-    line
-      .replace('C:/Apasai CIaB/Promo/promo.mp4', 'E:/Backup Library/promo.mp4')
-      .replace('C:/Apasai CIaB/Promo/sting.mov', 'E:/Backup Library/sting.mov');
+    onServerB(
+      line
+        .replace('C:/Apasai CIaB/Promo/promo.mp4', 'E:/Backup Library/promo.mp4')
+        .replace('C:/Apasai CIaB/Promo/sting.mov', 'E:/Backup Library/sting.mov'),
+      MIRROR,
+    );
 
   it('🔴 a take and a clear send server B exactly server A’s writes, but for the backup’s own clip path', async () => {
     const { r, aLines, bLines } = await boot({ backupMedia: BOTH_ON_B });
@@ -459,8 +479,9 @@ describe('PLAYOUT-FEATURES-01 A (B-286) — the backup’s own clip, by fingerpr
     const newA = (await aLines()).slice(markA);
     const newB = (await bLines()).slice(markB);
     expect(newA).toContain(`PAUSE 2-${String(sting?.slot.layer)}`);
-    expect(newB).not.toContain(`PAUSE 2-${String(sting?.slot.layer)}`);
-    // CONTROL — B holds its own PROMO: its pause reaches B too.
-    expect(newB).toContain(`PAUSE 2-${String(promo?.slot.layer)}`);
+    expect(newB).not.toContain(`PAUSE 4-${String(sting?.slot.layer)}`);
+    // CONTROL — B holds its own PROMO: its pause reaches B too, on B's own channel.
+    expect(newB).toContain(`PAUSE 4-${String(promo?.slot.layer)}`);
+    expect(newB.filter((l) => l.startsWith('PAUSE 2-'))).toEqual([]);
   });
 });

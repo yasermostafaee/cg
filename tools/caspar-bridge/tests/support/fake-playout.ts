@@ -575,6 +575,23 @@ export interface FakeCatalogueRow {
    */
   readonly output?: string;
   readonly playlist?: string;
+  /** `PLAYOUT-SOURCES-01` / v1.3 — the running core's video mode. Omitted: a row before `2.9.0`. */
+  readonly videoMode?: string | null;
+  /**
+   * `RELEASE-0113-01` (Playout `2.9.5` §3) — on a MIRROR channel's row, on the backup engine: the primary
+   * engine's address as an admin typed it, and the primary channel's D4 id there; `null` on any other row.
+   * Omitted: an engine before `2.9.5`.
+   */
+  readonly mirrorOf?: { readonly playout: string; readonly id: string } | null;
+  /**
+   * `RELEASE-0113-01` — on a PRIMARY channel's row: its mirrors, each with the number it had when it was
+   * made. A hint the Playout team says is never refreshed; CG never reads it.
+   */
+  readonly mirrors?: readonly {
+    readonly playout: string;
+    readonly id: string;
+    readonly casparChannel: number;
+  }[];
 }
 
 /** `UI-POLISH-01` G — one channel's air state for {@link FakePlayout.setChannelState}; `null` removes the field. */

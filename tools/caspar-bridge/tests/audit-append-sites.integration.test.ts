@@ -119,6 +119,13 @@ const NON_VERB_ACTIONS = [
     row carries the password.
   */
   'bridge-sign-in',
+  /*
+    `RELEASE-0113-01` (`R-089`) — a station admin set the backup channel entries: station configuration,
+    written directly by the bridge, reaching no air (an entry is used only once the backup engine's D4
+    confirms it). Driven by `tests/backup-channels-bridge.integration.test.ts`, which asserts the admin is
+    the actor and the entries as asked.
+  */
+  'set-backup-channels',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {

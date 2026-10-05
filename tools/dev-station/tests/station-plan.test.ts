@@ -491,7 +491,7 @@ describe('`RELEASE-0112-01` (`R-085`) — `--fake --pair`: two engines on one PC
       '  backup   http://127.0.0.1:63200  (fake backup engine · sign in as cg-admin / pw-b)',
     );
     expect(lines).toContain(
-      "  server B 127.0.0.1:5251  (fake · the backup engine's CasparCG, channels 1 and 2)",
+      "  server B 127.0.0.1:5251  (fake · the backup engine's CasparCG: 1 its own programme, 2 and 3 the mirrors of 1 and 2, 4 and 5 previews)",
     );
   });
 });

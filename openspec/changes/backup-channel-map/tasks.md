@@ -13,34 +13,52 @@ delivery (`0.11.3`).
 
 ## 1. The seam (`packages/caspar-client`)
 
-- [ ] 1.1 `RedundancyAdapter`: `serverBLine` required with a server B; every road to B — fan-out, primary-only while
-      B is primary, failover catch-up, corrective resend — asks it; a refused line is sent nowhere and is no
-      divergence; server A's line untouched
-- [ ] 1.2 `OscTransport.setChannelMap` (core channel → station channel or none), before every tap;
+- [x] 1.1 `RedundancyAdapter`: `serverBLine` required with a server B (a construction without it throws); every road
+      to B — fan-out, every send while B is the primary (`mirror: false` included), failover catch-up, corrective
+      resend — asks it through one private `ownLine`; a refused line is sent nowhere and is no divergence; the
+      `?? line` fallbacks are gone; server A's line untouched
+- [x] 1.2 `OscTransport.setChannelMap` (core channel → station channel or none), re-keying before every tap;
       `setServedChannels` a wrapper of it
-- [ ] 1.3 Tests: the adapter's roads to B each translated (and the control: A's line byte-identical); the OSC map
+- [x] 1.3 Tests: `redundancy-adapter.test.ts` § `B-316` (the construction refused without it; mirror-sync and
+      mirror-async: A byte for byte, B `2-…`, an unmapped channel A alone and no divergence; the journal-replay
+      catch-up and the corrective resend `2-…`; B as primary: mirrored and primary-only both `2-…`, an unmapped one
+      refused with nothing sent); `osc-transport.test.ts` (re-keyed before the taps, an unmapped one dropped);
+      the mechanics suites (`failure-matrix`, the soak harness) state `SAME_NUMBERS_ON_B` — never a default
 
 ## 2. Translation, guard and mapping (`tools/caspar-bridge`)
 
-- [ ] 2.1 `server-b-line.ts`: `translateForServerB` and `serverBLineRefusal` (the guard), pure; unit tests over every
-      line shape the builder emits, `route://`, channel-free lines, unknown verbs, a planted verbatim line
-- [ ] 2.2 D4 row schema: `mirrorOf` (lenient); `mirrors` deliberately not read
-- [ ] 2.3 `backup-channels.ts`: the Playout's rule, the entry check, disagreement, validity, B's D4 freshness (30 s),
-      A's last good rows, held-until-next-take; unit tests for every D4 shape the prompt lists
-- [ ] 2.4 `backup-channels-store.ts`: entries stamped with server B, durable write, restart and upgrade kept
-- [ ] 2.5 The runtime: `serverBLine` into both adapter constructions; B's OSC and clears mapped back; the start check
-      on B mapped; `#send`'s refusal while B is the primary (`backup-unmapped` / `backup-route` / `backup-guard`);
-      `take`'s refusal in words; `release` at a take; `holdsLiveLayersOn`; `serverBVerbatim` (TEST-ONLY)
-- [ ] 2.6 The bridge: the resolver wired (A's catalogue, the backup engine's catalogue + re-read at sign-in and on
-      B's reconnect, entries, config); `backupChannels.state` / `.changed` / `.set-entries` (station-admin, lock,
-      audit); `/health` per-server `channels`; `B-313`'s guard compares M
-- [ ] 2.7 The fake pair: B's core 5 channels (1 its own programme, 2 and 3 the mirrors, 4 and 5 previews); B's D4
-      with `mirrorOf`; A's D4 with `videoMode` and `mirrors`; the dev station's banner
-- [ ] 2.8 The decisive control (integration, the real bridge, the fake pair): a take, an UPDATE, a look switch, a swap,
-      a clear, a `CLEAR ALL`, a restore and a failover catch-up on A's CH 1 — core B's recorded wire holds only
-      `2-…` lines; the same test red on the pre-change seam (it sends `1-…` to B)
-- [ ] 2.9 An unmapped channel (A airs, B's wire empty; after a failover the take refused in words); a mapping change
-      while live; A's wire line for line against `0.11.2`'s; the existing pair tests given explicit mappings
+- [x] 2.1 `server-b-line.ts`: `translateForServerB` and `serverBLineRefusal` (the guard), pure;
+      `server-b-line.test.ts` (31) over every line shape `CommandBuilder` emits, both `route://` kinds, channel-free
+      lines, unknown shapes, a planted verbatim line (CONTROL: translated, it passes)
+- [x] 2.2 D4 row schema: `mirrorOf` (lenient); `mirrors` deliberately not parsed
+- [x] 2.3 `backup-channels.ts`: the Playout's rule, the entry check, disagreement, validity (server B, video mode,
+      `cgLicensed`), B's D4 freshness (30 s), A's last good rows, held-until-next-take; `backup-channels.test.ts`
+      (25) — every D4 shape the prompt lists
+- [x] 2.4 `backup-channels-store.ts`: entries stamped with server B, written durably (temp, `fsync`, rename), not
+      used for another server B
+- [x] 2.5 The runtime: `serverBLine` into both adapter constructions; B's OSC and acknowledged clears mapped back;
+      the start check on B at B's number; `#send`'s refusal while B is the primary (`backup-unmapped` /
+      `backup-route` / `backup-guard`); `take`'s refusal in words, before anything mutates; `release` at a take;
+      `holdsLiveLayersOn`; `serverBVerbatim` (TEST-ONLY); `set-backup-channels` audited (schema first)
+- [x] 2.6 The bridge: the resolver wired (A's catalogue, the backup engine's catalogue — re-read at B's sign-in and
+      on B's reconnect — the entries, the config, the declared channels, a 5 s tick); `backupChannels.state` /
+      `.changed` / `.set-entries` (station-admin, lock, audit; the census tables); `/health` per-server `channels`
+      and the `backup-channels` problem; `B-313`'s guard compares B's mirror channels (and re-reads when the
+      mapping changes)
+- [x] 2.7 The fake pair: B's core 5 channels (1 its own programme, 2 and 3 the mirrors, 4 and 5 previews); B's D4
+      with `mirrorOf`; A's D4 with `videoMode` and `mirrors`; the dev station's banner (`station-plan.test.ts`)
+- [x] 2.8 The decisive control — `backup-channel-map.integration.test.ts` (the real resolver over `2.9.5` rows): a
+      take, an UPDATE, a look switch, a swap, a clear, a `CLEAR ALL` and a restore (core A restarted empty, PUT
+      BACK ON AIR) on CH 1 — core B's wire names channel 2 and nothing else; the failover catch-up the same.
+      Red on the old seam: `backup-wire-control.integration.test.ts`, run UNCHANGED on `7ef2f274` (a worktree),
+      failed `expected [ 1 ] to deeply equal [ 2 ]` — B received `INFO 1`, `MIXER 1-80 VOLUME 1`… — and passes here
+- [x] 2.9 An unmapped channel (A airs, B's wire empty); after a failover a take refused in words with nothing sent;
+      a mapping change while live (nothing to 2 or 4, then the take to 4); the guard refusing a planted verbatim
+      take; A's wire LINE FOR LINE against `0.11.2`'s (`fixtures/wire-a-0112.json`, 78 writes recorded from
+      `7ef2f274`; positive control: one changed line reddens it); the bridge over HTTP
+      (`backup-channels-bridge.integration.test.ts`: mapped from B's D4, `/health`, a `2.9.2` backup with an
+      entry refused then accepted, audited, kept across a restart); the existing pair tests given explicit maps —
+      the media wire tests now at B's own channel 4, the `B-313` tests per channel
 
 ## 3. The console (`apps/runtime`)
 

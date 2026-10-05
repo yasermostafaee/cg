@@ -26,6 +26,7 @@ import {
 } from '../src/route-plates.js';
 import { FAKE_INPUTS, type FakeInput } from './support/fake-playout.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 import { LocalPlayoutSources } from './support/local-playout-sources.js';
 import { recvLines } from './support/wire-trace.js';
 
@@ -299,6 +300,8 @@ async function boot(
       seamForTest: (send) => {
         seam = send;
       },
+      // `B-316` — the subject here is ROUTES, on two mocks that share numbers by construction; said.
+      backupChannels: SAME_NUMBERS_ON_B,
     },
   );
   runtime = r;

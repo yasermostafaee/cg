@@ -121,6 +121,12 @@ import {
   BridgeBackupSignInChannel,
   BridgeEnginesChangedChannel,
   BridgeEnginesChannel,
+  // `RELEASE-0113-01` (`R-089`) — each channel's mirror on the backup engine, and the admin's entries.
+  BackupChannelEntriesSetChannel,
+  BackupChannelsChangedChannel,
+  BackupChannelsStateChannel,
+  type BackupChannelEntry,
+  type BackupChannelsState,
   isServerReachable,
   type EngineLine,
   type EngineSessions,
@@ -279,6 +285,14 @@ import { BackupMediaLookup } from './backup-media.js';
 import { BackupEngine, backupSessionPath, type BackupEngineOptions } from './backup-engine.js';
 import { engineState } from './engine-state.js';
 import { CoreGuard, type CoreGuardOptions } from './core-guard.js';
+import { BackupChannels } from './backup-channels.js';
+import {
+  backupChannelsPath,
+  entriesFor,
+  loadBackupEntries,
+  saveBackupEntries,
+} from './backup-channels-store.js';
+import type { BackupChannelMap } from './server-b-line.js';
 import {
   airOf,
   hostJoinsStation,
@@ -622,6 +636,17 @@ export interface BridgeOptions {
   >;
   /** TEST-ONLY seam — the Playout meters stream's backoff, silence and linger (`PLAYOUT-FEATURES-01` E). */
   playoutMetersTuning?: Partial<PlayoutMetersTuning>;
+  /**
+   * `RELEASE-0113-01` (`R-089`) — where a station admin's backup channel entries are kept. Default:
+   * `bridge-backup-channels.json` beside {@link persistPath}; with neither they live in memory only.
+   */
+  backupChannelsPath?: string;
+  /**
+   * TEST-ONLY seam — `B-316`: the backup channel map the runtime uses INSTEAD of the one read from the
+   * backup engine's D4, for a wire test on a pair with no Playout (auth off: no D4 on either side). The
+   * consoles' lines still describe the D4 resolver. Never set in production.
+   */
+  backupChannelMap?: BackupChannelMap;
   /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
@@ -2344,6 +2369,81 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     backupMedia.start();
   }
   /*
+    🔴 `RELEASE-0113-01` (`B-316`, `R-089`) — EACH DECLARED CHANNEL'S MIRROR ON THE BACKUP ENGINE. From the
+    backup engine's own D4 (`mirrorOf`, Playout `2.9.5`) by the Playout team's rule, or a station admin's
+    entry checked against it; the redundancy seam reads it on every line, so nothing reaches server B with the
+    primary's channel number, and nothing at all for a channel with no mapping. Re-judged on every input
+    change and every 5 s; B's D4 is re-read at B's sign-in (the backup engine does that) and on B's reconnect.
+  */
+  const backupEntriesFile =
+    options.backupChannelsPath ??
+    (options.persistPath !== undefined ? backupChannelsPath(options.persistPath) : undefined);
+  let storedBackupEntries =
+    backupEntriesFile === undefined ? null : loadBackupEntries(backupEntriesFile);
+  const serverBEndpoint = (): { host: string; amcpPort: number } | undefined => {
+    const b = runtime.config().servers.B;
+    return b === undefined ? undefined : { host: b.host, amcpPort: b.amcpPort };
+  };
+  const primaryEngineHost =
+    primaryEngineAddress === null ? null : new URL(primaryEngineAddress).hostname;
+  const backupChannels = new BackupChannels({
+    declared: () => runtime.declaredChannels(),
+    serverAHost: () => runtime.config().servers.A.host,
+    serverB: serverBEndpoint,
+    primaryEngineHost: () => primaryEngineHost,
+    primaryRows: () => playoutCatalogue?.rows() ?? null,
+    backupRows: () => backupEngine?.rows() ?? null,
+    backupReadAtMs: () => backupEngine?.lastReadAtMs() ?? null,
+    entries: () => entriesFor(storedBackupEntries, serverBEndpoint()),
+    liveOn: (channel) => runtime.holdsLiveLayersOn(channel),
+  });
+  // TEST-ONLY — a wire test on a pair with no Playout hands the runtime its own map instead.
+  runtime.useBackupChannels(options.backupChannelMap ?? backupChannels);
+  const recomputeBackupChannels = (): void => {
+    backupChannels.recompute();
+  };
+  playoutCatalogue?.onChanged(recomputeBackupChannels);
+  backupEngine?.onChanged(recomputeBackupChannels);
+  runtime.configChanged.subscribe(recomputeBackupChannels);
+  runtime.fixedConfigChanged.subscribe(recomputeBackupChannels);
+  runtime.onServerConnected((label) => {
+    if (label === 'B') void backupEngine?.refreshChannels().then(recomputeBackupChannels);
+  });
+  backupChannels.start();
+  /** `R-089` — a station admin's entries, saved durably for the server B in force, then in force. */
+  const setBackupEntries = (
+    entries: readonly BackupChannelEntry[],
+  ): { ok: boolean; message?: string } => {
+    const b = serverBEndpoint();
+    if (b === undefined) return { ok: false, message: 'No backup server is declared.' };
+    const declared = new Set(runtime.declaredChannels());
+    const stray = entries.find((e) => !declared.has(e.channel));
+    if (stray !== undefined) {
+      return {
+        ok: false,
+        message: `CH ${String(stray.channel)} is not a channel of this station.`,
+      };
+    }
+    const next = { server: b, entries: [...entries].sort((x, y) => x.channel - y.channel) };
+    if (backupEntriesFile !== undefined) {
+      try {
+        saveBackupEntries(backupEntriesFile, next);
+      } catch (err) {
+        return {
+          ok: false,
+          message:
+            `The entries could not be saved: ${err instanceof Error ? err.message : String(err)}`.slice(
+              0,
+              300,
+            ),
+        };
+      }
+    }
+    storedBackupEntries = next;
+    backupChannels.recompute();
+    return { ok: true };
+  };
+  /*
     🔴 `RELEASE-0112-01` (`R-085`) — EACH ENGINE'S LINE, decided once (`engineState`) from what is held:
     the session, the last sign-in's code, the license, whether the engine's API answers, the core's
     AMCP, and the guard's verdict (`B-313`, assigned before the runtime connects). Pushed to every
@@ -2733,6 +2833,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     engines: engineSessionsNow,
     backupEngine,
     publishEngines,
+    backupChannels: () => backupChannels.state(),
+    setBackupEntries,
     // `PLAYOUT-FEATURES-01` D — the CG license as last read, for `license.state`.
     license: () => playoutLicense?.license() ?? null,
     playoutSources,
@@ -3023,6 +3125,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
           payload: BridgeEnginesChangedChannel.payload.parse(sessions),
         });
       }),
+      // `RELEASE-0113-01` (`R-089`) — each channel's backup line, station-wide, behind the same gate.
+      backupChannels.onChanged((state) => {
+        if (!mayBeTold(authGateState(session, playoutAuth))) return;
+        send(socket, {
+          type: 'publish',
+          channel: BackupChannelsChangedChannel.name,
+          payload: BackupChannelsChangedChannel.payload.parse(state),
+        });
+      }),
       // `CENTRAL-BRIDGE-01` (D7) — the bridge's own session, behind the same delivery gate.
       ...(bridgeSession !== null
         ? [
@@ -3131,6 +3242,18 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       };
     },
     peerPort: () => options.coreGuardPort ?? port,
+    // `RELEASE-0113-01` — what this bridge writes on each core, in that core's own numbers.
+    channels: () => {
+      const map = runtime.backupChannelMap();
+      const declared = runtime.declaredChannels();
+      return {
+        A: declared,
+        B: declared.flatMap((channel) => {
+          const onB = map.channelOnB(channel);
+          return onB === null ? [] : [onB];
+        }),
+      };
+    },
     self: guardSelf,
     holdB: (held) => runtime.holdServerB(held),
     ...(options.coreGuardOptions ?? {}),
@@ -3139,6 +3262,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const guard = coreGuard;
   runtime.configChanged.subscribe(() => {
     void guard.serversChanged();
+  });
+  // `RELEASE-0113-01` — a backup channel newly in force is read for another CG Bridge at once.
+  backupChannels.onChanged(() => {
+    void guard.refresh();
   });
   await coreGuard.start();
   runtime.start();
@@ -3260,6 +3387,16 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       lastPlayoutReadAtMs: playoutCatalogue?.lastGoodReadAtMs() ?? null,
       // `RELEASE-0112-01` — what this bridge drives (`B-313` reads it), and the engines' lines.
       channels: runtime.declaredChannels(),
+      // `RELEASE-0113-01` — each declared channel's backup channel in force, on server B's own numbers.
+      ...(servers.B !== undefined
+        ? {
+            backupChannels: new Map(
+              runtime
+                .declaredChannels()
+                .map((channel) => [channel, runtime.backupChannelMap().channelOnB(channel)]),
+            ),
+          }
+        : {}),
       ...(() => {
         const engines = engineSessionsNow();
         return {
@@ -3320,6 +3457,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // `CENTRAL-BRIDGE-01` (D7) — and the bridge's own session refresh.
       bridgeSession?.dispose();
       backupEngine?.dispose();
+      backupChannels.dispose();
       coreGuard?.dispose();
       clearInterval(enginesTicker);
       // `C-039` — and the D4 tick, for the same reason.
@@ -4027,6 +4165,12 @@ export function buildRoutes(
     engines?: () => EngineSessions;
     backupEngine?: BackupEngine | null;
     publishEngines?: () => void;
+    /** `RELEASE-0113-01` (`R-089`) — each channel's mirror on the backup engine, and the admin's entries. */
+    backupChannels?: () => BackupChannelsState;
+    setBackupEntries?: (entries: readonly BackupChannelEntry[]) => {
+      ok: boolean;
+      message?: string;
+    };
     /** `PLAYOUT-FEATURES-01` D — the CG license as last read, or `null`. Absent: nothing read. */
     license?: () => PlayoutLicense | null;
     fixedLayersPath?: string;
@@ -4543,6 +4687,32 @@ export function buildRoutes(
         b.recordBridgeSignIn({
           ...(result.ok ? { outcome: 'ok' } : { outcome: 'failed', errorCode: result.failure }),
           server: 'backup',
+        });
+        return result;
+      },
+    ),
+    /*
+      🔴 `RELEASE-0113-01` (`R-089`) — WHERE EACH CHANNEL'S LINES GO ON THE BACKUP ENGINE, read by every
+      console; and a station admin's entries for a backup engine that publishes no mirror (`2.9.5`), on the
+      same rung and lock as the backup's sign-in, recorded with what was asked. An entry is used only once
+      the backup engine's own D4 confirms it.
+    */
+    route(BackupChannelsStateChannel, 'read', 'read', () => ({
+      backup: paths.backupChannels?.().backup ?? null,
+    })),
+    route(
+      BackupChannelEntriesSetChannel,
+      'operator',
+      'station-admin',
+      (r: { entries: { channel: number; backupChannel: number }[] }) => {
+        const set = paths.setBackupEntries;
+        const result =
+          set === undefined
+            ? { ok: false, message: 'This CG Bridge keeps no backup channels.' }
+            : set(r.entries);
+        b.recordBackupChannels({
+          outcome: result.ok ? 'ok' : 'failed',
+          backupChannels: r.entries,
         });
         return result;
       },

@@ -168,6 +168,12 @@ async function buildStack(strategy: RedundancyStrategy, backup: SoakBackupMode):
   const adapter = new RedundancyAdapter({
     strategy,
     sessions: sessionB !== undefined ? { A: sessionA, B: sessionB } : { A: sessionA },
+    /*
+      `B-316` — the soak measures the pair's MECHANICS (memory, divergence, resend) on two mocks that carry
+      the same channel numbers by construction, so B's line is A's — said, because the adapter has no
+      default for a server B. A real backup's own channel numbers are the bridge's `serverBLine`.
+    */
+    ...(sessionB !== undefined ? { serverBLine: (line: string): string => line } : {}),
     autoFailoverEnabled: false,
   });
 

@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
@@ -74,7 +75,8 @@ async function orphanedSession(m: MockHandle, oscPort: number): Promise<void> {
   const r = new CasparRuntime(
     connectionFor(m.amcpPort, oscPort, await freeUdpPort()),
     {},
-    { layerPolicy: TEST_LAYER_POLICY },
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
   );
   runtime = r;
   r.start();
@@ -133,7 +135,8 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
   const r2 = new CasparRuntime(
     connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
     {},
-    { layerPolicy: TEST_LAYER_POLICY },
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
   );
   runtime2 = r2;
   r2.start();
@@ -206,7 +209,8 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
   const r = new CasparRuntime(
     connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
     {},
-    { layerPolicy: TEST_LAYER_POLICY },
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
   );
   runtime = r;
   r.start();
@@ -256,7 +260,8 @@ it('EXP-A regression: a post-restart load with an EMPTY registry fails fast (unk
   const r2 = new CasparRuntime(
     connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
     {},
-    { layerPolicy: TEST_LAYER_POLICY },
+    // `B-316` — the mocks share numbers by construction; said, never defaulted.
+    { layerPolicy: TEST_LAYER_POLICY, backupChannels: SAME_NUMBERS_ON_B },
   );
   runtime2 = r2;
   r2.start();

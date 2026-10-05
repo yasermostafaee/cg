@@ -64,6 +64,8 @@ describe('the fixed shape', () => {
             amcp: 'up',
             osc: 'subscribed',
             oscHeardAt: '2026-09-30T08:59:59.000Z',
+            // `RELEASE-0113-01` — the channels it writes on THIS core, in this core's own numbers.
+            channels: [2],
           },
         ],
         // `RELEASE-0112-01` (`B-313`) — the channels it drives: another CG Bridge reads this.
@@ -117,6 +119,8 @@ describe('the states it reports', () => {
           ['A', 'unbound'],
           ['B', 'refused'],
         ]),
+        // `RELEASE-0113-01` — the station's channel 2 is mirrored at B's own channel 3.
+        backupChannels: new Map([[2, 3]]),
       }),
     );
     expect(health.casparcg.state).toBe('degraded');
@@ -129,6 +133,8 @@ describe('the states it reports', () => {
         amcp: 'up',
         osc: 'refused',
         oscHeardAt: null,
+        // 🔴 B's OWN number for the station's channel 2 — never 2.
+        channels: [3],
       },
       {
         label: 'A',
@@ -138,9 +144,47 @@ describe('the states it reports', () => {
         amcp: 'down',
         osc: 'unbound',
         oscHeardAt: null,
+        channels: [2],
       },
     ]);
     expect(health.problems.map((p) => p.code)).toEqual(['osc-unbound']);
+  });
+
+  it('🔴 RELEASE-0113-01 — a declared channel with no backup channel is a problem, in words', () => {
+    const health = bridgeHealth(
+      inputs({
+        channels: [1, 2],
+        connection: connection({
+          backup: { label: 'B', state: 'healthy', amcpAxisOk: true },
+        }),
+        endpoints: new Map([
+          ['A', { host: '127.0.0.1', amcpPort: 5250 }],
+          ['B', { host: '192.0.2.21', amcpPort: 5250 }],
+        ]),
+        backupChannels: new Map([
+          [1, 2],
+          [2, null],
+        ]),
+      }),
+    );
+    expect(health.casparcg.servers.find((s) => s.label === 'B')?.channels).toEqual([2]);
+    expect(health.problems).toEqual([
+      {
+        code: 'backup-channels',
+        message:
+          'No backup channel is known for CH 2: nothing is sent to the backup engine for it.',
+      },
+    ]);
+    // CONTROL: all mapped — no problem.
+    expect(
+      bridgeHealth(
+        inputs({
+          channels: [1],
+          connection: connection({ backup: { label: 'B', state: 'healthy', amcpAxisOk: true } }),
+          backupChannels: new Map([[1, 2]]),
+        }),
+      ).problems,
+    ).toEqual([]);
   });
 
   it('a bridge with no Playout session says so as a problem, in the line every console shows', () => {

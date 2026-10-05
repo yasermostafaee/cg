@@ -101,6 +101,8 @@ export * from './playout-session.js';
 // `CENTRAL-BRIDGE-01` (D7, rule 8) — CG Bridge's own Playout session: its state, and the admin's
 // one-time sign-in.
 export * from './channels/bridgeSession.js';
+// `RELEASE-0113-01` (`B-316`, `R-089`) — each channel's mirror on the backup engine, and the admin's entries.
+export * from './channels/backupChannels.js';
 export * from './channels/license.js';
 export * from './channels/meters.js';
 export * from './channels/bridgeHttp.js';

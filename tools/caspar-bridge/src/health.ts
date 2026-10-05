@@ -46,6 +46,12 @@ const ServerRowSchema = z.object({
   osc: z.enum(['subscribed', 'refused', 'unbound', 'none']),
   /** When OSC was last heard from this server (ISO 8601); `null` = not since the bridge started. */
   oscHeardAt: z.string().nullable(),
+  /**
+   * 🔴 `RELEASE-0113-01` (`B-316`) — the channels this bridge writes on THIS server's core, in that core's OWN
+   * numbers: server A — the declared channels; server B — the backup's mirror channels in force (never A's
+   * numbers). Another CG Bridge's guard (`B-313`) compares its own channels with these.
+   */
+  channels: z.array(z.number().int().positive()),
 });
 
 const ProblemSchema = z.object({
@@ -58,6 +64,8 @@ const ProblemSchema = z.object({
     'backup-engine',
     'core-held',
     'core-shared',
+    // `RELEASE-0113-01` (`B-316`) — a declared channel with no backup channel: nothing reaches B for it.
+    'backup-channels',
   ]),
   message: z.string(),
 });
@@ -139,6 +147,11 @@ export interface HealthInputs {
   readonly lastPlayoutReadAtMs: number | null;
   /** `RELEASE-0112-01` — the channels this bridge drives (declared). */
   readonly channels: readonly number[];
+  /**
+   * `RELEASE-0113-01` (`B-316`) — each declared channel's backup channel in force (`null`: none), with
+   * server B. Absent or empty with no server B.
+   */
+  readonly backupChannels?: ReadonlyMap<number, number | null>;
   /** `RELEASE-0112-01` — the backup engine's line and session, or `null` with no server B. */
   readonly backup: {
     readonly line: EngineLine;
@@ -157,6 +170,9 @@ export interface HealthInputs {
 export function bridgeHealth(inputs: HealthInputs): BridgeHealth {
   const c = inputs.connection;
   const rows: z.infer<typeof ServerRowSchema>[] = [];
+  const onB = [...(inputs.backupChannels?.values() ?? [])]
+    .filter((m): m is number => m !== null)
+    .sort((a, b) => a - b);
   const row = (server: ServerHealth, role: 'primary' | 'backup'): void => {
     const endpoint = inputs.endpoints.get(server.label);
     rows.push({
@@ -171,6 +187,7 @@ export function bridgeHealth(inputs: HealthInputs): BridgeHealth {
           : 'connecting',
       osc: inputs.oscStatus.get(server.label) ?? 'none',
       oscHeardAt: server.oscFreshAt ?? null,
+      channels: server.label === 'A' ? [...inputs.channels] : onB,
     });
   };
   row(c.primary, 'primary');
@@ -201,6 +218,18 @@ export function bridgeHealth(inputs: HealthInputs): BridgeHealth {
     problems.push({
       code: 'backup-engine',
       message: `CG Bridge on the backup engine: ${engineStateText(backupLine)}`,
+    });
+  }
+  const unmapped = [...(inputs.backupChannels ?? new Map<number, number | null>())]
+    .filter(([, m]) => m === null)
+    .map(([n]) => n)
+    .sort((a, b) => a - b);
+  if (c.backup !== undefined && unmapped.length > 0) {
+    problems.push({
+      code: 'backup-channels',
+      message:
+        `No backup channel is known for ${unmapped.map((n) => `CH ${String(n)}`).join(', ')}: ` +
+        'nothing is sent to the backup engine for it.',
     });
   }
   if (inputs.primaryLine?.state === 'core-shared') {

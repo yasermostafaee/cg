@@ -477,7 +477,8 @@ export function banner({ stateDir, playout, fake, log }) {
   if (backup !== undefined) {
     lines.push(
       `  backup   ${backup.address}  (fake backup engine · sign in as ${backup.username} / ${backup.password})`,
-      `  server B ${backup.caspar}  (fake · the backup engine's CasparCG, channels 1 and 2)`,
+      // `RELEASE-0113-01` — the backup core has its OWN numbers: the mirrors are not on the primary's.
+      `  server B ${backup.caspar}  (fake · the backup engine's CasparCG: 1 its own programme, 2 and 3 the mirrors of 1 and 2, 4 and 5 previews)`,
     );
   }
   if (fake?.caspar !== undefined) {

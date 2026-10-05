@@ -45,32 +45,52 @@ interface PeerHealth {
   readonly startedAt?: unknown;
   readonly ports?: { readonly control?: unknown };
   readonly casparcg?: {
-    readonly servers?: readonly { readonly host?: unknown; readonly amcpPort?: unknown }[];
+    readonly servers?: readonly {
+      readonly host?: unknown;
+      readonly amcpPort?: unknown;
+      readonly channels?: unknown;
+    }[];
     readonly channels?: unknown;
   };
 }
 
 /**
- * 🔴 **THE ONE PREDICATE: does the CG Bridge whose `/health` this is drive `core`?** `peerHost` is the
- * host the answer came from (the core's machine). It drives the core when a `casparcg.servers` row names
- * it — that host, or loopback on that machine, at the same AMCP port — AND it drives at least one
- * channel (`casparcg.channels`). A `/health` without `casparcg.channels` (a bridge older than `0.11.2`)
- * counts as driving: unknown resolves to the safe side.
+ * 🔴 **THE ONE PREDICATE: does the CG Bridge whose `/health` this is drive `core` — on a channel we write
+ * there?** `peerHost` is the host the answer came from (the core's machine). A `casparcg.servers` row must
+ * name the core — that host, or loopback on that machine, at the same AMCP port.
+ *
+ * 🔴 `RELEASE-0113-01` (the Playout team's §2: redundancy belongs to a CHANNEL, and one engine may hold
+ * standalone channels, primaries and mirrors at once) — and the channels it drives THERE must meet `ours`,
+ * the channels THIS bridge writes on that core in the core's own numbers: on server B the backup's mirror
+ * channels in force, never A's numbers. Its row's own `channels` when `/health` has them (`0.11.3`+), else its
+ * top-level `casparcg.channels` (`0.11.2`, which wrote its numbers to every core alike); a `/health` with no
+ * list at all (older than `0.11.2`) counts as driving — unknown resolves to the safe side.
  */
-export function drivesCore(health: unknown, core: CoreEndpoint, peerHost: string): boolean {
+export function drivesCore(
+  health: unknown,
+  core: CoreEndpoint,
+  peerHost: string,
+  ours: readonly number[],
+): boolean {
   if (typeof health !== 'object' || health === null) return false;
   const h = health as PeerHealth;
   if (h.app !== 'cg-bridge') return false;
   const rows = Array.isArray(h.casparcg?.servers) ? h.casparcg.servers : [];
-  const names = rows.some(
+  const named = rows.filter(
     (r) =>
       r.amcpPort === core.amcpPort &&
       typeof r.host === 'string' &&
       (r.host === core.host || r.host === peerHost || isLoopbackCasparHost(r.host)),
   );
-  if (!names) return false;
-  const channels = h.casparcg?.channels;
-  return Array.isArray(channels) ? channels.length > 0 : true;
+  if (named.length === 0) return false;
+  const lists = named.map((r) => (Array.isArray(r.channels) ? (r.channels as unknown[]) : null));
+  const theirs: unknown[] | null = lists.every((l) => l !== null)
+    ? lists.flatMap((l) => l ?? [])
+    : Array.isArray(h.casparcg?.channels)
+      ? (h.casparcg.channels as unknown[])
+      : null;
+  if (theirs === null) return true;
+  return theirs.some((c) => typeof c === 'number' && ours.includes(c));
 }
 
 /** Is this answer THIS bridge's own `/health`? */
@@ -92,6 +112,11 @@ export interface CoreGuardVerdict {
 export interface CoreGuardOptions {
   /** The cores in force now: server A, and server B when declared. */
   readonly servers: () => { readonly A: CoreEndpoint; readonly B?: CoreEndpoint | undefined };
+  /**
+   * `RELEASE-0113-01` — the channels this bridge writes on each core, in that core's own numbers: A's
+   * declared channels, and server B's mirror channels in force.
+   */
+  readonly channels: () => { readonly A: readonly number[]; readonly B: readonly number[] };
   /** The control port a CG Bridge on a core's machine answers on (this bridge's own, by default). */
   readonly peerPort: () => number;
   readonly self: SelfIdentity;
@@ -179,11 +204,12 @@ export class CoreGuard {
 
   async #read(): Promise<void> {
     const { A, B } = this.#opts.servers();
+    const ours = this.#opts.channels();
     const port = this.#opts.peerPort();
     const [aDriver, bDriver] = await Promise.all([
       // Server A on this machine is this bridge's own; it is read only when it is another machine.
-      isLoopbackCasparHost(A.host) ? Promise.resolve(null) : this.#driverOf(A, port),
-      B === undefined ? Promise.resolve(null) : this.#driverOf(B, port),
+      isLoopbackCasparHost(A.host) ? Promise.resolve(null) : this.#driverOf(A, port, ours.A),
+      B === undefined ? Promise.resolve(null) : this.#driverOf(B, port, ours.B),
     ]);
     const keyB = B === undefined ? null : `${B.host}:${String(B.amcpPort)}`;
     // Server B changed while this read ran: its answer is about another machine.
@@ -212,7 +238,11 @@ export class CoreGuard {
   }
 
   /** `host:port` of a CG Bridge on `core`'s machine that drives it, or `null`. */
-  async #driverOf(core: CoreEndpoint, port: number): Promise<string | null> {
+  async #driverOf(
+    core: CoreEndpoint,
+    port: number,
+    ours: readonly number[],
+  ): Promise<string | null> {
     if (port <= 0) return null;
     const where = `${core.host}:${String(port)}`;
     this.#probes += 1;
@@ -228,7 +258,7 @@ export class CoreGuard {
       return null; // Nothing answers there, or not a CG Bridge: nobody drives it from there.
     }
     if (isOwnHealth(body, this.#opts.self)) return null;
-    return drivesCore(body, core, core.host) ? where : null;
+    return drivesCore(body, core, core.host, ours) ? where : null;
   }
 
   #set(next: CoreGuardVerdict): void {

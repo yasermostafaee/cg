@@ -81,6 +81,21 @@ export const CatalogueRowSchema = z.object({
     LENIENT like the rest: a missing or malformed value is dropped, and a dropped one refuses nothing.
   */
   cgLicensed: z.boolean().optional().catch(undefined),
+  /*
+    🔴 `RELEASE-0113-01` (`R-089`, Playout `2.9.5` §3) — on a MIRROR channel's row, on the backup engine: which
+    engine's channel it mirrors (`playout`, the address an admin TYPED — empty, a name or an IP, with or without
+    a port; its form is never guessed) and that channel's D4 `id` there; `null` on every other row; absent before
+    `2.9.5`. LENIENT like the rest: a malformed value is dropped and reads as absent — no mapping from it.
+
+    ⚠ The primary's `mirrors[]` is deliberately NOT read: its `casparChannel` is recorded when the mirror is
+    made and never refreshed (their §3 warning), so it may never be the backup's number. A field that is not
+    parsed cannot be used.
+  */
+  mirrorOf: z
+    .object({ playout: z.string(), id: z.string().min(1) })
+    .nullable()
+    .optional()
+    .catch(undefined),
 });
 export type CatalogueRow = z.infer<typeof CatalogueRowSchema>;
 

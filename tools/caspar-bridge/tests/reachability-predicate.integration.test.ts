@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { HEALTH_MS, track, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
@@ -170,6 +171,8 @@ function newRuntime(
     {
       layerPolicy: TEST_LAYER_POLICY,
       ...(sessionTuning ? { sessionTuning } : {}),
+      // `B-316` — a pair's backup-only path needs B's channel; the mocks share numbers by construction.
+      backupChannels: SAME_NUMBERS_ON_B,
     },
   );
   return track(rt, (r) => r.stop());

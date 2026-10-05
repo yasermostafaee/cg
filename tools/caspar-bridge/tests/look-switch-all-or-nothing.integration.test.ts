@@ -16,6 +16,7 @@ import {
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { validateFixedBank } from '../src/fixed-layers-store.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 import { readTrace } from './support/wire-trace.js';
 
 /**
@@ -917,6 +918,8 @@ describe('the backup gets the same order', () => {
         lookMixerHoldMs: 0,
         sourceCatalog: CATALOG,
         sourceAssignments: ASSIGNMENTS,
+        // `B-316` — this case is about ORDER, on two mocks that share numbers by construction; said.
+        backupChannels: SAME_NUMBERS_ON_B,
       },
     );
     runtime = r;

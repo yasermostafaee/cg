@@ -7,6 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { TAKE_ON_AIR_CODE, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 import { recvLines as readWireLines } from './support/wire-trace.js';
 
 /**
@@ -106,7 +107,15 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
 }
 
 async function bootRuntime(config: ConnectionConfig): Promise<CasparRuntime> {
-  const r = new CasparRuntime(config, {}, { layerPolicy: TEST_LAYER_POLICY });
+  const r = new CasparRuntime(
+    config,
+    {},
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      // `B-316` — the mocks share numbers by construction; said, never defaulted.
+      backupChannels: SAME_NUMBERS_ON_B,
+    },
+  );
   runtime = r;
   r.start();
   await r.startServing();

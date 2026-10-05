@@ -39,6 +39,17 @@ export interface RedundancyAdapterOptions {
   correctiveResendEnabled?: boolean; // true
   /** Override for tests. */
   now?: () => number;
+  /**
+   * 🔴 `B-316` (`RELEASE-0113-01`) — **THE LINE SERVER B GETS FOR A STATION LINE, or `null`: nothing.**
+   *
+   * On the Playout, redundancy belongs to a CHANNEL: the mirror of the primary's channel N is a channel of
+   * the backup engine's own, M, and its channel N may be airing another programme. So no line may reach
+   * server B with the primary's channel number. Every road to B asks this one function — the live fan-out,
+   * every send while B is the primary, the failover catch-up and the corrective resend — after `B-286`'s own
+   * clip path is chosen. REQUIRED whenever a server B is declared: an adapter built with a B and without
+   * it throws, so no road to B can exist untranslated. Server A's line never passes through it.
+   */
+  serverBLine?: (line: string) => string | null;
 }
 
 export interface RedundancyAdapterEvents {
@@ -102,6 +113,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private readonly divergenceBudget: number;
   private readonly correctiveResendEnabled: boolean;
   private readonly now: () => number;
+  /** `B-316` — see {@link RedundancyAdapterOptions.serverBLine}; `null` only with no server B. */
+  private readonly serverBLine: ((line: string) => string | null) | null;
 
   private consecutiveTimeouts = 0;
   /** `B-313` — servers never failed over onto ({@link setHeld}). */
@@ -128,6 +141,13 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     this.divergenceBudget = options.divergenceBudget ?? 3;
     this.correctiveResendEnabled = options.correctiveResendEnabled ?? true;
     this.now = options.now ?? (() => Date.now());
+    if (options.sessions.B !== undefined && options.serverBLine === undefined) {
+      throw new Error(
+        'RedundancyAdapter: a server B needs serverBLine (B-316) — a line never reaches the backup ' +
+          "with the primary's channel number",
+      );
+    }
+    this.serverBLine = options.serverBLine ?? null;
 
     this.wireSessionEvents();
     this.on('error', noop);
@@ -168,10 +188,24 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   private lineFor(label: ServerLabel, line: string, options: SendOptions): string | null {
     // `B-313` — a HELD server is sent nothing, and its absence is no divergence (`null`, as `B-286`'s).
     if (this.held.has(label) && label !== this.primary) return null;
-    return journalLineFor(
+    return this.ownLine(
       { line, ...(options.serverB !== undefined ? { lineB: options.serverB } : {}) },
       label,
     );
+  }
+
+  /**
+   * 🔴 `B-316` — **THE ONE ANSWER TO "WHAT DOES SERVER `label` GET?"**, for a live send and for every
+   * journal replay alike: `B-286`'s own clip line first, then — for server B only — {@link serverBLine},
+   * which writes B's own channel number or answers `null` (nothing). Server A's line is returned as it is.
+   */
+  private ownLine(
+    entry: { line: string; lineB?: string | null },
+    label: ServerLabel,
+  ): string | null {
+    const own = journalLineFor(entry, label);
+    if (own === null || label === 'A') return own;
+    return this.serverBLine === null ? null : this.serverBLine(own);
   }
 
   /**
@@ -182,28 +216,31 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    *   journal-replay : send to primary only; journal
    */
   async send(line: string, options: SendOptions = {}): Promise<RedundancySendResult> {
-    // `ROUTE-PLATES-01` — a line that must never reach the backup: primary only, not journaled.
-    if (options.mirror === false) {
-      return this.sendPrimaryUnjournaled(line, options);
-    }
     /*
       `PLAYOUT-FEATURES-01` A (`B-286`) — a line server B has no version of cannot be sent while B is the
       primary: nothing is sent, and the caller (which checks this first) refuses it as it refuses a PLAY.
+      🔴 `B-316` — nor one B has no channel for: the same `null`, from the same function, and the same
+      refusal. Asked of EVERY send, the primary-only ones included — after a failover they go to B.
     */
-    if (this.lineFor(this.primary, line, options) === null) {
-      throw new Error(`no line for server ${this.primary} (it has no copy)`);
+    const primaryLine = this.lineFor(this.primary, line, options);
+    if (primaryLine === null) {
+      throw new Error(`no line for server ${this.primary} (it has no copy, or no channel for it)`);
+    }
+    // `ROUTE-PLATES-01` — a line that must never reach the backup: primary only, not journaled.
+    if (options.mirror === false) {
+      return this.sendPrimaryUnjournaled(primaryLine, options);
     }
     // B-046 — no declared backup: every strategy degenerates to primary-only.
     if (this.backupSession === null) {
-      return this.sendJournalReplay(line, options);
+      return this.sendJournalReplay(line, primaryLine, options);
     }
     if (this.strategy === 'journal-replay') {
-      return this.sendJournalReplay(line, options);
+      return this.sendJournalReplay(line, primaryLine, options);
     }
     if (this.strategy === 'mirror-async') {
-      return this.sendMirrorAsync(line, options);
+      return this.sendMirrorAsync(line, primaryLine, options);
     }
-    return this.sendMirrorSync(line, options);
+    return this.sendMirrorSync(line, primaryLine, options);
   }
 
   /**
@@ -285,14 +322,17 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
   // Strategy implementations
   // ──────────────────────────────────────────────────────────────────────
 
-  private async sendMirrorSync(line: string, options: SendOptions): Promise<RedundancySendResult> {
+  private async sendMirrorSync(
+    line: string,
+    primaryLine: string,
+    options: SendOptions,
+  ): Promise<RedundancySendResult> {
     const backup = this.backupSession;
-    if (backup === null) return this.sendJournalReplay(line, options);
+    if (backup === null) return this.sendJournalReplay(line, primaryLine, options);
     const seq = this.journal.append(line, 'both', options.serverB);
     const primaryQ = this.primarySession.queue;
     const backupQ = backup.queue;
-    // `B-286` — each server its OWN line; a backup with none is sent nothing, and is no divergence.
-    const primaryLine = this.lineFor(this.primary, line, options) ?? line;
+    // `B-286` / `B-316` — each server its OWN line; a backup with none is sent nothing, and is no divergence.
     const backupLine = this.lineFor(this.backupLabel, line, options);
     const [pRes, bRes] = await Promise.allSettled([
       primaryQ.enqueue(primaryLine, options),
@@ -329,18 +369,19 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     throw pRes.reason as Error;
   }
 
-  private async sendMirrorAsync(line: string, options: SendOptions): Promise<RedundancySendResult> {
+  private async sendMirrorAsync(
+    line: string,
+    primaryLine: string,
+    options: SendOptions,
+  ): Promise<RedundancySendResult> {
     const backup = this.backupSession;
-    if (backup === null) return this.sendJournalReplay(line, options);
+    if (backup === null) return this.sendJournalReplay(line, primaryLine, options);
     const seq = this.journal.append(line, 'both', options.serverB);
     const primaryQ = this.primarySession.queue;
     const backupQ = backup.queue;
     const backupLine = this.lineFor(this.backupLabel, line, options);
     try {
-      const result = await primaryQ.enqueue(
-        this.lineFor(this.primary, line, options) ?? line,
-        options,
-      );
+      const result = await primaryQ.enqueue(primaryLine, options);
       this.journal.resolve(seq, 'ok', result.response.code);
       this.recordPrimaryResult(result);
       // Backup runs in parallel — divergence detection is best-effort. `B-286`: its own line, or none.
@@ -367,13 +408,14 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
    * `ROUTE-PLATES-01` — {@link SendOptions.mirror} `false`: the primary alone, and no journal entry,
    * because every path that reaches the backup other than the live fan-out — the failover catch-up
    * and the corrective resend — reads the journal. Health is recorded exactly as for any send.
+   * `primaryLine` is the primary's OWN line (`B-316`: B's channel when B is the primary).
    */
   private async sendPrimaryUnjournaled(
-    line: string,
+    primaryLine: string,
     options: SendOptions,
   ): Promise<RedundancySendResult> {
     try {
-      const result = await this.primarySession.queue.enqueue(line, options);
+      const result = await this.primarySession.queue.enqueue(primaryLine, options);
       this.recordPrimaryResult(result);
       return { ...result, winner: this.primary };
     } catch (err) {
@@ -384,14 +426,12 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
 
   private async sendJournalReplay(
     line: string,
+    primaryLine: string,
     options: SendOptions,
   ): Promise<RedundancySendResult> {
     const seq = this.journal.append(line, 'primary', options.serverB);
     try {
-      const result = await this.primarySession.queue.enqueue(
-        this.lineFor(this.primary, line, options) ?? line,
-        options,
-      );
+      const result = await this.primarySession.queue.enqueue(primaryLine, options);
       this.journal.resolve(seq, 'ok', result.response.code);
       this.recordPrimaryResult(result);
       return { ...result, winner: this.primary };
@@ -503,8 +543,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
       const queue = session.queue;
       const entries = this.journal.all().filter((e) => e.outcome === 'ok');
       for (const entry of entries) {
-        // `B-286` — the server's OWN line; an entry it has none of is not replayed to it.
-        const own = journalLineFor(entry, target);
+        // `B-286` / `B-316` — the server's OWN line, with its own channel NOW; none — not replayed to it.
+        const own = this.ownLine(entry, target);
         if (own === null) continue;
         this.emit('corrective-resend', { seq: entry.seq, line: own, target });
         try {
@@ -580,8 +620,8 @@ export class RedundancyAdapter extends EventEmitter<RedundancyAdapterEvents> {
     const queue: CommandQueue = session.queue;
     const entries = this.journal.all().filter((e) => e.outcome === 'ok');
     for (const entry of entries) {
-      // `B-286` — the server's OWN line; an entry it has none of is not replayed to it.
-      const own = journalLineFor(entry, label);
+      // `B-286` / `B-316` — the server's OWN line, with its own channel NOW; none — not replayed to it.
+      const own = this.ownLine(entry, label);
       if (own === null) continue;
       try {
         await queue.enqueue(own, { priority: 'urgent' });

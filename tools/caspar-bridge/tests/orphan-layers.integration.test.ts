@@ -5,6 +5,7 @@ import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig, OrphanLayer } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
+import { SAME_NUMBERS_ON_B } from './support/backup-map.js';
 
 /**
  * R-009 — orphan-layer sweep against the mock's REAL OSC stream (the mock's
@@ -174,7 +175,13 @@ it('the sweep follows the CURRENT primary across a failover', async () => {
       autoFailoverEnabled: false,
     },
     {},
-    { layerPolicy: TEST_LAYER_POLICY, sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      // `B-316` — B's OSC is read as the station's channel only through a mapping; the mocks share numbers.
+      backupChannels: SAME_NUMBERS_ON_B,
+    },
   );
   runtime.start();
   await runtime.startServing();

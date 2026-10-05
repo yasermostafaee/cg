@@ -296,6 +296,11 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
           PIN; the way out of a session is a button that is behind it.
         */
         'auth.state',
+        /*
+          `RELEASE-0113-01` (`R-089`) — where each channel's lines go on the backup engine, a READ, reachable
+          locked; the station admin's entries are an operator-lock verb and are refused locked.
+        */
+        'backupChannels.state',
         'bridge.capabilities',
         // `CENTRAL-BRIDGE-01` §1 A — a read: a ticket for the logs. A locked station still reports.
         'bridge.logs-ticket',

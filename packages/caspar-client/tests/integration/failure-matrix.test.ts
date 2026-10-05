@@ -47,6 +47,13 @@ afterEach(async () => {
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * `B-316` — the failure matrix is about the pair's MECHANICS, on two mocks that carry the same channel
+ * numbers by construction, so server B's line is server A's — said here, because the adapter has no
+ * default for it.
+ */
+const SAME_NUMBERS_ON_B = (line: string): string => line;
+
 async function buildStack(strategy: RedundancyStrategy = 'mirror-sync'): Promise<Stack> {
   const mockA = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
   const mockB = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
@@ -69,6 +76,7 @@ async function buildStack(strategy: RedundancyStrategy = 'mirror-sync'): Promise
   const adapter = new RedundancyAdapter({
     strategy,
     sessions: { A: sessionA, B: sessionB },
+    serverBLine: SAME_NUMBERS_ON_B,
     autoFailoverEnabled: true,
     commandTimeoutBudget: 2,
     fiveXxBudget: 2,

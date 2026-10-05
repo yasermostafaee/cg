@@ -1,6 +1,6 @@
 import type { MockHandle, MockOptions } from '@cg/amcp-mock';
 import type { FakePgmFeed, FakePgmFeedOptions } from './fake-pgm-feed.js';
-import type { FakePlayout, FakePlayoutOptions } from './fake-playout.js';
+import type { FakeCatalogueRow, FakePlayout, FakePlayoutOptions } from './fake-playout.js';
 
 /**
  * 🔴 `DELTA-MULTI-CHANNEL-01-A` A1 — **A WHOLE FAKE STATION, ON LOOPBACK**: the Playout, a CasparCG
@@ -75,11 +75,98 @@ export interface FakeStationBackup {
   readonly amcp: number;
   /** The backup engine's own `cg-admin` password: never the primary's. */
   readonly password: string;
+  /** TEST-ONLY — record every AMCP line the BACKUP core received (`@cg/amcp-mock`'s trace). */
+  readonly tracePath?: string;
 }
 
 /** `--pair`'s backup engine: server B's port, and a password that is not the primary's. */
 export const FAKE_BACKUP_AMCP_PORT = 5251;
 export const FAKE_BACKUP_PASSWORD = 'test-only-backup-engine-not-a-secret';
+
+/**
+ * 🔴 `RELEASE-0113-01` (`B-316`) — **THE BACKUP CORE HAS ITS OWN CHANNEL NUMBERS**, the way the Playout team
+ * builds a test pair (`PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §2, §6): a fresh engine makes its own channel 1
+ * at first run, and each mirror is a NEW channel numbered largest + 1. So on the backup's core:
+ *
+ *   - channel 1 — the backup engine's OWN programme (its default channel), airing something else;
+ *   - channel 2 — the mirror of the primary's channel 1;
+ *   - channel 3 — the mirror of the primary's channel 2;
+ *   - channels 4 and 5 — the core's preview channels, which no D4 lists.
+ *
+ * Until `0.11.3` the fake backup served the primary's channels 1 and 2, so every line sent with the primary's
+ * number landed on the right channel by coincidence and no test could see `B-316`.
+ */
+export const FAKE_BACKUP_CHANNELS = 5;
+export const FAKE_VIDEO_MODE = '1080i5000';
+
+/** The primary engine's D4 for a pair: its two channels, their video mode, and their mirrors (a hint). */
+export function pairPrimaryCatalogue(backupAddress: string): FakeCatalogueRow[] {
+  const backupApi = new URL(backupAddress).host;
+  return [
+    {
+      id: 'fake-programme',
+      name: 'آپاسای',
+      casparHost: FAKE_STATION_HOST,
+      casparChannel: 1,
+      output: 'on-air',
+      playlist: 'playing',
+      videoMode: FAKE_VIDEO_MODE,
+      mirrorOf: null,
+      mirrors: [{ playout: backupApi, id: 'fake-programme-r2', casparChannel: 2 }],
+    },
+    {
+      id: 'fake-cg',
+      name: 'کانال دوم (تست CG)',
+      casparHost: FAKE_STATION_HOST,
+      casparChannel: 2,
+      output: 'off',
+      playlist: 'stopped',
+      videoMode: FAKE_VIDEO_MODE,
+      mirrorOf: null,
+      mirrors: [{ playout: backupApi, id: 'fake-cg-r2', casparChannel: 3 }],
+    },
+  ];
+}
+
+/** The backup engine's own D4 for a pair (`2.9.5`): its own channel 1, and the two mirrors at 2 and 3. */
+export function pairBackupCatalogue(primaryAddress: string): FakeCatalogueRow[] {
+  const primaryApi = new URL(primaryAddress).host;
+  return [
+    {
+      id: 'backup-own',
+      name: 'برنامهٔ موتورِ پشتیبان',
+      casparHost: FAKE_STATION_HOST,
+      casparChannel: 1,
+      output: 'on-air',
+      playlist: 'playing',
+      videoMode: FAKE_VIDEO_MODE,
+      mirrorOf: null,
+      mirrors: [],
+    },
+    {
+      id: 'fake-programme-r2',
+      name: 'آپاسای (آینه)',
+      casparHost: FAKE_STATION_HOST,
+      casparChannel: 2,
+      output: 'off',
+      playlist: 'stopped',
+      videoMode: FAKE_VIDEO_MODE,
+      mirrorOf: { playout: primaryApi, id: 'fake-programme' },
+      mirrors: [],
+    },
+    {
+      id: 'fake-cg-r2',
+      name: 'کانال دوم (آینه)',
+      casparHost: FAKE_STATION_HOST,
+      casparChannel: 3,
+      output: 'off',
+      playlist: 'stopped',
+      videoMode: FAKE_VIDEO_MODE,
+      mirrorOf: { playout: primaryApi, id: 'fake-cg' },
+      mirrors: [],
+    },
+  ];
+}
 
 export interface FakeStationOptions {
   /** TEST-ONLY — record every AMCP line CasparCG received (`@cg/amcp-mock`'s trace). */
@@ -159,6 +246,9 @@ export async function startFakeStation(
         await playout.stop();
         throw err;
       });
+    // `RELEASE-0113-01` — each engine's D4 says what a real pair's does: the mirrors, by `mirrorOf`.
+    playout.setChannels(pairPrimaryCatalogue(b.baseUrl));
+    b.setChannels(pairBackupCatalogue(playout.baseUrl));
     try {
       backup = {
         playout: b,
@@ -166,10 +256,12 @@ export async function startFakeStation(
           host,
           amcpPort: pair.amcp,
           oscPort: 0,
-          channels: FAKE_STATION_CHANNELS,
+          // `RELEASE-0113-01` — the backup core's OWN numbers: 1 its programme, 2–3 mirrors, 4–5 previews.
+          channels: FAKE_BACKUP_CHANNELS,
           // Server B admits this machine by the BACKUP engine's own allow list, never the primary's.
           admit: (ip) => b.isTrusted(ip),
           clipLength: (file) => b.clipLengthS(file),
+          ...(pair.tracePath !== undefined ? { tracePath: pair.tracePath } : {}),
         }),
       };
     } catch (err) {
