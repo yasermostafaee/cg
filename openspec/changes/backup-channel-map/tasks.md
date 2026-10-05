@@ -78,21 +78,43 @@ delivery (`0.11.3`).
 - [x] 3.3 Part D: the password line in the Playout team's words inside `<bdi>` (`ENGINE_PASSWORD_WHERE`, read
       against their letter by `bridge-engines.test.ts`), led by the account offered; the AMCP-pending line says what
       to do — «تأیید» on that engine's «اتصال به CG Control», the Playout client connected to it
-- [ ] 3.4 dom tests; e2e: the Station setup lines, the status bar's `n of m`, the channel view's backup line — run, and
-      the Linux run's URL here
+- [x] 3.4 dom tests; e2e: the Station setup lines, the status bar's `n of m`, the channel view's backup line — run, and
+      the Linux run's URL here. `backupChannels.dom.test.ts` (8). The Linux `e2e` on `65507361` (which carries
+      `0b3fdf47` and `d223fae9`) RAN — runtime 333 passed, `backup-channel-map.spec.ts` and `backup-engine.spec.ts`
+      among them; designer 293 — read from the job's own log:
+      <https://github.com/yasermostafaee/cg/actions/runs/37331199282>
 
 ## 4. Docs and close
 
 - [x] 4.1 The guide's "With a backup engine" (`0.11.3`; `guide.test.ts` pins its labels, no mark, their sentence
       from their letter, the `curl` line, the old sentence as an absence); `CG-BRIDGE-FOR-PLAYOUT.md` at `0.11.3`
       (`950aa2a2`: §3 rewritten, §1 per-row `channels` and `backup-channels`, §2/§5 versions and the floor)
-- [ ] 4.2 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here
+- [x] 4.2 Gate, push, CI COMPLETED green with the jobs RAN — the run URLs here. `950aa2a2`'s PR run was RED
+      (<https://github.com/yasermostafaee/cg/actions/runs/37323750849>: the guard window, task 2.10); fixed in
+      `9ca762b7` (PR <https://github.com/yasermostafaee/cg/actions/runs/37329430214> green). The head `65507361`:
+      PR <https://github.com/yasermostafaee/cg/actions/runs/37331199282> — `ci` RAN (bridge 1830, runtime 2262,
+      caspar-client 356 passed; the new guard test among them) and `e2e` RAN (above); Desktop
+      <https://github.com/yasermostafaee/cg/actions/runs/37331199682> — every job RAN, 0 failed (task 5.2)
 
 ## 5. `RELEASE-0113-01` Part E — the release `0.11.3`
 
 - [x] 5.1 `0.11.3` in every version source; `P-031`'s floor at `0.11.3` (an empty `git diff v0.11.2` over the
       five floor files, against a control that changed)
-- [ ] 5.2 The `0.11.3` pictures from a Desktop run of the bump; clean-Windows acceptance (fresh; upgrades from `0.10.0`,
-      `0.11.0`, `0.11.1`, `0.11.2`; the Installed-apps row; silent paths and exit codes)
-- [ ] 5.3 Tag `v0.11.3` on a commit whose runs are green with every job RAN; the draft read back, sums checked;
-      `v0.11.2`, `v0.11.1`, `v0.11.0` titled "— superseded, do not use (unsafe with a backup engine)"; NOT published
+- [x] 5.2 The `0.11.3` pictures from a Desktop run of the bump; clean-Windows acceptance (fresh; upgrades from `0.10.0`,
+      `0.11.0`, `0.11.1`, `0.11.2`; the Installed-apps row; silent paths and exit codes). Pictures from
+      `wip/release-0113-pictures` (<https://github.com/yasermostafaee/cg/actions/runs/37325010288>), committed in `65507361`.
+      Acceptance on `65507361`, Desktop <https://github.com/yasermostafaee/cg/actions/runs/37331199682>, counted from
+      each job's results files: fresh 74; upgrades from `0.10.0`, `0.11.0`, `0.11.1`, `0.11.2` 83 each (the last a
+      new job); CG Bridge smoke 117 (its silent paths and exit codes); installer smoke 194; 0 failed. Installed-apps:
+      one row, 64-bit, `CGBridge`, `CG Bridge`, `0.11.3` after the install and after every upgrade (`P-066`). One
+      earlier run (`9ca762b7`, Desktop 37329430573) failed one check, "CG Bridge: its setup window opens", though
+      its own capture shows the window open; not seen on `65507361` or the wip run; not filed
+- [x] 5.3 Tag `v0.11.3` on a commit whose runs are green with every job RAN; the draft read back, sums checked;
+      `v0.11.2`, `v0.11.1`, `v0.11.0` titled "— superseded, do not use (unsafe with a backup engine)"; NOT published.
+      `v0.11.3` (annotated, `30831be2`) on `65507361`; the tag's run
+      <https://github.com/yasermostafaee/cg/actions/runs/37337861683> repeated every job (fresh 74; upgrades 83 × 4;
+      CG Bridge smoke 117; installer smoke 194; 0 failed) and opened the DRAFT "APASAI CG 0.11.3"
+      (<https://github.com/yasermostafaee/cg/releases/tag/untagged-37438cb336f9614a0e37>): five files, read back,
+      downloaded again, `SHA256SUMS.txt` `OK` × 4 and each hashed independently; CG Bridge's installer 24,755,040
+      bytes, `de8eda68dfca12b28559c4c09f35f2555b2bf729a72b68ee268bb8267ca5884f`. The three older drafts retitled and
+      read back from the API, each still a draft with five files. Nothing published

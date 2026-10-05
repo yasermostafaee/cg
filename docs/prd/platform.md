@@ -4029,4 +4029,8 @@ row — 64-bit view, key `CGBridge`, `DisplayName` `CG Bridge`, `DisplayVersion`
 and every upgrade left one row reading the build's version. The NSIS lines that write it are byte-identical at
 the three tags. **The `0.11.2` build** (Desktop 37231676336, dispatched on the bump `e14274af`): the CG Bridge
 smoke's install and upgrade each left exactly one row — 64-bit, `CGBridge`, `CG Bridge`, `0.11.2` — and every
-upgrade acceptance (from `0.10.0`, `0.11.0`, `0.11.1`) passed its row checks.
+upgrade acceptance (from `0.10.0`, `0.11.0`, `0.11.1`) passed its row checks. **The `0.11.3` build** (`RELEASE-0113-01`;
+Desktop 37331199682 on `65507361` and the tag's run 37337861683): the CG Bridge smoke's install and upgrade each
+left exactly one row — 64-bit, `CGBridge`, `CG Bridge`, `0.11.3`; the `v0.11.2` draft's classic install left its
+own row at `0.11.2` (a new upgrade job), and every upgrade — from `0.10.0`, `0.11.0`, `0.11.1` and `0.11.2` — left
+one row reading `0.11.3`.
