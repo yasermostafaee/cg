@@ -8,6 +8,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
+import { useState } from 'react';
 import { CONNECTION_CHECK_GROUPS } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -110,6 +111,29 @@ const styles = {
  * a signed-in session. A group with no line is not shown. Without `grouped` (a compact surface that
  * shows the ONE deciding line, the sign-in gate) the lines are one plain list, as before.
  */
+/**
+ * 🔴 `R-092` — this viewer's choice to see every line (`Show all`), not the folded check. A per-viewer
+ * preference, like the shell layout; absent or unreadable reads as folded, the default.
+ */
+const SHOW_ALL_KEY = 'cg.runtime.check-show-all.v1';
+
+function readShowAll(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(SHOW_ALL_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeShowAll(on: boolean): void {
+  try {
+    if (on) globalThis.localStorage?.setItem(SHOW_ALL_KEY, '1');
+    else globalThis.localStorage?.removeItem(SHOW_ALL_KEY);
+  } catch {
+    // A store that refuses keeps the choice for this page only.
+  }
+}
+
 export function ConnectionCheckList({
   lines,
   grouped = false,
@@ -118,8 +142,10 @@ export function ConnectionCheckList({
   grouped?: boolean | undefined;
 }): JSX.Element {
   const still = usePrefersReducedMotion();
+  const [showAll, setShowAll] = useState(readShowAll);
   const checking = lines.some((l) => l.status === 'checking');
   if (grouped) {
+    const anyPass = lines.some((l) => l.status === 'pass');
     return (
       <div style={styles.groups} aria-label="Connection check" aria-busy={checking} role="group">
         {CONNECTION_CHECK_GROUPS.map((group) => {
@@ -128,14 +154,56 @@ export function ConnectionCheckList({
             lines.filter((l) => l.id === id),
           );
           if (mine.length === 0) return null;
+          /*
+            🔴 `R-092` — WHAT NEEDS ATTENTION, IN FULL; THE PASSES, IN ONE LINE. The owner read a long
+            list of ticks to find the two lines that mattered. A pass stays in the DOM, `hidden`, so
+            every probe that reads a line's state still finds it; a group of passes alone is its one
+            line. `Show all` opens every line, and the choice is this viewer's.
+          */
+          const passes = mine.filter((l) => l.status === 'pass').length;
+          const attention = mine.length - passes;
+          const folded = !showAll && passes > 0;
           return (
             // A GROUP, not a landmark: four sections per check would crowd the page's regions.
             <div key={group.id} role="group" aria-label={group.title} data-check-group={group.id}>
-              <h4 style={styles.groupHead}>{group.title}</h4>
-              <CheckLines lines={mine} still={still} />
+              {(!folded || attention > 0) && <h4 style={styles.groupHead}>{group.title}</h4>}
+              <ul style={styles.list}>
+                <CheckLineItems lines={mine} still={still} hidePasses={folded} />
+                {folded && (
+                  <li style={styles.line} data-check-fold={group.id}>
+                    <span
+                      style={{ color: colors.checkPass, paddingTop: 2 }}
+                      aria-hidden
+                      data-check-icon=""
+                    >
+                      <Icon icon={Check} size={14} />
+                    </span>
+                    <span style={{ color: colors.textSecondary }}>
+                      {`${group.title} · ${String(passes)} OK`}
+                    </span>
+                  </li>
+                )}
+              </ul>
             </div>
           );
         })}
+        {anyPass && (
+          <div>
+            <Button
+              variant="ghost"
+              data-check-show-all=""
+              aria-pressed={showAll}
+              onClick={() => {
+                setShowAll((on) => {
+                  writeShowAll(!on);
+                  return !on;
+                });
+              }}
+            >
+              {showAll ? 'Show less' : 'Show all'}
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -146,31 +214,29 @@ export function ConnectionCheckList({
   );
 }
 
-function CheckLines({
-  lines,
-  still,
-}: {
-  lines: readonly ShownCheckLine[];
-  still: boolean;
-}): JSX.Element {
-  return (
-    <ul style={styles.list}>
-      <CheckLineItems lines={lines} still={still} />
-    </ul>
-  );
-}
-
 function CheckLineItems({
   lines,
   still,
+  hidePasses = false,
 }: {
   lines: readonly ShownCheckLine[];
   still: boolean;
+  /** `R-092` — passes folded into their group's one line: kept, `hidden`. */
+  hidePasses?: boolean;
 }): JSX.Element {
   return (
     <>
       {lines.map((line) => (
-        <li key={line.id} style={styles.line} data-check={line.id} data-status={line.status}>
+        <li
+          key={line.id}
+          // The line's own `display: grid` would win over `hidden`'s UA rule: hidden says it, too.
+          style={
+            hidePasses && line.status === 'pass' ? { ...styles.line, display: 'none' } : styles.line
+          }
+          data-check={line.id}
+          data-status={line.status}
+          hidden={hidePasses && line.status === 'pass'}
+        >
           <span
             style={{ color: ICON_INK[line.status], paddingTop: 2 }}
             aria-label={line.status}

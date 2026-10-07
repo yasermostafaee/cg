@@ -25,8 +25,8 @@
 
 ## 4. Fold the passes (`R-092`)
 
-- [ ] 4.1 `ConnectionCheckList`: per group, what needs attention in full, passes as `<group> · n OK`
-- [ ] 4.2 `Show all` / `Show less`, remembered per viewer (`cg.runtime.check-show-all.v1`, in the census)
+- [x] 4.1 `ConnectionCheckList`: per group, what needs attention in full, passes as `<group> · n OK`
+- [x] 4.2 `Show all` / `Show less`, remembered per viewer (`cg.runtime.check-show-all.v1`, in the census)
 
 ## 5. The last prose (`R-093`)
 

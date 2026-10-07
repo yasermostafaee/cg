@@ -116,6 +116,13 @@ const BEFORE_AND_AFTER = {
       is what "byte-identical to today" means for the browser's storage.
     */
     /*
+      🔴 `RELEASE-0114-01` A6 (`R-092`) — NEW: whether THIS viewer opened every line of the connection
+      check (`Show all`, `ConnectionCheckList.tsx`), `'1'` or absent. A per-viewer preference, like the
+      shell layout. No migration is owed: ABSENT means the folded check, the default, and an unreadable
+      value reads as absent.
+    */
+    'cg.runtime.check-show-all.v1',
+    /*
       🔴 `FIELD-FIXES-01` L — the notices this console's operator dismissed about another system's
       layers inside CG's bands (`foreignNotice.ts`): per channel and strip, the `layer:producer`
       set each strip showed. A per-console preference, like the shell layout — hearing a notice is
