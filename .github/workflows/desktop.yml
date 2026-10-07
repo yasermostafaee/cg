@@ -1086,7 +1086,12 @@ jobs:
           & $node $acceptance --phase upgrade --apps-open yes --from 0.11.3 --bridge "$bridge" --control "$control" --designer "$designer" --version $v --out acceptance
           "::endgroup::"
           "::group::upgrade CG Control and CG Designer over the two apps OPEN (medium integrity)"
-          & $gsudo --integrity Medium $node $acceptance --phase upgrade-apps-open --from 0.11.3 --control "$control" --designer "$designer" --version $v --out acceptance
+          # Names without a space, for gsudo (it splits a quoted path at its space — measured on this job).
+          Copy-Item $control installers\cg-control-setup.exe
+          Copy-Item $designer installers\cg-designer-setup.exe
+          $controlNs = (Resolve-Path installers\cg-control-setup.exe).Path
+          $designerNs = (Resolve-Path installers\cg-designer-setup.exe).Path
+          & $gsudo --integrity Medium $node $acceptance --phase upgrade-apps-open --from 0.11.3 --control $controlNs --designer $designerNs --version $v --out acceptance
           "::endgroup::"
           "::group::drive the upgraded console (medium integrity)"
           & $gsudo --integrity Medium $node $acceptance --phase drive-upgraded --from 0.11.3 --version $v --out acceptance

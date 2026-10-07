@@ -1059,6 +1059,16 @@ async function openTheApps(label, ports, guarded) {
  * nothing on air is cleared — an app ended by an installer sends nothing to CasparCG.
  */
 async function phaseUpgradeAppsOpen() {
+  // Both installers named, and there: a path split by gsudo at its space arrives as half a path.
+  const given = [args.control, args.designer].every(
+    (file) => typeof file === 'string' && fs.existsSync(file),
+  );
+  check(
+    'upgrade-apps-open was given both installers, each a file that exists',
+    given,
+    `${String(args.control)} | ${String(args.designer)}`,
+  );
+  if (!given) return;
   const before = beforeUpgrade();
   const mark = (await stationLines()).length;
   const timings = [];
@@ -1101,6 +1111,11 @@ async function phaseUpgradeAppsOpen() {
         displayVersion('HKCU', p.name) === VERSION,
         String(displayVersion('HKCU', p.name)),
       );
+      // An app the installer did NOT end (already a failure above) is ended here, so it cannot hold
+      // the next round's or the next phase's single instance.
+      if (processCount(p.image) > 0) {
+        spawnSync('taskkill', ['/IM', p.image, '/F'], { windowsHide: true });
+      }
     }
   }
   fs.writeFileSync(path.join(OUT, 'apps-open-upgrade.json'), JSON.stringify(timings, null, 2));
