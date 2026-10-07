@@ -209,11 +209,17 @@ test('a separate server: CG Bridge’s own address, typed beside the Playout’s
   await bridgeAnswersOnce(page, '192.0.2.30:5281', dialed);
   await gate.getByRole('button', { name: 'Connect' }).click();
 
+  /*
+    Saved, and the console started again aimed at CG Bridge there: the gate gone, and the SECOND socket
+    there (the answered probe, then the console's own after the reload). Waiting on the first alone read
+    the record mid-reload ("Execution context was destroyed", the Linux run on `77451b5e`).
+  */
+  await expect(gate).toHaveCount(0, { timeout: 20_000 });
   await expect
-    .poll(() => dialed.some((url) => url.replace(/\/$/, '') === 'ws://192.0.2.30:5281'), {
+    .poll(() => bare(dialed).filter((url) => url === 'ws://192.0.2.30:5281').length, {
       timeout: 20_000,
     })
-    .toBe(true);
+    .toBeGreaterThanOrEqual(2);
   // Never the Playout's host: CG Bridge is not there.
   expect(dialed.some((url) => url.includes(EXAMPLE))).toBe(false);
   expect(

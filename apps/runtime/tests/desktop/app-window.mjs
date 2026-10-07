@@ -54,7 +54,9 @@ export function sendClose(image) {
 /**
  * 🔴 `D-162` / `R-094` — the dialog a HELD close raised, as the page shows it, or `null` when there
  * is none: its title, its buttons' words (the ✕ has none), which one has focus, CG Designer's
- * project name, CG Control's fact line, and how many dialogs are open at all.
+ * project name, CG Control's fact line, how many dialogs carry THIS title (`same` — one close asked
+ * once), and how many dialogs are open at all (`dialogs` — CG Control's close is asked OVER its
+ * first-run card, itself a dialog, which is what the dialog's `window` layer is for).
  */
 export function closeDialogProbe(title) {
   const dialog = document.querySelector(`[role="dialog"][aria-label="${title}"]`);
@@ -67,6 +69,7 @@ export function closeDialogProbe(title) {
     focused: document.activeElement?.textContent?.trim() ?? '',
     project: dialog.querySelector('[data-unsaved-project]')?.textContent ?? null,
     fact: dialog.querySelector('[data-modal-body]')?.textContent ?? null,
+    same: document.querySelectorAll(`[role="dialog"][aria-label="${title}"]`).length,
     dialogs: document.querySelectorAll('[role="dialog"]').length,
   };
 }

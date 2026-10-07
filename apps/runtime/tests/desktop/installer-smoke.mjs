@@ -390,8 +390,11 @@ class Cdp {
 
 // ── Page probes, evaluated inside the installed apps ─────────────────────────
 
-/** CG Control's console: where it came from, and the Persian face with nothing off the machine. */
-async function consoleProbe() {
+/**
+ * CG Control's console: where it came from, and the Persian face with nothing off the machine.
+ * `shellCommands` — the commands its capability grants it ({@link consoleShellCommands}).
+ */
+async function consoleProbe(shellCommands) {
   const probe = document.createElement('p');
   probe.textContent = 'سلام، کنترل پخش';
   probe.style.fontFamily = 'var(--cg-font)';
@@ -406,10 +409,14 @@ async function consoleProbe() {
     `TEXT-DIGITS-01` — the console asks its own shell which keyboard language the window types in,
     through Tauri's IPC, which WebView2 carries as `http://ipc.localhost/<command>` (measured on this
     job: one entry per ask). That is the app talking to its own shell, not a load from another
-    machine, so exactly that ONE read-only command is set aside, by name. Any other origin — and any
-    other command — still counts. (Inline: this function runs inside the page.)
+    machine, so the shell's commands are set aside BY NAME — exactly the ones the console's capability
+    grants (`R-094`'s close guard asks `close_guard` as soon as the console can answer a close; measured
+    on this job as `http://ipc.localhost/close_guard`). Any other origin — and any command the
+    capability does not grant — still counts. (Inline: this function runs inside the page.)
   */
   const shellAsk = (u) =>
+    u.origin === 'http://ipc.localhost' && shellCommands.includes(u.pathname.slice(1));
+  const keyboardAsk = (u) =>
     u.origin === 'http://ipc.localhost' && u.pathname === '/keyboard_language';
   /*
     `CENTRAL-BRIDGE-01` — CG Bridge is this console's own server (its state, its PGM return, its
@@ -436,7 +443,7 @@ async function consoleProbe() {
     });
   const keyboardAsks = performance.getEntriesByType('resource').filter((e) => {
     try {
-      return shellAsk(new URL(e.name));
+      return keyboardAsk(new URL(e.name));
     } catch {
       return false;
     }
@@ -687,6 +694,17 @@ const installedControlExe = () => installedPerUser('CG Control', 'cg-control.exe
 function identifierOf(app) {
   const file = path.join(REPO, 'apps', app, 'src-tauri', 'tauri.conf.json');
   return JSON.parse(fs.readFileSync(file, 'utf8')).identifier;
+}
+
+/**
+ * The commands CG Control's capability grants its console (`allow-close-guard` → `close_guard`), read
+ * from the app's own `capabilities/console.json` — the list the shell enforces, never a second copy.
+ */
+function consoleShellCommands() {
+  const file = path.join(REPO, 'apps', 'runtime', 'src-tauri', 'capabilities', 'console.json');
+  return JSON.parse(fs.readFileSync(file, 'utf8'))
+    .permissions.filter((p) => typeof p === 'string' && p.startsWith('allow-'))
+    .map((p) => p.slice('allow-'.length).replace(/-/g, '_'));
 }
 
 /**
@@ -986,6 +1004,7 @@ async function designerUnsavedClose(exe) {
       first.project === 'Close guard' &&
       JSON.stringify(first.buttons) === JSON.stringify(['Save', "Don't save", 'Cancel']) &&
       first.focused === 'Cancel' &&
+      first.same === 1 &&
       first.dialogs === 1,
     JSON.stringify(first),
   );
@@ -997,7 +1016,10 @@ async function designerUnsavedClose(exe) {
   const again = await page.evaluateWith(closeDialogProbe, TITLE);
   check(
     '…a second close while it asks stacks no second dialog',
-    again !== null && again.dialogs === 1 && processCount('cg-designer.exe') === 1,
+    again !== null &&
+      again.same === 1 &&
+      again.dialogs === 1 &&
+      processCount('cg-designer.exe') === 1,
     JSON.stringify(again),
   );
 
@@ -1171,7 +1193,7 @@ async function controlDrive() {
   if (live === null) await diagnose('control-connect', 9230);
   // Then the settle the probe always had: fonts and the first keyboard asks.
   await sleep(4000);
-  const facts = await page.evaluate(consoleProbe);
+  const facts = await page.evaluateWith(consoleProbe, consoleShellCommands());
   fs.writeFileSync(path.join(out, 'control-facts.json'), JSON.stringify(facts, null, 2));
   check(
     'the console is the one CG Control bundles, on http://tauri.localhost',
@@ -1341,7 +1363,8 @@ async function controlCloseGuard() {
       JSON.stringify(first.buttons) === JSON.stringify(['Cancel', 'Close']) &&
       first.focused === 'Cancel' &&
       first.fact === null &&
-      first.dialogs === 1,
+      // ONE close dialog — asked over the first-run card, itself a dialog (the `window` layer's case).
+      first.same === 1,
     JSON.stringify(first),
   );
   await page.screenshot(path.join(out, 'control-close-dialog.png'));
