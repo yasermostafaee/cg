@@ -1502,21 +1502,15 @@ export function LayersPanel({
                   re-runs by itself when the sign-in state changes (`useBridgeSnapshot`), so
                   there is nothing for the operator to do and nothing to tell them to press.
                 */
-                <>
-                  <strong style={{ color: colors.text }}>The layer list was refused.</strong>
-                  <span>
-                    The bridge answered and did not send the declared rows. This is not an empty
-                    list — the rows appear if it answers.
-                  </span>
-                </>
+                /*
+                  🔴 `R-093` (`RELEASE-0114-01` Part C) — THE STATE, AND NOTHING ELSE. Each branch
+                  used to explain itself ("Waiting for the bridge to send the declared rows. This is
+                  not an empty list — …"): read once, never again, on an operator surface that
+                  carries no explanatory prose. The title says the state; the absence is pinned.
+                */
+                <strong style={{ color: colors.text }}>The layer list was refused.</strong>
               ) : (
-                <>
-                  <strong style={{ color: colors.text }}>Loading the layer list…</strong>
-                  <span>
-                    Waiting for the bridge to send the declared rows. This is not an empty list —
-                    the rows appear as soon as it answers.
-                  </span>
-                </>
+                <strong style={{ color: colors.text }}>Loading the layer list…</strong>
               )}
             </div>
           ) : bank === null ? (

@@ -190,9 +190,10 @@ describe('§3 — an unready list can never render as an empty list', () => {
     // ── inside the window ──────────────────────────────────────────────────
     expect(loading(el), 'the panel must say it is waiting').not.toBeNull();
     expect(loading(el)?.getAttribute('role')).toBe('status');
-    // …and it must not be mistakable for either flavour of "nothing here".
+    // …and it must not be mistakable for either flavour of "nothing here": its title says so.
     expect(el.textContent).not.toContain('No candidate layers are declared');
-    expect(el.textContent).toContain('not an empty list');
+    // `R-093` — the title alone: no explanation under it, pinned as an absence by equality.
+    expect(loading(el)?.textContent).toBe('Loading the layer list…');
     expect(rows(el)).toHaveLength(0);
 
     // A HALF-ARRIVAL is still an unready list: a ready bank over unready slots

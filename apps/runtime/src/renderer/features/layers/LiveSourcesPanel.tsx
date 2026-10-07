@@ -465,7 +465,7 @@ export function LiveSourcesPanel({
     return (
       <div style={styles.empty} data-live-layers-known={empty.known ? 'true' : 'false'}>
         <div style={styles.emptyHeadline}>{empty.headline}</div>
-        <div>{empty.detail}</div>
+        {empty.detail !== null && <div>{empty.detail}</div>}
       </div>
     );
   }

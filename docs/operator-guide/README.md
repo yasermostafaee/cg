@@ -78,8 +78,8 @@ row is `99`, _Layer 99_; beds read _Bed 59_ … _Bed 50_. A name you give a row 
 
 **Closing CG Control stops control, not air.** What is on air stays on air, CG Bridge keeps running,
 and the next start picks the rows up again. If CG Control cannot reach CG Bridge, its banner says
-**CG Bridge not reachable at …** and why; if the address itself was typed wrong, **Set up again** asks
-for it again. For support, **LOG → Download logs** (a station admin) saves CG Bridge's logs as one zip.
+**CG Bridge not reachable at …** and that takes are refused until it is back; if the address itself was
+typed wrong, **Set up again** asks for it again. For support, **LOG → Download logs** (a station admin) saves CG Bridge's logs as one zip.
 
 ## Daily flow
 

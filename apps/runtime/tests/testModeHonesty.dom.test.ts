@@ -175,8 +175,8 @@ describe('test mode does not claim real air — R-006', () => {
     const alert = el.querySelector('[role="alert"]');
     expect(alert?.getAttribute('aria-label')).toBe('Bridge disconnected');
     expect(alert?.textContent).toContain('NOTHING CAN REACH AIR');
-    // Refused, not queued — the operator must know to reissue.
-    expect(alert?.textContent).toContain('refused, not queued');
+    // `R-093` — takes are refused while it is gone: the one fact, said once.
+    expect(alert?.textContent).toContain('Takes are refused until it is back.');
   });
 
   it('renders NOTHING when the link is live — no banner IS the signal air is reachable', async () => {

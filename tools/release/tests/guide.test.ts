@@ -49,18 +49,7 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     shown: 'CG Bridge not reachable at',
     file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
   },
-  {
-    shown: 'nothing is listening on port',
-    file: 'apps/runtime/src/renderer/hooks/useBridgeReachability.ts',
-  },
-  {
-    shown: 'does not answer (switched off, a wrong address, or a firewall)',
-    file: 'apps/runtime/src/renderer/hooks/useBridgeReachability.ts',
-  },
-  {
-    shown: 'something there answers, but not as CG Bridge',
-    file: 'apps/runtime/src/renderer/hooks/useBridgeReachability.ts',
-  },
+  // `R-093` — the banner no longer explains why nothing answered (its three reasons are gone).
   {
     shown: 'Set up again',
     file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',

@@ -665,7 +665,8 @@ export function declaredFrameRows(
  */
 export interface LiveLayerEmptyView {
   headline: string;
-  detail: string;
+  /** `null` — the headline is the whole state (`R-093`: no explanation of it). */
+  detail: string | null;
   /** True only when the emptiness is a fact we actually have. */
   known: boolean;
 }
@@ -686,7 +687,8 @@ export function liveLayerEmptyView(
   if (!ledgerReady) {
     return {
       headline: 'The live-plate list has not arrived yet.',
-      detail: 'It fills in as soon as the bridge answers. This is not an empty list.',
+      // `R-093` — the layer list's own wait lost the same sentence; the headline is the state.
+      detail: null,
       known: false,
     };
   }

@@ -1,7 +1,6 @@
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useLink } from '../../hooks/useLink.js';
-import { unreachableReason, useBridgeReachability } from '../../hooks/useBridgeReachability.js';
 import { setTestMode } from '../../../platform/testMode.js';
 
 /**
@@ -82,9 +81,8 @@ export function ConnectionBanner({
   reload?: () => void;
 }): JSX.Element | null {
   const link = useLink();
-  // `CENTRAL-BRIDGE-01` §1 C — WHERE CG Bridge was looked for, and why it did not answer.
+  // `CENTRAL-BRIDGE-01` §1 C — WHERE CG Bridge was looked for.
   const address = window.cg.link.bridgeAddress?.() ?? null;
-  const unreachable = useBridgeReachability(address, link === 'disconnected');
 
   if (link === 'live') return null;
 
@@ -118,17 +116,17 @@ export function ConnectionBanner({
     >
       <span style={styles.text}>
         NOT CONNECTED — NOTHING CAN REACH AIR.
-        <span style={styles.detail} data-bridge-unreachable={unreachable ?? ''}>
+        <span style={styles.detail}>
           {/*
-            `CENTRAL-BRIDGE-01` §1 C — the one line: CG Bridge is on another machine now, so the
-            console names where it looked and, once the probe answers, why nothing came back.
+            🔴 `R-093` (`RELEASE-0114-01` Part C) — THE STATE, THE ADDRESS, AND THE ONE FACT AN
+            OPERATOR ACTS ON. It used to explain WHY nothing answered ("nothing is listening on port
+            5280 there", "switched off, a wrong address, or a firewall", "something there answers, but
+            not as CG Bridge") and what to do later ("reissue them once the connection is back") —
+            explanations an operator under pressure reads once and never again. The absence is
+            pinned (`connectionBannerSetUpAgain.dom.test.ts`, `R-093`).
           */}
-          {address === null
-            ? 'The Runtime cannot reach CG Bridge.'
-            : `CG Bridge not reachable at ${address}${
-                unreachable === null ? '' : ` — ${unreachableReason(unreachable, address)}`
-              }.`}{' '}
-          On-air commands are refused, not queued: reissue them once the connection is back.
+          {address === null ? 'CG Bridge not reachable.' : `CG Bridge not reachable at ${address}.`}{' '}
+          Takes are refused until it is back.
         </span>
       </span>
       <Button variant="secondary" onClick={reload}>

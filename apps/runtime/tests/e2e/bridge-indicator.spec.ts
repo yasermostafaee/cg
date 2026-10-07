@@ -60,7 +60,7 @@ test.describe('bridge link indicator', () => {
     // A pill is not enough for "nothing can reach air" — the alert is unmissable.
     const alert = page.getByRole('alert', { name: 'Bridge disconnected' });
     await expect(alert).toContainText('NOTHING CAN REACH AIR');
-    await expect(alert).toContainText('refused, not');
+    await expect(alert).toContainText('Takes are refused until it is back.');
 
     // No server is claimed healthy while nothing is reachable (the green pill that used to
     // sit beside the amber one, and won). Scoped + case-sensitive: a bare

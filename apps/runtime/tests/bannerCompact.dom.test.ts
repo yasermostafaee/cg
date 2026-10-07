@@ -87,7 +87,8 @@ describe('the banners stay loud — the R-006 message is unchanged', () => {
 
     expect(banner?.getAttribute('aria-label')).toBe('Bridge disconnected');
     expect(banner?.textContent).toContain('NOTHING CAN REACH AIR');
-    expect(banner?.textContent).toContain('refused, not queued');
+    // `R-093` — the one fact an operator acts on, and no explanation (`connectionBannerSetUpAgain`).
+    expect(banner?.textContent).toContain('Takes are refused until it is back.');
     // `R-087` (`RELEASE-0112-01-A` A1) — the retry is the one door here (a browser has no Set up
     // again); the way INTO test mode is gone.
     const buttons = [...el.querySelectorAll('button')].map((b) => b.textContent);

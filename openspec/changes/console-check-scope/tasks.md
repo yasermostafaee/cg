@@ -30,9 +30,9 @@
 
 ## 5. The last prose (`R-093`)
 
-- [ ] 5.1 The banner: the state, the address, `Takes are refused until it is back.`; the reachability reasons gone
-- [ ] 5.2 `Loading the layer list…`: the title only
-- [ ] 5.3 Absences pinned; swept by string and by component
+- [x] 5.1 The banner: the state, the address, `Takes are refused until it is back.`; the reachability reasons gone
+- [x] 5.2 `Loading the layer list…`: the title only
+- [x] 5.3 Absences pinned; swept by string and by component
 
 ## 6. Verification
 

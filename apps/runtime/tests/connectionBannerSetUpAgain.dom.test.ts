@@ -40,7 +40,7 @@ afterEach(async () => {
 function stub(options: { insideCgControl: boolean; forget?: () => boolean }): {
   forgetStation: ReturnType<typeof vi.fn>;
 } {
-  // The reachability probe is a real `fetch` of the address: refused here, never dialled.
+  // `R-093` — the banner probes nothing now; any `fetch` it made would be refused here, never dialled.
   vi.stubGlobal(
     'fetch',
     vi.fn(() => Promise.reject(new Error('refused'))),
@@ -80,18 +80,52 @@ async function render(reload: () => void): Promise<HTMLDivElement> {
 const button = (c: HTMLElement, name: string): HTMLButtonElement | undefined =>
   [...c.querySelectorAll('button')].find((b) => b.textContent?.trim() === name);
 
+/**
+ * 🔴 `R-093` (`RELEASE-0114-01` Part C) — **THE BANNER STATES, IT DOES NOT TEACH.** Pinned as an
+ * ABSENCE, the direction the rule regresses in: the next person adds one helpful line and nothing else
+ * fails. Every removed phrase, in a CG Control and in a browser; control: the facts are still there.
+ */
+const REMOVED = [
+  /nothing is listening/i,
+  /switched off/i,
+  /a wrong address/i,
+  /firewall/i,
+  /answers, but not as CG Bridge/i,
+  /reissue/i,
+  /not queued/i,
+  /once the connection is back/i,
+];
+
+describe('R-093 — no explanation on the NOT CONNECTED banner', () => {
+  for (const insideCgControl of [true, false]) {
+    it(`carries the state, the address and one fact — nothing more (${insideCgControl ? 'CG Control' : 'a browser'})`, async () => {
+      stub({ insideCgControl });
+      const c = await render(() => undefined);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      const text = c.textContent ?? '';
+      for (const re of REMOVED) expect(text, `${String(re)} came back`).not.toMatch(re);
+      // Control — the facts the operator acts on are there.
+      expect(text).toContain('NOT CONNECTED — NOTHING CAN REACH AIR.');
+      expect(text).toContain('CG Bridge not reachable at 192.0.2.50:5280.');
+      expect(text).toContain('Takes are refused until it is back.');
+    });
+  }
+});
+
 describe('CENTRAL-BRIDGE-01 — the disconnected banner', () => {
-  it('names where it looked for CG Bridge — and, once the probe answers, why nothing came back', async () => {
+  it('names where it looked for CG Bridge, and the one fact to act on — never why nothing answered (R-093)', async () => {
     stub({ insideCgControl: true });
     const c = await render(() => undefined);
     const alert = c.querySelector('[role="alert"]');
     expect(alert?.getAttribute('aria-label')).toBe('Bridge disconnected');
-    expect(alert?.textContent).toContain('CG Bridge not reachable at 192.0.2.50:5280');
-    // A refusal comes back at once: nothing is listening there.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
-    expect(alert?.textContent).toContain('nothing is listening on port 5280 there');
+    expect(alert?.querySelector('span span')?.textContent?.trim()).toBe(
+      'CG Bridge not reachable at 192.0.2.50:5280. Takes are refused until it is back.',
+    );
   });
 
   it('🔴 inside CG Control, Set up again forgets this console’s station and starts it again — on the question', async () => {
