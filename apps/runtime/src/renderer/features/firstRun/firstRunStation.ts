@@ -168,9 +168,25 @@ export function signInCanWork(lines: readonly Pick<ShownCheckLine, 'id' | 'statu
 }
 
 /**
- * `DELTA-MULTI-CHANNEL-01-B` B2 — the ONE line a disabled sign-in shows, in the check's own
- * words: the first of the sign-in's links that has not passed, as the check left it (failed, not
- * checked, or checking). `null` when a sign-in can work — or when nothing has been checked yet.
+ * 🔴 `B-317` (`RELEASE-0114-01` A4) — **IS THE SIGN-IN FORM LOCKED?** Only by a line of the check that
+ * SAYS a sign-in cannot work — one of its links failed or was not checked — or while that line is still
+ * being checked. Signing in to the Playout never waits on CG Bridge: with no check yet, or a check that
+ * found no CG Bridge (so it has no word on the Playout's links), the form is open, and the Playout's own
+ * answer to the sign-in is the verdict. Connect is a different question (`signInCanWork`, which needs
+ * the links to have PASSED).
+ */
+export function signInLocked(lines: readonly ShownCheckLine[] | null): boolean {
+  if (lines === null) return false;
+  return SIGN_IN_LINKS.some((id) => {
+    const line = lines.find((l) => l.id === id);
+    return line !== undefined && line.status !== 'pass';
+  });
+}
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-B` B2 — the ONE line a locked sign-in shows, in the check's own words: the
+ * first of the sign-in's links that has not passed, as the check left it (failed, not checked, or
+ * checking). `null` when nothing locks it ({@link signInLocked}).
  */
 export function signInBlocker(lines: readonly ShownCheckLine[] | null): ShownCheckLine | null {
   if (lines === null) return null;
@@ -179,6 +195,20 @@ export function signInBlocker(lines: readonly ShownCheckLine[] | null): ShownChe
     if (line !== undefined && line.status !== 'pass') return line;
   }
   return null;
+}
+
+/**
+ * 🔴 `B-317` — **SET UP NEVER SAYS "command rejected. Not sent to CasparCG."** That is the console's
+ * refusal of a COMMAND on a down socket (`BridgeDisconnectedError`); on Set up nothing was a command, and
+ * the owner was left reading it with nothing he could do. Here it is the state, in words, naming where.
+ */
+export function inSetupWords(err: unknown, bridgeAddress: string | null): string {
+  if (err instanceof Error && err.name === 'BridgeDisconnectedError') {
+    return bridgeAddress === null
+      ? 'CG Bridge is not answering.'
+      : `CG Bridge is not answering at ${bridgeAddress}.`;
+  }
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
@@ -191,14 +221,45 @@ export type ShownCheckLine = Omit<ConnectionCheckLine, 'status' | 'id'> & {
   readonly status: ConnectionCheckLine['status'] | 'checking';
 };
 
+/** The host of `host:port` (an IPv6 host keeps its brackets). */
+export function hostPart(hostPort: string): string {
+  const m = /^(\[[^\]]*\]|[^:]+)(?::\d+)?$/.exec(hostPort.trim());
+  return m?.[1] ?? hostPort;
+}
+
+/** `B-317` — is CG Bridge (`host:port`) on another host than the Playout (`http://host:port`)? */
+export function onSeparateServer(bridgeAddress: string, playoutAddress: string): boolean {
+  try {
+    const playoutHost = new URL(playoutAddress).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    return (
+      hostPart(bridgeAddress)
+        .replace(/^\[|\]$/g, '')
+        .toLowerCase() !== playoutHost
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** A name inside an English line: a first-strong isolate, so a Persian name keeps its order. */
 const isolated = (text: string): string =>
   `${String.fromCodePoint(0x2068)}${text}${String.fromCodePoint(0x2069)}`;
 
 /** What only this console knows, for {@link consoleCheckLines}. */
 export interface ConsoleCheckFacts {
-  /** Where this console found CG Bridge — the address it dialled (`host:port`); `null` — not known. */
+  /**
+   * 🔴 `B-317` — where the CHECK found CG Bridge, the address it dialled (`host:port`), never the socket
+   * this console happens to be on; `null` — not known.
+   */
   readonly bridgeAddress: string | null;
+  /** `B-317` — nothing answered at {@link bridgeAddress}. */
+  readonly bridgeSilent?: boolean | undefined;
+  /** `B-317` — CG Bridge's host is not the Playout's: said in one line. */
+  readonly separateServer?: boolean | undefined;
+  /** `R-090` — what CG Bridge's `/health` says about its own ports, in its words. */
+  readonly bridgeProblems?:
+    | readonly { readonly code: string; readonly message: string }[]
+    | undefined;
   /** CG Bridge's release as it told this console; `null` — too old to say; absent — not read yet. */
   readonly bridgeVersion?: string | null | undefined;
   /** This console's own release. */
@@ -222,11 +283,39 @@ export interface ConsoleCheckFacts {
 export function consoleCheckLines(facts: ConsoleCheckFacts): ShownCheckLine[] {
   const lines: ShownCheckLine[] = [];
   if (facts.bridgeAddress !== null) {
-    lines.push({
-      id: 'bridge',
-      status: 'pass',
-      text: `CG Bridge found at ${facts.bridgeAddress}.`,
-    });
+    // `B-317` — the CG Bridge the check ran on: found, on a separate server, or not answering there.
+    lines.push(
+      facts.bridgeSilent === true
+        ? {
+            id: 'bridge',
+            status: 'fail',
+            text: `CG Bridge is not answering at ${facts.bridgeAddress}.`,
+          }
+        : {
+            id: 'bridge',
+            status: 'pass',
+            text:
+              facts.separateServer === true
+                ? `CG Bridge on a separate server: ${facts.bridgeAddress}.`
+                : `CG Bridge found at ${facts.bridgeAddress}.`,
+          },
+    );
+    // `R-090` — a port CG Bridge cannot open, naming CG Bridge's machine (never the console's).
+    const problems = facts.bridgeProblems ?? [];
+    if (facts.bridgeSilent !== true && problems.length > 0) {
+      const host = hostPart(facts.bridgeAddress);
+      lines.push({
+        id: 'bridge-ports',
+        status: 'fail',
+        text: problems
+          .map((p) =>
+            p.code === 'port-refused'
+              ? `CG Bridge on ${host} ${p.message}`
+              : `CG Bridge on ${host}: ${p.message}`,
+          )
+          .join(' '),
+      });
+    }
   }
   if (facts.bridgeVersion !== undefined) {
     lines.push(

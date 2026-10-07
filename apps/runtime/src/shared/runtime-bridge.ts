@@ -170,6 +170,25 @@ export interface AuthCapabilities {
 }
 
 /**
+ * 🔴 `B-317` — **A CHECK'S ANSWER, AND WHERE IT RAN.** The console writes its CG Bridge line from
+ * `bridge` — the CG Bridge that actually answered this check — never from the socket it happens to be on.
+ */
+export interface SetupCheckAnswer extends ChannelResponse<typeof SetupCheckChannel> {
+  /** `null` — test mode, which has no CG Bridge. */
+  readonly bridge: {
+    /** `host:port` the check ran at. */
+    readonly address: string;
+    /** CG Bridge's release as it said it; `null` — too old to say; absent — not read. */
+    readonly version?: string | null;
+    /**
+     * `R-090` — what CG Bridge's `/health` says it cannot do about its own ports (`port-refused`,
+     * `reserved-port`), in its words; empty when nothing, or when `/health` did not answer.
+     */
+    readonly problems: readonly { readonly code: string; readonly message: string }[];
+  } | null;
+}
+
+/**
  * 🔴 `R-066` — **WHAT THE CONSOLE SAYS ABOUT ITSELF, in the operator's words, as ONE state.**
  *
  * Five names rather than a principal-or-null, because the surfaces that read this — the
@@ -846,10 +865,23 @@ export interface RuntimeBridge {
    * as first-run needs them, and — inside CG Control only — the Playout address.
    */
   setup: {
-    /** §2F — the connection check, one line per link. Reads; changes nothing. */
+    /**
+     * §2F — the connection check, one line per link. Reads; changes nothing.
+     *
+     * 🔴 `B-317` — with `where`, it runs on the CG Bridge the Set up fields resolve to
+     * ({@link RuntimeBridge.setup.bridgeAddressFor}), on a socket of its own when that is not the one
+     * this console is on; without it, on this console's own CG Bridge. Rejects with the operator's
+     * sentence `CG Bridge is not answering at <host>:<port>.` when nothing answers there.
+     */
     check(
       req: ChannelRequest<typeof SetupCheckChannel>,
-    ): Promise<ChannelResponse<typeof SetupCheckChannel>>;
+      where?: { readonly bridgeAddress: string },
+    ): Promise<SetupCheckAnswer>;
+    /**
+     * 🔴 `B-317` — the ONE CG Bridge address Set up's fields resolve to, as `host:port`: the CG Bridge
+     * field when a person typed it, else the Playout's host on 5280. `null` — no usable host. Pure.
+     */
+    bridgeAddressFor(playoutAddress: string, bridgeAddress: string): string | null;
     /** §2E — this machine's address on the route to a host: the serve-host default. */
     routeAddress(
       req: ChannelRequest<typeof SetupRouteAddressChannel>,

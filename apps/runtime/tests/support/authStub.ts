@@ -267,7 +267,8 @@ export function fillBankList(fixedLayers: Record<string, unknown>): void {
  * absent, and no desktop door (a spec is not CG Control, so the Playout address cannot be set).
  */
 export function setupStub(): {
-  check: () => Promise<{ lines: []; localAddress: null }>;
+  check: () => Promise<{ lines: []; localAddress: null; bridge: null }>;
+  bridgeAddressFor: () => string | null;
   routeAddress: () => Promise<{ address: null }>;
   catalogue: () => Promise<{ rows: null }>;
   channelOccupancy: () => Promise<{ state: 'unknown'; layers: [] }>;
@@ -277,7 +278,9 @@ export function setupStub(): {
   forgetStation: () => boolean;
 } {
   return {
-    check: () => Promise.resolve({ lines: [], localAddress: null }),
+    // `B-317` — a check's answer says where it ran; this stub has no CG Bridge, so nowhere.
+    check: () => Promise.resolve({ lines: [], localAddress: null, bridge: null }),
+    bridgeAddressFor: () => null,
     routeAddress: () => Promise.resolve({ address: null }),
     catalogue: () => Promise.resolve({ rows: null }),
     channelOccupancy: () => Promise.resolve({ state: 'unknown', layers: [] }),

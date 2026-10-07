@@ -78,6 +78,42 @@ export function bridgeUrlForStation(station: StationAddress): string | null {
 }
 
 /**
+ * 🔴 `B-317` — the ONE CG Bridge address Set up's fields resolve to, as `host:port` — the same rule
+ * {@link bridgeUrlForStation} connects by (golden rule 6): the CG Bridge field when a person typed it,
+ * else the Playout's host on 5280. `null` — no usable host.
+ */
+export function bridgeAddressFor(playoutAddress: string, bridgeAddress: string): string | null {
+  const typed = bridgeAddress.trim();
+  const url = bridgeUrlForStation({
+    playoutAddress,
+    ...(typed === '' ? {} : { bridgeAddress: typed }),
+  });
+  return url === null ? null : bridgeHostPort(url);
+}
+
+const LOOPBACK_HOST = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|::1)$/i;
+
+/**
+ * 🔴 `B-317` — **A LOOPBACK ADDRESS CG BRIDGE ADVERTISES NAMES CG BRIDGE'S OWN MACHINE.** CG Bridge set up
+ * on the Playout's machine knows its Playout as `http://127.0.0.1:8080`, and advertises that as the sign-in
+ * address; a console on another PC would sign in to its OWN loopback. So when this console reaches CG
+ * Bridge at a host that is not loopback, a loopback host in what CG Bridge advertises is CG Bridge's host
+ * — the same rule the Playout's own lists follow (loopback = that machine). Anything else is unchanged.
+ */
+export function rebaseLoopback(advertised: string | null, bridgeHost: string): string | null {
+  if (advertised === null || bridgeHost === '' || LOOPBACK_HOST.test(bridgeHost)) return advertised;
+  try {
+    const url = new URL(advertised);
+    if (!LOOPBACK_HOST.test(url.hostname)) return advertised;
+    url.hostname =
+      bridgeHost.includes(':') && !bridgeHost.startsWith('[') ? `[${bridgeHost}]` : bridgeHost;
+    return url.href;
+  } catch {
+    return advertised;
+  }
+}
+
+/**
  * `host:port` of a bridge URL — what the "not reachable" line names. From the TEXT, as
  * {@link bridgeUrlForStation} reads it: a URL parser would drop `ws://host:80`'s port and name 5280.
  */

@@ -76,18 +76,26 @@ export interface GateStation {
 
 export function PlayoutAddressGate({
   save,
+  answers = () => Promise.resolve(null),
   reload = () => globalThis.location.reload(),
 }: {
   /** Save this console's station record; `false` when the store refused (`main.tsx` hands it in). */
   save: (station: GateStation) => boolean;
+  /**
+   * 🔴 `B-317` — does CG Bridge answer where this record would send the console? `null` — it does;
+   * else the sentence that says where nothing answered (`main.tsx` hands in the platform's).
+   */
+  answers?: (station: GateStation) => Promise<string | null>;
   /** Start the console again once the address is saved (a test passes its own). */
   reload?: () => void;
 }): JSX.Element {
   const [typed, setTyped] = useState('');
   const [bridgeTyped, setBridgeTyped] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const connect = (): void => {
+  const connect = async (): Promise<void> => {
+    if (busy) return;
     const playoutAddress = normalisePlayoutAddress(typed);
     if (playoutAddress === null) {
       setError(NOT_A_PLAYOUT_ADDRESS);
@@ -98,14 +106,30 @@ export function PlayoutAddressGate({
       setError(NOT_A_BRIDGE_ADDRESS);
       return;
     }
-    if (!save({ playoutAddress, ...(bridgeAddress === '' ? {} : { bridgeAddress }) })) {
+    const station = { playoutAddress, ...(bridgeAddress === '' ? {} : { bridgeAddress }) };
+    /*
+      🔴 `B-317` — Connect only where CG Bridge ANSWERS. The owner's typed `192.168.111` was saved as it
+      came (the URL parser reads it `192.168.0.111`) and left him in a NOT CONNECTED; the sentence below
+      names the address the console would have dialled, so a typo shows where it sends him.
+    */
+    setBusy(true);
+    setError(null);
+    const silent = await answers(station).catch((err: unknown) =>
+      err instanceof Error ? err.message : String(err),
+    );
+    setBusy(false);
+    if (silent !== null) {
+      setError(silent);
+      return;
+    }
+    if (!save(station)) {
       setError('This console could not save the Playout address.');
       return;
     }
     reload();
   };
   const onEnter = (e: { key: string }): void => {
-    if (e.key === 'Enter' && typed.trim() !== '') connect();
+    if (e.key === 'Enter' && typed.trim() !== '') void connect();
   };
 
   /*
@@ -120,8 +144,12 @@ export function PlayoutAddressGate({
       title="Set up"
       groundData={{ 'data-playout-address-gate': '' }}
       footer={
-        <Button variant="primary" disabled={typed.trim() === ''} onClick={connect}>
-          Connect
+        <Button
+          variant="primary"
+          disabled={typed.trim() === '' || busy}
+          onClick={() => void connect()}
+        >
+          {busy ? 'Connecting…' : 'Connect'}
         </Button>
       }
     >

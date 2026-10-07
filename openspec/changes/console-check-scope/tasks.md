@@ -8,13 +8,13 @@
 
 ## 2. The console: one address, no dead end (`B-317`)
 
-- [ ] 2.1 One resolver for the Set up fields; the check on that CG Bridge (its own socket when it is not the
+- [x] 2.1 One resolver for the Set up fields; the check on that CG Bridge (its own socket when it is not the
       console's); `CG Bridge is not answering at <host>:<port>.`
-- [ ] 2.2 The CG Bridge line names where the check ran; `CG Bridge on a separate server: …`; `Use … (last used)`
-- [ ] 2.3 `Connect` only after CG Bridge answered there; first-run shows the CG Bridge field; no silent override
-- [ ] 2.4 Sign in locked only by a line that says it cannot work; the advertised loopback rebased onto CG Bridge's
+- [x] 2.2 The CG Bridge line names where the check ran; `CG Bridge on a separate server: …`; `Use … (last used)`
+- [x] 2.3 `Connect` only after CG Bridge answered there; first-run shows the CG Bridge field; no silent override
+- [x] 2.4 Sign in locked only by a line that says it cannot work; the advertised loopback rebased onto CG Bridge's
       host; the check asked by CG Bridge's own name for its loopback Playout (the narrowing unchanged)
-- [ ] 2.5 The console drops an older CG Bridge's `ports`/`topology`; shows `/health`'s `port-refused` naming the
+- [x] 2.5 The console drops an older CG Bridge's `ports`/`topology`; shows `/health`'s `port-refused` naming the
       host
 
 ## 3. CG Bridge on this machine (`R-091`)

@@ -118,6 +118,8 @@ const BRIDGE_SURFACE: {
     // `DESKTOP-APPS-01` — first-run. The mock answers empty and has no desktop door.
     setup: [
       'check',
+      // `B-317` — the one CG Bridge address Set up's fields resolve to (the mock: none).
+      'bridgeAddressFor',
       'routeAddress',
       'catalogue',
       // `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared.

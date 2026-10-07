@@ -144,6 +144,7 @@ import type {
   AuthSessionState,
   BridgeLinkStatus,
   RuntimeBridge,
+  SetupCheckAnswer,
   Unsubscribe,
 } from '../shared/runtime-bridge.js';
 import * as ipcChannels from '@cg/shared-ipc';
@@ -174,7 +175,18 @@ import {
   shellKeyboardLanguage,
   shellReportsKeyboardLanguage,
 } from './desktop.js';
-import { bridgeHostPort, bridgeUrlForStation } from './bridgeUrl.js';
+import {
+  bridgeAddressFor,
+  bridgeHostPort,
+  bridgeUrlForStation,
+  rebaseLoopback,
+} from './bridgeUrl.js';
+import {
+  bridgePortProblems,
+  checkOnItsOwnSocket,
+  hostOfBridgeUrl,
+  playoutAsBridgeNamesIt,
+} from './checkAt.js';
 import { loadStationAddress, saveStationAddress, type StationAddress } from './stationAddress.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -219,6 +231,11 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 export interface WebSocketRuntimeOptions {
   /** Inject a WebSocket implementation (default: the global `WebSocket`). */
   createWebSocket?: WebSocketFactory;
+  /**
+   * `R-090` — what CG Bridge's `/health` says about its own ports, for the check's `bridge-ports` line
+   * (default: `bridgePortProblems`, an HTTP read). A test answers it without a network.
+   */
+  portProblems?: (bridgeUrl: string) => Promise<{ code: string; message: string }[]>;
   /**
    * `CENTRAL-BRIDGE-01` — this console's release version, compared with CG Bridge's by release line
    * at connect. Defaults to the build stamp's (`__CG_BUILD__`, the number `tools/release` stamps);
@@ -314,6 +331,13 @@ export class WebSocketRuntime implements RuntimeBridge {
   /** `CENTRAL-BRIDGE-01` — not readonly: a console re-aimed at another CG Bridge ({@link retarget}). */
   #url: string;
   readonly #createWs: WebSocketFactory;
+  /** `R-090` — CG Bridge's own port trouble, read off its `/health`. */
+  readonly #portProblems: (bridgeUrl: string) => Promise<{ code: string; message: string }[]>;
+  /**
+   * `B-317` — the sign-in address CG Bridge ADVERTISED, before `rebaseLoopback`: a check before a sign-in
+   * asks a loopback-configured CG Bridge for its Playout by this name (`playoutAsBridgeNamesIt`).
+   */
+  #advertisedSignInUrl: string | null = null;
   #ws: WebSocketLike | null = null;
   #status: BridgeLinkStatus = 'disconnected';
   #everOpened = false;
@@ -541,6 +565,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#url = url;
     this.#createWs =
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
+    this.#portProblems = options.portProblems ?? ((u) => bridgePortProblems(u));
     this.#consoleVersion = options.consoleVersion ?? __CG_BUILD__.version;
     // Default to in-memory (unhydrated, empty) display copies so tests can construct the runtime
     // with no store. The boot path injects OPFS-backed, hydrated ones.
@@ -970,10 +995,17 @@ export class WebSocketRuntime implements RuntimeBridge {
         would be a second thing that can fail on the connect path, and `B-153` put this
         question here precisely because it is asked before the operator can press anything.
       */
+      /*
+        🔴 `B-317` — a loopback address CG Bridge advertises names CG Bridge's own machine: rebased onto
+        the host this console reaches it at, so a console on another PC never signs in to its own
+        loopback. The raw one is kept for the check's narrowing (`playoutAsBridgeNamesIt`).
+      */
+      const bridgeHost = hostOfBridgeUrl(this.#url);
+      this.#advertisedSignInUrl = caps.signInUrl ?? null;
       this.#setAuthCaps({
         mode: ipcChannels.capabilitiesAuthMode(caps),
-        signInUrl: caps.signInUrl ?? null,
-        refreshUrl: caps.refreshUrl ?? null,
+        signInUrl: rebaseLoopback(caps.signInUrl ?? null, bridgeHost),
+        refreshUrl: rebaseLoopback(caps.refreshUrl ?? null, bridgeHost),
         contractVersion: caps.authContractVersion ?? null,
         // `DESKTOP-APPS-01` — an installed station still in first-run says so here.
         setupPhase: caps.setup ?? null,
@@ -1902,19 +1934,90 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly setup = {
     // `DESKTOP-APPS-01-C` C2 — waits longer than the check's slowest line, from the one constant;
     // `DELTA-MULTI-CHANNEL-01-A` A2 — and a check that holds its AMCP line, the window on top.
-    check: (req: ChannelRequest<typeof ipcChannels.SetupCheckChannel>) =>
-      this.#invoke(
-        ipcChannels.SetupCheckChannel,
-        /*
-          `CENTRAL-BRIDGE-01` rule 8 — the check asks what THIS console's sign-in will meet. Where the
-          sign-in is native (CG Control: the same `nativePlayoutFetch` it signs in with, never a
-          second test), it sends no `Origin`, so there is no CORS list to probe for it.
-        */
-        nativePlayoutFetch() === null ? req : { ...req, signIn: 'native' as const },
+    /*
+      🔴 `B-317` — **THE CHECK RUNS WHERE `Connect` WILL GO.** With `where` (Set up's fields), on the CG
+      Bridge they resolve to — this console's own socket only when it IS that CG Bridge and live, else a
+      socket of its own (`checkOnItsOwnSocket`), so a check never runs on a CG Bridge the operator did not
+      name and never retargets the console. Without `where`, on this console's own CG Bridge, as before.
+      The answer says where it ran; CG Bridge's own port trouble comes from its `/health` (`R-090`).
+    */
+    check: async (
+      req: ChannelRequest<typeof ipcChannels.SetupCheckChannel>,
+      where?: { readonly bridgeAddress: string },
+    ): Promise<SetupCheckAnswer> => {
+      /*
+        `CENTRAL-BRIDGE-01` rule 8 — the check asks what THIS console's sign-in will meet. Where the
+        sign-in is native (CG Control: the same `nativePlayoutFetch` it signs in with, never a
+        second test), it sends no `Origin`, so there is no CORS list to probe for it.
+      */
+      const ask = nativePlayoutFetch() === null ? req : { ...req, signIn: 'native' as const };
+      const waitMs =
         req.awaitLetIn === true
           ? ipcChannels.SETUP_CHECK_LET_IN_WAIT_MS
-          : ipcChannels.SETUP_CHECK_WAIT_MS,
-      ),
+          : ipcChannels.SETUP_CHECK_WAIT_MS;
+      const url =
+        where === undefined
+          ? this.#url
+          : (() => {
+              const playoutAddress = ipcChannels.normalisePlayoutAddress(req.playoutAddress);
+              const bridge = where.bridgeAddress.trim();
+              return playoutAddress === null
+                ? null
+                : bridgeUrlForStation({
+                    playoutAddress,
+                    ...(bridge === '' ? {} : { bridgeAddress: bridge }),
+                  });
+            })();
+      if (url === null) throw new Error(ipcChannels.NOT_A_PLAYOUT_ADDRESS);
+      const address = bridgeHostPort(url);
+      if (url === this.#url && this.#status === 'live') {
+        const result = await this.#invoke(
+          ipcChannels.SetupCheckChannel,
+          // Before a sign-in, a loopback-configured CG Bridge is asked for its Playout by its own name.
+          this.#principal === null
+            ? {
+                ...ask,
+                playoutAddress: playoutAsBridgeNamesIt(
+                  ask.playoutAddress,
+                  hostOfBridgeUrl(url),
+                  this.#advertisedSignInUrl,
+                ),
+              }
+            : ask,
+          waitMs,
+        );
+        const version = this.#authCaps?.bridgeVersion;
+        return {
+          ...result,
+          bridge: {
+            address,
+            ...(version !== undefined ? { version } : {}),
+            problems: await this.#portProblems(url),
+          },
+        };
+      }
+      const { result, capabilities } = await checkOnItsOwnSocket({
+        url,
+        address,
+        request: ask,
+        createSocket: this.#createWs,
+        token: this.#session?.accessToken ?? null,
+        waitMs,
+      });
+      return {
+        ...result,
+        bridge: {
+          address,
+          ...(capabilities !== null ? { version: capabilities.bridgeVersion ?? null } : {}),
+          problems: await this.#portProblems(url),
+        },
+      };
+    },
+    // `B-317` — the one rule `Connect` connects by, for Set up to name and compare (pure).
+    bridgeAddressFor: (playoutAddress: string, bridgeAddress: string): string | null => {
+      const normal = ipcChannels.normalisePlayoutAddress(playoutAddress);
+      return normal === null ? null : bridgeAddressFor(normal, bridgeAddress);
+    },
     routeAddress: (req: ChannelRequest<typeof ipcChannels.SetupRouteAddressChannel>) =>
       this.#invoke(ipcChannels.SetupRouteAddressChannel, req),
     catalogue: () => this.#invoke(ipcChannels.ChannelsCatalogueChannel, undefined),

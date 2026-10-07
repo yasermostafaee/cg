@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
 import { saveStationAddress } from '../platform/stationAddress.js';
+import { stationBridgeAnswers } from '../platform/checkAt.js';
 import { PlayoutAddressGate } from './features/firstRun/PlayoutAddressGate.js';
 import { startKeyboardLanguage } from './keyboardLanguage.js';
 import { applyThemeVars } from './theme.js';
@@ -93,7 +94,7 @@ async function boot(): Promise<void> {
     root.render(
       <StrictMode>
         <BootComplete>
-          <PlayoutAddressGate save={saveStationAddress} />
+          <PlayoutAddressGate save={saveStationAddress} answers={stationBridgeAnswers} />
         </BootComplete>
       </StrictMode>,
     );

@@ -20,9 +20,10 @@ import {
   declareFirstRunChannels,
   groupByHost,
   onAirWarning,
+  inSetupWords,
   playoutOriginOf,
   signInBlocker,
-  signInCanWork,
+  signInLocked,
   writeFirstRunConnection,
   type ChannelChoice,
   type ShownCheckLine,
@@ -235,21 +236,27 @@ function SignInStep({
     🔴 `DELTA-MULTI-CHANNEL-01-B` B2 — **A SIGN-IN IS OFFERED ONLY WHEN IT CAN WORK.** The owner,
     with the Playout down, could type and press Sign in, and got his Password field turned red over
     a Playout that was not answering. The fields and the button are enabled only while the check
-    says a sign-in can work (the one predicate, `signInCanWork`), and while it does not, ONE line
+    says a sign-in can work (since `B-317`: no line says it cannot — `signInLocked`), and while one does, ONE line
     says why in the check's own words. Check stays where it is, above.
   */
-  const canWork = lines !== null && signInCanWork(lines);
+  /*
+    🔴 `B-317` (`RELEASE-0114-01` A4) — **SIGNING IN NEVER WAITS ON CG BRIDGE.** Locked only by a line
+    that SAYS a sign-in cannot work (`signInLocked`); a check that found no CG Bridge has no word on the
+    Playout, and the form stays open — the owner's Set up kept it locked, with no reason, while nothing
+    answered.
+  */
+  const refused = signInLocked(lines);
   /*
     🔴 `B-304` — **A BLOCKER IS A VERDICT.** While the check is still running, the line that would
     block is `checking` — no verdict yet — and it is already drawn once, in the check above. Repeating
     it here drew the same line twice (a strict-mode race in `first-run.spec.ts:129`, red 3/3 on the
     dev host). So the Sign in section names its blocker only once the check has said something.
   */
-  const verdict = canWork ? null : signInBlocker(lines);
+  const verdict = refused ? signInBlocker(lines) : null;
   const blocker = verdict !== null && verdict.status !== 'checking' ? verdict : null;
 
   const submit = async (): Promise<void> => {
-    if (busy || !canWork || username === '' || password === '') return;
+    if (busy || refused || username === '' || password === '') return;
     setBusy(true);
     setError(null);
     try {
@@ -276,7 +283,7 @@ function SignInStep({
   // What the BRIDGE said about the token it was shown — "not set up yet" for an account that
   // cannot set the station up, "not for this station" for another Playout's. Never a field's fault.
   const shown = error ?? (reason !== undefined ? { text: reason, marksField: false } : null);
-  const locked = busy || !canWork;
+  const locked = busy || refused;
 
   return (
     <section style={styles.step} aria-label="Sign in">
@@ -463,7 +470,8 @@ export function ChannelStep({
           if (!cancelled) {
             setCatalogue({
               state: 'refused',
-              message: err instanceof Error ? err.message : String(err),
+              // `B-317` — a dropped CG Bridge said as the state, never a command's refusal.
+              message: inSetupWords(err, window.cg.link.bridgeAddress?.() ?? null),
             });
           }
           return;
@@ -586,7 +594,7 @@ export function ChannelStep({
       if (refused === null) onDone();
       else setError(refused);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(inSetupWords(err, window.cg.link.bridgeAddress?.() ?? null));
     } finally {
       setBusy(false);
     }

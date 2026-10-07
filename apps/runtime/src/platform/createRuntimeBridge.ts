@@ -283,7 +283,9 @@ export function createMockBridge(): RuntimeBridge {
       simulation is not CG Control, so the Playout address cannot be changed from here.
     */
     setup: {
-      check: () => Promise.resolve({ lines: [], localAddress: null }),
+      // `B-317` — test mode has no CG Bridge: no lines, and nowhere the check ran.
+      check: () => Promise.resolve({ lines: [], localAddress: null, bridge: null }),
+      bridgeAddressFor: () => null,
       routeAddress: () => Promise.resolve({ address: null }),
       catalogue: () => Promise.resolve({ rows: null }),
       // `DESKTOP-APPS-01-D` d — no plant, so nothing can be read: unknown, which warns of nothing.

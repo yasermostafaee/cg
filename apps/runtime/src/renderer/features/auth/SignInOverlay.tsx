@@ -13,7 +13,7 @@ import { PlayoutConnection } from '../firstRun/PlayoutConnection.js';
 import {
   playoutOriginOf,
   signInBlocker,
-  signInCanWork,
+  signInLocked,
   type ShownCheckLine,
 } from '../firstRun/firstRunStation.js';
 import { signInFailureLine } from './signInMessages.js';
@@ -59,8 +59,9 @@ import { signInFailureLine } from './signInMessages.js';
  * ── SIGN-IN ONLY WHEN IT CAN WORK ───────────────────────────────────────────
  *
  * 🔴 `DELTA-MULTI-CHANNEL-01-B` B2 — the connection check is on the gate: the Playout's address,
- * CHECK, and ONE line in the check's own words. The fields and the button are enabled only while
- * that check says a sign-in can work (`signInCanWork`); the check runs once when the gate opens
+ * CHECK, and ONE line in the check's own words. The fields and the button are locked only while
+ * a line of that check says a sign-in cannot work (`signInLocked`, `B-317`: signing in never waits
+ * on CG Bridge); the check runs once when the gate opens
  * (the unsigned door allows it, for this station's Playout — B1). A sign-in that finds the Playout
  * silent runs it again, so the silence is said under the address, never on a field; and only a
  * wrong username or password marks one.
@@ -158,11 +159,12 @@ export function SignInOverlay(): JSX.Element | null {
 
   if (!gated) return null;
 
-  const canWork = lines !== null && signInCanWork(lines);
-  const locked = busy || !canWork;
+  // 🔴 `B-317` — the one predicate every sign-in form asks: locked only by a line that says it cannot work.
+  const refused = signInLocked(lines);
+  const locked = busy || refused;
 
   const submit = async (): Promise<void> => {
-    if (busy || !canWork || username === '' || password === '') return;
+    if (busy || refused || username === '' || password === '') return;
     setBusy(true);
     setError(null);
     try {

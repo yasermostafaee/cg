@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { normaliseBridgeAddress, orderCheckLines, type CheckLineId } from '@cg/shared-ipc';
+import {
+  DEFAULT_BRIDGE_PORT,
+  normaliseBridgeAddress,
+  orderCheckLines,
+  type CheckLineId,
+} from '@cg/shared-ipc';
 import { APP_VERSION } from '../../appVersion.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
@@ -8,10 +13,13 @@ import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
+import { BRIDGE_ADDRESS_PLACEHOLDER } from './PlayoutAddressGate.js';
 import {
   checkingLines,
   consoleCheckLines,
   currentCheckLines,
+  inSetupWords,
+  onSeparateServer,
   markChecking,
   normalisePlayoutAddress,
   signInCanWork,
@@ -46,6 +54,28 @@ const styles = {
   */
   error: { fontSize: cssVars['--r-text-sm'], color: cssVars['--r-caution-text'], lineHeight: 1.6 },
 } as const;
+
+/**
+ * 🔴 `B-317` — where a check ran: still running there, answered there (and what CG Bridge said of itself),
+ * or nothing answered there. `playout` is the Playout address the check was about.
+ */
+type RanAt =
+  | { readonly kind: 'pending'; readonly address: string; readonly playout: string }
+  | {
+      readonly kind: 'answered';
+      readonly address: string;
+      readonly version?: string | null;
+      readonly problems: readonly { readonly code: string; readonly message: string }[];
+      readonly playout: string;
+    }
+  | { readonly kind: 'silent'; readonly address: string; readonly playout: string };
+
+/** `host:port` as the CG Bridge field holds it: the host alone on CG Bridge's own port. */
+function asFieldValue(hostPort: string): string {
+  return hostPort.endsWith(`:${String(DEFAULT_BRIDGE_PORT)}`)
+    ? hostPort.slice(0, -`:${String(DEFAULT_BRIDGE_PORT)}`.length)
+    : hostPort;
+}
 
 /** `R-081` — a console line's subject while a check runs, as the bridge's lines show theirs. */
 function consoleSubject(id: CheckLineId): string {
@@ -126,8 +156,26 @@ export function PlayoutConnection({
   const [lines, setLines] = useState<readonly ShownCheckLine[] | null>(null);
   const [busy, setBusy] = useState<'checking' | 'connecting' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+    🔴 `B-317` — WHERE THE CHECK RAN: the CG Bridge that answered it (and what it said of itself), or the
+    address where nothing answered. The check's CG Bridge line and Connect read THIS, never the socket the
+    console happens to be on — that is how `.111` came to be "found" for a typed `127.0.0.1`.
+  */
+  const [ranAt, setRanAt] = useState<RanAt | null>(null);
 
   const typed = normalisePlayoutAddress(address);
+  // `B-317` — the ONE address the fields resolve to (the rule Connect connects by).
+  const resolved =
+    editing && typed !== null ? window.cg.setup.bridgeAddressFor(typed, bridge) : null;
+  // `B-317` — the address this console last connected to: a CHOICE when it differs, never used silently.
+  const lastUsed = window.cg.link.bridgeAddress?.() ?? null;
+  const offerLastUsed =
+    editing &&
+    canWrite &&
+    bridge.trim() === '' &&
+    resolved !== null &&
+    lastUsed !== null &&
+    lastUsed !== resolved;
   /*
     🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **A CHECK RUNS WHEN CHECK IS PRESSED; BY ITSELF, ONCE.**
 
@@ -179,9 +227,20 @@ export function PlayoutConnection({
    * the sign-in wants a verdict: the same, by itself. `auto` — the one re-run: only the lines that
    * waited, in place, with the AMCP line held until this machine is let in.
    */
-  const check = async (mode: 'press' | 'first' | 'auto'): Promise<void> => {
+  const check = async (
+    mode: 'press' | 'first' | 'auto',
+    /** `B-317` — the CG Bridge field as it is about to be (a choice just made); else as it is. */
+    bridgeField: string = bridge,
+  ): Promise<void> => {
     // After the sign-in the configured address is the one to judge, whatever the field holds.
     const target = judgeRef.current && origin !== null ? origin : editing ? typed : origin;
+    /*
+      `B-317` — while the fields are being edited INSIDE CG CONTROL, the check runs where they resolve to:
+      there the fields decide where CG Bridge is (Connect writes them). A browser console's CG Bridge is
+      its page's host whatever is typed, so its check runs on its own CG Bridge, as before.
+    */
+    const where =
+      editing && canWrite && target === typed ? { bridgeAddress: bridgeField } : undefined;
     if (inFlight.current) return;
     if (target === null) {
       if (judgeRef.current) onJudgedRef.current?.();
@@ -211,22 +270,48 @@ export function PlayoutConnection({
     );
     setBusy('checking');
     setError(null);
+    const going =
+      where === undefined
+        ? (window.cg.link.bridgeAddress?.() ?? null)
+        : window.cg.setup.bridgeAddressFor(target, where.bridgeAddress);
+    if (mode !== 'auto') {
+      setRanAt(going === null ? null : { kind: 'pending', address: going, playout: target });
+    }
     let shown: readonly ShownCheckLine[] | null = null;
     try {
-      const result = await window.cg.setup.check({
-        playoutAddress: target,
-        origin: window.location.origin,
-        ...(mode === 'auto' ? { awaitLetIn: true as const } : {}),
-      });
+      const result = await window.cg.setup.check(
+        {
+          playoutAddress: target,
+          origin: window.location.origin,
+          ...(mode === 'auto' ? { awaitLetIn: true as const } : {}),
+        },
+        where,
+      );
+      if (result.bridge !== null) {
+        setRanAt({ kind: 'answered', ...result.bridge, playout: target });
+      }
       // `R-090` — an older CG Bridge's `ports`/`topology` lines are dropped here, where its answer lands.
       const fresh = currentCheckLines(result.lines);
       shown = waiting !== null && before !== null ? updateOnly(before, waiting, fresh) : fresh;
       show(shown);
     } catch (err) {
-      // C2 — a bridge that did not answer is said in words (`BridgeTimeoutError`'s message), and
-      // no line is left checking under it.
-      show(null);
-      setError(err instanceof Error ? err.message : String(err));
+      const silentAt = (err as { name?: unknown; address?: unknown }).address;
+      if (
+        err instanceof Error &&
+        err.name === 'BridgeNotAnsweringError' &&
+        typeof silentAt === 'string'
+      ) {
+        // 🔴 `B-317` — no CG Bridge there: said as the check's own CG Bridge line; nothing else is
+        // known, so no other line stands — and nothing locks the fields or the sign-in.
+        setRanAt({ kind: 'silent', address: silentAt, playout: target });
+        shown = [];
+        show(shown);
+      } else {
+        // C2 — a bridge that did not answer is said in words (`BridgeTimeoutError`'s message), and
+        // no line is left checking under it. `B-317` — never the console's refusal of a command.
+        show(null);
+        setError(inSetupWords(err, going));
+      }
     } finally {
       inFlight.current = false;
       setBusy(null);
@@ -269,8 +354,11 @@ export function PlayoutConnection({
     setBusy('connecting');
     setError(null);
     try {
-      // CG Control saves this console's station record and reconnects to CG Bridge there.
-      await window.cg.setup.setPlayoutAddress(typed, showBridge ? bridge : undefined);
+      /*
+        CG Control saves this console's station record and reconnects to CG Bridge there. 🔴 `B-317` —
+        the field AS IT IS, always: an address remembered from another session never rides along unseen.
+      */
+      await window.cg.setup.setPlayoutAddress(typed, bridge);
       setEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -336,7 +424,9 @@ export function PlayoutConnection({
           )}
         </div>
       )}
-      {showBridge && editing && canWrite && (
+      {/* 🔴 `B-317` — the CG Bridge field wherever the address is edited (first-run too): a person
+          types it, or it is the Playout's host; nothing else decides where CG Bridge is. */}
+      {editing && canWrite && (
         <div style={styles.row}>
           <label htmlFor="cg-bridge-address" style={styles.label}>
             CG Bridge address
@@ -347,13 +437,34 @@ export function PlayoutConnection({
               value={bridge}
               onChange={(v) => {
                 setBridge(v);
+                setLines(null);
+                setRanAt(null);
               }}
+              placeholder={BRIDGE_ADDRESS_PLACEHOLDER}
               dir="ltr"
               aria-label="CG Bridge address"
               invalid={bridgeTyped === null}
               disabled={busy !== null}
             />
           </div>
+        </div>
+      )}
+      {offerLastUsed && (
+        <div style={styles.row}>
+          <Button
+            variant="ghost"
+            disabled={busy !== null}
+            data-last-used-bridge=""
+            onClick={() => {
+              const field = asFieldValue(lastUsed);
+              setBridge(field);
+              setLines(null);
+              setRanAt(null);
+              void check('press', field);
+            }}
+          >
+            {`Use ${asFieldValue(lastUsed)} (last used)`}
+          </Button>
         </div>
       )}
       {showBridge && !editing && (
@@ -372,10 +483,16 @@ export function PlayoutConnection({
               ...lines,
               // `CHECK-RERUN-01` — a running check starts clean: the console's lines too.
               ...consoleCheckLines({
-                bridgeAddress: window.cg.link.bridgeAddress?.() ?? null,
-                ...(capabilities?.bridgeVersion !== undefined
-                  ? { bridgeVersion: capabilities.bridgeVersion }
-                  : {}),
+                // 🔴 `B-317` — where the CHECK found CG Bridge, never the socket this console is on.
+                bridgeAddress: ranAt?.address ?? null,
+                bridgeSilent: ranAt?.kind === 'silent',
+                separateServer: ranAt !== null && onSeparateServer(ranAt.address, ranAt.playout),
+                bridgeProblems: ranAt?.kind === 'answered' ? ranAt.problems : [],
+                ...(ranAt?.kind === 'answered' && ranAt.version !== undefined
+                  ? { bridgeVersion: ranAt.version }
+                  : ranAt?.kind === 'pending' && capabilities?.bridgeVersion !== undefined
+                    ? { bridgeVersion: capabilities.bridgeVersion }
+                    : {}),
                 consoleVersion: APP_VERSION,
                 auth,
                 // `RELEASE-0112-01` (`R-085`) — the backup engine's line, beside the primary's.
@@ -390,17 +507,23 @@ export function PlayoutConnection({
         ) : (
           <ConnectionCheckList lines={lineFilter === undefined ? lines : lineFilter(lines)} />
         ))}
-      {editing && lines !== null && signInCanWork(lines) && canWrite && (
-        <div style={styles.row}>
-          <Button
-            variant="primary"
-            disabled={busy !== null || (showBridge && bridgeTyped === null)}
-            onClick={() => void connect()}
-          >
-            {busy === 'connecting' ? 'Connecting…' : 'Connect'}
-          </Button>
-        </div>
-      )}
+      {/* 🔴 `B-317` — Connect only once CG Bridge ANSWERED at the address the fields resolve to. */}
+      {editing &&
+        lines !== null &&
+        ranAt?.kind === 'answered' &&
+        ranAt.address === resolved &&
+        signInCanWork(lines) &&
+        canWrite && (
+          <div style={styles.row}>
+            <Button
+              variant="primary"
+              disabled={busy !== null || (showBridge && bridgeTyped === null)}
+              onClick={() => void connect()}
+            >
+              {busy === 'connecting' ? 'Connecting…' : 'Connect'}
+            </Button>
+          </div>
+        )}
       {error !== null && (
         <div style={styles.error} role="status">
           {error}
