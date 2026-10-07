@@ -20,13 +20,16 @@ function powershell(script) {
 
 /**
  * What an installed app's WebView2 is started with in these scripts (test instrumentation; the app is
- * untouched): DevTools on `cdpPort`, and Chromium's native-occlusion tracking OFF. On the clean
- * runner CG Designer's window counted as covered, so Chromium stopped painting it after boot and
- * every capture returned that early frame — the start-up splash at 37–52 %, while the page beneath
- * was already answering (`installer-smoke` on `65507361` and `77451b5e`, `designer*.png`).
+ * untouched): DevTools on `cdpPort`.
+ *
+ * ⚠ A capture of CG Designer on the clean runner is NOT evidence of what it shows: every one returns
+ * the start-up splash (28–52 %) while the page beneath answers every probe (`installer-smoke` on
+ * `65507361`, `77451b5e`, `813123a6`; `acceptance-upgrade-0113` on `813123a6`, where CG Control,
+ * launched beside it, went stale too). Turning Chromium's native-occlusion tracking off did not change
+ * it (`813123a6`), so it is not that. Read the page, not the picture.
  */
 export function webViewArgs(cdpPort) {
-  return `--remote-debugging-port=${String(cdpPort)} --disable-features=CalculateNativeWinOcclusion`;
+  return `--remote-debugging-port=${String(cdpPort)}`;
 }
 
 /** How many processes of `image` are running. */
