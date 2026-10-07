@@ -50,7 +50,7 @@
  */
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes below run INSIDE the installed apps (serialised through CDP), not in Node.
-/* global window, document, navigator, location, performance, File, URL */
+/* global window, document, navigator, location, performance, File, URL, Event, HTMLInputElement */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -148,6 +148,23 @@ function windowTitle(image) {
   } catch {
     return '';
   }
+}
+/**
+ * 🔴 `D-162` / `R-094` — **A CLOSE, AS WINDOWS SENDS ONE**: `WM_CLOSE` posted to the app's MAIN
+ * window — what its title bar's ×, Alt+F4 and the taskbar's Close window all become. Aimed at that
+ * one window on purpose: a bare `taskkill /PID` posts `WM_CLOSE` to every top-level window the
+ * process owns, tao's hidden event window among them. `posted`, or `no-window` when none is found.
+ */
+function sendClose(image) {
+  const name = image.replace(/\.exe$/i, '');
+  return powershell(
+    [
+      "$ErrorActionPreference = 'Stop'",
+      'Add-Type -Namespace CgSmoke -Name Win -MemberDefinition \'[DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr hWnd, uint Msg, System.IntPtr wParam, System.IntPtr lParam);\'',
+      `$p = Get-Process -Name '${name}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1`,
+      "if ($null -eq $p) { 'no-window' } else { [void][CgSmoke.Win]::PostMessage($p.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero); 'posted' }",
+    ].join('\n'),
+  ).trim();
 }
 /** This process's mandatory integrity level, read from its own token: `High` or `Medium`. */
 function integrityLevel() {
@@ -368,6 +385,19 @@ class Cdp {
     }
     return r.result.value;
   }
+  /** `evaluate`, handing the page function ONE JSON-serialisable argument. */
+  async evaluateWith(fn, arg) {
+    const r = await this.send('Runtime.evaluate', {
+      expression: `(${fn.toString()})(${JSON.stringify(arg)})`,
+      awaitPromise: true,
+      returnByValue: true,
+      userGesture: true,
+    });
+    if (r.exceptionDetails) {
+      throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
+    }
+    return r.result.value;
+  }
   async screenshot(file) {
     const { data } = await this.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(file, Buffer.from(data, 'base64'));
@@ -481,6 +511,79 @@ async function keyboardProbe() {
   } catch (err) {
     return { ok: false, said: String(err) };
   }
+}
+
+/**
+ * 🔴 `D-162` / `R-094` — the dialog a HELD close raised, as the page shows it, or `null` when there
+ * is none: its title, its buttons' words (the ✕ has none), which one has focus, CG Designer's
+ * project name, CG Control's fact line, and how many dialogs are open at all.
+ */
+function closeDialogProbe(title) {
+  const dialog = document.querySelector(`[role="dialog"][aria-label="${title}"]`);
+  if (dialog === null) return null;
+  return {
+    title: dialog.querySelector('h2')?.textContent ?? '',
+    buttons: [...dialog.querySelectorAll('button')]
+      .map((b) => b.textContent?.trim() ?? '')
+      .filter((t) => t !== ''),
+    focused: document.activeElement?.textContent?.trim() ?? '',
+    project: dialog.querySelector('[data-unsaved-project]')?.textContent ?? null,
+    fact: dialog.querySelector('[data-modal-body]')?.textContent ?? null,
+    dialogs: document.querySelectorAll('[role="dialog"]').length,
+  };
+}
+
+/**
+ * Press one of that dialog's buttons by its words — on the page's NEXT turn, so a press that closes
+ * the window does not take this evaluation's answer down with it. `false` when there is no such
+ * button.
+ */
+function pressInDialog({ title, label }) {
+  const dialog = document.querySelector(`[role="dialog"][aria-label="${title}"]`);
+  const button = [...(dialog?.querySelectorAll('button') ?? [])].find(
+    (b) => b.textContent?.trim() === label,
+  );
+  if (button === undefined) return false;
+  setTimeout(() => button.click(), 50);
+  return true;
+}
+
+/** `D-162` — a new project from CG Designer's landing page, through its own dialog. */
+async function designerNewProject(name) {
+  const wait = async (find) => {
+    for (let i = 0; i < 150; i++) {
+      const found = find();
+      if (found) return found;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  };
+  const open = [...document.querySelectorAll('button')].find(
+    (b) => b.textContent?.trim() === 'New project',
+  );
+  if (open === undefined) return { ok: false, said: 'no New project button' };
+  open.click();
+  const dialog = await wait(() =>
+    document.querySelector('[role="dialog"][aria-label="New project"]'),
+  );
+  if (dialog === null) return { ok: false, said: 'no New project dialog' };
+  // The name, typed into the React-held field the way an input event delivers it.
+  const input = dialog.querySelector('input[aria-label="Project name"]');
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setValue?.call(input, name);
+  input?.dispatchEvent(new Event('input', { bubbles: true }));
+  [...dialog.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Create')?.click();
+  const canvas = await wait(() => document.querySelector('[data-testid="canvas-surface"]'));
+  return { ok: canvas !== null, said: document.title };
+}
+
+/** `D-162` — one edit: a new composition from the Compositions panel. The title then reads `* name`. */
+async function designerEdit() {
+  document.querySelector('button[aria-label="New composition"]')?.click();
+  for (let i = 0; i < 50 && !document.title.startsWith('* '); i++) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return document.title;
 }
 
 /**
@@ -705,12 +808,143 @@ async function designer() {
     ffmpeg.ran && ffmpeg.reason === 'no-stream' && ffmpeg.logTail.length > 0,
     `${ffmpeg.reason}; ${ffmpeg.logTail.slice(-2).join(' / ')}`,
   );
-  page.close();
-  for (const pid of pidsOf('cg-designer.exe')) request('taskkill', ['/PID', String(pid)]);
-  await until('CG Designer to close', () => processCount('cg-designer.exe') === 0, 30_000).catch(
-    () => undefined,
+
+  // `D-162` 1 — a project open and UNCHANGED: a close (WM_CLOSE) closes CG Designer at once.
+  const made = await page.evaluateWith(designerNewProject, 'Close guard');
+  check(
+    'CG Designer opens a new project (control: the studio shows it, unchanged)',
+    made.ok && made.said === 'Close guard',
+    made.said,
   );
+  const posted = sendClose('cg-designer.exe');
+  const closed = await until(
+    'CG Designer to close',
+    () => processCount('cg-designer.exe') === 0,
+    15_000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  check(
+    'D-162 — with no unsaved changes, a close (WM_CLOSE) closes CG Designer at once',
+    posted === 'posted' && closed,
+    `${posted}; ${String(processCount('cg-designer.exe'))} running`,
+  );
+  page.close();
+  for (const pid of pidsOf('cg-designer.exe')) request('taskkill', ['/PID', String(pid), '/F']);
+
+  // `D-162` 2 — with unsaved changes the close is held, and the page asks.
+  await designerUnsavedClose(exe);
   check('CG Designer closes', processCount('cg-designer.exe') === 0);
+}
+
+/**
+ * 🔴 `D-162` — **NEVER LOSE UNSAVED WORK SILENTLY**, in the installed app: a project edited, a close
+ * (WM_CLOSE) is HELD and `Unsaved changes` asks; Cancel keeps the window, a second close while it
+ * asks stacks no second dialog, and Don't save closes it. The dialog's picture is kept.
+ */
+async function designerUnsavedClose(exe) {
+  const TITLE = 'Unsaved changes';
+  // The first run's WebView2 gone before the second starts on the same DevTools port and profile.
+  await until(
+    "the first run's WebView2 to exit",
+    () => processCount('msedgewebview2.exe') === 0,
+    20_000,
+  ).catch(() => undefined);
+  launch(exe, 9231);
+  const page = await Cdp.attach(9231, APP_PAGE, 90_000).catch(async (err) => {
+    await diagnose('designer-relaunch', 9231);
+    throw err;
+  });
+  await until(
+    'the Designer landing page',
+    () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('button')].some(
+          (b) => b.textContent?.trim() === 'New project',
+        ),
+      ),
+    60_000,
+  );
+  const made = await page.evaluateWith(designerNewProject, 'Close guard');
+  const edited = made.ok ? await page.evaluate(designerEdit) : made.said;
+  check(
+    '…a project edited, so it holds unsaved changes (control: its title reads * Close guard)',
+    edited === '* Close guard',
+    edited,
+  );
+  const asked = () =>
+    until('the Unsaved changes dialog', () => page.evaluateWith(closeDialogProbe, TITLE), 15_000)
+      .then((d) => d)
+      .catch(() => null);
+
+  sendClose('cg-designer.exe');
+  const first = await asked();
+  await sleep(1000);
+  check(
+    'D-162 — with unsaved changes, a close (WM_CLOSE) is HELD: CG Designer stays open and asks',
+    first !== null && processCount('cg-designer.exe') === 1,
+    `${JSON.stringify(first)}; ${String(processCount('cg-designer.exe'))} running`,
+  );
+  if (first === null) await diagnose('designer-close', 9231);
+  check(
+    "…in ONE dialog: Unsaved changes, the project's name, Save / Don't save / Cancel, focus on Cancel",
+    first !== null &&
+      first.title === TITLE &&
+      first.project === 'Close guard' &&
+      JSON.stringify(first.buttons) === JSON.stringify(['Save', "Don't save", 'Cancel']) &&
+      first.focused === 'Cancel' &&
+      first.dialogs === 1,
+    JSON.stringify(first),
+  );
+  await page.screenshot(path.join(out, 'designer-unsaved-dialog.png'));
+
+  // A second close while it asks: still one dialog, still open.
+  sendClose('cg-designer.exe');
+  await sleep(1500);
+  const again = await page.evaluateWith(closeDialogProbe, TITLE);
+  check(
+    '…a second close while it asks stacks no second dialog',
+    again !== null && again.dialogs === 1 && processCount('cg-designer.exe') === 1,
+    JSON.stringify(again),
+  );
+
+  // Cancel keeps the window open, the work still unsaved.
+  await page.evaluateWith(pressInDialog, { title: TITLE, label: 'Cancel' });
+  await sleep(1500);
+  const afterCancel = await page.evaluateWith(closeDialogProbe, TITLE);
+  const stillEdited = await page.evaluate(() => document.title);
+  check(
+    '…Cancel keeps CG Designer open, the work still unsaved',
+    afterCancel === null &&
+      processCount('cg-designer.exe') === 1 &&
+      stillEdited === '* Close guard',
+    `${JSON.stringify(afterCancel)}; ${stillEdited}; ${String(processCount('cg-designer.exe'))} running`,
+  );
+
+  // Closed again: Don't save closes it.
+  sendClose('cg-designer.exe');
+  const second = await asked();
+  const pressed =
+    second !== null &&
+    (await page.evaluateWith(pressInDialog, { title: TITLE, label: "Don't save" }));
+  const gone = await until(
+    'CG Designer to close',
+    () => processCount('cg-designer.exe') === 0,
+    20_000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  check(
+    "…closed again, Don't save closes CG Designer",
+    pressed && gone,
+    `pressed ${String(pressed)}; ${String(processCount('cg-designer.exe'))} running`,
+  );
+  page.close();
+  if (!gone) {
+    for (const pid of pidsOf('cg-designer.exe')) request('taskkill', ['/PID', String(pid), '/F']);
+  }
 }
 
 // ── CG Bridge, and the installers' names (install phase, elevated) ──────────
@@ -941,11 +1175,9 @@ async function controlDrive() {
   );
 
   // 5 — closed: CG Bridge is a service, not the console's child. It keeps running, and stops
-  // counting the console (`§5`: the service survives a console closing).
-  for (const pid of pidsOf('cg-control.exe')) request('taskkill', ['/PID', String(pid)]);
-  await until('CG Control to close', () => processCount('cg-control.exe') === 0, 30_000).catch(
-    () => undefined,
-  );
+  // counting the console (`§5`: the service survives a console closing). `R-094` — the close is
+  // HELD and asked about first; Close is a window close, and sends nothing to CG Bridge.
+  await controlCloseGuard();
   check('CG Control closes', processCount('cg-control.exe') === 0);
   const after = await until(
     'CG Bridge to stop counting the console',
@@ -966,10 +1198,94 @@ async function controlDrive() {
     logText.includes('page loaded: http://tauri.localhost'),
     shellLog,
   );
+  // `R-094` — and it wrote down that it HELD the close rather than letting it through.
+  check(
+    "R-094 — CG Control's shell logged the held close",
+    logText.includes('a close was held: the page is asked'),
+    logText
+      .split('\n')
+      .filter((l) => l.includes('a close '))
+      .slice(-4)
+      .join(' | ') || 'none',
+  );
   check(
     'nothing was written to ~/.cg-runtime',
     !fs.existsSync(path.join(os.homedir(), '.cg-runtime')),
   );
+}
+
+/**
+ * 🔴 `R-094` — **NO CLOSE ON A SLIP**, in the installed app: a close (WM_CLOSE) is HELD and
+ * `Close CG Control?` asks — over the first-run gate this fresh station is at, which is exactly the
+ * case the dialog's `window` layer exists for. Cancel keeps the window; Close exits. Nothing of this
+ * console is on air (it is signed out), so there is no fact line. The dialog's picture is kept.
+ */
+async function controlCloseGuard() {
+  const TITLE = 'Close CG Control?';
+  const page = await Cdp.attach(9230, APP_PAGE, 30_000).catch(() => null);
+  if (page === null) {
+    check('R-094 — the console can be reached to answer a close', false);
+    for (const pid of pidsOf('cg-control.exe')) request('taskkill', ['/PID', String(pid), '/F']);
+    return;
+  }
+  const asked = () =>
+    until('the Close CG Control? dialog', () => page.evaluateWith(closeDialogProbe, TITLE), 15_000)
+      .then((d) => d)
+      .catch(() => null);
+
+  sendClose('cg-control.exe');
+  const first = await asked();
+  await sleep(1000);
+  check(
+    'R-094 — a close (WM_CLOSE) is HELD: CG Control stays open and asks',
+    first !== null && processCount('cg-control.exe') === 1,
+    `${JSON.stringify(first)}; ${String(processCount('cg-control.exe'))} running`,
+  );
+  if (first === null) await diagnose('control-close', 9230);
+  check(
+    '…in ONE dialog: Close CG Control?, Cancel / Close, focus on Cancel — and no fact line, nothing being on air',
+    first !== null &&
+      first.title === TITLE &&
+      JSON.stringify(first.buttons) === JSON.stringify(['Cancel', 'Close']) &&
+      first.focused === 'Cancel' &&
+      first.fact === null &&
+      first.dialogs === 1,
+    JSON.stringify(first),
+  );
+  await page.screenshot(path.join(out, 'control-close-dialog.png'));
+
+  // Cancel keeps the window open.
+  await page.evaluateWith(pressInDialog, { title: TITLE, label: 'Cancel' });
+  await sleep(1500);
+  const afterCancel = await page.evaluateWith(closeDialogProbe, TITLE);
+  check(
+    '…Cancel keeps CG Control open',
+    afterCancel === null && processCount('cg-control.exe') === 1,
+    `${JSON.stringify(afterCancel)}; ${String(processCount('cg-control.exe'))} running`,
+  );
+
+  // Closed again: Close exits.
+  sendClose('cg-control.exe');
+  const second = await asked();
+  const pressed =
+    second !== null && (await page.evaluateWith(pressInDialog, { title: TITLE, label: 'Close' }));
+  const gone = await until(
+    'CG Control to close',
+    () => processCount('cg-control.exe') === 0,
+    30_000,
+  ).then(
+    () => true,
+    () => false,
+  );
+  check(
+    '…closed again, Close exits CG Control',
+    pressed && gone,
+    `pressed ${String(pressed)}; ${String(processCount('cg-control.exe'))} running`,
+  );
+  page.close();
+  if (!gone) {
+    for (const pid of pidsOf('cg-control.exe')) request('taskkill', ['/PID', String(pid), '/F']);
+  }
 }
 
 // ── CG Control's uninstall (uninstall phase, elevated) ───────────────────────
