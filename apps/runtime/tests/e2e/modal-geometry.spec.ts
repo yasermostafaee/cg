@@ -150,6 +150,115 @@ test('§B row 139 — the CONFIRM dialog, which had never been measured against 
   await page.keyboard.press('Escape');
 });
 
+/**
+ * Every footer button whose box is not inside the dialog's box, described — one snapshot, read
+ * in the page. This frame CLIPS, so a spilled button is not drawn outside it: it is cut off. The
+ * layout box still says where it is, which is what makes the clip measurable.
+ */
+async function footerButtonsOutside(page: Page): Promise<string[]> {
+  return dialog(page).evaluate((d) => {
+    const frame = d.getBoundingClientRect();
+    const out: string[] = [];
+    for (const b of Array.from(d.querySelectorAll('.cg-modal-footer .cg-btn'))) {
+      const r = b.getBoundingClientRect();
+      const name = (b.textContent ?? '').trim();
+      const past = (side: string, by: number): void => {
+        if (by > 0.5) out.push(`${name}: ${by.toFixed(1)} px past the ${side} edge`);
+      };
+      past('left', frame.left - r.left);
+      past('right', r.right - frame.right);
+      past('top', frame.top - r.top);
+      past('bottom', r.bottom - frame.bottom);
+      // A label wider than its own button is the same defect one box in.
+      if (b.scrollWidth > b.clientWidth + 1) out.push(`${name}: its label overflows the button`);
+    }
+    return out;
+  });
+}
+
+/** `row` — one line; `stack` — one button per line at the footer's full content width. */
+async function footerForm(page: Page): Promise<'row' | 'stack' | 'mixed'> {
+  return dialog(page)
+    .locator('.cg-modal-footer')
+    .evaluate((row) => {
+      const cs = getComputedStyle(row);
+      const box = row.getBoundingClientRect();
+      const left = box.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
+      const right = box.right - parseFloat(cs.borderRightWidth) - parseFloat(cs.paddingRight);
+      const kids = Array.from(row.children).map((c) => c.getBoundingClientRect());
+      const near = (a: number, b: number): boolean => Math.abs(a - b) <= 0.5;
+      if (
+        kids.every((k) =>
+          near(k.top + k.height / 2, (kids[0]?.top ?? 0) + (kids[0]?.height ?? 0) / 2),
+        )
+      )
+        return 'row';
+      const stacked =
+        kids.every((k, i) => i === 0 || k.top >= (kids[i - 1]?.bottom ?? 0) - 0.5) &&
+        kids.every((k) => near(k.left, left) && near(k.right, right));
+      return stacked ? 'stack' : 'mixed';
+    });
+}
+
+/*
+  🔴 `B-319` — THE FOOTER KEEPS ITS BUTTONS INSIDE THE DIALOG, whatever their labels say.
+
+  The Designer's clip dialog put `Cancel` 47.9 px outside its card when its labels grew; this
+  primitive had the same `nowrap` row packed to its end, and its frame CLIPS, so here the spilled
+  button would not even have been visible. No Runtime dialog has three buttons today, so the
+  property is driven through the confirm's own two, RELABELLED IN PLACE with the kind of label a
+  footer grows into — the footer is the subject, not the confirm's wording. The smallest window
+  the console runs in is 1100 × 700 (`src-tauri/tauri.conf.json`). The modal's button text is set
+  in `px`, so a larger ROOT font size does not move it; page zoom does, as a narrower viewport —
+  1100 × 700 at 200 % is 550 × 350.
+*/
+test('B-319 — long labels stack inside the frame, short ones keep the one row', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await app.layers
+    .getByRole('button', { name: /^Clear all/ })
+    .first()
+    .click();
+  await expect(dialog(page)).toBeVisible();
+  const buttons = page.locator('[role="dialog"] .cg-modal-footer > .cg-btn');
+
+  // As shipped: one row, inside.
+  await expect.poll(() => footerButtonsOutside(page)).toEqual([]);
+  await expect.poll(() => footerForm(page)).toBe('row');
+
+  // Labels a footer grows into — the second longer than the dialog is wide.
+  const shipped = await buttons.evaluateAll((els) => els.map((e) => e.textContent ?? ''));
+  await buttons.evaluateAll((els) => {
+    const long = [
+      'Cancel and keep every layer exactly as it is now',
+      'Clear every layer on this channel and take all of them off air at once, now',
+    ];
+    els.forEach((e, i) => {
+      e.textContent = long[i] ?? e.textContent;
+    });
+  });
+  await expect.poll(() => footerButtonsOutside(page)).toEqual([]);
+  await expect.poll(() => footerForm(page)).toBe('stack');
+  // Cancel first, the destructive last — the end corner is the bottom now.
+  const tops = await buttons.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
+  expect(tops[0] ?? 0).toBeLessThan(tops[1] ?? 0);
+
+  // Zoomed (a narrower viewport), still inside.
+  await page.setViewportSize({ width: 550, height: 350 });
+  await expect.poll(() => footerButtonsOutside(page)).toEqual([]);
+
+  // The shipped labels back: the row returns.
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await buttons.evaluateAll((els, labels) => {
+    els.forEach((e, i) => {
+      e.textContent = labels[i] ?? e.textContent;
+    });
+  }, shipped);
+  await expect.poll(() => footerButtonsOutside(page)).toEqual([]);
+  await expect.poll(() => footerForm(page)).toBe('row');
+  await page.keyboard.press('Escape');
+});
+
 test('§C5 — no modal region is full-bleed against its pane or its footer', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });

@@ -1622,6 +1622,31 @@
   padding: 0.5rem 0.9rem 0.2rem;
 }
 
+/*
+ * 🔴 `B-319` — THE STACKED FOOTER. While one row holds the footer it is exactly the row above
+ * and in `Modal`'s `styles.footer`. When a child would leave it, `@cg/gesture`'s
+ * `useActionRowFit` marks it `data-stacked` and it becomes a column: every button the footer's
+ * full width, in DOM order — Cancel first, so the primary keeps the end corner, now the bottom —
+ * and a label longer than the dialog wraps inside its own button.
+ *
+ * ⚠ These are stylesheet rules beside an INLINE footer, and that is safe here for the reason the
+ * inline-trap notes give in the other direction: `styles.footer` sets no `flex-direction`, and
+ * its `align-items` is the ROW's, which each child's `align-self` overrides. Nothing below
+ * competes with an inline value. An info line's `margin-right: auto` beats `align-self`, so it
+ * keeps the start and its own width; a nested row (Station setup's slot) keeps the end.
+ */
+.cg-modal-footer[data-stacked] {
+  flex-direction: column;
+}
+.cg-modal-footer[data-stacked] > * {
+  align-self: flex-end;
+  max-width: 100%;
+}
+.cg-modal-footer[data-stacked] > .cg-btn {
+  align-self: stretch;
+  white-space: normal;
+}
+
 /* The close X: a square target, not a text button's rectangle. */
 .cg-modal-close.cg-btn {
   min-width: 30px;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X, type LucideIcon } from 'lucide-react';
+import { useActionRowFit } from '@cg/gesture';
 import { colors, cssVars } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
 import { useFocusTrap } from './focusTrap.js';
@@ -866,6 +867,14 @@ export function Modal({
     there is no race to win: see `usePrompt`, the one caller that needs it.
   */
   const layer = useFocusTrap(ref, true, { initialFocusSelector: '[data-modal-autofocus]' });
+  /*
+    🔴 `B-319` — THE ACTION ROW KEEPS ITS BUTTONS INSIDE THE DIALOG, for every size and every
+    footer variant, because it is the footer that is watched rather than a dialog. One row while
+    one row holds them; `data-stacked` — a column, see `.cg-modal-footer[data-stacked]` in
+    `controls.css` — when a child would leave the row. This frame CLIPS (`overflow: hidden`), so
+    a spilled `Cancel` here was not drawn outside the dialog: it was cut off and unreachable.
+  */
+  const fitFooter = useActionRowFit<HTMLDivElement>();
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
@@ -1033,6 +1042,7 @@ export function Modal({
             );
           const footerNode = (
             <div
+              ref={fitFooter}
               style={{
                 ...styles.footer,
                 ...(fixed ? styles.footerFixed : {}),
