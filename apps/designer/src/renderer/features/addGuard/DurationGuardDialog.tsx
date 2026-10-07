@@ -44,9 +44,13 @@ export function DurationGuardDialog(): JSX.Element | null {
       footer={
         <>
           <ModalButton onClick={resolveDurationGuardCancel}>Cancel</ModalButton>
+          {/* `B-319` — shortened so three buttons fit one row; the long form is its title. */}
           {pending.canFollow ? (
-            <ModalButton onClick={resolveDurationGuardBackdrop}>
-              Add as backdrop — follow the composition
+            <ModalButton
+              onClick={resolveDurationGuardBackdrop}
+              title="Add as backdrop — follow the composition"
+            >
+              Add as backdrop
             </ModalButton>
           ) : null}
           <ModalButton variant="primary" onClick={resolveDurationGuardExtend} autoFocus>

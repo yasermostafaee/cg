@@ -20,7 +20,7 @@ import type { AssetMeta } from '@cg/shared-ipc';
 // Type-only namespace import — erased at compile time, so the wasm-touching
 // module still loads ONLY via the lazy `import()` in the mount effect below.
 import type * as VideoConvertModule from './video-convert.js';
-import { Modal, ModalButton } from '../shell/Modal.js';
+import { Modal, ModalActions, ModalButton } from '../shell/Modal.js';
 import { Callout } from '../../ui/Callout.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import { useDesignerSelector } from '../../state/store.js';
@@ -664,7 +664,8 @@ export function VideoImportModal(props: {
           </div>
         </div>
       )}
-      <div className={s.footerActions}>
+      {/* `B-319` — the shared action row, so this nested one fits as the footer does. */}
+      <ModalActions>
         {phase.kind === 'result' ? (
           <>
             <ModalButton variant="secondary" onClick={props.onClose}>
@@ -706,7 +707,7 @@ export function VideoImportModal(props: {
             </ModalButton>
           </>
         )}
-      </div>
+      </ModalActions>
     </div>
   );
 

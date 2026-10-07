@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { useActionRowFit } from '@cg/gesture';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
@@ -15,6 +16,9 @@ const FOCUSABLE =
  * scrolling body, and an optional right-aligned footer for action buttons
  * (built with {@link ModalButton}). Closes on Escape, backdrop click, and the
  * ✕ icon. Rendered through a portal so it escapes any stacking context.
+ *
+ * `B-319` — the footer keeps its buttons inside the card: one row while one row
+ * holds them, a column of full-width buttons when it does not (`s.actionRow`).
  */
 
 interface ModalProps {
@@ -44,6 +48,7 @@ export function Modal({
   minBodyHeight,
 }: ModalProps): JSX.Element {
   const boxRef = useRef<HTMLDivElement>(null);
+  const fitFooter = useActionRowFit<HTMLDivElement>();
 
   // Escape closes; Tab is trapped inside the dialog so focus never leaves it.
   useEffect(() => {
@@ -127,7 +132,11 @@ export function Modal({
         >
           {children}
         </div>
-        {footer !== undefined && <div className={s.footer}>{footer}</div>}
+        {footer !== undefined && (
+          <div ref={fitFooter} className={s.footer}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,
@@ -135,10 +144,24 @@ export function Modal({
 }
 
 /**
+ * `B-319` — an action row that is NOT the footer itself: a dialog whose footer carries more than
+ * its buttons (`VideoImportModal`'s progress above them) nests one. The same row and the same fit
+ * as the footer, so a nested row cannot be the one copy that still spills.
+ */
+export function ModalActions({ children }: { children: ReactNode }): JSX.Element {
+  const fit = useActionRowFit<HTMLDivElement>();
+  return (
+    <div ref={fit} className={s.actionRow}>
+      {children}
+    </div>
+  );
+}
+
+/**
  * Consistent modal action button — a thin wrapper over the shared design-system
  * {@link Button} so dialog actions share the same hover / active / focus-visible /
  * disabled states as the rest of the app. `variant` maps straight through
- * (primary / secondary / danger).
+ * (primary / secondary / danger). `title` carries a shortened label's long form.
  */
 export function ModalButton({
   children,
@@ -146,15 +169,23 @@ export function ModalButton({
   variant = 'secondary',
   disabled = false,
   autoFocus = false,
+  title,
 }: {
   children: ReactNode;
   onClick: () => void;
   variant?: 'primary' | 'secondary' | 'danger';
   disabled?: boolean;
   autoFocus?: boolean;
+  title?: string;
 }): JSX.Element {
   return (
-    <Button variant={variant} onClick={onClick} disabled={disabled} autoFocus={autoFocus}>
+    <Button
+      variant={variant}
+      onClick={onClick}
+      disabled={disabled}
+      autoFocus={autoFocus}
+      {...(title !== undefined ? { title } : {})}
+    >
       {children}
     </Button>
   );

@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { globalStyle, style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 export const backdrop = style({
@@ -63,10 +63,32 @@ export const body = style({
   gap: '0.6rem',
 });
 
-export const footer = style({
+/**
+ * `B-319` — THE ACTION ROW. One line packed to its end while one line holds the buttons, which is
+ * the look the footer always had; a column of full-width buttons when it does not. The owner's
+ * clip dialog was the second case drawn as the first: a `nowrap` row three buttons wider than its
+ * card, packed to its end, with `Cancel` painted outside the card's left edge.
+ *
+ * `@cg/gesture`'s `useActionRowFit` decides, by measuring, and marks the row `data-stacked` (its
+ * `ACTION_ROW_STACKED`). Cancel stays first in DOM order, so the primary keeps the end corner in
+ * both forms — the row's right end, the column's bottom — and Tab order is reading order.
+ */
+export const actionRow = style({
   display: 'flex',
   justifyContent: 'flex-end',
   gap: '0.4rem',
-  padding: '0.7rem 0.9rem',
-  borderTop: `1px solid ${colors.border}`,
+  selectors: {
+    '&[data-stacked]': { flexDirection: 'column', alignItems: 'stretch' },
+  },
 });
+
+// A stacked button is the row's width, which can be narrower than its label: the label wraps.
+globalStyle(`${actionRow}[data-stacked] > *`, { whiteSpace: 'normal' });
+
+export const footer = style([
+  actionRow,
+  {
+    padding: '0.7rem 0.9rem',
+    borderTop: `1px solid ${colors.border}`,
+  },
+]);

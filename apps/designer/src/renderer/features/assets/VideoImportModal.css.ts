@@ -95,12 +95,6 @@ export const progressArea = style({
   gap: '0.3rem',
 });
 
-export const footerActions = style({
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: '0.4rem',
-});
-
 export const progressTrack = style({
   height: 8,
   borderRadius: 4,
