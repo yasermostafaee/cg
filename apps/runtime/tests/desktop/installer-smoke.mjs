@@ -50,13 +50,22 @@
  */
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes below run INSIDE the installed apps (serialised through CDP), not in Node.
-/* global window, document, navigator, location, performance, File, URL, Event, HTMLInputElement */
+/* global window, document, navigator, location, performance, File, URL, Event, HTMLInputElement, KeyboardEvent */
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { identityChecks, parseIdentityRead } from './app-identity.mjs';
+import {
+  closeDialogProbe,
+  designerEdit,
+  designerNewProject,
+  pidsOf,
+  pressInDialog,
+  processCount,
+  sendClose,
+} from './app-window.mjs';
 import { parseRules } from './firewall-rule.mjs';
 
 const args = Object.fromEntries(
@@ -122,17 +131,6 @@ function request(file, argv) {
     /* judged below */
   }
 }
-function processCount(image) {
-  const listing = run('tasklist', ['/FI', `IMAGENAME eq ${image}`, '/FO', 'CSV', '/NH']);
-  return listing.split('\n').filter((l) => l.toLowerCase().startsWith(`"${image.toLowerCase()}"`))
-    .length;
-}
-function pidsOf(image) {
-  return run('tasklist', ['/FI', `IMAGENAME eq ${image}`, '/FO', 'CSV', '/NH'])
-    .split('\n')
-    .filter((l) => l.toLowerCase().startsWith(`"${image.toLowerCase()}"`))
-    .map((l) => Number(l.split(',')[1]?.replace(/"/g, '')));
-}
 /**
  * `FIELD-FIXES-01` G — the TITLE BAR's text, as Windows holds it: the main window title of the
  * app's process. Read after its page is up, so the window exists. '' when none is found.
@@ -148,23 +146,6 @@ function windowTitle(image) {
   } catch {
     return '';
   }
-}
-/**
- * 🔴 `D-162` / `R-094` — **A CLOSE, AS WINDOWS SENDS ONE**: `WM_CLOSE` posted to the app's MAIN
- * window — what its title bar's ×, Alt+F4 and the taskbar's Close window all become. Aimed at that
- * one window on purpose: a bare `taskkill /PID` posts `WM_CLOSE` to every top-level window the
- * process owns, tao's hidden event window among them. `posted`, or `no-window` when none is found.
- */
-function sendClose(image) {
-  const name = image.replace(/\.exe$/i, '');
-  return powershell(
-    [
-      "$ErrorActionPreference = 'Stop'",
-      'Add-Type -Namespace CgSmoke -Name Win -MemberDefinition \'[DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr hWnd, uint Msg, System.IntPtr wParam, System.IntPtr lParam);\'',
-      `$p = Get-Process -Name '${name}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1`,
-      "if ($null -eq $p) { 'no-window' } else { [void][CgSmoke.Win]::PostMessage($p.MainWindowHandle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero); 'posted' }",
-    ].join('\n'),
-  ).trim();
 }
 /** This process's mandatory integrity level, read from its own token: `High` or `Medium`. */
 function integrityLevel() {
@@ -514,76 +495,139 @@ async function keyboardProbe() {
 }
 
 /**
- * 🔴 `D-162` / `R-094` — the dialog a HELD close raised, as the page shows it, or `null` when there
- * is none: its title, its buttons' words (the ✕ has none), which one has focus, CG Designer's
- * project name, CG Control's fact line, and how many dialogs are open at all.
+ * 🔴 `RELEASE-0114-01-C` — **THE INSTALLED DESIGNER STILL DOES ITS WORK** under the capability
+ * `D-162` gave it (before it, every command the shell registered was open to the page; now only
+ * the four granted are). With the project `name` open and unchanged: a composition SETTING changed
+ * (its duration, to 137 frames), SAVE, EXPORT (.vcg), Home, then OPEN it again from Recent on the
+ * landing page (its stored file handle), the setting read back; Home again, at the landing page.
+ *
+ * Windows' file pickers are the ONE thing replaced: each hands the page a file in its own OPFS, so
+ * the page's real save, export and open code runs and writes bytes read back here. A picker is a
+ * Windows window, and no capability governs it. The pickers stay replaced for the page's life, so
+ * {@link designerOpenFile} opens the same saved file.
  */
-function closeDialogProbe(title) {
-  const dialog = document.querySelector(`[role="dialog"][aria-label="${title}"]`);
-  if (dialog === null) return null;
-  return {
-    title: dialog.querySelector('h2')?.textContent ?? '',
-    buttons: [...dialog.querySelectorAll('button')]
-      .map((b) => b.textContent?.trim() ?? '')
-      .filter((t) => t !== ''),
-    focused: document.activeElement?.textContent?.trim() ?? '',
-    project: dialog.querySelector('[data-unsaved-project]')?.textContent ?? null,
-    fact: dialog.querySelector('[data-modal-body]')?.textContent ?? null,
-    dialogs: document.querySelectorAll('[role="dialog"]').length,
+async function designerWork(name) {
+  const said = { steps: [] };
+  const step = (s) => said.steps.push(s);
+  const wait = async (find, tries = 150) => {
+    for (let i = 0; i < tries; i++) {
+      const found = await find();
+      if (found) return found;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
   };
+  const buttons = () => [...document.querySelectorAll('button')];
+  const named = (label) => buttons().find((b) => b.getAttribute('aria-label') === label);
+  const durationField = () =>
+    document.querySelector('input[aria-label="Scene duration in frames"]');
+  const setDuration = (n) => {
+    const field = durationField();
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setValue?.call(field, String(n));
+    field?.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  // `null` while the page is still writing it: a file read mid-write is a stale snapshot.
+  const fileFacts = async (dir, file) => {
+    if (file === undefined) return null;
+    try {
+      const blob = await (await dir.getFileHandle(file)).getFile();
+      const head = [...new Uint8Array(await blob.slice(0, 4).arrayBuffer())];
+      return { file, bytes: blob.size, zip: head.join(',') === '80,75,3,4' };
+    } catch {
+      return null;
+    }
+  };
+  const atLanding = () => wait(() => named('New project') !== undefined);
+  try {
+    const dir = await (
+      await navigator.storage.getDirectory()
+    ).getDirectoryHandle('cg-smoke', { create: true });
+    const written = [];
+    window.showSaveFilePicker = async (options) => {
+      const file = options?.suggestedName ?? 'untitled';
+      if (!written.includes(file)) written.push(file);
+      return dir.getFileHandle(file, { create: true });
+    };
+    window.showOpenFilePicker = async () => [
+      await dir.getFileHandle(written.find((f) => f.endsWith('.cgproj'))),
+    ];
+
+    // A composition setting: its duration. The title then reads `* name`.
+    step('setting');
+    said.durationBefore = durationField()?.value ?? null;
+    setDuration(137);
+    said.dirtyTitle = await wait(() => (document.title.startsWith('* ') ? document.title : null));
+
+    // Save: the title loses its `*`.
+    step('save');
+    buttons()
+      .find((b) => b.textContent?.trim() === 'SAVE')
+      ?.click();
+    said.savedTitle = await wait(() => (document.title === name ? document.title : null));
+    said.saved = await fileFacts(
+      dir,
+      written.find((f) => f.endsWith('.cgproj')),
+    );
+
+    // Export: the open composition, to .vcg.
+    step('export');
+    named('Export .vcg')?.click();
+    said.exported = await wait(async () => {
+      const facts = await fileFacts(
+        dir,
+        written.find((f) => f.endsWith('.vcg')),
+      );
+      return facts !== null && facts.zip && facts.bytes > 0 ? facts : null;
+    });
+
+    // Home, then Open from Recent: the setting read back from the saved file.
+    step('home');
+    named('Home')?.click();
+    said.home = (await atLanding()) !== null;
+    step('open-recent');
+    buttons()
+      .find((b) => b.querySelector('strong')?.textContent === name)
+      ?.click();
+    said.recentDuration = await wait(() => durationField()?.value ?? null);
+    said.recentTitle = document.title;
+
+    step('home-again');
+    named('Home')?.click();
+    said.homeAgain = (await atLanding()) !== null;
+    step('done');
+  } catch (err) {
+    said.error = String(err);
+  }
+  return said;
 }
 
 /**
- * Press one of that dialog's buttons by its words — on the page's NEXT turn, so a press that closes
- * the window does not take this evaluation's answer down with it. `false` when there is no such
- * button.
+ * `RELEASE-0114-01-C` — File → Open (Ctrl+O, by its physical key) from ANOTHER project, open and
+ * unchanged: the studio then shows the saved one, its title and its duration read from the file
+ * (`designerWork` saved it; its picker hands the page that file). Home again, at the landing page.
  */
-function pressInDialog({ title, label }) {
-  const dialog = document.querySelector(`[role="dialog"][aria-label="${title}"]`);
-  const button = [...(dialog?.querySelectorAll('button') ?? [])].find(
-    (b) => b.textContent?.trim() === label,
-  );
-  if (button === undefined) return false;
-  setTimeout(() => button.click(), 50);
-  return true;
-}
-
-/** `D-162` — a new project from CG Designer's landing page, through its own dialog. */
-async function designerNewProject(name) {
-  const wait = async (find) => {
-    for (let i = 0; i < 150; i++) {
+async function designerOpenFile(name) {
+  const wait = async (find, tries = 150) => {
+    for (let i = 0; i < tries; i++) {
       const found = find();
       if (found) return found;
       await new Promise((r) => setTimeout(r, 100));
     }
     return null;
   };
-  const open = [...document.querySelectorAll('button')].find(
-    (b) => b.textContent?.trim() === 'New project',
+  const named = (label) =>
+    [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === label);
+  const before = document.title;
+  window.dispatchEvent(
+    new KeyboardEvent('keydown', { code: 'KeyO', key: 'o', ctrlKey: true, bubbles: true }),
   );
-  if (open === undefined) return { ok: false, said: 'no New project button' };
-  open.click();
-  const dialog = await wait(() =>
-    document.querySelector('[role="dialog"][aria-label="New project"]'),
-  );
-  if (dialog === null) return { ok: false, said: 'no New project dialog' };
-  // The name, typed into the React-held field the way an input event delivers it.
-  const input = dialog.querySelector('input[aria-label="Project name"]');
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  setValue?.call(input, name);
-  input?.dispatchEvent(new Event('input', { bubbles: true }));
-  [...dialog.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Create')?.click();
-  const canvas = await wait(() => document.querySelector('[data-testid="canvas-surface"]'));
-  return { ok: canvas !== null, said: document.title };
-}
-
-/** `D-162` — one edit: a new composition from the Compositions panel. The title then reads `* name`. */
-async function designerEdit() {
-  document.querySelector('button[aria-label="New composition"]')?.click();
-  for (let i = 0; i < 50 && !document.title.startsWith('* '); i++) {
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return document.title;
+  const title = await wait(() => (document.title === name ? document.title : null));
+  const duration =
+    document.querySelector('input[aria-label="Scene duration in frames"]')?.value ?? null;
+  named('Home')?.click();
+  const home = (await wait(() => named('New project') !== undefined)) !== null;
+  return { before, title, duration, home };
 }
 
 /**
@@ -809,6 +853,54 @@ async function designer() {
     `${ffmpeg.reason}; ${ffmpeg.logTail.slice(-2).join(' / ')}`,
   );
 
+  // `RELEASE-0114-01-C` — its own work, under the capability `D-162` gave it: a setting, Save,
+  // Export, and Open (from Recent, and File → Open from another project). The facts are kept.
+  const NAME = 'Designer work';
+  const started = await page.evaluateWith(designerNewProject, NAME);
+  check('CG Designer opens a new project', started.ok && started.said === NAME, started.said);
+  const work = started.ok
+    ? await page.evaluateWith(designerWork, NAME)
+    : { steps: [], error: started.said };
+  const target =
+    work.homeAgain === true
+      ? await page.evaluateWith(designerNewProject, 'Open target')
+      : { ok: false, said: 'not at the landing page' };
+  const reopened = target.ok ? await page.evaluateWith(designerOpenFile, NAME) : null;
+  fs.writeFileSync(
+    path.join(out, 'designer-work.json'),
+    JSON.stringify({ work, target, reopened }, null, 2),
+  );
+  const at = `${work.steps.at(-1) ?? 'none'}${work.error === undefined ? '' : `: ${work.error}`}`;
+  check(
+    `…a composition setting changed (duration ${String(work.durationBefore)} → 137 frames): unsaved (control: the title reads * ${NAME})`,
+    work.dirtyTitle === `* ${NAME}`,
+    `${String(work.dirtyTitle)}; at ${at}`,
+  );
+  check(
+    '…Save writes the project (.cgproj, a zip) and the title loses its *',
+    work.savedTitle === NAME && work.saved?.zip === true && work.saved.bytes > 0,
+    `${JSON.stringify(work.saved)}; at ${at}`,
+  );
+  check(
+    '…Export writes the composition (.vcg, a zip)',
+    work.exported?.zip === true && work.exported.bytes > 0,
+    `${JSON.stringify(work.exported)}; at ${at}`,
+  );
+  check(
+    '…Home, then Open from Recent: the project, its setting read back from the file (137)',
+    work.home === true && work.recentTitle === NAME && work.recentDuration === '137',
+    `${String(work.recentTitle)}; ${String(work.recentDuration)}; at ${at}`,
+  );
+  check(
+    '…File → Open (Ctrl+O) from another project: the saved one, its setting read from the file (137)',
+    reopened !== null &&
+      reopened.before === 'Open target' &&
+      reopened.title === NAME &&
+      reopened.duration === '137' &&
+      reopened.home,
+    JSON.stringify(reopened ?? target),
+  );
+
   // `D-162` 1 — a project open and UNCHANGED: a close (WM_CLOSE) closes CG Designer at once.
   const made = await page.evaluateWith(designerNewProject, 'Close guard');
   check(
@@ -861,7 +953,7 @@ async function designerUnsavedClose(exe) {
     () =>
       page.evaluate(() =>
         [...document.querySelectorAll('button')].some(
-          (b) => b.textContent?.trim() === 'New project',
+          (b) => b.getAttribute('aria-label') === 'New project',
         ),
       ),
     60_000,
