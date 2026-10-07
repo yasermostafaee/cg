@@ -344,6 +344,12 @@ export const ConnectionCheckResultSchema = z.object({
   lines: z.array(ConnectionCheckLineSchema),
   /** This machine's address on the route to the CasparCG host — the serve-host default. */
   localAddress: z.string().nullable(),
+  /**
+   * 🔴 `R-090` — what CG Bridge cannot do about its OWN ports (`/health`'s `port-refused` and
+   * `reserved-port`), in its words, carried in the check's answer: a console page cannot read `/health`
+   * itself (CG Control's webview does not reach loopback HTTP). Absent from an older CG Bridge.
+   */
+  bridgeProblems: z.array(z.object({ code: z.string(), message: z.string() })).optional(),
 });
 export type ConnectionCheckResult = z.infer<typeof ConnectionCheckResultSchema>;
 

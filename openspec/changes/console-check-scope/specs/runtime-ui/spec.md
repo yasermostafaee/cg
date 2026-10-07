@@ -53,8 +53,9 @@ Bridge knows its Playout by — the same Playout — so CG Bridge's before-sign-
 ### Requirement: The check SHALL say nothing about the machine the console runs on
 
 The check SHALL carry no line about the console machine's ports or about where the Playout and CasparCG run
-(`R-090`); a `ports` or `topology` line from an older CG Bridge SHALL be dropped. When CG Bridge's `/health` names
-a port it cannot open, the check SHALL show it as a failure naming CG Bridge's host:
+(`R-090`); a `ports` or `topology` line from an older CG Bridge SHALL be dropped. When CG Bridge names a port
+it cannot open — in its `/health`, and in its answer to the check, which is where a console reads it (CG Control's
+page does not reach CG Bridge's loopback HTTP) — the check SHALL show it as a failure naming CG Bridge's host:
 `CG Bridge on <host> cannot open UDP 6251 (OSC from CasparCG): held by <process> (PID n).`
 
 #### Scenario: An older CG Bridge's leftovers
@@ -63,7 +64,7 @@ a port it cannot open, the check SHALL show it as a failure naming CG Bridge's h
 
 #### Scenario: A port CG Bridge cannot open
 
-- **WHEN** `/health` lists `port-refused` for UDP 6251 held by `casparcg.exe` (PID 4321) **THEN** the check shows
+- **WHEN** CG Bridge answers the check with `port-refused` for UDP 6251 held by `casparcg.exe` (PID 4321) **THEN** the check shows
   `CG Bridge on <host> cannot open UDP 6251 (OSC from CasparCG): held by casparcg.exe (PID 4321).` as a failure
 
 ### Requirement: CG Control SHALL offer to start CG Bridge on its own machine

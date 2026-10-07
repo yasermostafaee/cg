@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { normalisePlayoutAddress, parseWsFrame, serializeWsFrame } from '@cg/shared-ipc';
 import {
   bridgeAnswersAt,
-  bridgePortProblems,
   BridgeNotAnsweringError,
   checkOnItsOwnSocket,
   playoutAsBridgeNamesIt,
@@ -212,49 +211,42 @@ describe('B-317 — the one address the fields resolve to', () => {
   });
 });
 
-describe('R-090 / B-317 — CG Bridge’s /health, read with no credentials', () => {
-  const json = (body: unknown) => () => Promise.resolve({ json: () => Promise.resolve(body) });
-  it('the address gate: CG Bridge answers → null; nothing, or something else → the sentence naming where', async () => {
+describe('B-317 — the address gate asks CG Bridge over a socket (never loopback HTTP from the page)', () => {
+  const socketFor =
+    (opens: boolean, answer: (channel: string) => unknown) =>
+    (url: string): FakeSocket =>
+      new FakeSocket(url, answer, opens);
+  it('CG Bridge answers its capabilities → null; nothing opens, or something that is not CG Bridge → the sentence naming where', async () => {
     expect(
-      await bridgeAnswersAt('ws://10.0.0.5:5280', '10.0.0.5:5280', json({ app: 'cg-bridge' })),
+      await bridgeAnswersAt(
+        'ws://10.0.0.5:5280',
+        '10.0.0.5:5280',
+        socketFor(true, bridgeThatAnswers(null)),
+        200,
+      ),
     ).toBeNull();
     expect(
-      await bridgeAnswersAt('ws://10.0.0.5:5280', '10.0.0.5:5280', json({ app: 'nginx' })),
+      await bridgeAnswersAt(
+        'ws://10.0.0.5:5280',
+        '10.0.0.5:5280',
+        socketFor(false, () => null),
+        30,
+      ),
     ).toBe('CG Bridge is not answering at 10.0.0.5:5280.');
+    // A socket that opens and answers something else: not CG Bridge.
     expect(
-      await bridgeAnswersAt('ws://10.0.0.5:5280', '10.0.0.5:5280', () =>
-        Promise.reject(new Error('refused')),
+      await bridgeAnswersAt(
+        'ws://10.0.0.5:5280',
+        '10.0.0.5:5280',
+        socketFor(true, () => ({ hello: 'nginx' })),
+        200,
       ),
     ).toBe('CG Bridge is not answering at 10.0.0.5:5280.');
   });
 
-  it('a record that names no Playout is refused before anything is read', async () => {
+  it('a record that names no Playout is refused before anything is dialled', async () => {
     expect(await stationBridgeAnswers({ playoutAddress: 'http://' })).toBe(
       'That is not a Playout address.',
     );
-  });
-
-  it('only CG Bridge’s OWN port problems are taken, in its words', async () => {
-    const problems = await bridgePortProblems(
-      'ws://10.0.0.5:5280',
-      json({
-        problems: [
-          {
-            code: 'port-refused',
-            message: 'cannot open UDP 6251 (OSC from CasparCG): held by x (PID 1).',
-          },
-          { code: 'playout-session', message: 'CG Bridge needs a station admin to sign in.' },
-        ],
-      }),
-    );
-    expect(problems).toEqual([
-      {
-        code: 'port-refused',
-        message: 'cannot open UDP 6251 (OSC from CasparCG): held by x (PID 1).',
-      },
-    ]);
-    expect(
-      await bridgePortProblems('ws://10.0.0.5:5280', () => Promise.reject(new Error('x'))),
-    ).toEqual([]);
   });
 });

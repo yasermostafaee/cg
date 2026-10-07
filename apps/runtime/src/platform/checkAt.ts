@@ -26,6 +26,11 @@ type BridgeCapabilities = ChannelResponse<typeof BridgeCapabilitiesChannel>;
  * console holds one), `bridge.capabilities`, `setup.check`, close. The console's own socket is never
  * retargeted by a check.
  *
+ * ⚠ **A SOCKET, NEVER HTTP.** CG Control's webview does not reach CG Bridge's loopback HTTP (`/health`)
+ * from its page — measured on the clean runner: CG Bridge answered Node at `127.0.0.1:5280/health`, and the
+ * page's `fetch` of the same URL never did — while the console's WebSocket to the same port works. So the
+ * address gate's probe is a socket too, and CG Bridge's own port trouble rides the check's answer.
+ *
  * CG Bridge that does not open within the check's connect bound is {@link BridgeNotAnsweringError} — the
  * operator's sentence, never the console's refusal of a command.
  */
@@ -89,131 +94,42 @@ export function playoutAsBridgeNamesIt(
   }
 }
 
-/** The `/health` problems that are about CG Bridge's OWN ports (`R-090`). */
-const PORT_PROBLEMS = new Set(['port-refused', 'reserved-port']);
-
-/**
- * 🔴 `R-090` — **WHAT CG BRIDGE SAYS ABOUT ITS OWN PORTS**, read off its `/health` (no credentials;
- * `access-control-allow-origin: *`): a port it cannot open and what holds it. Empty when `/health` does
- * not answer within the bound — never a verdict of "all clear" written as a line.
- */
-export async function bridgePortProblems(
-  url: string,
-  fetchImpl:
-    | ((input: string, init: { signal: AbortSignal }) => Promise<{ json(): Promise<unknown> }>)
-    | undefined = (
-    globalThis as {
-      fetch?: (
-        input: string,
-        init: { signal: AbortSignal },
-      ) => Promise<{ json(): Promise<unknown> }>;
-    }
-  ).fetch,
-  timeoutMs = 2000,
-): Promise<{ code: string; message: string }[]> {
-  if (fetchImpl === undefined) return [];
-  const health = `${url.replace(/^ws(s?):\/\//i, 'http$1://').replace(/\/+$/, '')}/health`;
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
-  try {
-    const body = (await (await fetchImpl(health, { signal: abort.signal })).json()) as {
-      problems?: unknown;
-    };
-    if (!Array.isArray(body.problems)) return [];
-    return body.problems.flatMap((p: unknown) => {
-      const { code, message } = (p ?? {}) as { code?: unknown; message?: unknown };
-      return typeof code === 'string' && typeof message === 'string' && PORT_PROBLEMS.has(code)
-        ? [{ code, message }]
-        : [];
-    });
-  } catch {
-    return [];
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * 🔴 `B-317` — **DOES CG BRIDGE ANSWER WHERE THE ADDRESS GATE WOULD SEND THIS CONSOLE?** The gate (no
- * station yet, so no socket) saved whatever was typed and restarted; the owner's `192.168.111` became
- * `192.168.0.111` and a NOT CONNECTED he could only escape by setting up again. Now Connect asks CG
- * Bridge's `/health` at the resolved address first (no credentials; `cors: *`), within the check's
- * connect bound. `null` — CG Bridge answered; else the operator's sentence naming where.
- */
-export async function bridgeAnswersAt(
-  bridgeUrl: string,
-  address: string,
-  fetchImpl:
-    | ((input: string, init: { signal: AbortSignal }) => Promise<{ json(): Promise<unknown> }>)
-    | undefined = (
-    globalThis as {
-      fetch?: (
-        input: string,
-        init: { signal: AbortSignal },
-      ) => Promise<{ json(): Promise<unknown> }>;
-    }
-  ).fetch,
-  timeoutMs = CONNECTION_CHECK_CONNECT_MS,
-): Promise<string | null> {
-  const silent = new BridgeNotAnsweringError(address).message;
-  if (fetchImpl === undefined) return silent;
-  const health = `${bridgeUrl.replace(/^ws(s?):\/\//i, 'http$1://').replace(/\/+$/, '')}/health`;
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
-  try {
-    const body = (await (await fetchImpl(health, { signal: abort.signal })).json()) as {
-      app?: unknown;
-    };
-    return body.app === 'cg-bridge' ? null : silent;
-  } catch {
-    return silent;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** {@link bridgeAnswersAt} for a station record, resolved by the one rule Connect connects by. */
-export function stationBridgeAnswers(station: {
-  readonly playoutAddress: string;
-  readonly bridgeAddress?: string;
-}): Promise<string | null> {
-  const url = bridgeUrlForStation(station);
-  return url === null
-    ? Promise.resolve(NOT_A_PLAYOUT_ADDRESS)
-    : bridgeAnswersAt(url, bridgeHostPort(url));
-}
-
 /** The host of a `ws://host:port` URL, from its text. */
 export function hostOfBridgeUrl(url: string): string {
   const authority = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split(/[/?#]/, 1)[0] ?? '';
   return splitHostPort(authority)?.host.replace(/^\[|\]$/g, '') ?? '';
 }
 
-export async function checkOnItsOwnSocket(options: {
-  readonly url: string;
-  /** `host:port`, as the not-answering sentence names it. */
-  readonly address: string;
-  readonly request: ConnectionCheckRequest;
-  readonly createSocket: (url: string) => CheckSocket;
-  /** This console's token, presented first so a signed-in check is not narrowed; `null` — none. */
-  readonly token: string | null;
-  readonly waitMs: number;
-  /** TEST-ONLY — the connect bound, the check's own by default. */
-  readonly connectMs?: number;
-}): Promise<CheckedAt> {
-  const { url, address } = options;
-  const ws = options.createSocket(url);
+type Frame =
+  | { type: 'request'; channel: string; payload: unknown }
+  | { type: 'auth'; token: string };
+
+/** A short-lived socket to one CG Bridge: opened (or not) within the connect bound, asked, closed. */
+interface OwnSocket {
+  ask(frame: Frame, waitMs: number): Promise<unknown>;
+  close(): void;
+}
+
+/** Open a socket of its own to `url`; rejects with {@link BridgeNotAnsweringError} when nothing opens. */
+async function openOwnSocket(
+  url: string,
+  address: string,
+  createSocket: (url: string) => CheckSocket,
+  connectMs: number,
+): Promise<OwnSocket> {
+  const ws = createSocket(url);
   const pending = new Map<
     string,
     (frame: { payload?: unknown; error?: { message: string } | undefined }) => void
   >();
   let nextId = 0;
   let closed = false;
+  const close = (): void => {
+    closed = true;
+    ws.close();
+  };
   const opened = new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new BridgeNotAnsweringError(address)),
-      options.connectMs ?? CONNECTION_CHECK_CONNECT_MS,
-    );
+    const timer = setTimeout(() => reject(new BridgeNotAnsweringError(address)), connectMs);
     ws.addEventListener('open', () => {
       clearTimeout(timer);
       resolve();
@@ -237,42 +153,70 @@ export async function checkOnItsOwnSocket(options: {
     pending.delete(frame.id);
     answer(frame);
   });
-  const ask = (
-    frame: { type: 'request'; channel: string; payload: unknown } | { type: 'auth'; token: string },
-    waitMs: number,
-  ): Promise<unknown> =>
-    new Promise((resolve, reject) => {
-      if (closed) {
-        reject(new BridgeNotAnsweringError(address));
-        return;
-      }
-      const id = String(++nextId);
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new BridgeNotAnsweringError(address));
-      }, waitMs);
-      pending.set(id, (answer) => {
-        clearTimeout(timer);
-        if (answer.error !== undefined) reject(new Error(answer.error.message));
-        else resolve(answer.payload);
-      });
-      ws.send(serializeWsFrame({ ...frame, id }));
-    });
   try {
     await opened;
+  } catch (err) {
+    close();
+    throw err;
+  }
+  return {
+    close,
+    ask: (frame, waitMs) =>
+      new Promise((resolve, reject) => {
+        if (closed) {
+          reject(new BridgeNotAnsweringError(address));
+          return;
+        }
+        const id = String(++nextId);
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new BridgeNotAnsweringError(address));
+        }, waitMs);
+        pending.set(id, (answer) => {
+          clearTimeout(timer);
+          if (answer.error !== undefined) reject(new Error(answer.error.message));
+          else resolve(answer.payload);
+        });
+        ws.send(serializeWsFrame({ ...frame, id }));
+      }),
+  };
+}
+
+const capabilitiesOn = (socket: OwnSocket, waitMs: number): Promise<BridgeCapabilities> =>
+  socket
+    .ask({ type: 'request', channel: BridgeCapabilitiesChannel.name, payload: {} }, waitMs)
+    .then((raw) => BridgeCapabilitiesChannel.response.parse(raw));
+
+export async function checkOnItsOwnSocket(options: {
+  readonly url: string;
+  /** `host:port`, as the not-answering sentence names it. */
+  readonly address: string;
+  readonly request: ConnectionCheckRequest;
+  readonly createSocket: (url: string) => CheckSocket;
+  /** This console's token, presented first so a signed-in check is not narrowed; `null` — none. */
+  readonly token: string | null;
+  readonly waitMs: number;
+  /** TEST-ONLY — the connect bound, the check's own by default. */
+  readonly connectMs?: number;
+}): Promise<CheckedAt> {
+  const { url, address } = options;
+  const socket = await openOwnSocket(
+    url,
+    address,
+    options.createSocket,
+    options.connectMs ?? CONNECTION_CHECK_CONNECT_MS,
+  );
+  try {
     if (options.token !== null) {
       // A refused token only narrows the check; it never stops it.
-      await ask({ type: 'auth', token: options.token }, options.waitMs).catch(() => undefined);
+      await socket
+        .ask({ type: 'auth', token: options.token }, options.waitMs)
+        .catch(() => undefined);
     }
-    const capabilities = await ask(
-      { type: 'request', channel: BridgeCapabilitiesChannel.name, payload: {} },
-      options.waitMs,
-    )
-      .then((raw) => BridgeCapabilitiesChannel.response.parse(raw))
-      .catch((err: unknown) => {
-        if (err instanceof BridgeNotAnsweringError) throw err;
-        return null;
-      });
+    const capabilities = await capabilitiesOn(socket, options.waitMs).catch((err: unknown) => {
+      if (err instanceof BridgeNotAnsweringError) throw err;
+      return null;
+    });
     const request = {
       ...options.request,
       playoutAddress: playoutAsBridgeNamesIt(
@@ -281,7 +225,7 @@ export async function checkOnItsOwnSocket(options: {
         capabilities?.signInUrl,
       ),
     };
-    const raw = await ask(
+    const raw = await socket.ask(
       {
         type: 'request',
         channel: SetupCheckChannel.name,
@@ -291,7 +235,43 @@ export async function checkOnItsOwnSocket(options: {
     );
     return { result: SetupCheckChannel.response.parse(raw), capabilities };
   } finally {
-    closed = true;
-    ws.close();
+    socket.close();
   }
+}
+
+/**
+ * 🔴 `B-317` — **DOES CG BRIDGE ANSWER WHERE THE ADDRESS GATE WOULD SEND THIS CONSOLE?** The gate (no
+ * station yet, so no socket) saved whatever was typed and restarted; the owner's `192.168.111` became
+ * `192.168.0.111` and a NOT CONNECTED he could only escape by setting up again. Now Connect opens a socket
+ * to the resolved address first and asks `bridge.capabilities`, within the check's connect bound. `null` —
+ * CG Bridge answered; else the operator's sentence naming where.
+ */
+export async function bridgeAnswersAt(
+  bridgeUrl: string,
+  address: string,
+  createSocket: (url: string) => CheckSocket = (u) => new WebSocket(u) as unknown as CheckSocket,
+  connectMs = CONNECTION_CHECK_CONNECT_MS,
+): Promise<string | null> {
+  try {
+    const socket = await openOwnSocket(bridgeUrl, address, createSocket, connectMs);
+    try {
+      await capabilitiesOn(socket, connectMs);
+      return null;
+    } finally {
+      socket.close();
+    }
+  } catch {
+    return new BridgeNotAnsweringError(address).message;
+  }
+}
+
+/** {@link bridgeAnswersAt} for a station record, resolved by the one rule Connect connects by. */
+export function stationBridgeAnswers(station: {
+  readonly playoutAddress: string;
+  readonly bridgeAddress?: string;
+}): Promise<string | null> {
+  const url = bridgeUrlForStation(station);
+  return url === null
+    ? Promise.resolve(NOT_A_PLAYOUT_ADDRESS)
+    : bridgeAnswersAt(url, bridgeHostPort(url));
 }

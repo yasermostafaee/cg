@@ -40,9 +40,13 @@
    Bridge host it dialled and CG Bridge names its Playout by loopback on the same port: the same Playout, seen from
    CG Bridge's machine, and still "this station's own Playout" to the narrowing.
 6. **`ports` and `topology` stay in the wire enum** so an older CG Bridge's answer still parses; the new CG Bridge
-   never sends them and the console drops them. CG Bridge's own port trouble comes from `/health` — the existing,
-   never-emitted code `port-refused`, so no enum grows that another CG Bridge's guard parses (`B-313`); read with
-   `cors: *`; the holder looked up when the bind fails.
+   never sends them and the console drops them. CG Bridge's own port trouble is on `/health` — the existing,
+   never-emitted code `port-refused`, so no enum grows that another CG Bridge's guard parses (`B-313`); the holder
+   looked up when the bind fails — and rides the check's answer (`bridgeProblems`, optional and additive).
+   ⚠ **Measured, not assumed:** the first version read `/health` from the page (`cors: *`). On the clean runner
+   CG Bridge answered Node at `127.0.0.1:5280/health` and CG Control's page `fetch` of the same URL never did,
+   while its WebSocket to the same port works (Desktop run 37599351497, installer smoke). So nothing in the console
+   reads CG Bridge over HTTP: the address gate's probe is a socket (`bridge.capabilities`) too.
 7. **VPN/proxy:** the line is a finding, not a process list. A proxy counts only with a listener (or a non-local
    host); a tunnel adapter counts when up (Teredo/ISATAP/6to4 excluded); red needs the route to the Playout or
    CasparCG through the tunnel. CG Bridge's own requests never use the system proxy (`playout-http.ts`), so a

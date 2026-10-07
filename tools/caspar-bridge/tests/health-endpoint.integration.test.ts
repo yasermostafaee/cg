@@ -123,6 +123,17 @@ it('🔴 R-090 — a port CG Bridge cannot open is on /health, naming what holds
         asked.push(`${protocol}:${String(port)}`);
         return Promise.resolve({ kind: 'other', name: 'casparcg.exe', pid: 4321 });
       },
+      // The check's probes, quiet and quick: only its ANSWER's `bridgeProblems` is under test here.
+      connectionCheckProbes: {
+        processes: () => Promise.resolve([]),
+        systemProxy: () => Promise.resolve(null),
+        adapters: () => [],
+        route: () => Promise.resolve({ address: '127.0.0.1', iface: 'Loopback' }),
+        ipv4: () => Promise.resolve('127.0.0.1'),
+        amcp: () => Promise.resolve({ kind: 'refused' }),
+        request: () => Promise.reject(new Error('no Playout here')),
+        portHolder: () => Promise.resolve({ kind: 'free' }),
+      },
     });
     const b = bridge;
     const message = `cannot open UDP ${String(heldPort)} (OSC from CasparCG): held by casparcg.exe (PID 4321).`;
@@ -145,6 +156,29 @@ it('🔴 R-090 — a port CG Bridge cannot open is on /health, naming what holds
       ws.once('open', () => resolve());
       ws.once('error', reject);
     });
+    /*
+      …and the same problem rides the CHECK's answer, over the console's socket: a console page cannot
+      read `/health` itself (CG Control's webview does not reach loopback HTTP).
+    */
+    const answer = await new Promise<{ payload?: { bridgeProblems?: unknown } }>((resolve) => {
+      ws.on('message', (raw: Buffer) => {
+        const frame = JSON.parse(raw.toString('utf8')) as {
+          type?: string;
+          id?: string;
+          payload?: { bridgeProblems?: unknown };
+        };
+        if (frame.type === 'response' && frame.id === 'check-1') resolve(frame);
+      });
+      ws.send(
+        JSON.stringify({
+          type: 'request',
+          id: 'check-1',
+          channel: 'setup.check',
+          payload: { playoutAddress: 'http://127.0.0.1:1', origin: 'http://127.0.0.1:5174' },
+        }),
+      );
+    });
+    expect(answer.payload?.bridgeProblems).toEqual([{ code: 'port-refused', message }]);
   } finally {
     await new Promise<void>((resolve) => holder.close(() => resolve()));
   }

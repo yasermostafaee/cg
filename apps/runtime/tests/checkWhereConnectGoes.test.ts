@@ -99,7 +99,6 @@ afterEach(() => {
 async function onTheStaleStation(): Promise<WebSocketRuntime> {
   const r = new WebSocketRuntime(STALE, {
     consoleVersion: '0.11.4',
-    portProblems: () => Promise.resolve([]),
     createWebSocket: (url) => {
       const s = new Socket(url, answering.has(url));
       sockets.push(s);

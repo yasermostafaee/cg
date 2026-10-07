@@ -62,19 +62,35 @@ async function asCgControl(page: Page, dialed: string[]): Promise<void> {
 }
 
 /**
- * 🔴 `B-317` — CG Bridge ANSWERS its `/health` at `host:port` (as it does: `cors: *`). Registered after
- * {@link asCgControl}'s refusal of the whole block, so it wins for that one address.
+ * 🔴 `B-317` — CG Bridge at `hostPort` ANSWERS the gate's probe: the FIRST socket there gets its
+ * `bridge.capabilities` answered; every later one is closed, so the console that then connects meets
+ * nobody (as {@link asCgControl}'s sockets do). Registered after that catch-all, so it wins here.
  */
-async function bridgeAnswersAt(page: Page, hostPort: string): Promise<void> {
-  await page.route(`http://${hostPort}/health`, (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ app: 'cg-bridge', version: '0.0.0', problems: [] }),
-    }),
-  );
+async function bridgeAnswersOnce(page: Page, hostPort: string, dialed: string[]): Promise<void> {
+  let answered = false;
+  await page.routeWebSocket(`ws://${hostPort}/`, (ws) => {
+    dialed.push(ws.url());
+    if (answered) {
+      ws.close();
+      return;
+    }
+    answered = true;
+    ws.onMessage((message) => {
+      const frame = JSON.parse(String(message)) as { type?: string; id?: string; channel?: string };
+      if (frame.type === 'request' && frame.channel === 'bridge.capabilities') {
+        ws.send(
+          JSON.stringify({
+            type: 'response',
+            id: frame.id,
+            payload: { channels: [], bridgeVersion: '0.0.0' },
+          }),
+        );
+      }
+    });
+  });
 }
+
+const bare = (urls: readonly string[]): string[] => urls.map((u) => u.replace(/\/$/, ''));
 
 test('🔴 a fresh CG Control asks ONE question; given the Playout, it connects to CG Bridge on that host — and says why nothing answers', async ({
   page,
@@ -96,8 +112,9 @@ test('🔴 a fresh CG Control asks ONE question; given the Playout, it connects 
   await gate.getByLabel('Playout address').fill(EXAMPLE);
 
   /*
-    🔴 `B-317` — nothing answers there yet: Connect says WHERE it looked, saves nothing, dials nothing,
-    and the gate stays — the owner was left in a NOT CONNECTED he could only escape by setting up again.
+    🔴 `B-317` — nothing answers there yet: Connect asks once (its probe is the one socket) and says
+    WHERE it looked; it saves nothing and the gate stays — the owner was left in a NOT CONNECTED he could
+    only escape by setting up again.
   */
   await connect.click();
   await expect(gate.getByRole('status')).toHaveText(
@@ -105,22 +122,25 @@ test('🔴 a fresh CG Control asks ONE question; given the Playout, it connects 
     { timeout: 20_000 },
   );
   expect(await page.evaluate((key) => localStorage.getItem(key), STATION_KEY)).toBeNull();
-  expect(dialed).toEqual([]);
+  expect(bare(dialed)).toEqual([`ws://${EXAMPLE}:5280`]);
 
   // CONTROL — CG Bridge answers there now: the same Connect saves and connects.
-  await bridgeAnswersAt(page, `${EXAMPLE}:5280`);
+  await bridgeAnswersOnce(page, `${EXAMPLE}:5280`, dialed);
   await connect.click();
 
-  // Saved, normalised — and the console started again aimed at CG Bridge on the Playout's host.
+  /*
+    Saved, normalised — and the console started again aimed at CG Bridge on the Playout's host: the
+    THIRD socket there (the refused probe, the answered probe, then the console's own after the reload).
+  */
+  await expect(gate).toHaveCount(0, { timeout: 20_000 });
   await expect
-    .poll(() => dialed.some((url) => url.replace(/\/$/, '') === `ws://${EXAMPLE}:5280`), {
+    .poll(() => bare(dialed).filter((url) => url === `ws://${EXAMPLE}:5280`).length, {
       timeout: 20_000,
     })
-    .toBe(true);
+    .toBeGreaterThanOrEqual(3);
   expect(
     JSON.parse((await page.evaluate((key) => localStorage.getItem(key), STATION_KEY)) ?? 'null'),
   ).toEqual({ playoutAddress: `http://${EXAMPLE}:8080` });
-  await expect(gate).toHaveCount(0);
 
   // Its socket is closed here (never dialled): the one line names WHERE it looked.
   const banner = page.getByRole('alert', { name: 'Bridge disconnected' });
@@ -186,7 +206,7 @@ test('a separate server: CG Bridge’s own address, typed beside the Playout’s
   await gate.getByLabel('Playout address').fill(EXAMPLE);
   await gate.getByLabel('CG Bridge address').fill('192.0.2.30:5281');
   // `B-317` — CG Bridge answers on the separate server (and only there).
-  await bridgeAnswersAt(page, '192.0.2.30:5281');
+  await bridgeAnswersOnce(page, '192.0.2.30:5281', dialed);
   await gate.getByRole('button', { name: 'Connect' }).click();
 
   await expect

@@ -2234,6 +2234,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     read when the bind fails — never on the `/health` request path — one problem per port.
   */
   const portRefusals = new Map<string, HealthProblem>();
+  /** `CENTRAL-BRIDGE-01` rule 12 — reserved-range port problems, filled once the bridge is up (below). */
+  const portProblems: HealthProblem[] = [];
+  /** `R-090` — every problem about this bridge's OWN ports, for `/health` and for the check's answer. */
+  const ownPortProblems = (): HealthProblem[] => [...portProblems, ...portRefusals.values()];
   const notePortRefused = (protocol: 'tcp' | 'udp', port: number, role: string): void => {
     const key = `${protocol}:${String(port)}`;
     if (portRefusals.has(key)) return;
@@ -2786,6 +2790,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
             ` — ${String(totalMs)} ms\n`,
         );
       },
+    }).then((result) => {
+      /*
+        🔴 `R-090` — CG Bridge's own port trouble rides the check's answer: a console page cannot read
+        `/health` itself (CG Control's webview does not reach loopback HTTP; measured on the clean runner).
+      */
+      const own = ownPortProblems().filter(
+        (p) => p.code === 'port-refused' || p.code === 'reserved-port',
+      );
+      return own.length === 0 ? result : { ...result, bridgeProblems: own };
     });
   };
 
@@ -3398,7 +3411,6 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     the log and on `/health`, and never changed. Asked for by the CLI; a bridge in a test does not
     spawn `netsh`.
   */
-  const portProblems: HealthProblem[] = [];
   const oscPortA = runtime.config().servers.A.oscPort;
   const bridgePorts: BridgePort[] = [
     { port, protocol: 'tcp' as const, role: 'consoles' },
@@ -3462,7 +3474,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       })(),
       consoles: wss.clients.size,
       ports: { control: port, templates: templateServe.port, osc: servers.A.oscPort },
-      portProblems: [...portProblems, ...portRefusals.values()],
+      portProblems: ownPortProblems(),
     });
   };
 

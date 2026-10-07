@@ -181,12 +181,7 @@ import {
   bridgeUrlForStation,
   rebaseLoopback,
 } from './bridgeUrl.js';
-import {
-  bridgePortProblems,
-  checkOnItsOwnSocket,
-  hostOfBridgeUrl,
-  playoutAsBridgeNamesIt,
-} from './checkAt.js';
+import { checkOnItsOwnSocket, hostOfBridgeUrl, playoutAsBridgeNamesIt } from './checkAt.js';
 import { loadStationAddress, saveStationAddress, type StationAddress } from './stationAddress.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -231,11 +226,6 @@ export type WebSocketFactory = (url: string) => WebSocketLike;
 export interface WebSocketRuntimeOptions {
   /** Inject a WebSocket implementation (default: the global `WebSocket`). */
   createWebSocket?: WebSocketFactory;
-  /**
-   * `R-090` — what CG Bridge's `/health` says about its own ports, for the check's `bridge-ports` line
-   * (default: `bridgePortProblems`, an HTTP read). A test answers it without a network.
-   */
-  portProblems?: (bridgeUrl: string) => Promise<{ code: string; message: string }[]>;
   /**
    * `CENTRAL-BRIDGE-01` — this console's release version, compared with CG Bridge's by release line
    * at connect. Defaults to the build stamp's (`__CG_BUILD__`, the number `tools/release` stamps);
@@ -331,8 +321,6 @@ export class WebSocketRuntime implements RuntimeBridge {
   /** `CENTRAL-BRIDGE-01` — not readonly: a console re-aimed at another CG Bridge ({@link retarget}). */
   #url: string;
   readonly #createWs: WebSocketFactory;
-  /** `R-090` — CG Bridge's own port trouble, read off its `/health`. */
-  readonly #portProblems: (bridgeUrl: string) => Promise<{ code: string; message: string }[]>;
   /**
    * `B-317` — the sign-in address CG Bridge ADVERTISED, before `rebaseLoopback`: a check before a sign-in
    * asks a loopback-configured CG Bridge for its Playout by this name (`playoutAsBridgeNamesIt`).
@@ -565,7 +553,6 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#url = url;
     this.#createWs =
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
-    this.#portProblems = options.portProblems ?? ((u) => bridgePortProblems(u));
     this.#consoleVersion = options.consoleVersion ?? __CG_BUILD__.version;
     // Default to in-memory (unhydrated, empty) display copies so tests can construct the runtime
     // with no store. The boot path injects OPFS-backed, hydrated ones.
@@ -1992,7 +1979,8 @@ export class WebSocketRuntime implements RuntimeBridge {
           bridge: {
             address,
             ...(version !== undefined ? { version } : {}),
-            problems: await this.#portProblems(url),
+            // `R-090` — CG Bridge's own port trouble, carried in its answer (an older one: none).
+            problems: result.bridgeProblems ?? [],
           },
         };
       }
@@ -2009,7 +1997,7 @@ export class WebSocketRuntime implements RuntimeBridge {
         bridge: {
           address,
           ...(capabilities !== null ? { version: capabilities.bridgeVersion ?? null } : {}),
-          problems: await this.#portProblems(url),
+          problems: result.bridgeProblems ?? [],
         },
       };
     },

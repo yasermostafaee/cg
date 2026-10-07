@@ -108,9 +108,12 @@ When CG Bridge cannot bind one of its own ports because another program holds it
 problem `port-refused` whose message names the protocol, the port, what the port is for and, when it can be read,
 the holder's image name and PID — "cannot open UDP 6251 (OSC from CasparCG): held by casparcg.exe (PID 4321)."
 (`R-090`). The holder SHALL be read when the bind fails, never on the `/health` request path, and no new problem
-code SHALL be added for it: another CG Bridge's guard parses this `/health` (`B-313`).
+code SHALL be added for it: another CG Bridge's guard parses this `/health` (`B-313`). Its answer to
+`setup.check` SHALL carry the same problems about its own ports (`port-refused`, `reserved-port`) as the optional
+`bridgeProblems`, because a console page cannot read `/health` itself.
 
 #### Scenario: CG Bridge's OSC port is held
 
 - **WHEN** another program holds CG Bridge's OSC port as it starts **THEN** `/health` lists a `port-refused`
-  problem naming `UDP`, the port and the holder **AND** CG Bridge still takes consoles
+  problem naming `UDP`, the port and the holder **AND** CG Bridge still takes consoles **AND** its answer to a
+  check carries the same problem in `bridgeProblems`
