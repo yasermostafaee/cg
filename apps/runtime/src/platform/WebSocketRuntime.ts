@@ -171,6 +171,8 @@ import {
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
 import {
   insideCgControl,
+  localBridgeAct,
+  localBridgeState,
   nativePlayoutFetch,
   shellKeyboardLanguage,
   shellReportsKeyboardLanguage,
@@ -2050,6 +2052,9 @@ export class WebSocketRuntime implements RuntimeBridge {
     // `CENTRAL-BRIDGE-01` (D8) — the admin's CG Bridge address this console keeps, if any.
     bridgeOverride: (): string | null =>
       insideCgControl() ? (loadStationAddress()?.bridgeAddress ?? null) : null,
+    // 🔴 `R-091` — CG Bridge on THIS machine, read and acted on by CG Control's shell (null elsewhere).
+    localBridgeState: (host: string) => localBridgeState(host),
+    localBridgeAct: (action: 'start' | 'free', pid?: number) => localBridgeAct(action, pid),
     /*
       `CENTRAL-BRIDGE-01` (D8) — FORGET this console's station, so it asks again: the way back for a
       console that cannot reach the CG Bridge it was pointed at (a mistyped address), where Station

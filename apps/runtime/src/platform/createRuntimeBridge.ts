@@ -296,6 +296,10 @@ export function createMockBridge(): RuntimeBridge {
       // `CENTRAL-BRIDGE-01` — test mode has no station record: nothing kept, nothing to forget.
       bridgeOverride: () => null,
       forgetStation: () => false,
+      // `R-091` — test mode is not CG Control: no Windows to read, no step to take.
+      localBridgeState: () => Promise.resolve(null),
+      localBridgeAct: () =>
+        Promise.resolve({ kind: 'failed' as const, reason: 'Test mode is not CG Control.' }),
     },
 
     /*

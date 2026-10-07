@@ -181,12 +181,42 @@ export interface SetupCheckAnswer extends ChannelResponse<typeof SetupCheckChann
     /** CG Bridge's release as it said it; `null` — too old to say; absent — not read. */
     readonly version?: string | null;
     /**
-     * `R-090` — what CG Bridge's `/health` says it cannot do about its own ports (`port-refused`,
-     * `reserved-port`), in its words; empty when nothing, or when `/health` did not answer.
+     * `R-090` — what CG Bridge says it cannot do about its own ports (`port-refused`, `reserved-port`),
+     * in its words, carried in its answer to the check; empty when nothing (or from an older CG Bridge).
      */
     readonly problems: readonly { readonly code: string; readonly message: string }[];
   } | null;
 }
+
+/**
+ * 🔴 `R-091` — **CG BRIDGE ON THIS MACHINE**, as CG Control's shell reads it from Windows when the
+ * resolved CG Bridge address is this machine and nothing answered there.
+ */
+export type LocalBridgeState =
+  | { readonly kind: 'elsewhere' }
+  | {
+      readonly kind: 'here';
+      readonly service:
+        | 'not-installed'
+        | 'stopped'
+        | 'starting'
+        | 'running'
+        | 'stopping'
+        | 'unknown';
+      /** What holds TCP 5280 here: its PID, its image's name, and whether it is ours to stop. */
+      readonly holder: {
+        readonly pid: number;
+        readonly name: string;
+        readonly ours: boolean;
+      } | null;
+    };
+
+/** `R-091` — what one administrator step came to. */
+export type LocalBridgeOutcome =
+  | { readonly kind: 'done' }
+  | { readonly kind: 'declined' }
+  | { readonly kind: 'refused'; readonly code: number }
+  | { readonly kind: 'failed'; readonly reason: string };
 
 /**
  * 🔴 `R-066` — **WHAT THE CONSOLE SAYS ABOUT ITSELF, in the operator's words, as ONE state.**
@@ -909,6 +939,16 @@ export interface RuntimeBridge {
     setPlayoutAddress(address: string, bridgeAddress?: string): Promise<string>;
     /** `CENTRAL-BRIDGE-01` (D8) — the separate server's CG Bridge address this console keeps, if any. */
     bridgeOverride(): string | null;
+    /**
+     * 🔴 `R-091` — CG Bridge on `host` when that is THIS machine: the `CGBridge` service and what holds
+     * TCP 5280, read by CG Control's shell. `null` outside CG Control (a browser has no Windows to read).
+     */
+    localBridgeState(host: string): Promise<LocalBridgeState | null>;
+    /**
+     * 🔴 `R-091` — one administrator step on this machine: `start` CG Bridge's service, or `free` TCP
+     * 5280 from a holder of OURS (by PID; the shell checks again that it is ours and stops nothing else).
+     */
+    localBridgeAct(action: 'start' | 'free', pid?: number): Promise<LocalBridgeOutcome>;
     /**
      * `CENTRAL-BRIDGE-01` (D8) — forget this console's station so it asks again (CG Control only;
      * `false` elsewhere, or when the store refused). The caller restarts the page.

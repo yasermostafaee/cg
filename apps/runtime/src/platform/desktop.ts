@@ -1,14 +1,16 @@
 import type { PlayoutFetchLike, PlayoutResponseLike } from '@cg/shared-ipc';
+import type { LocalBridgeOutcome, LocalBridgeState } from '../shared/runtime-bridge.js';
 
 /**
  * 🔴 CG Control's shell, from the console's side (ADR 0011; `CENTRAL-BRIDGE-01`).
  *
  * CG Control no longer runs a bridge: CG Bridge is one service on the Playout machine and this
- * console connects to it over the network. What is left of the shell is two doors, each granted to
+ * console connects to it over the network. What is left of the shell is a few doors, each granted to
  * the console the app bundles and to nothing else, and absent in a plain browser:
  *
  *   - `playout_post` — the Playout's D1/D2 from the native side, with no `Origin` (rule 8);
- *   - `keyboard_language` — which keyboard language the window types in (`TEXT-DIGITS-01`).
+ *   - `keyboard_language` — which keyboard language the window types in (`TEXT-DIGITS-01`);
+ *   - `local_bridge_state` / `local_bridge_act` — CG Bridge on this machine (`R-091`).
  *
  * `set_playout_address` and `open_bridge_log` are gone with the bridge the app no longer runs: the
  * console keeps its own Playout address (`stationAddress.ts`), and a station admin downloads CG
@@ -45,6 +47,40 @@ export function shellReportsKeyboardLanguage(): boolean {
 export function shellKeyboardLanguage(): Promise<unknown> {
   const door = tauri();
   return door === null ? Promise.resolve('unknown') : door.invoke('keyboard_language');
+}
+
+/**
+ * 🔴 `R-091` — CG Bridge on `host` when that is THIS machine, as CG Control's shell reads Windows
+ * (`local_bridge_state`). `null` outside CG Control, or when the shell could not answer.
+ */
+export async function localBridgeState(host: string): Promise<LocalBridgeState | null> {
+  const door = tauri();
+  if (door === null) return null;
+  try {
+    return (await door.invoke('local_bridge_state', { host })) as LocalBridgeState;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 🔴 `R-091` — one administrator step (`local_bridge_act`): start CG Bridge's service, or free TCP 5280
+ * from a holder of ours. Windows asks for the rights itself; the shell stops nothing that is not ours.
+ */
+export async function localBridgeAct(
+  action: 'start' | 'free',
+  pid?: number,
+): Promise<LocalBridgeOutcome> {
+  const door = tauri();
+  if (door === null) return { kind: 'failed', reason: 'Only CG Control can do this.' };
+  try {
+    return (await door.invoke('local_bridge_act', {
+      action,
+      ...(pid !== undefined ? { pid } : {}),
+    })) as LocalBridgeOutcome;
+  } catch (err) {
+    return { kind: 'failed', reason: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**

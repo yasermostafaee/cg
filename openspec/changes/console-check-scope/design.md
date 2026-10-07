@@ -55,5 +55,7 @@
    the IP helper, no elevation) and `local_bridge_act(action)`, which relaunches `cg-control.exe` elevated
    (`ShellExecuteExW` `runas`) with `--cg-service start|free <pid>`; that instance does only that — it re-checks
    that a holder is ours by its image path before stopping it — and exits before Tauri starts. "Ours" is an image
-   named `cg-bridge.exe` in a folder named `CG Bridge` or `CG Control`.
+   named `cg-bridge.exe` in a folder named `CG Bridge` or `CG Control`. `local_bridge.rs` carries no Tauri (its two
+   commands are thin wrappers in `main.rs`), so its tests — real reads of Windows' service and TCP tables
+   included — run without a window or a manifest.
 9. **Fold** is presentation over the same lines; the choice is one per-viewer key, `cg.runtime.check-show-all.v1`.

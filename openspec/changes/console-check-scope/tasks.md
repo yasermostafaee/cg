@@ -19,9 +19,9 @@
 
 ## 3. CG Bridge on this machine (`R-091`)
 
-- [ ] 3.1 CG Control's shell: the `CGBridge` service's state and TCP 5280's holder (ours or not), read-only
-- [ ] 3.2 `Start CG Bridge` (self-elevated, the service started); `Free the port` for a holder of ours only
-- [ ] 3.3 Set up's three states and two offers (dom tests)
+- [x] 3.1 CG Control's shell: the `CGBridge` service's state and TCP 5280's holder (ours or not), read-only
+- [x] 3.2 `Start CG Bridge` (self-elevated, the service started); `Free the port` for a holder of ours only
+- [x] 3.3 Set up's three states and two offers (dom tests)
 
 ## 4. Fold the passes (`R-092`)
 

@@ -17,9 +17,16 @@ serde_json = "1"
 # TEXT-DIGITS-01 — `keyboard_language` (shared with CG Designer's shell) reads the webview input
 # thread's keyboard layout.
 [target.'cfg(windows)'.dependencies]
+# `R-091` — CG Bridge on this machine: the service table (Services), the TCP table (IpHelper), the
+# holder's image and stop (Threading), and the one elevated relaunch (Shell; its struct needs Registry).
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_System_Registry",
+  "Win32_System_Services",
+  "Win32_System_Threading",
   "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
   "Win32_UI_TextServices",
   "Win32_UI_WindowsAndMessaging",
 ] }

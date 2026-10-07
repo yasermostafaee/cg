@@ -276,6 +276,8 @@ export function setupStub(): {
   setPlayoutAddress: () => Promise<string>;
   bridgeOverride: () => string | null;
   forgetStation: () => boolean;
+  localBridgeState: () => Promise<null>;
+  localBridgeAct: () => Promise<{ kind: 'failed'; reason: string }>;
 } {
   return {
     // `B-317` — a check's answer says where it ran; this stub has no CG Bridge, so nowhere.
@@ -289,5 +291,9 @@ export function setupStub(): {
     // `CENTRAL-BRIDGE-01` — no station record here: nothing kept, nothing to forget.
     bridgeOverride: () => null,
     forgetStation: () => false,
+    // `R-091` — this stub is not CG Control: no Windows to read, no step to take.
+    localBridgeState: () => Promise.resolve(null),
+    localBridgeAct: () =>
+      Promise.resolve({ kind: 'failed', reason: 'this stub is not CG Control' }),
   };
 }

@@ -129,6 +129,9 @@ const BRIDGE_SURFACE: {
       // `CENTRAL-BRIDGE-01` (D8) — a separate server's CG Bridge address, and forgetting the station.
       'bridgeOverride',
       'forgetStation',
+      // `R-091` — CG Bridge on this machine (the mock: not CG Control).
+      'localBridgeState',
+      'localBridgeAct',
     ],
     // `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare.
     strays: ['list', 'onChanged', 'takeOffAir'],

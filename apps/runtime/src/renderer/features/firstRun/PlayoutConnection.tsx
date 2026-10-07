@@ -14,10 +14,12 @@ import { Button } from '../../ui/Button.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
 import { BRIDGE_ADDRESS_PLACEHOLDER } from './PlayoutAddressGate.js';
+import { LocalBridgeHelp } from './LocalBridgeHelp.js';
 import {
   checkingLines,
   consoleCheckLines,
   currentCheckLines,
+  hostPart,
   inSetupWords,
   onSeparateServer,
   markChecking,
@@ -507,6 +509,15 @@ export function PlayoutConnection({
         ) : (
           <ConnectionCheckList lines={lineFilter === undefined ? lines : lineFilter(lines)} />
         ))}
+      {/* 🔴 `R-091` — nothing answered, and CG Bridge's address is THIS machine: why, and the one step. */}
+      {ranAt?.kind === 'silent' && canWrite && (
+        <LocalBridgeHelp
+          key={ranAt.address}
+          host={hostPart(ranAt.address)}
+          address={ranAt.address}
+          onFixed={() => void check('press')}
+        />
+      )}
       {/* 🔴 `B-317` — Connect only once CG Bridge ANSWERED at the address the fields resolve to. */}
       {editing &&
         lines !== null &&

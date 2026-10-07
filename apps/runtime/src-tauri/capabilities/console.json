@@ -1,6 +1,11 @@
 {
   "identifier": "console",
-  "description": "CENTRAL-BRIDGE-01: the console CG Control bundles, in its own window, may sign in to the Playout natively with no Origin (playout_post: a POST to the Playout's two auth routes only) and (TEXT-DIGITS-01) read which keyboard language the window types in. Nothing else: this app runs no bridge and writes no station setting.",
+  "description": "CENTRAL-BRIDGE-01: the console CG Control bundles, in its own window, may sign in to the Playout natively with no Origin (playout_post: a POST to the Playout's two auth routes only) and (TEXT-DIGITS-01) read which keyboard language the window types in. R-091: when its CG Bridge address is this machine, it may read the CGBridge service and what holds TCP 5280, and ask (each as its own administrator step) to start that service or stop a holder of ours (cg-bridge.exe in a CG Bridge or CG Control folder). Nothing else: this app runs no bridge and writes no station setting.",
   "windows": ["main"],
-  "permissions": ["allow-playout-post", "allow-keyboard-language"]
+  "permissions": [
+    "allow-playout-post",
+    "allow-keyboard-language",
+    "allow-local-bridge-state",
+    "allow-local-bridge-act"
+  ]
 }
