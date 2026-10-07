@@ -2,6 +2,7 @@ import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useLink } from '../../hooks/useLink.js';
 import { setTestMode } from '../../../platform/testMode.js';
+import { reloadOnPurpose } from '../shell/leavePrompt.js';
 
 /**
  * R-006 — the loud half of "the Runtime never pretends to be on air".
@@ -75,9 +76,12 @@ const styles = {
 const TEST_STRIPES = `repeating-linear-gradient(135deg, ${cssVars['--r-band-stripe-a']} 0 14px, ${cssVars['--r-band-stripe-b']} 14px 28px)`;
 
 export function ConnectionBanner({
-  reload = () => globalThis.location.reload(),
+  reload = () => reloadOnPurpose(),
 }: {
-  /** Start the console again (a test passes its own: jsdom's `location.reload` is fixed). */
+  /**
+   * Start the console again (a test passes its own: jsdom's `location.reload` is fixed). On
+   * purpose (`R-094`): the operator pressed for it, so the tab's leave prompt does not ask.
+   */
   reload?: () => void;
 }): JSX.Element | null {
   const link = useLink();

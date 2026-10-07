@@ -87,6 +87,14 @@ const styles = {
     WebkitBackdropFilter: cssVars['--r-modal-scrim-sub-blur'],
     zIndex: 1001,
   },
+  /**
+   * 🔴 `R-094` — A DIALOG ABOUT THE WINDOW ITSELF (`Close CG Control?`), above every gate that can
+   * cover the console: the lock (1000), the sign-in gate (1001) and first-run (1002). The window
+   * can be closed whatever covers the console, and a close held behind a gate would be a window
+   * that silently refuses to close. Below the anchored panels (1100) and the tooltip (3000).
+   * The base scrim's ground and blur; only the stacking differs.
+   */
+  scrimWindow: { zIndex: 1050 },
   dialog: {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
@@ -796,8 +804,12 @@ interface ModalProps {
    * ⚠ It is a z-index and a scrim, and NOTHING about the keyboard. Which surface owns
    * Escape and Tab is decided by the trap STACK in `focusTrap.ts` — arm order, not a prop
    * — so a caller cannot get the two out of step by forgetting this.
+   *
+   * `window` (`R-094`) is a dialog about the WINDOW, not the console: `Close CG Control?`. It
+   * stacks above the lock, the sign-in gate and first-run, because the window can be closed
+   * whatever covers the console. The base scrim; see `styles.scrimWindow`.
    */
-  layer?: 'base' | 'sub';
+  layer?: 'base' | 'sub' | 'window';
 }
 
 /** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
@@ -908,7 +920,13 @@ export function Modal({
 
   return createPortal(
     <div
-      style={layerLevel === 'sub' ? { ...styles.scrim, ...styles.scrimSub } : styles.scrim}
+      style={
+        layerLevel === 'sub'
+          ? { ...styles.scrim, ...styles.scrimSub }
+          : layerLevel === 'window'
+            ? { ...styles.scrim, ...styles.scrimWindow }
+            : styles.scrim
+      }
       role="presentation"
       data-modal-layer={layerLevel}
       onClick={onClose}

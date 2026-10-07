@@ -96,6 +96,8 @@ const BRIDGE_SURFACE: {
   groups: {
     // `TEXT-DIGITS-01` — the shell's keyboard language (both ask the same shell door).
     keyboard: ['language', 'reportsLanguage'],
+    // `R-094` — the window's close, held by the shell (both hold through the same shell door).
+    closeGuard: ['closeNow', 'held', 'hold'],
     // §4 — `resyncing` says whether an EMPTY stack is an answer or a not-yet.
     // `B-153` — `skew` names the channels the connected bridge PROCESS does not route.
     // `CENTRAL-BRIDGE-01` — `versionMismatch`: another release than CG Bridge (the mock: never).

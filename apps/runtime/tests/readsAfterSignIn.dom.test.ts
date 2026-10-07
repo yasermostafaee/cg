@@ -111,6 +111,13 @@ const LOCAL = new Set([
   'setup.bridgeOverride',
   'setup.forgetStation',
   'audit.canDownloadLogs',
+  /*
+    `R-094` — the window's close: the SHELL's door (CG Control's), never the bridge's. `App` holds
+    it at mount; nothing it does is a request, so nothing of it could be refused or recorded here.
+  */
+  'closeGuard.held',
+  'closeGuard.hold',
+  'closeGuard.closeNow',
 ]);
 
 /**

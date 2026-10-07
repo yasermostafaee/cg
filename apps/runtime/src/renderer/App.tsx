@@ -33,6 +33,7 @@ import { ChannelScope } from './features/channels/ChannelScope.js';
 import { useChannelBankState } from './features/channels/useSelectedChannel.js';
 import { onChannel } from './features/stack/onAir.js';
 import { AppHeader } from './features/shell/AppHeader.js';
+import { ConsoleCloseGuard } from './features/shell/ConsoleCloseGuard.js';
 import { MonitorStrip } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
 import { useShellLayout } from './hooks/useShellLayout.js';
@@ -634,6 +635,9 @@ export function App(): JSX.Element {
           {...(lock.reason !== undefined ? { reason: lock.reason } : {})}
           onRelease={(pin) => window.cg.lock.release({ pin })}
         />
+        {/* `R-094` — no close on a slip: CG Control's window close, or the tab's leave prompt.
+            Last, so its dialog (the `window` layer) sits above every gate rendered before it. */}
+        <ConsoleCloseGuard items={items} />
       </main>
     </ShellLayoutProvider>
   );

@@ -1,3 +1,4 @@
+import { closeGuardDoor, type CloseGuardDoor, type ShellInvoke } from '@cg/gesture';
 import type { PlayoutFetchLike, PlayoutResponseLike } from '@cg/shared-ipc';
 import type { LocalBridgeOutcome, LocalBridgeState } from '../shared/runtime-bridge.js';
 
@@ -10,7 +11,8 @@ import type { LocalBridgeOutcome, LocalBridgeState } from '../shared/runtime-bri
  *
  *   - `playout_post` — the Playout's D1/D2 from the native side, with no `Origin` (rule 8);
  *   - `keyboard_language` — which keyboard language the window types in (`TEXT-DIGITS-01`);
- *   - `local_bridge_state` / `local_bridge_act` — CG Bridge on this machine (`R-091`).
+ *   - `local_bridge_state` / `local_bridge_act` — CG Bridge on this machine (`R-091`);
+ *   - the window's close, held for the console to answer (`R-094`, {@link shellCloseGuard}).
  *
  * `set_playout_address` and `open_bridge_log` are gone with the bridge the app no longer runs: the
  * console keeps its own Playout address (`stationAddress.ts`), and a station admin downloads CG
@@ -81,6 +83,22 @@ export async function localBridgeAct(
   } catch (err) {
     return { kind: 'failed', reason: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * 🔴 `R-094` — **NO CLOSE ON A SLIP.** CG Control's shell holds every close of its window it can
+ * intercept and asks the console (`close_window.rs`, shared with CG Designer; the JS half is
+ * `@cg/gesture`'s `closeGuardDoor`). Closing the window is a WINDOW close: the three commands go to
+ * the shell and nowhere else — nothing is sent to CG Bridge or CasparCG, and what is on air stays.
+ * A browser has no shell: the door holds nothing, and the tab's leave prompt is the question.
+ */
+export function shellCloseGuard(): CloseGuardDoor {
+  const door = tauri();
+  const invoke: ShellInvoke | null =
+    door === null ? null : (command, args) => door.invoke(command, args);
+  // The page's window — or, where there is none (a test under Node), a target nothing dispatches on.
+  const target: EventTarget = typeof window === 'undefined' ? new EventTarget() : window;
+  return closeGuardDoor(invoke, target);
 }
 
 /**

@@ -305,6 +305,22 @@ export interface RuntimeBridge {
     language(): Promise<unknown>;
   };
 
+  /**
+   * 🔴 `R-094` — **NO CLOSE ON A SLIP.** CG Control's shell holds every close of its window it can
+   * intercept and asks the console (`@cg/gesture`'s `closeGuardDoor`; the Rust half is shared with
+   * CG Designer). It is the SHELL's door, never the socket's: closing the window sends nothing to
+   * CG Bridge or CasparCG — it is a window close, not a CLEAR, and what is on air stays on air.
+   * A browser has no shell: `held()` is false, and the tab's leave prompt is the question.
+   */
+  closeGuard: {
+    /** Is a shell holding this window's closes? */
+    held(): boolean;
+    /** Every close the shell intercepts calls `onRequest` instead of closing. Returns the release. */
+    hold(onRequest: () => void): Unsubscribe;
+    /** Close the window now, asking nothing more (nothing to close in a browser). */
+    closeNow(): Promise<void>;
+  };
+
   /** Status of the link to the local bridge (drives the connection indicator). */
   link: {
     status(): BridgeLinkStatus;

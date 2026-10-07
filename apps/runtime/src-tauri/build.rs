@@ -5,7 +5,9 @@ fn main() {
     //   - `playout_post` (`CENTRAL-BRIDGE-01` rule 8): the console's D1/D2, natively, with no `Origin`;
     //   - `keyboard_language` (`TEXT-DIGITS-01`): read-only;
     //   - `local_bridge_state` / `local_bridge_act` (`R-091`): CG Bridge on this machine — its service
-    //     and port holder read, and the two administrator steps (start it; free its port of OURS).
+    //     and port holder read, and the two administrator steps (start it; free its port of OURS);
+    //   - `close_guard`, `close_request_seen`, `close_window_now` (`R-094`): the window's close,
+    //     held for the console to answer (CG Designer's `src/close_window.rs`, shared).
     // `set_playout_address` and `open_bridge_log` are gone with the bridge this app no longer runs.
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
@@ -13,6 +15,9 @@ fn main() {
             "keyboard_language",
             "local_bridge_state",
             "local_bridge_act",
+            "close_guard",
+            "close_request_seen",
+            "close_window_now",
         ])),
     )
     .expect("tauri-build failed");

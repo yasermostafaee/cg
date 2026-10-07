@@ -174,6 +174,7 @@ import {
   localBridgeAct,
   localBridgeState,
   nativePlayoutFetch,
+  shellCloseGuard,
   shellKeyboardLanguage,
   shellReportsKeyboardLanguage,
 } from './desktop.js';
@@ -2356,6 +2357,12 @@ export class WebSocketRuntime implements RuntimeBridge {
     reportsLanguage: (): boolean => shellReportsKeyboardLanguage(),
     language: (): Promise<unknown> => shellKeyboardLanguage(),
   };
+
+  /**
+   * `R-094` — the window's close, from CG Control's shell (never the socket): closing the window
+   * sends nothing to CG Bridge or CasparCG. A browser has no shell; this then holds nothing.
+   */
+  readonly closeGuard = shellCloseGuard();
 
   readonly update = {
     request: (req: ChannelRequest<typeof UpdateRequestChannel>) =>

@@ -2,7 +2,7 @@ import { consoleSourceCatalog, type StationChannel, type StationChannels } from 
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { resolveBridgeUrl } from './bridgeUrl.js';
-import { shellKeyboardLanguage, shellReportsKeyboardLanguage } from './desktop.js';
+import { shellCloseGuard, shellKeyboardLanguage, shellReportsKeyboardLanguage } from './desktop.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { initRuntimeWorkspace } from './library/workspace.js';
@@ -153,6 +153,9 @@ export function createMockBridge(): RuntimeBridge {
       reportsLanguage: () => shellReportsKeyboardLanguage(),
       language: () => shellKeyboardLanguage(),
     },
+
+    // `R-094` — nor is the window's close: the same shell door the live console uses.
+    closeGuard: shellCloseGuard(),
 
     link: {
       status: () => OFFLINE,
