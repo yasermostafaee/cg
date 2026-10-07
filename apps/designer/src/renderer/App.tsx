@@ -225,17 +225,9 @@ export function App(): JSX.Element {
       projectName === null ? 'APASAI CG DESIGNER' : dirty ? `* ${projectName}` : projectName;
   }, [projectName, dirty]);
 
-  // D-088 — warn on tab-close / refresh while there are unsaved changes. The browser shows
-  // a generic prompt (custom text is ignored); arm the handler only when dirty.
-  useEffect(() => {
-    if (!dirty) return;
-    function onBeforeUnload(e: BeforeUnloadEvent): void {
-      e.preventDefault();
-      e.returnValue = '';
-    }
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty]);
+  // D-088 — the warning on tab-close / refresh with unsaved changes lives in `CloseGuard`
+  // (`features/shell`), mounted beside this component: `D-162` puts it and CG Designer's
+  // window-close guard behind ONE predicate, `hasUnsavedChanges`.
   // The editing surface is the open composition (its own size / duration /
   // layers); null when nothing is open (→ empty state). Issues validate the
   // open composition, not the now-layerless project root.

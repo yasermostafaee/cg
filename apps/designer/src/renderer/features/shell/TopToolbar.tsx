@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { Scene } from '@cg/shared-schema';
-import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import {
+  designerStore,
+  hasUnsavedChanges,
+  shallowEqual,
+  useDesignerSelector,
+} from '../../state/store.js';
 import { cx } from '../../cx.js';
 import { comboKey } from '../../keyboard.js';
 import { Button } from '../../ui/Button.js';
@@ -164,8 +169,9 @@ export function TopToolbar({ scene, projectPath }: Props): JSX.Element {
    * triggered from.
    */
   function guardedSwitch(action: () => void | Promise<void>): void {
-    // Only prompt when there's unsaved work; otherwise switch straight through.
-    if (scene === null || !designerStore.get().dirty) {
+    // Only prompt when there's unsaved work; otherwise switch straight through. `D-162`'s ONE
+    // predicate, the same the leave prompt and the window-close guard ask.
+    if (!hasUnsavedChanges(designerStore.get())) {
       void Promise.resolve(action());
       return;
     }

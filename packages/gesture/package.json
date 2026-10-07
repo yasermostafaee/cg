@@ -2,7 +2,7 @@
   "name": "@cg/gesture",
   "version": "0.0.0",
   "private": true,
-  "description": "B-140 — headless pointer-drag gesture: one hook, one teardown, and a full-window shield so a drag survives crossing an iframe; TEXT-DIGITS-01 — the one keyboard-language detector. No styles, no tokens, no markup: @cg/ui stays tokens-only and components stay app-local.",
+  "description": "B-140 — headless pointer-drag gesture: one hook, one teardown, and a full-window shield so a drag survives crossing an iframe; TEXT-DIGITS-01 — the one keyboard-language detector; D-162 / R-094 — the JS half of the desktop shells' close guard. No styles, no tokens, no markup: @cg/ui stays tokens-only and components stay app-local.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

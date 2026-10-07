@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   _resetCore,
   current,
+  hasUnsavedChanges,
   markHistoryBoundary,
   markSaved,
   redo,
@@ -28,6 +29,8 @@ import { viewSlice } from './slices/view.js';
 // is byte-identical for every consumer (no import-path or symbol changes).
 export type { DesignerStoreState, DesignerTool, DesignerView, ElementFieldMetaPatch, KeyframeRef };
 export { editSceneOf, scopeSceneToComposition };
+// `D-162` — the ONE "would work be lost?" predicate (leave prompt, close guard, switch guard).
+export { hasUnsavedChanges };
 
 /**
  * Designer renderer state — small pub-sub store with a JSON-patch-ish

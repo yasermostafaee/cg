@@ -84,6 +84,22 @@ export interface DesignerBridge {
     language(): Promise<unknown>;
   };
 
+  /**
+   * 🔴 `D-162` — the window's close, where a shell holds it. A Tauri window runs no
+   * `beforeunload` when it is closed, so CG Designer's shell holds every close it can intercept
+   * and asks the page instead (`src-tauri/src/close_window.rs`; the JS half is `@cg/gesture`'s
+   * `closeGuardDoor`). A browser has no shell: `held()` is false, and the tab's `beforeunload`
+   * is the warning.
+   */
+  closeGuard: {
+    /** Is a shell holding this window's closes? */
+    held(): boolean;
+    /** Every close the shell intercepts calls `onRequest` instead of closing. Returns the release. */
+    hold(onRequest: () => void): Unsubscribe;
+    /** Close the window now, asking nothing more (nothing to close in a browser). */
+    closeNow(): Promise<void>;
+  };
+
   projects: {
     create(
       req: ChannelRequest<typeof ProjectsNewChannel>,

@@ -6,6 +6,7 @@ import './index.css';
 import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
+import { CloseGuard } from './features/shell/CloseGuard.js';
 import { initDesignerPlatform } from '../platform/createDesignerBridge.js';
 import { startKeyboardLanguage } from './keyboardLanguage.js';
 import './splashTiming.js';
@@ -73,6 +74,9 @@ async function bootstrap(): Promise<void> {
     <StrictMode>
       <BootComplete>
         <App />
+        {/* `D-162` — unsaved work is never lost silently: the leave prompt and, inside CG
+            Designer, the window's close. Beside `App`, so every view it shows is covered. */}
+        <CloseGuard />
       </BootComplete>
     </StrictMode>,
   );

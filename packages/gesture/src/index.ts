@@ -3,8 +3,9 @@
  *
  * ONE headless pointer-drag gesture, shared by the Runtime's `ShellDivider` and
  * the Designer's `Splitter` — and (`TEXT-DIGITS-01`) the ONE keyboard-language
- * detector both apps' editors ask, and (`B-319`) the ONE action-row fit both apps'
- * dialog footers are watched with. Behaviour only: no styles, no tokens, no markup,
+ * detector both apps' editors ask, (`B-319`) the ONE action-row fit both apps'
+ * dialog footers are watched with, and (`D-162` / `R-094`) the JS half of the desktop
+ * shells' close guard. Behaviour only: no styles, no tokens, no markup,
  * so `@cg/ui` stays tokens-only and components stay app-local.
  */
 export { useDragGesture, type DragGesture, type DragGestureOptions } from './useDragGesture.js';
@@ -28,3 +29,10 @@ export {
   type Extent,
   type ItemFit,
 } from './actionRowFit.js';
+// `D-162` / `R-094` — the window's close, held by a desktop shell for the page to answer.
+export {
+  CLOSE_REQUESTED_EVENT,
+  closeGuardDoor,
+  type CloseGuardDoor,
+  type ShellInvoke,
+} from './closeGuard.js';

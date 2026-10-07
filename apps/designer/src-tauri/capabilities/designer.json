@@ -1,0 +1,11 @@
+{
+  "identifier": "designer",
+  "description": "The Designer CG Designer bundles, in its own window, may read which keyboard language the window types in (TEXT-DIGITS-01) and (D-162) answer the window's close: hold it while it can ask about unsaved changes (close_guard), say it has the ask (close_request_seen) and close the window once answered (close_window_now). Nothing else.",
+  "windows": ["main"],
+  "permissions": [
+    "allow-keyboard-language",
+    "allow-close-guard",
+    "allow-close-request-seen",
+    "allow-close-window-now"
+  ]
+}

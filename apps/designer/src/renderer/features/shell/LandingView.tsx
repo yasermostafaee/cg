@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
-import { designerStore, shallowEqual, useDesignerSelector } from '../../state/store.js';
+import {
+  designerStore,
+  hasUnsavedChanges,
+  shallowEqual,
+  useDesignerSelector,
+} from '../../state/store.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Tag } from '../../ui/Tag.js';
@@ -55,8 +60,9 @@ export function LandingView(): JSX.Element {
    * otherwise queues it behind the save-before-switch modal.
    */
   function guardedSwitch(label: string, action: () => Promise<void>): void {
-    // Only prompt to save when the project actually has unsaved changes.
-    if (scene === null || !designerStore.get().dirty) {
+    // Only prompt to save when the project actually has unsaved changes — `D-162`'s ONE
+    // predicate, the same the leave prompt and the window-close guard ask.
+    if (!hasUnsavedChanges(designerStore.get())) {
       void action();
       return;
     }

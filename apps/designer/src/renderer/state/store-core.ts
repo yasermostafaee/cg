@@ -253,6 +253,19 @@ export const initialState: DesignerStoreState = {
   dirty: false,
 };
 
+/**
+ * 🔴 `D-162` — **DOES THE OPEN PROJECT HOLD WORK THAT WOULD BE LOST?** The ONE predicate every
+ * "you will lose this" question asks (golden rule 6): the browser's leave prompt, CG Designer's
+ * window-close guard and the save-before-switch guard. A project is open AND `dirty` — D-088's
+ * content hash against the last load or save; with nothing open there is nothing to lose.
+ *
+ * ⚠ Ask it at the moment of the decision (`designerStore.get()`), never from a value captured
+ * earlier: a close or a leave is decided on the document as it is NOW.
+ */
+export function hasUnsavedChanges(state: Pick<DesignerStoreState, 'scene' | 'dirty'>): boolean {
+  return state.scene !== null && state.dirty;
+}
+
 export type Listener = (state: DesignerStoreState) => void;
 const listeners = new Set<Listener>();
 

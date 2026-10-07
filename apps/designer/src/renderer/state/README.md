@@ -7,7 +7,7 @@ method bodies moved unchanged; only the file they live in differs.
 
 > **Public API is unchanged.** Everything is still imported from
 > [`state/store.ts`](store.ts): `designerStore`, `useDesignerSelector`,
-> `useDesignerStore`, `editSceneOf`, `shallowEqual`, the types
+> `useDesignerStore`, `editSceneOf`, `shallowEqual`, `hasUnsavedChanges` (`D-162`), the types
 > (`DesignerStoreState`, `DesignerTool`, `DesignerView`, `KeyframeRef`,
 > `ElementFieldMetaPatch`), the `_reset` test hook, and the DEV global
 > `__cgDesignerStore`. No component imports changed.
@@ -75,6 +75,13 @@ construction), and excluding `metadata.updatedAt` (bumped by saving, not editing
   runs on `markHistoryBoundary` (gesture/edit boundary) and `markSaved`. That's what
   clears dirty after **edit-then-revert to identical content** (a fresh object whose
   hash matches the baseline) — without hashing per mutation during a drag.
+
+**`hasUnsavedChanges(state)`** (`store-core.ts`, re-exported from `store.ts`) is the ONE reading of
+`dirty` for every "work would be lost" question (`D-162`, golden rule 6): a project open AND
+`dirty`. The browser's leave prompt and CG Designer's window-close guard
+(`features/shell/unsavedWork.ts`, mounted by `CloseGuard`) and both save-before-switch guards
+(`TopToolbar`, `LandingView`) ask it — at the moment of the decision, never from a value captured
+earlier. Do not spell `scene !== null && dirty` (or `scene === null || !dirty`) anywhere else.
 
 The on-disk **file handle** is NOT in the store: it lives in the platform bridge
 (`createDesignerBridge`) keyed by project id, persisted in IndexedDB (`@cg/storage`

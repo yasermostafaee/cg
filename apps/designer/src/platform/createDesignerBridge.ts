@@ -1,6 +1,7 @@
 import { PROJECT_PACKAGE_EXT, type Element, type Scene } from '@cg/shared-schema';
 import { packProject, readProjectDocument, type ProjectDocument } from '@cg/vcg-format';
 import { getStarter } from '@cg/starter-templates';
+import { closeGuardDoor, type ShellInvoke } from '@cg/gesture';
 import type { AppInfo, DesignerBridge } from '../shared/designer-bridge.js';
 import {
   cgCss,
@@ -196,9 +197,13 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
     getAppInfo: () => Promise.resolve(APP_INFO),
 
     keyboard: {
-      reportsLanguage: () => tauriInvoke() !== null,
-      language: () => tauriInvoke()?.('keyboard_language') ?? Promise.resolve('unknown'),
+      reportsLanguage: () => shellInvoke() !== null,
+      language: () => shellInvoke()?.('keyboard_language') ?? Promise.resolve('unknown'),
     },
+
+    // `D-162` — the window's close, held by CG Designer's shell for the page to answer. In a
+    // browser there is no shell and this holds nothing: the tab's `beforeunload` is the warning.
+    closeGuard: closeGuardDoor(shellInvoke(), window),
 
     projects: {
       create: (req) =>
@@ -555,16 +560,16 @@ export async function initDesignerPlatform(): Promise<DesignerBridge> {
 }
 
 /**
- * `TEXT-DIGITS-01` — CG Designer's shell reports the keyboard language through ONE read-only command,
- * `keyboard_language` (`src-tauri/src/keyboard_language.rs`), reached through Tauri's IPC. A browser
- * has no shell, so there is nothing to ask: `null`.
+ * CG Designer's shell, reached through Tauri's IPC: `TEXT-DIGITS-01`'s one read-only command,
+ * `keyboard_language` (`src-tauri/src/keyboard_language.rs`), and `D-162`'s three close-guard
+ * commands (`src-tauri/src/close_window.rs`). A browser has no shell, so there is nothing to ask:
+ * `null`.
  */
-function tauriInvoke(): ((command: string) => Promise<unknown>) | null {
-  const internals = (
-    globalThis as { __TAURI_INTERNALS__?: { invoke?: (command: string) => Promise<unknown> } }
-  ).__TAURI_INTERNALS__;
+function shellInvoke(): ShellInvoke | null {
+  const internals = (globalThis as { __TAURI_INTERNALS__?: { invoke?: ShellInvoke } })
+    .__TAURI_INTERNALS__;
   if (internals === undefined || typeof internals.invoke !== 'function') return null;
-  return (command) => internals.invoke?.(command) ?? Promise.resolve('unknown');
+  return (command, args) => internals.invoke?.(command, args) ?? Promise.resolve('unknown');
 }
 
 function mimeOf(kind: 'image' | 'font' | 'lottie' | 'video', filename: string): string {
