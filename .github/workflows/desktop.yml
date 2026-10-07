@@ -385,6 +385,7 @@ jobs:
           sparse-checkout: |
             apps/runtime/tests/desktop
             apps/runtime/src-tauri/tauri.conf.json
+            apps/runtime/src-tauri/capabilities/console.json
             apps/designer/src-tauri/tauri.conf.json
           sparse-checkout-cone-mode: false
 
