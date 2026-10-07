@@ -57,6 +57,7 @@ import {
   pressInDialog,
   processCount,
   sendClose,
+  splashGone,
   webViewArgs,
 } from './app-window.mjs';
 
@@ -277,7 +278,11 @@ class Cdp {
     }
     return r.result.value;
   }
+  /** A picture of the page — once the start-up splash has left ({@link splashGone}). */
   async screenshot(name) {
+    await until('the start-up splash to leave', () => this.evaluate(splashGone), 25_000).catch(
+      () => undefined,
+    );
     try {
       const { data } = await this.send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(path.join(OUT, name), Buffer.from(data, 'base64'));

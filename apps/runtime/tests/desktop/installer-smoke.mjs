@@ -65,6 +65,7 @@ import {
   pressInDialog,
   processCount,
   sendClose,
+  splashGone,
   webViewArgs,
 } from './app-window.mjs';
 import { parseRules } from './firewall-rule.mjs';
@@ -380,7 +381,11 @@ class Cdp {
     }
     return r.result.value;
   }
+  /** A picture of the page — once the start-up splash has left ({@link splashGone}). */
   async screenshot(file) {
+    await until('the start-up splash to leave', () => this.evaluate(splashGone), 25_000).catch(
+      () => undefined,
+    );
     const { data } = await this.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(file, Buffer.from(data, 'base64'));
   }

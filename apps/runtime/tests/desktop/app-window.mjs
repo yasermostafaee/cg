@@ -21,15 +21,20 @@ function powershell(script) {
 /**
  * What an installed app's WebView2 is started with in these scripts (test instrumentation; the app is
  * untouched): DevTools on `cdpPort`.
- *
- * ⚠ A capture of CG Designer on the clean runner is NOT evidence of what it shows: every one returns
- * the start-up splash (28–52 %) while the page beneath answers every probe (`installer-smoke` on
- * `65507361`, `77451b5e`, `813123a6`; `acceptance-upgrade-0113` on `813123a6`, where CG Control,
- * launched beside it, went stale too). Turning Chromium's native-occlusion tracking off did not change
- * it (`813123a6`), so it is not that. Read the page, not the picture.
  */
 export function webViewArgs(cdpPort) {
   return `--remote-debugging-port=${String(cdpPort)}`;
+}
+
+/**
+ * Page function: the start-up splash has left (`#cg-splash`, both apps' `index.html`). A picture waits for
+ * it. Each app's splash stays on top for its floor — 8 s from a cold start, at most 20 s — and the
+ * scripts drive the page through the DOM, which works beneath it, so a flow can reach its picture first:
+ * every CG Designer picture the runner took was its splash (28–52 %), and so was CG Control's beside it
+ * in `acceptance-upgrade-0113` (`65507361`, `77451b5e`, `813123a6`). Measured again in local Chromium.
+ */
+export function splashGone() {
+  return document.getElementById('cg-splash') === null;
 }
 
 /** How many processes of `image` are running. */
