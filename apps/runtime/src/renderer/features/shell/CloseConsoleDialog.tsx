@@ -44,7 +44,12 @@ export function CloseConsoleDialog({
           <ModalAction actionRole="cancel" onClick={onCancel} data-modal-autofocus="">
             Cancel
           </ModalAction>
-          <ModalAction actionRole="primary" onClick={onClose}>
+          {/*
+            ⚠ NAMED `Close CG Control`, shown `Close`. The primitive's ✕ is named `Close` too, and
+            it means CANCEL: two buttons announced alike with opposite effects is a trap for anyone
+            who hears the dialog rather than sees it. The name keeps the visible word in it.
+          */}
+          <ModalAction actionRole="primary" onClick={onClose} aria-label="Close CG Control">
             Close
           </ModalAction>
         </>
