@@ -4469,7 +4469,8 @@ the same event by a different route and must go through the same path.
 
 **✅ ANSWERED (owner, 2026-08-12, recorded with `media-phases-follow-composition`): Candidate A,
 SHARPENED by the follow-composition phase source.** The third choice is **"Add as backdrop — follow
-the composition"**, and taking it adds the element with `phases.source: 'composition'` — the
+the composition"** (since `B-319`, 2026-10-07: labelled `Add as backdrop`, the long form its `title`),
+and taking it adds the element with `phases.source: 'composition'` — the
 element's window through the clip is thereafter DERIVED from the host's lifecycle
 (intro settled at the content start, still through the hold, build-off riding the OUT segment).
 
