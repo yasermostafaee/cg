@@ -18,6 +18,10 @@
  *                              classic` leaves it on air for the upgrade
  *   upgrade         (elevated) each of this release's installers over `--from`: its Welcome, then `/S`; the
  *                              service, the settings and CG Bridge's session kept; no `CLEAR`
+ *                              (`--apps-open yes`: CG Control's and CG Designer's `/S` left to the next)
+ *   upgrade-apps-open (medium) `RELEASE-0114-01-C`: CG Control's and CG Designer's upgrades over the two
+ *                              apps OPEN (CG Designer with unsaved changes), then again over the
+ *                              guarded upgraded apps; bounded, exit 0, never waiting on a dialog
  *   drive-upgraded  (medium)   the upgraded CG Control: the station kept, the row still ON AIR, cleared
  *   uninstall       (elevated) all three: the service, its rules and the shortcuts gone; data kept
  *   summary                    every phase's results; a phase that never ran is a failure
@@ -25,6 +29,7 @@
  *   node release-acceptance.mjs --phase <phase> --out <dir> --version <x.y.z>
  *     [--bridge <setup.exe>] [--control <setup.exe>] [--designer <setup.exe>] [--mode fresh|classic]
  *     [--from <x.y.z>]   (the release the upgrade starts from; `0.10.0` by default)
+ *     [--apps-open yes]   (upgrade: leave the two apps' own upgrades to `upgrade-apps-open`)
  *     [--expect <phase,phase,…>]   (summary)
  *
  * Node built-ins only, plus `../desktop/setup-window.mjs`'s hands on the setup window.
@@ -45,6 +50,14 @@ import {
   until as untilSetup,
 } from './setup-window.mjs';
 import { checkInstalledAppsRow } from '../../../../tools/bridge-installer/installed-apps.mjs';
+import {
+  closeDialogProbe,
+  designerEdit,
+  designerNewProject,
+  pressInDialog,
+  processCount,
+  sendClose,
+} from './app-window.mjs';
 
 const args = Object.fromEntries(
   process.argv
@@ -63,6 +76,12 @@ const VERSION = args.version;
  * from `0.11.0` (`--from 0.11.0`, the `v0.11.0` draft's own installers).
  */
 const OLD = args.from ?? '0.10.0';
+/**
+ * `RELEASE-0114-01-C` — `--apps-open yes`: `upgrade` still reads each installer's Welcome, but leaves
+ * CG Control's and CG Designer's own silent upgrades to `upgrade-apps-open`, which runs them over
+ * the two apps OPEN — CG Designer with unsaved changes.
+ */
+const APPS_OPEN = args['apps-open'] === 'yes';
 fs.mkdirSync(OUT, { recursive: true });
 
 const APP_PAGE = 'http://tauri.localhost';
@@ -823,9 +842,17 @@ async function phaseUpgrade() {
       cancelled === 1 && displayVersion(p.hive, p.key) === OLD,
       `${String(cancelled)} ${String(displayVersion(p.hive, p.key))}`,
     );
+    // `RELEASE-0114-01-C` — CG Control's and CG Designer's own upgrades run over the two apps OPEN,
+    // in `upgrade-apps-open` (both install per user: an operator's, unelevated, upgrade).
+    if (APPS_OPEN && p.hive === 'HKCU') continue;
     // …then the silent upgrade, as the Playout's installer chains it.
+    const started = Date.now();
     const code = codeOf(p.file, ['/S']);
-    check(`${p.name}: the silent upgrade (/S) exits 0`, code === 0, String(code));
+    check(
+      `${p.name}: the silent upgrade (/S) exits 0`,
+      code === 0,
+      `${String(code)}; ${String(Date.now() - started)} ms`,
+    );
     check(
       `${p.name}: Installed apps lists ${String(VERSION)}`,
       displayVersion(p.hive, p.key) === VERSION,
@@ -904,6 +931,199 @@ async function phaseUpgrade() {
     seated !== null,
     JSON.stringify(seated),
   );
+}
+
+/**
+ * One silent upgrade of an app, when Windows has it running, bounded: an installer that waited on a
+ * dialog would never end on its own, so the bound is how "it never waits" is measured. Generous
+ * against the normal time (`upgrade`'s own `/S` lines carry theirs): a per-user install is seconds.
+ */
+const UPGRADE_BOUND_MS = 120_000;
+
+/** An ended app's WebView2 gone, before the next launch opens the same profile (as the smoke waits). */
+function webViewsGone() {
+  return until(
+    "the last apps' WebView2 to exit",
+    () => processCount('msedgewebview2.exe') === 0,
+    30_000,
+  ).catch(() => undefined);
+}
+
+/** Start CG Designer as an operator does, with DevTools opened by the environment (unelevated only). */
+function launchDesigner(cdpPort) {
+  const exe = installedPerUser('CG Designer', 'cg-designer.exe');
+  if (exe === undefined) return null;
+  const child = spawn(exe, [], {
+    detached: true,
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${String(cdpPort)}`,
+    },
+  });
+  child.unref();
+  return exe;
+}
+
+/**
+ * CG Designer open on a new project with ONE edit made, so it holds unsaved changes (`* Unsaved
+ * work`), and CG Control open and connected — the two apps an operator has open when he upgrades.
+ * `guarded`: these are apps with `D-162` / `R-094`'s close guard, and it is proved LIVE first — a close
+ * (WM_CLOSE) is HELD by each and asked about, then Cancel. Returns nothing: the apps stay open.
+ */
+async function openTheApps(label, ports, guarded) {
+  await webViewsGone();
+  const opened = launchDesigner(ports.designer);
+  check(`${label}: CG Designer is installed for this user`, opened !== null, String(opened));
+  const designer =
+    opened === null ? null : await Cdp.attach(ports.designer, APP_PAGE, 90_000).catch(() => null);
+  let unsaved = null;
+  if (designer !== null) {
+    await until(
+      'the Designer landing page',
+      () =>
+        designer.evaluate(() =>
+          [...document.querySelectorAll('button')].some(
+            (b) => b.getAttribute('aria-label') === 'New project',
+          ),
+        ),
+      60_000,
+    ).catch(() => false);
+    const made = await designer.evaluate(designerNewProject, 'Unsaved work');
+    unsaved = made.ok ? await designer.evaluate(designerEdit) : made.said;
+  }
+  check(
+    `${label}: CG Designer is open with unsaved changes (control: its title reads * Unsaved work)`,
+    unsaved === '* Unsaved work' && processCount('cg-designer.exe') === 1,
+    `${String(unsaved)}; ${String(processCount('cg-designer.exe'))} running`,
+  );
+  const control = await openControl(ports.control);
+  const live =
+    control === null
+      ? false
+      : await until(
+          'CG Control to reach CG Bridge',
+          () => control.evaluate(() => window.cg?.link?.status?.() === 'live'),
+          60_000,
+        ).catch(() => false);
+  check(
+    `${label}: CG Control is open, and connected`,
+    live && processCount('cg-control.exe') === 1,
+    `${String(live)}; ${String(processCount('cg-control.exe'))} running`,
+  );
+
+  if (guarded) {
+    for (const [name, image, page, title, key] of [
+      ['CG Designer', 'cg-designer.exe', designer, 'Unsaved changes', 'designer'],
+      ['CG Control', 'cg-control.exe', control, 'Close CG Control?', 'control'],
+    ]) {
+      if (page === null) continue;
+      sendClose(image);
+      const asked = await until(
+        `the ${title} dialog`,
+        () => page.evaluate(closeDialogProbe, title),
+        15_000,
+      ).catch(() => null);
+      check(
+        `${label}: CONTROL — the guard is LIVE: a close (WM_CLOSE) of ${name} is HELD and asks "${title}"`,
+        asked !== null && processCount(image) === 1,
+        `${JSON.stringify(asked)}; ${String(processCount(image))} running`,
+      );
+      await page.screenshot(`apps-open-${key}-held.png`);
+      await page.evaluate(pressInDialog, { title, label: 'Cancel' });
+      await sleep(1500);
+      check(
+        `${label}: …Cancel keeps ${name} open`,
+        processCount(image) === 1 && (await page.evaluate(closeDialogProbe, title)) === null,
+        `${String(processCount(image))} running`,
+      );
+    }
+  }
+  designer?.close();
+  control?.close();
+}
+
+/**
+ * 🔴 `RELEASE-0114-01-C` — **AN UPGRADE NEVER WAITS ON A DIALOG.** Tauri's NSIS ends a running app
+ * with `nsis_tauri_utils::KillProcessCurrentUser` — `OpenProcess(PROCESS_TERMINATE)` and
+ * `TerminateProcess` (nsis-tauri-utils `v0.5.3`, `crates/nsis-process/src/lib.rs`, `fn kill`), never a
+ * `WM_CLOSE` — so a close guard is never asked. Measured, twice, each installer bounded:
+ *
+ *   1. CG Control's and CG Designer's upgrades from `--from` over both `--from` apps OPEN, CG Designer
+ *      with unsaved changes (what an operator has open when he upgrades);
+ *   2. the same installers again over the UPGRADED apps — the ones with the close guard — open the
+ *      same way, the guard first proved live (a held WM_CLOSE, then Cancel): the case where a dialog
+ *      could stop an installer, and the one every later upgrade meets.
+ *
+ * Each: exit 0 within the bound, the open app ended, Installed apps this release. Across the phase,
+ * nothing on air is cleared — an app ended by an installer sends nothing to CasparCG.
+ */
+async function phaseUpgradeAppsOpen() {
+  const before = beforeUpgrade();
+  const mark = (await stationLines()).length;
+  const timings = [];
+  for (const [label, ports, guarded] of [
+    [`over the open ${OLD} apps`, { designer: 9250 + 72, control: 9250 + 73 }, false],
+    [
+      `over the open ${String(VERSION)} apps (the close guard)`,
+      { designer: 9250 + 74, control: 9250 + 75 },
+      true,
+    ],
+  ]) {
+    await openTheApps(label, ports, guarded);
+    for (const p of [
+      { name: 'CG Control', file: args.control, image: 'cg-control.exe' },
+      { name: 'CG Designer', file: args.designer, image: 'cg-designer.exe' },
+    ]) {
+      const running = processCount(p.image);
+      const started = Date.now();
+      const r = spawnSync(p.file, ['/S'], { windowsHide: true, timeout: UPGRADE_BOUND_MS });
+      const ms = Date.now() - started;
+      timings.push({
+        label,
+        product: p.name,
+        ms,
+        status: r.status,
+        error: r.error?.message ?? null,
+      });
+      check(
+        `${label}: ${p.name}'s installer (/S) exits 0 within ${String(UPGRADE_BOUND_MS / 1000)} s — it waited on no dialog`,
+        r.status === 0 && r.error === undefined,
+        `exit ${String(r.status)}${r.error === undefined ? '' : ` (${r.error.message})`}; ${String(ms)} ms`,
+      );
+      check(
+        `${label}: …the open ${p.name} was ended by it`,
+        running === 1 && processCount(p.image) === 0,
+        `${String(running)} running before, ${String(processCount(p.image))} after`,
+      );
+      check(
+        `${label}: …Installed apps lists ${String(VERSION)}`,
+        displayVersion('HKCU', p.name) === VERSION,
+        String(displayVersion('HKCU', p.name)),
+      );
+    }
+  }
+  fs.writeFileSync(path.join(OUT, 'apps-open-upgrade.json'), JSON.stringify(timings, null, 2));
+  await webViewsGone();
+  if (before === null) return;
+  const target = `${String(CHANNEL)}-${String(before.layer)}`;
+  const since = (await stationLines()).slice(mark);
+  const offAir = since.filter(
+    (l) =>
+      l === `CLEAR ${String(CHANNEL)}` ||
+      l === `CLEAR ${target}` ||
+      l.startsWith(`CG ${target} STOP`) ||
+      l.startsWith(`CG ${target} CLEAR`) ||
+      l.startsWith(`CG ${target} REMOVE`) ||
+      l === `MIXER ${target} CLEAR`,
+  );
+  check(
+    `NOTHING ON AIR WAS CLEARED while the open apps were upgraded: no CLEAR, CG STOP or MIXER CLEAR of ${target}`,
+    offAir.length === 0,
+    `${String(since.length)} lines; on air: ${offAir.join(' | ') || 'none'}`,
+  );
+  const seated = await stationLayer(CHANNEL, before.layer);
+  check(`…and the graphic is still on ${target}`, seated !== null, JSON.stringify(seated));
 }
 
 /** The upgraded CG Control: the station kept, the row still ON AIR, then cleared. */
@@ -1075,6 +1295,7 @@ const PHASES = {
   'install-classic': phaseInstallClassic,
   drive: phaseDrive,
   upgrade: phaseUpgrade,
+  'upgrade-apps-open': phaseUpgradeAppsOpen,
   'drive-upgraded': phaseDriveUpgraded,
   uninstall: phaseUninstall,
 };

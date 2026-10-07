@@ -68,6 +68,23 @@ window may close.
       Windows CI runner.
 - [ ] 5.2 **OWED** — the `smoke` job on the Windows runner, RAN and green, for the commit that
       carries this change: run URL here.
+- [x] 5.3 `RELEASE-0114-01-C` — the smoke's landing-page match was by TEXT (`New project`), and the
+      button reads `+ New project` (its NAME is `New project`): both `D-162` steps would have timed out
+      at the landing page. Matched by name; proved in local Chrome against the built Designer (the old
+      match finds nothing, the new one finds the button).
+- [x] 5.4 `RELEASE-0114-01-C` — the installed Designer's own work under its new capability, in the
+      smoke: a composition setting (duration 50 → 137), Save (`.cgproj`, a zip), Export (`.vcg`, a
+      zip), Open from Recent and File → Open (Ctrl+O) from another project — the setting read back
+      from the file both times. Windows' file pickers are replaced by OPFS files; the page's own save,
+      export and open code runs. Dry-run in local Chrome: every step passes (747-byte `.cgproj`,
+      136,805-byte `.vcg`, 137 read back twice).
+- [x] 5.5 The capability proof (`RELEASE-0114-01-C`): every command the Designer page invokes is
+      granted — 4 distinct (`keyboard_language`, `close_guard`, `close_request_seen`,
+      `close_window_now`) at 5 call sites, 4 registered in `generate_handler!`, 4 declared in
+      `build.rs`, 4 granted in `capabilities/designer.json`; no plugin, and the close reaches the page
+      by `eval` (no permission). CG Control: 7 distinct at 8 call sites, 7 / 7 / 7.
+- [x] 5.6 `sendClose`, the dialog probe and the Designer page functions are ONE copy,
+      `tests/desktop/app-window.mjs`, used by the smoke and the release acceptance.
 
 ## 6. Owed before this is done
 
@@ -77,6 +94,13 @@ window may close.
 - [ ] 6.2 **OWED** — the owner's hand check on the installed apps: Alt+F4 with focus inside the page,
       the taskbar's Close window, and a Windows sign-out with unsaved work (expected: not held — the
       app ends; `design.md` §0.3).
-- [ ] 6.3 **OWED** — confirm an upgrade with CG Designer open and edited does not wait on the dialog
-      (Tauri's NSIS `KillProcess` is believed to terminate, not post `WM_CLOSE`; not read from source).
-- [ ] 6.4 PRD items `D-162` and `R-094` flipped by the lead (not by this change).
+- [x] 6.3a Read from source (`RELEASE-0114-01-C`): `KillProcess(CurrentUser)` is a hard terminate —
+      nsis-tauri-utils `v0.5.3` (pinned by tauri-cli 2.11.5's bundler), `crates/nsis-process/src/lib.rs`
+      `fn kill`: `OpenProcess(PROCESS_TERMINATE)` + `TerminateProcess(handle, 1)`, never `WM_CLOSE`; under
+      `/S` (every CG Setup run) the template's OK/Cancel prompt is skipped. `design.md` §0.3.
+- [ ] 6.3b **OWED** — measured: the `acceptance-upgrade-0113` job's `upgrade-apps-open` phase, RAN and
+      green — CG Control's and CG Designer's installers over both apps open (Designer with unsaved
+      changes), from `0.11.3` and again over the guarded `0.11.4` apps (a held `WM_CLOSE` first);
+      each exits 0 within its bound, the app ended, nothing on air cleared. Run URL here.
+- [x] 6.4 PRD items `D-162` and `R-094` read `[~]` with this change dir (checked on `dev`,
+      `RELEASE-0114-01-C`: `docs/prd/designer.md`, `docs/prd/runtime.md`).
