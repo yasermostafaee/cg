@@ -1,6 +1,6 @@
 [package]
 name = "cg-control"
-version = "0.11.3"
+version = "0.11.4"
 description = "CG Control: the Runtime console and its CasparCG bridge, as one Windows app (ADR 0011)"
 edition = "2021"
 publish = false

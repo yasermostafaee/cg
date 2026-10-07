@@ -1,6 +1,6 @@
 {
   "name": "@cg/caspar-bridge",
-  "version": "0.11.3",
+  "version": "0.11.4",
   "private": true,
   "description": "Local CasparCG bridge (C-001): a localhost WebSocket server speaking the @cg/shared-ipc contract, backed by the real @cg/caspar-client stack (ServerSession + CommandQueue + OSC pipeline + Reconciler + LayerManager) in its native Node tier.",
   "type": "module",

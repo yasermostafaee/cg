@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.3`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0`, `0.11.1` and `0.11.2` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, `RELEASE-0112-01` to `0.11.2`, and `RELEASE-0113-01` moves it to `0.11.3`, the build the client receives (2026-10-05 — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.4`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0`, `0.11.1`, `0.11.2` and `0.11.3` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, `RELEASE-0112-01` to `0.11.2`, `RELEASE-0113-01` to `0.11.3`, and `RELEASE-0114-01` moves it to `0.11.4`, the build the client receives (2026-10-07 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1917,6 +1917,31 @@ console, and the floor's own consoles read the row; a wording for the older-cons
 **The `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a floor:**
 `0.11.3`'s installers upgrade each in place, settings kept, tested on a clean runner from each draft's own
 installers. That is a test of this release, not a promise to any one's formats.
+
+### 🔴 THE FLOOR MOVES — `0.11.4` (2026-10-07, `RELEASE-0114-01` Part D)
+
+**Why:** `0.11.3` was never installed at a station either. The owner's own test of it found Set up checking
+the wrong socket and stranding him with no CG Bridge answering (`B-317`, `R-090`–`R-093`), a dialog whose
+buttons left its frame (`B-319`), each installer showing the other app's art (`P-067`), and both installed
+apps closing at once with work unsaved (`D-162`, `R-094`). So the first build a client holds is `0.11.4`, and
+the floor is `0.11.4`. The `v0.11.3` draft is retitled "superseded, do not use" and stays a draft.
+
+**What it means:** the same list as the sections above, read at `0.11.4`. Nothing it covers moved: the five
+files that define the `.vcg` manifest and scene, the `.cgproj`, CG Bridge's `cg-bridge.json` and CG Control's
+station record read an empty `git diff v0.11.3` (2026-10-07, against a control file in the same command —
+`connection-check.ts`, 168 insertions and 160 deletions — that did change). CG Bridge gains no station file.
+CG Control's WebView2 storage gains one per-viewer convenience, `cg.runtime.check-show-all.v1` (whether the
+check shows its passing lines), which a `0.11.3` console never reads. The console ↔ CG Bridge protocol stays
+one release line (`0.11`), measured in both directions: the check's answer gains an OPTIONAL `bridgeProblems`,
+which a `0.11.3` console's plain `z.object` strips; and CG Bridge no longer sends the `ports` and `topology`
+lines, which a `0.11.3` console then does not show — it draws the answer's own lines
+(`PlayoutConnection.tsx`, `v0.11.3`, lines 222–223) — while a `0.11.4` console drops them by id from an
+older CG Bridge (`RETIRED_CHECK_IDS`).
+
+**The `0.11.3`, `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are carried forward, without being a
+floor:** `0.11.4`'s installers upgrade each in place, settings kept, tested on a clean runner from each
+draft's own installers — from `0.11.3` with CG Designer and CG Control OPEN through it (`RELEASE-0114-01-C`).
+That is a test of this release, not a promise to any one's formats.
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 

@@ -49,10 +49,82 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     shown: 'CG Bridge not reachable at',
     file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
   },
-  // `R-093` — the banner no longer explains why nothing answered (its three reasons are gone).
+  // `R-093` — the banner no longer explains why nothing answered (its three reasons are gone): its
+  // address, one fact, and the way back.
+  {
+    shown: 'Takes are refused until it is back.',
+    file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
+  },
   {
     shown: 'Set up again',
     file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
+  },
+  // `B-317` / `R-090` — Set up names where it found no CG Bridge; `R-091` — and, on this machine, the one step.
+  {
+    shown: 'CG Bridge is not answering at',
+    file: 'apps/runtime/src/renderer/features/firstRun/firstRunStation.ts',
+  },
+  {
+    shown: 'CG Bridge is installed here but not running.',
+    file: 'apps/runtime/src/renderer/features/firstRun/LocalBridgeHelp.tsx',
+  },
+  { shown: 'Start CG Bridge', file: 'apps/runtime/src/renderer/features/firstRun/LocalBridgeHelp.tsx' },
+  {
+    shown: 'CG Bridge is not installed here.',
+    file: 'apps/runtime/src/renderer/features/firstRun/LocalBridgeHelp.tsx',
+  },
+  {
+    shown: 'TCP 5280 here is held by',
+    file: 'apps/runtime/src/renderer/features/firstRun/LocalBridgeHelp.tsx',
+  },
+  { shown: 'Free the port', file: 'apps/runtime/src/renderer/features/firstRun/LocalBridgeHelp.tsx' },
+  // `R-092` — the check folds the passes of each group into one line; `Show all` opens them.
+  {
+    shown: 'Reachable · 4 OK',
+    text: '`${group.title} · ${String(passes)} OK`',
+    file: 'apps/runtime/src/renderer/features/firstRun/ConnectionCheckList.tsx',
+  },
+  {
+    shown: 'Show all',
+    text: "'Show less' : 'Show all'",
+    file: 'apps/runtime/src/renderer/features/firstRun/ConnectionCheckList.tsx',
+  },
+  // `R-094` — closing CG Control asks; `Close` is a window close and takes nothing off air.
+  {
+    shown: 'Close CG Control?',
+    text: 'title="Close CG Control?"',
+    file: 'apps/runtime/src/renderer/features/shell/CloseConsoleDialog.tsx',
+  },
+  {
+    shown: 'Close',
+    text: '\n            Close\n',
+    file: 'apps/runtime/src/renderer/features/shell/CloseConsoleDialog.tsx',
+  },
+  {
+    shown: 'Cancel',
+    text: '\n            Cancel\n',
+    file: 'apps/runtime/src/renderer/features/shell/CloseConsoleDialog.tsx',
+  },
+  // `D-162` — closing CG Designer with unsaved changes asks.
+  {
+    shown: 'Unsaved changes',
+    text: 'title="Unsaved changes"',
+    file: 'apps/designer/src/renderer/features/shell/UnsavedChangesDialog.tsx',
+  },
+  {
+    shown: 'Save',
+    text: '\n            Save\n',
+    file: 'apps/designer/src/renderer/features/shell/UnsavedChangesDialog.tsx',
+  },
+  {
+    shown: "Don't save",
+    text: '{"Don\'t save"}',
+    file: 'apps/designer/src/renderer/features/shell/UnsavedChangesDialog.tsx',
+  },
+  {
+    shown: 'Cancel',
+    text: '\n            Cancel\n',
+    file: 'apps/designer/src/renderer/features/shell/UnsavedChangesDialog.tsx',
   },
   {
     shown: 'CG Bridge needs a station admin to sign in',
