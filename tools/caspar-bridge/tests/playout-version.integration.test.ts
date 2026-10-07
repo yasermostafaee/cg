@@ -31,6 +31,7 @@ async function station(): Promise<{ handle: BridgeHandle; playout: FakePlayout }
       processes: async () => [],
       systemProxy: async () => null,
       portHolder: async () => ({ kind: 'free' }),
+      adapters: () => [],
     },
   });
   return { handle, playout };

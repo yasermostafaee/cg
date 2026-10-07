@@ -30,7 +30,9 @@ SHALL say `CG Bridge is not answering at <host>:<port>.` — never the console's
 `Sign in` usable (`B-317`). Signing in to the Playout SHALL NOT wait on CG Bridge: the form SHALL be locked only by
 a check line that says a sign-in cannot work. A loopback host in the sign-in or refresh address CG Bridge
 advertises SHALL be read as CG Bridge's own machine and rebased onto CG Bridge's host whenever the console reaches
-CG Bridge at a host that is not loopback.
+CG Bridge at a host that is not loopback. When the typed Playout's host is the CG Bridge host the check dials and
+CG Bridge names its own Playout by loopback on the same port, the console SHALL ask the check by the address CG
+Bridge knows its Playout by — the same Playout — so CG Bridge's before-sign-in narrowing, unchanged, still holds.
 
 #### Scenario: CG Bridge absent, then present, then gone
 
@@ -45,6 +47,8 @@ CG Bridge at a host that is not loopback.
 
 - **WHEN** CG Bridge at `192.168.21.111` advertises `http://127.0.0.1:8080/api/cg/auth/token` **THEN** the console
   signs in at `http://192.168.21.111:8080/api/cg/auth/token`
+- **WHEN** the typed Playout is `http://192.168.21.111:8080` and that CG Bridge names its Playout
+  `http://127.0.0.1:8080` **THEN** an unsigned console's check runs there, asked for `http://127.0.0.1:8080`
 
 ### Requirement: The check SHALL say nothing about the machine the console runs on
 
@@ -59,7 +63,7 @@ a port it cannot open, the check SHALL show it as a failure naming CG Bridge's h
 
 #### Scenario: A port CG Bridge cannot open
 
-- **WHEN** `/health` lists `port-held` for UDP 6251 held by `casparcg.exe` (PID 4321) **THEN** the check shows
+- **WHEN** `/health` lists `port-refused` for UDP 6251 held by `casparcg.exe` (PID 4321) **THEN** the check shows
   `CG Bridge on <host> cannot open UDP 6251 (OSC from CasparCG): held by casparcg.exe (PID 4321).` as a failure
 
 ### Requirement: CG Control SHALL offer to start CG Bridge on its own machine

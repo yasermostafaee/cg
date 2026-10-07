@@ -35,11 +35,14 @@
 4. **Rebase, don't rewrite configuration.** A loopback host in CG Bridge's advertised sign-in/refresh URL is
    replaced by the host the console reached CG Bridge at, only when that host is not loopback. One place:
    where the capabilities are adopted.
-5. **The narrowing accepts CG Bridge's own machine** only for a loopback-configured Playout and only for the same
-   scheme and port: still this station's Playout, never a network probe for an unsigned caller.
+5. **The before-sign-in narrowing is NOT changed** (the prompt's hard stop: no refusal condition changes). Instead
+   the console asks the check by the address CG Bridge knows its own Playout by, when the typed host is the CG
+   Bridge host it dialled and CG Bridge names its Playout by loopback on the same port: the same Playout, seen from
+   CG Bridge's machine, and still "this station's own Playout" to the narrowing.
 6. **`ports` and `topology` stay in the wire enum** so an older CG Bridge's answer still parses; the new CG Bridge
-   never sends them and the console drops them. CG Bridge's own port trouble comes from `/health` (`port-held`,
-   read with `cors: *`; the holder looked up when the bind fails).
+   never sends them and the console drops them. CG Bridge's own port trouble comes from `/health` — the existing,
+   never-emitted code `port-refused`, so no enum grows that another CG Bridge's guard parses (`B-313`); read with
+   `cors: *`; the holder looked up when the bind fails.
 7. **VPN/proxy:** the line is a finding, not a process list. A proxy counts only with a listener (or a non-local
    host); a tunnel adapter counts when up (Teredo/ISATAP/6to4 excluded); red needs the route to the Playout or
    CasparCG through the tunnel. CG Bridge's own requests never use the system proxy (`playout-http.ts`), so a

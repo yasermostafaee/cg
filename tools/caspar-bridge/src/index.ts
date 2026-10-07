@@ -30,7 +30,6 @@ export {
   type CheckProbes,
   type HttpAnswer,
   type PortHolder,
-  type StationPorts,
 } from './connection-check.js';
 export { playoutHostOf } from './bridge.js';
 // `DESKTOP-APPS-01-B` B1.4 — every bridge request to the Playout: server-side, no Origin, no proxy.

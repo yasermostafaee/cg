@@ -24,7 +24,8 @@ import type { ShownCheckLine } from './firstRunStation.js';
  * F (the owner, 2026-09-26): a passing line's ✓ IS green now — in its OWN token, `checkPass`, a
  * quieter green of a third the saturation (`theme.ts` measures the two side by side), so the rule
  * above still holds: `onAir` stays reserved for air. Only the ICON takes it; the line's text keeps
- * its ink. A failure is the error ink; the topology advice is a warning; a link not judged yet
+ * its ink. A failure is the error ink; a finding that is advice (a VPN or proxy that intercepts
+ * nothing of ours, `B-318`) is a warning; a link not judged yet
  * (`DESKTOP-APPS-01-B`: AMCP before a station admin signs in) is the quiet ink with a clock —
  * neutral, never a failure.
  *

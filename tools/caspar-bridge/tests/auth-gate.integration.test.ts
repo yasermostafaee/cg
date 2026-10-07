@@ -233,8 +233,7 @@ describe('DELTA-MULTI-CHANNEL-01-B B1 — the check answers before any sign-in, 
     processes: async () => [],
     systemProxy: async () => null,
     portHolder: async () => ({ kind: 'free' }),
-    localAddresses: () => [],
-    resolve: async (host) => [host],
+    adapters: () => [],
   });
   const CONSOLE = 'http://127.0.0.1:5174';
 

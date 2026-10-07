@@ -6,6 +6,7 @@ import {
   defaultFixedLayerBank,
   engineStateText,
   fiveRowVisibility,
+  RETIRED_CHECK_IDS,
   sameReleaseLine,
   versionMismatchRefusal,
   type CatalogueChannel,
@@ -289,11 +290,17 @@ export function checkingLines(address: string): readonly ShownCheckLine[] {
   } catch {
     // Not a URL: the subjects name what was typed.
   }
-  return CONNECTION_CHECK_IDS.map((id) => ({
+  // `R-090` — the retired `ports` and `topology` are never shown, so never shown checking either.
+  return CONNECTION_CHECK_IDS.filter((id) => !RETIRED_CHECK_IDS.includes(id)).map((id) => ({
     id,
     status: 'checking',
     text: connectionCheckSubject(id, host, port),
   }));
+}
+
+/** `R-090` — an older CG Bridge's `ports` and `topology` lines, dropped: they judged its own machine. */
+export function currentCheckLines<T extends { readonly id: string }>(lines: readonly T[]): T[] {
+  return lines.filter((l) => !(RETIRED_CHECK_IDS as readonly string[]).includes(l.id));
 }
 
 /**

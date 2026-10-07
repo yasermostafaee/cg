@@ -11,6 +11,7 @@ import { ConnectionCheckList } from './ConnectionCheckList.js';
 import {
   checkingLines,
   consoleCheckLines,
+  currentCheckLines,
   markChecking,
   normalisePlayoutAddress,
   signInCanWork,
@@ -217,10 +218,9 @@ export function PlayoutConnection({
         origin: window.location.origin,
         ...(mode === 'auto' ? { awaitLetIn: true as const } : {}),
       });
-      shown =
-        waiting !== null && before !== null
-          ? updateOnly(before, waiting, result.lines)
-          : result.lines;
+      // `R-090` — an older CG Bridge's `ports`/`topology` lines are dropped here, where its answer lands.
+      const fresh = currentCheckLines(result.lines);
+      shown = waiting !== null && before !== null ? updateOnly(before, waiting, fresh) : fresh;
       show(shown);
     } catch (err) {
       // C2 — a bridge that did not answer is said in words (`BridgeTimeoutError`'s message), and

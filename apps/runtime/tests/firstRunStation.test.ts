@@ -11,7 +11,9 @@ import {
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import {
+  checkingLines,
   commitFirstRun,
+  currentCheckLines,
   declareChannelSet,
   declareFirstRunChannels,
   firstRunBank,
@@ -40,6 +42,29 @@ const current: ConnectionConfig = {
   autoFailoverEnabled: true,
   templateServeHost: '10.0.0.1',
 };
+
+describe('🔴 R-090 — nothing about the machine the console runs on', () => {
+  it('an older CG Bridge’s `ports` and `topology` lines are dropped; every other line is kept, in order', () => {
+    const older: ConnectionCheckLine[] = [
+      { id: 'proxy', status: 'pass', text: 'p' },
+      {
+        id: 'ports',
+        status: 'pass',
+        text: 'Ports 5280, 7911 and 6251/udp are free for this station.',
+      },
+      { id: 'api', status: 'pass', text: 'a' },
+      { id: 'topology', status: 'warn', text: 'The Playout and CasparCG run on this machine.' },
+    ];
+    expect(currentCheckLines(older).map((l) => l.id)).toEqual(['proxy', 'api']);
+  });
+
+  it('a running check shows no retired subject; control: the probed and station lines are all there', () => {
+    const ids = checkingLines('http://192.0.2.10:8080').map((l) => l.id);
+    expect(ids).not.toContain('ports');
+    expect(ids).not.toContain('topology');
+    expect(ids).toEqual(expect.arrayContaining(['proxy', 'route', 'amcp', 'api', 'cors', 'osc']));
+  });
+});
 
 describe('the bank first-run declares', () => {
   it('is the chosen channel on the default bands, with EVERY row shown', () => {

@@ -33,7 +33,7 @@ const PLAYOUT_OFF: ConnectionCheckResult = {
     {
       id: 'route',
       status: 'pass',
-      text: 'The route to 127.0.0.1 leaves through Loopback (127.0.0.1).',
+      text: "CG Bridge's route to 127.0.0.1 leaves through Loopback (127.0.0.1).",
     },
     { id: 'amcp', status: 'fail', text: '127.0.0.1 refused the connection on port 5250.' },
     { id: 'api', status: 'fail', text: 'No answer from 127.0.0.1 on port 8080.' },
@@ -42,12 +42,6 @@ const PLAYOUT_OFF: ConnectionCheckResult = {
       status: 'skip',
       text: 'Sign-in from this console: not checked — the Playout does not answer.',
     },
-    {
-      id: 'ports',
-      status: 'pass',
-      text: 'Ports 5174, 5280, 7911 and 6250/udp are free for this station.',
-    },
-    { id: 'topology', status: 'pass', text: 'The Playout and CasparCG run on other machines.' },
   ],
   localAddress: '127.0.0.1',
 };
@@ -59,17 +53,11 @@ const PLAYOUT_ON: ConnectionCheckResult = {
     {
       id: 'route',
       status: 'pass',
-      text: 'The route to 127.0.0.1 leaves through Loopback (127.0.0.1).',
+      text: "CG Bridge's route to 127.0.0.1 leaves through Loopback (127.0.0.1).",
     },
     { id: 'amcp', status: 'pass', text: 'CasparCG on 127.0.0.1 answered VERSION: 2.3.2.' },
     { id: 'api', status: 'pass', text: 'The Playout answers and publishes 1 signing key.' },
     { id: 'cors', status: 'pass', text: 'The Playout accepts sign-in from this console.' },
-    {
-      id: 'ports',
-      status: 'pass',
-      text: 'Ports 5174, 5280, 7911 and 6250/udp are free for this station.',
-    },
-    { id: 'topology', status: 'pass', text: 'The Playout and CasparCG run on other machines.' },
   ],
   localAddress: '127.0.0.1',
 };
@@ -196,7 +184,10 @@ describe('CHECK-RERUN-01 A — a (re-)check starts clean', () => {
     await pressCheck();
     expect(check).toHaveBeenCalledTimes(2);
     const during = shown();
-    expect(during.map((l) => l.id)).toEqual([...CONNECTION_CHECK_IDS]);
+    // `R-090` — every id but the retired `ports` and `topology`, which are never shown.
+    expect(during.map((l) => l.id)).toEqual(
+      CONNECTION_CHECK_IDS.filter((id) => id !== 'ports' && id !== 'topology'),
+    );
     for (const l of during) expect(l.status, l.id ?? '').toBe('checking');
     expect(verdictMarks()).toBe(0);
     // Each line is its subject with no verdict — none of the last run's words survive.
@@ -289,15 +280,15 @@ const WAITS_FOR_SIGN_IN = withAmcp({
   status: 'wait',
   text: 'CasparCG on 127.0.0.1: waiting for sign-in.',
 });
-/** Just after it: the AMCP line waits for the Playout to let this machine in. */
+/** Just after it: the AMCP line waits for the Playout to let CG Bridge's machine in. */
 const WAITS_FOR_TRUST = withAmcp({
   status: 'wait',
-  text: 'CasparCG on 127.0.0.1: waiting for the Playout to let this machine in.',
+  text: "CasparCG on 127.0.0.1: waiting for the Playout to let CG Bridge's machine in.",
 });
 /** The trust window over and the machine not let in: the bridge names the approval. */
 const NEEDS_APPROVAL = withAmcp({
   status: 'fail',
-  text: 'This machine (127.0.0.1) is waiting for approval in the Playout.',
+  text: "CG Bridge's machine (127.0.0.1) is waiting for approval in the Playout.",
 });
 
 /** What the spec asked the bridge for, run by run. */

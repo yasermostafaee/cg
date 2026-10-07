@@ -262,12 +262,14 @@ import { AuthSession } from './auth-session.js';
 import {
   AMCP_PROBE_TIMEOUT_MS,
   AMCP_TRUST_WINDOW_MS,
+  portHolderOf,
   probeRoute,
   realProbes,
   runConnectionCheck,
   withStationLines,
   type CheckOptions,
   type CheckProbes,
+  type PortHolder,
 } from './connection-check.js';
 import { pinnedIPv4, playoutFetchForSession } from './playout-http.js';
 import { BridgeSession } from './bridge-session.js';
@@ -592,6 +594,8 @@ export interface BridgeOptions {
   playoutAuthOptions?: PlayoutAuthOptions;
   /** TEST-ONLY seam — the connection check's probes (`realProbes()` by default). */
   connectionCheckProbes?: CheckProbes;
+  /** TEST-ONLY seam — who holds a port this bridge could not open (`R-090`; `portHolderOf` by default). */
+  portHolderOf?: (protocol: 'tcp' | 'udp', port: number) => Promise<PortHolder>;
   /** TEST-ONLY seam — the check's bounds and AMCP window, so a suite need not wait 30 s. */
   connectionCheckOptions?: Pick<CheckOptions, 'amcpTrustWindowMs' | 'lineMs' | 'connectMs'>;
   /**
@@ -2224,8 +2228,33 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     command it sends (the connect handshake) is written too. Every exchange of every session.
   */
   const amcpLog = options.amcpLogPath === undefined ? null : new AmcpLog(options.amcpLogPath);
+  /*
+    🔴 `R-090` — A PORT THIS BRIDGE CANNOT OPEN, AND WHAT HOLDS IT, for `/health` (`port-refused`): the
+    console says it naming this machine ("CG Bridge on <host> cannot open UDP 6251 …"). The holder is
+    read when the bind fails — never on the `/health` request path — one problem per port.
+  */
+  const portRefusals = new Map<string, HealthProblem>();
+  const notePortRefused = (protocol: 'tcp' | 'udp', port: number, role: string): void => {
+    const key = `${protocol}:${String(port)}`;
+    if (portRefusals.has(key)) return;
+    const head = `cannot open ${protocol.toUpperCase()} ${String(port)} (${role})`;
+    portRefusals.set(key, { code: 'port-refused', message: `${head}.` });
+    void (options.portHolderOf ?? portHolderOf)(protocol, port)
+      .then((holder) => {
+        if (holder.kind !== 'other') return;
+        const pid = holder.pid === null ? '' : ` (PID ${String(holder.pid)})`;
+        portRefusals.set(key, {
+          code: 'port-refused',
+          message: `${head}: held by ${holder.name}${pid}.`,
+        });
+      })
+      .catch(() => undefined);
+  };
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     amcpAddressFor,
+    onOscUnbound: (_server, port) => {
+      notePortRefused('udp', port, 'OSC from CasparCG');
+    },
     ...(amcpLog !== null
       ? {
           onAmcpExchange: (exchange: AmcpLogEntry) => {
@@ -2729,22 +2758,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // The control port is known only once it has bound; the check reads it at call time.
   const bound = { port: requestedPort };
   const connectionCheck = (req: ConnectionCheckRequest): Promise<ConnectionCheckResult> => {
-    const ports = {
-      console: options.consolePort ?? null,
-      control: bound.port,
-      templates: runtime.templateServe?.port ?? 0,
-      osc: runtime.config().servers.A.oscPort,
-    };
+    // This bridge's own ports, so a probe of one (the proxy's listener) never names CG Bridge itself.
     const probes =
       options.connectionCheckProbes ??
       realProbes([
-        { proto: 'tcp', port: ports.control },
-        { proto: 'tcp', port: ports.templates },
-        { proto: 'udp', port: ports.osc },
-        ...(ports.console !== null ? [{ proto: 'tcp' as const, port: ports.console }] : []),
+        { proto: 'tcp', port: bound.port },
+        { proto: 'tcp', port: runtime.templateServe?.port ?? 0 },
+        { proto: 'udp', port: runtime.config().servers.A.oscPort },
+        ...(options.consolePort !== undefined
+          ? [{ proto: 'tcp' as const, port: options.consolePort }]
+          : []),
       ]);
+    // 🔴 `R-090` — no `ports` option: the check judges no port of the machine it runs on.
     return runConnectionCheck(req, probes, {
-      ports,
       // C7 — the AMCP line's phase: waiting for a sign-in, for the Playout, or for approval.
       amcpSignInAt: stationAdminSignedInAt,
       ...(options.connectionCheckOptions ?? {}),
@@ -3436,7 +3462,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       })(),
       consoles: wss.clients.size,
       ports: { control: port, templates: templateServe.port, osc: servers.A.oscPort },
-      portProblems,
+      portProblems: [...portProblems, ...portRefusals.values()],
     });
   };
 
@@ -4282,14 +4308,7 @@ export function buildRoutes(
   const connectionCheck =
     paths.connectionCheck ??
     ((req: ConnectionCheckRequest): Promise<ConnectionCheckResult> =>
-      runConnectionCheck(req, realProbes(), {
-        ports: {
-          console: null,
-          control: DEFAULT_BRIDGE_PORT,
-          templates: 0,
-          osc: b.config().servers.A.oscPort,
-        },
-      }));
+      runConnectionCheck(req, realProbes(), {}));
   /*
     🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **BEFORE ANY SIGN-IN, THE CHECK PROBES THIS STATION'S
     PLAYOUT AND NOTHING ELSE.** The check reaches out — HTTP to the address it is given, AMCP to

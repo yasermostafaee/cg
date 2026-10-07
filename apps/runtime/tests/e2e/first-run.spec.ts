@@ -422,8 +422,6 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
     'amcp',
     'api',
     'cors',
-    'ports',
-    'topology',
     'osc',
     'license',
     'channels',

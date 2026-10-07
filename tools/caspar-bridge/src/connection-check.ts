@@ -115,11 +115,19 @@ export class ProbeError extends Error {
   }
 }
 
+/** A running process: its image name, and its PID when the listing gave one. */
+export interface RunningProcess {
+  readonly name: string;
+  readonly pid: number | null;
+}
+
 export interface CheckProbes {
-  /** Image names of running processes (Windows `tasklist`); empty where not read. */
-  processes(): Promise<readonly string[]>;
+  /** Running processes (Windows `tasklist`); empty where not read. */
+  processes(): Promise<readonly RunningProcess[]>;
   /** The system proxy when one is ON, with its bypass list; `null` when off or not read. */
   systemProxy(): Promise<{ server: string; bypass: readonly string[] } | null>;
+  /** `B-318` — the names of this machine's network adapters that are up (they hold an address). */
+  adapters(): readonly string[];
   route(host: string): Promise<ProbeRoute | null>;
   /** `DESKTOP-APPS-01-C` C6 — the host's one IPv4 address, or `null` when it has none. */
   ipv4(host: string): Promise<string | null>;
@@ -132,17 +140,6 @@ export interface CheckProbes {
     bounds: RequestBounds,
   ): Promise<HttpAnswer>;
   portHolder(proto: 'tcp' | 'udp', port: number): Promise<PortHolder>;
-  /** Every address this machine answers on, loopback included. */
-  localAddresses(): readonly string[];
-  resolve(host: string): Promise<readonly string[]>;
-}
-
-/** The station's own ports, as this process bound them. */
-export interface StationPorts {
-  readonly console: number | null;
-  readonly control: number;
-  readonly templates: number;
-  readonly osc: number;
 }
 
 /** How long one line took, and what it came to — `DESKTOP-APPS-01-C` C1's instrument. */
@@ -153,7 +150,6 @@ export interface LineTiming {
 }
 
 export interface CheckOptions {
-  readonly ports: StationPorts;
   readonly amcpTimeoutMs?: number;
   /**
    * `DESKTOP-APPS-01-B`/`-C` — when a `station-admin` last signed in to this bridge (epoch ms), or
@@ -197,19 +193,29 @@ const KNOWN_INTERCEPTORS: readonly { match: RegExp; name: string }[] = [
 const TUNNEL_IFACE =
   /tun|tap|wintun|wireguard|\bwg\d|v2ray|xray|sing-?box|clash|mihomo|neko|hiddify|openvpn|vpn|zerotier|tailscale|\bppp/i;
 
+/** Windows' own IPv6 transition pseudo-interfaces: "Tunneling" in the name, and no VPN behind it. */
+const PSEUDO_IFACE = /teredo|isatap|6to4|pseudo-interface/i;
+
 function hostOf(url: string): string {
   return new URL(url).hostname.replace(/^\[|\]$/g, '');
 }
 
-/** Windows proxy bypass: `;`-separated globs, and `<local>` for names with no dot. */
-function bypassed(host: string, bypass: readonly string[]): boolean {
-  return bypass.some((entry) => {
-    const e = entry.trim().toLowerCase();
-    if (e === '') return false;
-    if (e === '<local>') return !host.includes('.');
-    const re = new RegExp(`^${e.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
-    return re.test(host.toLowerCase());
-  });
+/**
+ * `B-318` — the host and port a Windows proxy setting points at: `127.0.0.1:10808`, the first entry of
+ * `http=127.0.0.1:10808;https=…`, or a PAC URL's own host. `null` when it names no host.
+ */
+export function proxyEndpoint(server: string): { host: string; port: number | null } | null {
+  const first = (server.split(';')[0] ?? '').trim().replace(/^[a-z]+=/i, '');
+  const m = /^(?:[a-z][a-z0-9+.-]*:\/\/)?(\[[^\]]+\]|[^:/\s]+)(?::(\d{1,5}))?/i.exec(first);
+  const host = m?.[1];
+  if (m === null || host === undefined) return null;
+  return { host: host.replace(/^\[|\]$/g, ''), port: m[2] === undefined ? null : Number(m[2]) };
+}
+
+/** A host that can only be this machine. */
+function isLoopbackHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h === 'localhost' || h === '::1' || /^127\./.test(h);
 }
 
 /**
@@ -341,11 +347,15 @@ export async function runConnectionCheck(
       .amcp(ip, AMCP_PORT, options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS)
       .catch((): AmcpOutcome => ({ kind: 'unreachable', code: 'error' }));
 
-  const [proxy, route, amcp, api, cors, ports, topology, playoutVersion] = await Promise.all([
-    // 1 — a VPN or proxy between this machine and the plant.
+  const [proxy, route, amcp, api, cors, playoutVersion] = await Promise.all([
+    // 1 — a VPN or proxy on CG Bridge's machine (`B-318`): red only for a route through its tunnel.
     line(
       'proxy',
-      () => checkInterceptors(probes, playoutHost),
+      async () =>
+        checkInterceptors(probes, [
+          { host: playoutHost, route: await playoutRoute },
+          ...(casparHost === playoutHost ? [] : [{ host: casparHost, route: await casparRoute }]),
+        ]),
       (): ConnectionCheckLine => ({
         id: 'proxy',
         status: 'warn',
@@ -416,27 +426,14 @@ export async function runConnectionCheck(
         text: `No answer from ${playoutHost} on port ${portOf(endpoints.tokenUrl)}.`,
       }),
     ),
-    // 6 — our ports: this station's, or free, or held by somebody we can name.
-    line(
-      'ports',
-      () => checkPorts(probes, options.ports),
-      (): ConnectionCheckLine => ({
-        id: 'ports',
-        status: 'warn',
-        text: 'The port check did not finish in time.',
-      }),
-    ),
-    // 7 — topology: the Playout or CasparCG on THIS machine.
-    line(
-      'topology',
-      () => checkTopology(probes, playoutHost, casparHost),
-      (): ConnectionCheckLine => ({
-        id: 'topology',
-        status: 'warn',
-        text: 'The machine check did not finish in time.',
-      }),
-    ),
-    // 8 — `R-084`: the Playout's own version, asked with no token. Not served is a fact, never a
+    /*
+      🔴 `R-090` — NO `ports` AND NO `topology` LINE. They judged the machine CG Bridge runs on — its
+      ports, and whether the Playout and CasparCG run there — from the era when CG Control carried its
+      own bridge, and read on a console as verdicts about the console's machine. A console may run
+      anywhere; CG Bridge's ports are its own, said by its `/health` (`port-held`). The ids stay in the
+      wire enum only so an older CG Bridge's answer still parses; the console drops them.
+    */
+    // 6 — `R-084`: the Playout's own version, asked with no token. Not served is a fact, never a
     // refusal: no other line reads it, and nothing waits on it.
     line(
       'playout-version',
@@ -455,7 +452,7 @@ export async function runConnectionCheck(
     casparHost,
     options,
   });
-  const all = [proxy, route, needing.amcp, api.line, needing.cors, ports, topology, playoutVersion];
+  const all = [proxy, route, needing.amcp, api.line, needing.cors, playoutVersion];
   // C1 — every line's time and its outcome as worded, in the order the lines finished.
   const timings = all
     .map((l): LineTiming => {
@@ -726,62 +723,114 @@ function routeLine(host: string, ip: string | null, route: ProbeRoute | null): C
       text: `${host} has no IPv4 address. CG Control reaches the Playout over IPv4 — type its IPv4 address.`,
     };
   }
+  // `R-090` — the route is CG Bridge's: said as CG Bridge's, never "this machine's".
   if (route === null) {
     return {
       id: 'route',
       status: 'fail',
-      text: `There is no route to ${host}. Check this machine's network cable and address.`,
+      text: `CG Bridge's machine has no route to ${host}.`,
     };
   }
   if (TUNNEL_IFACE.test(route.iface)) {
     return {
       id: 'route',
       status: 'fail',
-      text: `The route to ${host} goes through ${route.iface}, a tunnel. Turn it off, then check again.`,
+      text: `CG Bridge's route to ${host} goes through ${route.iface}, a tunnel. Turn it off, then check again.`,
     };
   }
   return {
     id: 'route',
     status: 'pass',
-    text: `The route to ${host} leaves through ${route.iface} (${route.address}).`,
+    text: `CG Bridge's route to ${host} leaves through ${route.iface} (${route.address}).`,
   };
 }
 
+/** `name (PID n)`, or the name alone when the listing gave no PID. */
+function withPid(name: string, pid: number | null): string {
+  return pid === null ? name : `${name} (PID ${String(pid)})`;
+}
+
+/** `a`, `a and b`, `a, b and c`. */
+function listed(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? '';
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1] ?? ''}`;
+}
+
+/**
+ * 🔴 `B-318` — **A VPN OR PROXY, EXACT OR NOT AT ALL.** The line used to FAIL whenever a process named
+ * like v2rayN ran — "even with its TUN off" — before it looked at anything that intercepts. It runs on
+ * CG Bridge's machine, so the owner quit v2rayN on his own PC and the line stayed: it was another
+ * machine's process. Now a line appears only while something ACTUALLY intercepts there:
+ *
+ *   - a system proxy that is on AND has a listener on its address (a setting left behind with
+ *     nothing listening is no proxy at all); a proxy on another host is taken as live;
+ *   - a tunnel adapter that is up (Windows' Teredo/ISATAP/6to4 pseudo-interfaces are not tunnels);
+ *   - a route to the Playout's or CasparCG's host that leaves through a tunnel.
+ *
+ * It names what it found — the proxy and the process holding it, the adapter, any known client with
+ * its PID — and is a WARNING: CG Bridge's own requests never use the system proxy (`playout-http.ts`)
+ * and a tunnel up beside a LAN route takes nothing of ours. It is a FAILURE only when the route to the
+ * Playout or CasparCG goes through the tunnel — the one case that is proved to intercept our traffic.
+ */
 async function checkInterceptors(
   probes: CheckProbes,
-  playoutHost: string,
+  targets: readonly { readonly host: string; readonly route: ProbeRoute | null }[],
 ): Promise<ConnectionCheckLine> {
-  // Three independent readings, read together: the line's bound covers the slowest, not the sum.
-  const [running, proxy, outward] = await Promise.all([
-    probes.processes().catch((): readonly string[] => []),
+  // Independent readings, read together: the line's bound covers the slowest, not the sum.
+  const [running, proxy] = await Promise.all([
+    probes.processes().catch((): readonly RunningProcess[] => []),
     probes.systemProxy().catch(() => null),
-    probes.route('8.8.8.8').catch(() => null),
   ]);
-  const found = KNOWN_INTERCEPTORS.find(({ match }) =>
-    running.some((p) => match.test(p.replace(/\.exe$/i, ''))),
+  const clients: string[] = [];
+  for (const p of running) {
+    const known = KNOWN_INTERCEPTORS.find(({ match }) => match.test(p.name.replace(/\.exe$/i, '')));
+    if (known !== undefined) clients.push(withPid(known.name, p.pid));
+  }
+
+  const findings: string[] = [];
+  if (proxy !== null) {
+    const at = proxyEndpoint(proxy.server);
+    if (at === null || !isLoopbackHost(at.host)) {
+      findings.push(`the Windows proxy ${proxy.server} is on`);
+    } else if (at.port !== null) {
+      const holder = await probes
+        .portHolder('tcp', at.port)
+        .catch((): PortHolder => ({ kind: 'free' }));
+      // Nothing listening there: a setting left behind, which intercepts nothing.
+      if (holder.kind === 'other') {
+        findings.push(
+          `the Windows proxy ${proxy.server} is on, held by ${withPid(holder.name, holder.pid)}`,
+        );
+      }
+    }
+  }
+  for (const name of probes.adapters()) {
+    if (TUNNEL_IFACE.test(name) && !PSEUDO_IFACE.test(name))
+      findings.push(`the tunnel ${name} is up`);
+  }
+  const through = targets.filter(
+    (t): t is { host: string; route: ProbeRoute } =>
+      t.route !== null && TUNNEL_IFACE.test(t.route.iface) && !PSEUDO_IFACE.test(t.route.iface),
   );
-  if (found !== undefined) {
+  if (findings.length === 0 && through.length === 0) {
+    return { id: 'proxy', status: 'pass', text: 'No VPN or proxy in the way.' };
+  }
+  const alongside = clients.length === 0 ? '' : `; running: ${listed(clients)}`;
+  if (through.length > 0) {
+    const iface = through[0]?.route.iface ?? '';
     return {
       id: 'proxy',
       status: 'fail',
-      text: `${found.name} is running and can intercept this machine's traffic, even with its TUN off. Quit it, then check again.`,
+      text:
+        `CG Bridge's traffic to ${listed(through.map((t) => t.host))} goes through the tunnel ` +
+        `${iface}${alongside}. Turn it off, then check again.`,
     };
   }
-  if (proxy !== null && !bypassed(playoutHost, proxy.bypass)) {
-    return {
-      id: 'proxy',
-      status: 'fail',
-      text: `Windows sends web traffic through a proxy (${proxy.server}). Turn it off, or add ${playoutHost} to its exceptions, then check again.`,
-    };
-  }
-  if (outward !== null && TUNNEL_IFACE.test(outward.iface)) {
-    return {
-      id: 'proxy',
-      status: 'fail',
-      text: `A tunnel (${outward.iface}) carries this machine's traffic. Turn it off, then check again.`,
-    };
-  }
-  return { id: 'proxy', status: 'pass', text: 'No VPN or proxy in the way.' };
+  return {
+    id: 'proxy',
+    status: 'warn',
+    text: `On CG Bridge's machine, ${listed(findings)}${alongside}.`,
+  };
 }
 
 /** A refusal or a drop: how a Playout 2.8.54 answers a machine it has not let in. */
@@ -823,17 +872,19 @@ function amcpLineFor(
     return {
       id: 'amcp',
       status: 'wait',
-      text: `${subject}: waiting for the Playout to let this machine in.`,
+      text: `${subject}: waiting for the Playout to let CG Bridge's machine in.`,
     };
   }
-  const machine = localAddress === null ? 'This machine' : `This machine, ${localAddress},`;
+  // `R-090` — the machine the Playout approves is CG Bridge's, wherever the console that reads this runs.
+  const machine =
+    localAddress === null ? "CG Bridge's machine" : `CG Bridge's machine, ${localAddress},`;
   return {
     id: 'amcp',
     status: 'fail',
     text:
       `${machine} is waiting for approval in the Playout, at ${PLAYOUT_CG_SETTINGS}, where the ` +
-      "Playout's administrator approves it. If it is not listed there, this machine reaches the " +
-      'Playout through NAT, a proxy or a VPN.',
+      "Playout's administrator approves it. If it is not listed there, CG Bridge's machine reaches " +
+      'the Playout through NAT, a proxy or a VPN.',
   };
 }
 
@@ -1004,73 +1055,6 @@ async function checkCors(
     : refused;
 }
 
-async function checkPorts(probes: CheckProbes, ports: StationPorts): Promise<ConnectionCheckLine> {
-  const wanted: { proto: 'tcp' | 'udp'; port: number }[] = [
-    ...(ports.console !== null ? [{ proto: 'tcp' as const, port: ports.console }] : []),
-    { proto: 'tcp', port: ports.control },
-    { proto: 'tcp', port: ports.templates },
-    { proto: 'udp', port: ports.osc },
-  ];
-  const label = (p: { proto: 'tcp' | 'udp'; port: number }): string =>
-    p.proto === 'udp' ? `${String(p.port)}/udp` : String(p.port);
-  const taken: string[] = [];
-  for (const p of wanted) {
-    const holder = await probes
-      .portHolder(p.proto, p.port)
-      .catch((): PortHolder => ({ kind: 'free' }));
-    if (holder.kind === 'other') {
-      taken.push(
-        `${label(p)} is held by ${holder.name}${holder.pid !== null ? ` (PID ${String(holder.pid)})` : ''}`,
-      );
-    }
-  }
-  if (taken.length > 0) {
-    return {
-      id: 'ports',
-      status: 'fail',
-      text: `${taken.join('; ')}. Stop that program, or run CG Control on another machine.`,
-    };
-  }
-  const list = wanted.map(label);
-  return {
-    id: 'ports',
-    status: 'pass',
-    text: `Ports ${list.slice(0, -1).join(', ')} and ${list[list.length - 1] ?? ''} are free for this station.`,
-  };
-}
-
-async function checkTopology(
-  probes: CheckProbes,
-  playoutHost: string,
-  casparHost: string,
-): Promise<ConnectionCheckLine> {
-  const mine = new Set(probes.localAddresses());
-  const isHere = async (host: string): Promise<boolean> => {
-    const addresses = await probes.resolve(host).catch(() => [host]);
-    return addresses.some((a) => mine.has(a) || a.startsWith('127.') || a === '::1');
-  };
-  const playoutHere = await isHere(playoutHost);
-  const casparHere = casparHost === playoutHost ? playoutHere : await isHere(casparHost);
-  if (playoutHere || casparHere) {
-    const which =
-      playoutHere && casparHere
-        ? 'The Playout and CasparCG run'
-        : playoutHere
-          ? 'The Playout runs'
-          : 'CasparCG runs';
-    return {
-      id: 'topology',
-      status: 'warn',
-      text: `${which} on this machine. UDP 6250 belongs to the engine here, so CG Control belongs on a separate machine.`,
-    };
-  }
-  return {
-    id: 'topology',
-    status: 'pass',
-    text: 'The Playout and CasparCG run on other machines.',
-  };
-}
-
 // ── The probes a station runs ────────────────────────────────────────────────
 
 function run(file: string, args: readonly string[]): Promise<string> {
@@ -1196,13 +1180,28 @@ function probeRequest(
   });
 }
 
-async function windowsProcesses(): Promise<readonly string[]> {
-  if (process.platform !== 'win32') return [];
-  const out = await run('tasklist', ['/FO', 'CSV', '/NH']);
+/** `tasklist /FO CSV /NH`: `"name","pid",…` per process — the name and the PID. */
+export function parseTasklist(out: string): RunningProcess[] {
   return out
     .split(/\r?\n/)
-    .map((line) => line.split(',')[0]?.replace(/"/g, '').trim() ?? '')
-    .filter((name) => name !== '');
+    .map((line) => {
+      const cols = line.split(',').map((c) => c.replace(/"/g, '').trim());
+      const pid = Number(cols[1]);
+      return { name: cols[0] ?? '', pid: Number.isInteger(pid) && pid > 0 ? pid : null };
+    })
+    .filter((p) => p.name !== '');
+}
+
+async function windowsProcesses(): Promise<readonly RunningProcess[]> {
+  if (process.platform !== 'win32') return [];
+  return parseTasklist(await run('tasklist', ['/FO', 'CSV', '/NH']));
+}
+
+/** `B-318` — the adapters that are up: every interface holding a non-internal address. */
+function upAdapters(): readonly string[] {
+  return Object.entries(os.networkInterfaces())
+    .filter(([, infos]) => (infos ?? []).some((i) => !i.internal))
+    .map(([name]) => name);
 }
 
 async function windowsProxy(): Promise<{ server: string; bypass: readonly string[] } | null> {
@@ -1267,6 +1266,23 @@ async function bindPortHolder(proto: 'tcp' | 'udp', port: number): Promise<PortH
   });
 }
 
+/**
+ * Who holds a port on this machine: on Windows by `netstat` (the holder's name and PID), elsewhere by
+ * binding it for an instant. `ownPorts` are reported as this process's without being probed. Also
+ * what `/health`'s `port-held` problem names (`R-090`).
+ */
+export function portHolderOf(
+  proto: 'tcp' | 'udp',
+  port: number,
+  ownPorts: readonly { proto: 'tcp' | 'udp'; port: number }[] = [],
+): Promise<PortHolder> {
+  if (process.platform === 'win32') return windowsPortHolder(proto, port);
+  if (ownPorts.some((p) => p.proto === proto && p.port === port)) {
+    return Promise.resolve({ kind: 'self' });
+  }
+  return bindPortHolder(proto, port);
+}
+
 /** The probes a station runs. `ownPorts` are reported as this station's without being probed. */
 export function realProbes(
   ownPorts: readonly { proto: 'tcp' | 'udp'; port: number }[] = [],
@@ -1274,20 +1290,12 @@ export function realProbes(
   return {
     processes: windowsProcesses,
     systemProxy: windowsProxy,
+    adapters: upAdapters,
     route: probeRoute,
     // C6 — the same one-per-host IPv4 the bridge's own reads and AMCP session use.
     ipv4: pinnedIPv4,
     amcp: probeAmcp,
     request: probeRequest,
-    portHolder: async (proto, port) => {
-      if (process.platform === 'win32') return windowsPortHolder(proto, port);
-      if (ownPorts.some((p) => p.proto === proto && p.port === port)) return { kind: 'self' };
-      return bindPortHolder(proto, port);
-    },
-    localAddresses: () =>
-      Object.values(os.networkInterfaces())
-        .flatMap((infos) => infos ?? [])
-        .map((i) => i.address),
-    resolve: async (host) => (await dns.promises.lookup(host, { all: true })).map((a) => a.address),
+    portHolder: (proto, port) => portHolderOf(proto, port, ownPorts),
   };
 }

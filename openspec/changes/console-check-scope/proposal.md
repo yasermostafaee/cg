@@ -21,9 +21,9 @@ VPN/proxy line failed on a process name alone. `B-317`, `B-318`, `R-090`…`R-09
   `CG Bridge is not answering at <host>:<port>.` and keeps Check, the fields and Sign in usable; the sign-in never
   waits on CG Bridge.
 - **CG Bridge on the Playout's machine (`B-317`).** A loopback address CG Bridge advertises (its sign-in and
-  refresh URLs) names CG Bridge's machine, so a console on another PC is rebased onto CG Bridge's host; and before
-  a sign-in, a CG Bridge whose own Playout is loopback accepts its own machine's address as "this station's
-  Playout".
+  refresh URLs) names CG Bridge's machine, so a console on another PC is rebased onto CG Bridge's host; and the
+  console asks the check by the address CG Bridge knows its own Playout by when the typed host is CG Bridge's and
+  CG Bridge names its Playout by loopback on the same port. CG Bridge's before-sign-in narrowing is unchanged.
 - **The check judges only what a console needs (`R-090`).** No local ports line, no topology advice. CG Bridge's
   `/health` names a port it cannot open and its holder; the console says it, naming CG Bridge's host. Lines CG
   Bridge writes about its own machine say "CG Bridge's machine". An older CG Bridge's `ports`/`topology` lines are
@@ -40,7 +40,8 @@ VPN/proxy line failed on a process name alone. `B-317`, `B-318`, `R-090`…`R-09
 
 ## Impact
 
-- `tools/caspar-bridge` — `connection-check.ts`, `bridge.ts` (`checksThisStation`, `/health` port holder), `health.ts`.
+- `tools/caspar-bridge` — `connection-check.ts`, `bridge.ts` (`/health`'s `port-refused` with its holder),
+  `caspar-runtime.ts` (the OSC bind-failure sink).
 - `packages/shared-ipc` — `setup.ts` (groups, subjects; `ports`/`topology` kept on the wire for older bridges).
 - `apps/runtime` — the platform's check and sign-in addressing, `PlayoutConnection`, `ConnectionCheckList`,
   `FirstRunScreen`, the banner, `LayersPanel`, a new per-viewer key (`cg.runtime.check-show-all.v1`), and CG

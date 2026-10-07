@@ -151,10 +151,14 @@ export function normalisePlayoutAddress(typed: string): string | null {
 }
 
 /**
- * The lines CG Bridge answers the connection check with. The first seven probe a link; the last four
- * (`R-081`, `CONSOLE-POLISH-01` §6) READ CG Bridge's own state — its Playout session, CasparCG's OSC,
- * the CG license and the channels the asker's sign-in holds — and are answered only for this
- * station's own Playout. Their ORDER on screen is {@link CONNECTION_CHECK_GROUPS}'s, not this list's.
+ * The lines CG Bridge answers the connection check with. Most probe a link; four (`R-081`,
+ * `CONSOLE-POLISH-01` §6) READ CG Bridge's own state — its Playout session, CasparCG's OSC, the CG
+ * license and the channels the asker's sign-in holds — and are answered only for this station's own
+ * Playout. Their ORDER on screen is {@link CONNECTION_CHECK_GROUPS}'s, not this list's.
+ *
+ * 🔴 `R-090` — `ports` and `topology` are RETIRED: CG Bridge no longer writes them (they judged the
+ * machine it runs on), and the console drops them ({@link RETIRED_CHECK_IDS}). They stay in this enum
+ * only so an older CG Bridge's answer still parses.
  */
 export const CONNECTION_CHECK_IDS = [
   'proxy',
@@ -174,12 +178,17 @@ export const CONNECTION_CHECK_IDS = [
 export const ConnectionCheckIdSchema = z.enum(CONNECTION_CHECK_IDS);
 export type ConnectionCheckId = z.infer<typeof ConnectionCheckIdSchema>;
 
+/** `R-090` — the ids an older CG Bridge may still send and no console shows. */
+export const RETIRED_CHECK_IDS: readonly ConnectionCheckId[] = ['ports', 'topology'];
+
 /**
  * `R-081` — the lines a CONSOLE adds to the check from what only it knows, never on the wire: where it
  * found CG Bridge (the address it dialled), CG Bridge's release against its own, and its own sign-in.
  */
 export const CONSOLE_CHECK_IDS = [
   'bridge',
+  // `R-090` — a port CG Bridge cannot open, read off its `/health`, naming CG Bridge's host.
+  'bridge-ports',
   'bridge-version',
   'signin',
   // `RELEASE-0112-01` (`R-085`) — CG Bridge's own session on the BACKUP engine (from `bridgeSession.engines`).
@@ -196,18 +205,19 @@ export type CheckLineId = ConnectionCheckId | ConsoleCheckId;
  * sign-in" line sat third, between two that need nothing).
  *
  *   1. **Reachable** — nothing needed: the path (VPN or proxy, the route), the Playout's API, CG Bridge
- *      where this console found it, and this station's ports;
+ *      where the check found it, and a port CG Bridge cannot open (`R-090`);
  *   2. **Versions** — CG Bridge's release against this console's, and the Playout's own version
  *      (`R-084`: `GET /api/v1/system/version`, read by CG Bridge; `not served` is never a refusal);
  *   3. **Sign-in** — whether this console CAN sign in, this console's own sign-in, then CG Bridge's
  *      own Playout session;
  *   4. **After sign-in** — what needs a signed-in session: CasparCG through CG Bridge, OSC, the CG
- *      license, the channels; and where the Playout and CasparCG run.
+ *      license, the channels.
  *
- * ONE constant: the bridge orders its answer by it and the console groups by it (golden rule 6).
+ * ONE constant: the bridge orders its answer by it and the console groups by it (golden rule 6). The
+ * retired `ports` and `topology` (`R-090`) are in no group.
  */
 export const CONNECTION_CHECK_GROUPS = [
-  { id: 'reach', title: 'Reachable', lines: ['proxy', 'route', 'api', 'bridge', 'ports'] },
+  { id: 'reach', title: 'Reachable', lines: ['proxy', 'route', 'api', 'bridge', 'bridge-ports'] },
   { id: 'versions', title: 'Versions', lines: ['bridge-version', 'playout-version'] },
   {
     id: 'sign-in',
@@ -217,7 +227,7 @@ export const CONNECTION_CHECK_GROUPS = [
   {
     id: 'session',
     title: 'After sign-in',
-    lines: ['amcp', 'osc', 'license', 'channels', 'topology'],
+    lines: ['amcp', 'osc', 'license', 'channels'],
   },
 ] as const satisfies readonly {
   readonly id: string;
@@ -237,8 +247,8 @@ export function orderCheckLines<T extends { readonly id: string }>(lines: readon
 }
 
 /**
- * One line of the connection check: pass, fail, or — for the topology, which is advice rather
- * than a blocker — warn. `text` is the operator's sentence: on a failure, what is wrong and what
+ * One line of the connection check: pass, fail, or — for a finding that is advice rather than a
+ * blocker (a VPN or proxy that intercepts nothing of ours, `B-318`) — warn. `text` is the operator's sentence: on a failure, what is wrong and what
  * to do. `command` is the ONE line somebody else must run or add (the AMCP allow rule, the CORS
  * origin), carried apart from the sentence so the console can show it to copy.
  *
@@ -276,10 +286,11 @@ export function connectionCheckSubject(id: ConnectionCheckId, host: string, port
       return `The Playout on port ${port}`;
     case 'cors':
       return 'Sign-in from this console';
+    // `R-090` — retired: never shown; named only so the switch stays total.
     case 'ports':
-      return "This station's ports";
+      return "CG Bridge's ports";
     case 'topology':
-      return 'Where the Playout and CasparCG run';
+      return 'Topology';
     case 'bridge-session':
       return "CG Bridge's own sign-in";
     case 'osc':

@@ -185,8 +185,7 @@ function checkProbes(): CheckProbes {
     processes: async () => [],
     systemProxy: async () => null,
     portHolder: async () => ({ kind: 'free' }),
-    localAddresses: () => [],
-    resolve: async () => ['10.0.0.1'],
+    adapters: () => [],
     amcp: (host, _p, t) => realProbes().amcp(host, amcp?.amcpPort ?? 0, t),
   };
 }
@@ -388,12 +387,14 @@ describe('C7 — after the window, the check names the in-app approval and this 
       return found;
     };
     // Inside the window it still waits — for the Playout, not for the sign-in.
-    expect((await amcpLine('k2')).text).toMatch(/waiting for the Playout to let this machine in/);
+    expect((await amcpLine('k2')).text).toMatch(
+      /waiting for the Playout to let CG Bridge's machine in/,
+    );
     await new Promise((r) => setTimeout(r, 1600));
     const pending = await amcpLine('k3');
     expect(pending.status).toBe('fail');
     expect(pending.text).toMatch(
-      /^This machine, \d+\.\d+\.\d+\.\d+, is waiting for approval in the Playout, at /,
+      /^CG Bridge's machine, \d+\.\d+\.\d+\.\d+, is waiting for approval in the Playout, at /,
     );
     expect(pending.text).toContain('If it is not listed there');
     // C7 — no script, ever: the line carries no command.

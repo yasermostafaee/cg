@@ -102,29 +102,15 @@ through the tunnel.
 
 ## ADDED Requirements
 
-### Requirement: A CG Bridge whose Playout is on its own machine SHALL accept that machine's address before a sign-in
-
-Before a sign-in the bridge SHALL check only this station's own Playout (`DELTA-MULTI-CHANNEL-01-B` B1). When its
-configured Playout's host is loopback, a typed address on the same scheme and port whose host is one of CG
-Bridge's own machine's addresses SHALL count as this station's Playout (`B-317`): a console on another PC types
-the Playout's real address, and CG Bridge configured on the Playout's own machine names it by loopback. Any other
-address SHALL still be refused before a sign-in with the one sentence.
-
-#### Scenario: The Playout's real address, on a loopback-configured CG Bridge
-
-- **WHEN** CG Bridge's Playout is `http://127.0.0.1:8080` and an unsigned console checks
-  `http://<CG Bridge's own LAN address>:8080` **THEN** the check runs, as for its own Playout
-- **WHEN** the same console checks `http://192.0.2.99:8080`, an address not of CG Bridge's machine **THEN** it is
-  refused before a sign-in
-
 ### Requirement: CG Bridge's `/health` SHALL name a port it cannot open, and what holds it
 
-When CG Bridge cannot bind one of its own ports because another program holds it, its `/health` SHALL carry a
-problem `port-held` whose message names the protocol, the port, what the port is for and, when it can be read,
-the holder's image name and PID — "cannot open UDP 6251 (OSC from CasparCG): held by casparcg.exe (PID 4321)"
-(`R-090`). The holder SHALL be read when the bind fails, never on the `/health` request path.
+When CG Bridge cannot bind one of its own ports because another program holds it, its `/health` SHALL carry the
+problem `port-refused` whose message names the protocol, the port, what the port is for and, when it can be read,
+the holder's image name and PID — "cannot open UDP 6251 (OSC from CasparCG): held by casparcg.exe (PID 4321)."
+(`R-090`). The holder SHALL be read when the bind fails, never on the `/health` request path, and no new problem
+code SHALL be added for it: another CG Bridge's guard parses this `/health` (`B-313`).
 
 #### Scenario: CG Bridge's OSC port is held
 
-- **WHEN** another program holds CG Bridge's OSC port as it starts **THEN** `/health` lists a `port-held` problem
-  naming `UDP`, the port and the holder **AND** CG Bridge still takes consoles
+- **WHEN** another program holds CG Bridge's OSC port as it starts **THEN** `/health` lists a `port-refused`
+  problem naming `UDP`, the port and the holder **AND** CG Bridge still takes consoles

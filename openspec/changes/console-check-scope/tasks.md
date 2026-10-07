@@ -1,11 +1,10 @@
 ## 1. CG Bridge: the check judges only CG Bridge's links (`R-090`, `B-318`, `B-317`)
 
-- [ ] 1.1 `connection-check.ts`: no `ports` or `topology` line; every line about CG Bridge's machine says so
-- [ ] 1.2 The VPN/proxy line: an active proxy (a listener), a tunnel up, or a route through one — named, amber;
+- [x] 1.1 `connection-check.ts`: no `ports` or `topology` line; every line about CG Bridge's machine says so
+- [x] 1.2 The VPN/proxy line: an active proxy (a listener), a tunnel up, or a route through one — named, amber;
       red only for a route to the Playout or CasparCG through the tunnel; planted-state tests
-- [ ] 1.3 `checksThisStation`: a loopback-configured Playout accepts CG Bridge's own machine's address
-- [ ] 1.4 `/health`: `port-held` with the holder when the OSC bind fails
-- [ ] 1.5 `dev-station`'s plan stops promising the topology line
+- [x] 1.3 `/health`: `port-refused` with the holder when the OSC bind fails (no new problem code)
+- [x] 1.4 `dev-station`'s plan stops promising the topology line
 
 ## 2. The console: one address, no dead end (`B-317`)
 
@@ -14,8 +13,9 @@
 - [ ] 2.2 The CG Bridge line names where the check ran; `CG Bridge on a separate server: …`; `Use … (last used)`
 - [ ] 2.3 `Connect` only after CG Bridge answered there; first-run shows the CG Bridge field; no silent override
 - [ ] 2.4 Sign in locked only by a line that says it cannot work; the advertised loopback rebased onto CG Bridge's
+      host; the check asked by CG Bridge's own name for its loopback Playout (the narrowing unchanged)
+- [ ] 2.5 The console drops an older CG Bridge's `ports`/`topology`; shows `/health`'s `port-refused` naming the
       host
-- [ ] 2.5 The console drops an older CG Bridge's `ports`/`topology`; shows `/health`'s `port-held` naming the host
 
 ## 3. CG Bridge on this machine (`R-091`)
 

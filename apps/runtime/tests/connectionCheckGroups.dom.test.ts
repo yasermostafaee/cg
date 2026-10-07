@@ -67,6 +67,7 @@ describe('R-081 — four groups, in the order things happen', () => {
         line('signin', 'wait'),
         line('ports'),
         line('api'),
+        line('bridge-ports', 'fail'),
         line('route'),
         line('proxy'),
         line('bridge'),
@@ -87,10 +88,19 @@ describe('R-081 — four groups, in the order things happen', () => {
     ]);
     const idsIn = (g: Element): (string | null)[] =>
       [...g.querySelectorAll('[data-check]')].map((li) => li.getAttribute('data-check'));
-    expect(idsIn(groups[0] as Element)).toEqual(['proxy', 'route', 'api', 'bridge', 'ports']);
+    expect(idsIn(groups[0] as Element)).toEqual([
+      'proxy',
+      'route',
+      'api',
+      'bridge',
+      'bridge-ports',
+    ]);
     expect(idsIn(groups[1] as Element)).toEqual(['cors', 'signin']);
     // The line that waits for a sign-in is AFTER the sign-in, never in the middle.
-    expect(idsIn(groups[2] as Element)).toEqual(['amcp', 'topology']);
+    expect(idsIn(groups[2] as Element)).toEqual(['amcp']);
+    // 🔴 `R-090` — an older CG Bridge's `ports` and `topology` lines are in no group: never shown.
+    expect(c.querySelector('[data-check="ports"]')).toBeNull();
+    expect(c.querySelector('[data-check="topology"]')).toBeNull();
   });
 
   it('🔴 `R-084` — the Versions group: CG Bridge’s release, then the Playout’s version CG Bridge read', async () => {

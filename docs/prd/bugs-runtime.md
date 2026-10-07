@@ -13411,9 +13411,11 @@ own loopback.
 CG Bridge; a remembered address from another session is offered as a choice ("Use … (last used)"), never used
 silently; a CG Bridge on another host than the Playout is said in one line. `Connect` only when CG Bridge
 answered there. Set up never shows the console→bridge refusal; it says
-`CG Bridge is not answering at <host>:<port>.` and keeps Check, the address fields and Sign in usable. A loopback address CG Bridge advertises
-names CG Bridge's machine, and a CG Bridge whose own Playout is loopback accepts its machine's own address as
-"this station's Playout".
+`CG Bridge is not answering at <host>:<port>.` and keeps Check, the address fields and Sign in usable. A
+loopback address CG Bridge advertises names CG Bridge's machine; and where the typed host is CG Bridge's and CG
+Bridge names its own Playout by loopback on the same port, the console asks the check by CG Bridge's own name
+for it. CG Bridge's before-sign-in narrowing is NOT changed (`RELEASE-0114-01`'s hard stop: no refusal condition
+changes).
 
 **Acceptance:**
 
@@ -13421,8 +13423,9 @@ names CG Bridge's machine, and a CG Bridge whose own Playout is loopback accepts
   `127.0.0.1:5280`, and the check never runs on `.111`
 - WHEN no CG Bridge answers, then one appears, then it disappears THEN Set up says so in words each time and the
   owner is never left without Check, the fields and Sign in
-- WHEN a CG Bridge whose Playout is `http://127.0.0.1:8080` is asked, before a sign-in, to check its machine's own
-  address on that port THEN it checks it
+- WHEN the typed Playout is CG Bridge's own host on `8080` and that CG Bridge's Playout is `http://127.0.0.1:8080`
+  THEN an unsigned console's check runs there, asked for `http://127.0.0.1:8080`; and the console signs in at the
+  Playout's real address, never at its own loopback
 
 ## [~] B-318 — The VPN/proxy line fires on a process alone, in red, and says "this machine" about CG Bridge's machine ⟨priority: medium — a false alarm that sent the owner to quit software that was not in the way⟩ — FILED 2026-10-07 by `RELEASE-0114-01` §0.3 · `openspec/changes/console-check-scope/`
 

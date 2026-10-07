@@ -46,7 +46,7 @@ function render(): HTMLDivElement {
         lines: [
           { id: 'amcp', status: 'pass', text: 'CasparCG answers on 127.0.0.1:5250.' },
           { id: 'api', status: 'fail', text: 'No OSC from CasparCG.' },
-          { id: 'topology', status: 'warn', text: 'The return feed is on another host.' },
+          { id: 'proxy', status: 'warn', text: "On CG Bridge's machine, the tunnel tun0 is up." },
           { id: 'cors', status: 'wait', text: 'Not checked until an admin signs in.' },
         ],
       }),
@@ -73,7 +73,7 @@ describe('the connection check’s pass mark', () => {
     const el = render();
     expect(iconInk(el, 'api')).toBe(computed(colors.errorText));
     expect(textInk(el, 'api')).toBe(computed(colors.errorText));
-    expect(iconInk(el, 'topology')).toBe(computed(colors.pending));
+    expect(iconInk(el, 'proxy')).toBe(computed(colors.pending));
     expect(iconInk(el, 'cors')).toBe(computed(colors.textSecondary));
   });
 });

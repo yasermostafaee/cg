@@ -2043,6 +2043,8 @@ export class CasparRuntime {
   readonly #lookMixerHoldMs: number | undefined;
   /** `FIELD-FIXES-01-A` — where every settled AMCP exchange goes (the bridge's AMCP log). */
   readonly #onAmcpExchange: ((entry: AmcpLogEntry) => void) | undefined;
+  /** `R-090` — the OSC bind-failure sink (`/health`'s `port-refused`). */
+  readonly #onOscUnbound: ((server: ServerLabel, port: number) => void) | undefined;
   /**
    * TEST-ONLY seam (B-100): per-`ServerSession` health-timer overrides. Empty in
    * production, so the ServerSession defaults apply. A test uses it to drive and
@@ -2262,6 +2264,11 @@ export class CasparRuntime {
        */
       onAmcpExchange?: (entry: AmcpLogEntry) => void;
       /**
+       * 🔴 `R-090` — told when a server's OSC port cannot be bound (another program holds it), so
+       * `/health` can name the port and its holder. A sink, like `onAmcpExchange`: never a publication.
+       */
+      onOscUnbound?: (server: ServerLabel, port: number) => void;
+      /**
        * `ROUTE-PLATES-01` rule 4 — TEST-ONLY: the clock a Playout route's `LOADBG` → `PLAY` window
        * and its reveal wait run on. Absent: the real one.
        */
@@ -2348,6 +2355,7 @@ export class CasparRuntime {
     // one is not defaulted at construction the way its siblings below are.
     this.#lookMixerHoldMs = options.lookMixerHoldMs;
     this.#onAmcpExchange = options.onAmcpExchange;
+    this.#onOscUnbound = options.onOscUnbound;
     this.#routeClock = options.routeClock ?? SYSTEM_ROUTE_CLOCK;
     options.seamForTest?.((line, sendOptions = {}) =>
       this.#send(line, this.#nextSeq(), 'urgent', sendOptions),
@@ -2462,6 +2470,7 @@ export class CasparRuntime {
       });
       built.on('oscUnavailable', ({ host, port, error }) => {
         this.#oscStatus.set(name, 'unbound');
+        this.#onOscUnbound?.(name, port);
         process.stderr.write(
           `[caspar-bridge] ⚠ OSC: cannot bind UDP ${host}:${String(port)} for server ${name} ` +
             `(${error.message}) - AMCP is connected without OSC; the bind is tried again at the next reconnect\n`,

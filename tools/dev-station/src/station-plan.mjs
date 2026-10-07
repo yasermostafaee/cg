@@ -448,9 +448,8 @@ export function blockedLine(b) {
  * The one short banner: where the console is, where its state and its log are, which Playout — and,
  * with `--fake`, which CasparCG — and how to stop.
  *
- * `DELTA-MULTI-CHANNEL-01-A` A1(c) — the connection check's "The Playout and CasparCG run on this
- * machine" warning STAYS: it is true of a fake station, whose every part is on loopback. One line
- * here says it is expected, so the owner does not read a true warning as a fault of the tool.
+ * `RELEASE-0114-01` (`R-090`) — the connection check no longer judges where the Playout and CasparCG
+ * run, so the banner no longer promises that warning (it said a fake station would show it).
  */
 export function banner({ stateDir, playout, fake, log }) {
   const lines = [
@@ -479,11 +478,6 @@ export function banner({ stateDir, playout, fake, log }) {
       `  backup   ${backup.address}  (fake backup engine · sign in as ${backup.username} / ${backup.password})`,
       // `RELEASE-0113-01` — the backup core has its OWN numbers: the mirrors are not on the primary's.
       `  server B ${backup.caspar}  (fake · the backup engine's CasparCG: 1 its own programme, 2 and 3 the mirrors of 1 and 2, 4 and 5 previews)`,
-    );
-  }
-  if (fake?.caspar !== undefined) {
-    lines.push(
-      '  check    "The Playout and CasparCG run on this machine" is expected here: they do.',
     );
   }
   for (const note of fake?.notes ?? []) lines.push(`  note     ${note}`);

@@ -84,6 +84,7 @@ function probesAimedAt(amcpPort: () => number): CheckProbes {
     processes: async () => [],
     systemProxy: async () => null,
     portHolder: async () => ({ kind: 'free' }),
+    adapters: () => [],
     amcp: (host, _port, timeoutMs) => realProbes().amcp(host, amcpPort(), timeoutMs),
   };
 }

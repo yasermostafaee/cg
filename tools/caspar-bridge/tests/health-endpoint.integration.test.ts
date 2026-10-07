@@ -105,6 +105,51 @@ it('every other plain request is answered 426, as the socket’s own server alwa
   expect(post.status).toBe(426);
 });
 
+it('🔴 R-090 — a port CG Bridge cannot open is on /health, naming what holds it; control: the first test’s free port lists no problem', async () => {
+  mock = await createMock({ amcpPort: 0, oscPort: 0, oscHz: 40 });
+  // Somebody else holds the OSC port this bridge is told to use, on the address it binds.
+  const holder = dgram.createSocket('udp4');
+  await new Promise<void>((resolve, reject) => {
+    holder.once('error', reject);
+    holder.bind(0, '127.0.0.1', () => resolve());
+  });
+  const heldPort = holder.address().port;
+  const asked: string[] = [];
+  try {
+    bridge = await createBridge({
+      port: 0,
+      connection: single(mock.amcpPort, heldPort),
+      portHolderOf: (protocol, port) => {
+        asked.push(`${protocol}:${String(port)}`);
+        return Promise.resolve({ kind: 'other', name: 'casparcg.exe', pid: 4321 });
+      },
+    });
+    const b = bridge;
+    const message = `cannot open UDP ${String(heldPort)} (OSC from CasparCG): held by casparcg.exe (PID 4321).`;
+    const deadline = Date.now() + HEALTH_MS;
+    let problems: { code: string; message: string }[] = [];
+    while (Date.now() < deadline) {
+      const body = (await health(b.port)).body as { problems: { code: string; message: string }[] };
+      problems = body.problems;
+      if (problems.some((p) => p.code === 'port-refused' && p.message === message)) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(problems).toContainEqual({ code: 'port-refused', message });
+    // The holder was asked about the one port that failed, once — and CG Bridge still takes consoles.
+    expect(asked).toEqual([`udp:${String(heldPort)}`]);
+    const parsed = BridgeHealthSchema.safeParse((await health(b.port)).body);
+    expect(parsed.success).toBe(true);
+    const ws = new WebSocket(b.url);
+    clients.push(ws);
+    await new Promise<void>((resolve, reject) => {
+      ws.once('open', () => resolve());
+      ws.once('error', reject);
+    });
+  } finally {
+    await new Promise<void>((resolve) => holder.close(() => resolve()));
+  }
+});
+
 it('a core that is not there reads as down, and the bridge still answers', async () => {
   // Port 1 on loopback: nothing listens there.
   bridge = await createBridge({ port: 0, connection: single(1, 0) });

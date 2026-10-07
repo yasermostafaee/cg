@@ -373,11 +373,11 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` starts a whole station, fre
     expect(at('fresh-fake')).toBeGreaterThan(at('build'));
     expect(at('fresh-fake')).toBeLessThan(at('start-fake'));
     expect(at('fresh-fake')).toBeLessThan(at('set-address http://127.0.0.1:43111'));
-    // The banner carries the fake CasparCG, and says the same-machine warning is expected.
+    // The banner carries the fake CasparCG — and (`R-090`) no longer promises a same-machine warning.
     expect(h.printed).toContain(
       '  CasparCG 127.0.0.1:5250  (fake · channels 1 and 2 · programme feeds on 9250, 9251)',
     );
-    expect(h.printed.join('\n')).toContain('is expected here: they do.');
+    expect(h.printed.join('\n')).not.toMatch(/same-machine|run on this machine|they do\./);
   });
 
   it('CONTROL — a dev station on a real Playout keeps its state: nothing is moved aside', async () => {

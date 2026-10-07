@@ -13,6 +13,8 @@ import {
 import {
   NATIVE_SIGN_IN_LINE,
   ProbeError,
+  parseTasklist,
+  proxyEndpoint,
   stationStateLines,
   withStationLines,
   type StationState,
@@ -34,22 +36,13 @@ import {
  */
 
 const ORIGIN = 'http://127.0.0.1:5174';
-const PORTS = { console: 5174, control: 5280, templates: 7911, osc: 6250 };
 /**
- * `R-081` — the seven PROBED lines in the order things happen (`CONNECTION_CHECK_GROUPS`): what needs
+ * `R-081` — the PROBED lines in the order things happen (`CONNECTION_CHECK_GROUPS`): what needs
  * nothing, then whether this console can sign in, then what needs a signed-in session. The four lines
- * that read CG Bridge's own state are added by the route (`withStationLines`, below).
+ * that read CG Bridge's own state are added by the route (`withStationLines`, below). `R-090` — no
+ * `ports` and no `topology`: the check judges nothing about the machine it runs on.
  */
-const PROBED_IN_ORDER = [
-  'proxy',
-  'route',
-  'api',
-  'ports',
-  'playout-version',
-  'cors',
-  'amcp',
-  'topology',
-];
+const PROBED_IN_ORDER = ['proxy', 'route', 'api', 'playout-version', 'cors', 'amcp'];
 const closers: (() => Promise<void>)[] = [];
 
 afterEach(async () => {
@@ -61,9 +54,9 @@ function probes(overrides: Partial<CheckProbes> = {}): CheckProbes {
     ...realProbes(),
     processes: async () => [],
     systemProxy: async () => null,
+    // `B-318` — pinned: the dev host runs a TUN (`singbox_tun`), and a test must not read it.
+    adapters: () => [],
     portHolder: async () => ({ kind: 'free' }),
-    localAddresses: () => [],
-    resolve: async (host) => [host],
     ...overrides,
   };
 }
@@ -166,7 +159,7 @@ describe('§2F / C7 — AMCP: waiting for a sign-in, for the Playout, for approv
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN },
       probes({ amcp: (host, _p, t) => realProbes().amcp(host, port, t) }),
-      { ports: PORTS, amcpTimeoutMs: 2000 },
+      { amcpTimeoutMs: 2000 },
     );
     expect(line(lines, 'amcp')).toEqual({
       id: 'amcp',
@@ -181,12 +174,12 @@ describe('§2F / C7 — AMCP: waiting for a sign-in, for the Playout, for approv
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN },
       probes({ amcp: (host, _p, t) => realProbes().amcp(host, port, t) }),
-      { ports: PORTS, amcpSignInAt: Date.now(), amcpTrustWindowMs: 30_000 },
+      { amcpSignInAt: Date.now(), amcpTrustWindowMs: 30_000 },
     );
     expect(line(lines, 'amcp')).toEqual({
       id: 'amcp',
       status: 'wait',
-      text: 'CasparCG on 127.0.0.1: waiting for the Playout to let this machine in.',
+      text: "CasparCG on 127.0.0.1: waiting for the Playout to let CG Bridge's machine in.",
     });
   });
 
@@ -196,15 +189,15 @@ describe('§2F / C7 — AMCP: waiting for a sign-in, for the Playout, for approv
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN },
       probes({ amcp: (host, _p, t) => realProbes().amcp(host, port, t) }),
-      { ports: PORTS, amcpTimeoutMs: 2000, ...PAST_WINDOW },
+      { amcpTimeoutMs: 2000, ...PAST_WINDOW },
     );
     expect(line(lines, 'amcp')).toEqual({
       id: 'amcp',
       status: 'fail',
       text:
-        `This machine, 127.0.0.1, is waiting for approval in the Playout, at ${SETTINGS}, where the ` +
-        "Playout's administrator approves it. If it is not listed there, this machine reaches the " +
-        'Playout through NAT, a proxy or a VPN.',
+        `CG Bridge's machine, 127.0.0.1, is waiting for approval in the Playout, at ${SETTINGS}, ` +
+        "where the Playout's administrator approves it. If it is not listed there, CG Bridge's " +
+        'machine reaches the Playout through NAT, a proxy or a VPN.',
     });
   });
 
@@ -215,7 +208,7 @@ describe('§2F / C7 — AMCP: waiting for a sign-in, for the Playout, for approv
       const { lines } = await runConnectionCheck(
         { playoutAddress: api, origin: ORIGIN },
         probes({ amcp: (host, _p, t) => realProbes().amcp(host, port, t) }),
-        { ports: PORTS, ...phase },
+        { ...phase },
       );
       expect(line(lines, 'amcp')).toEqual({
         id: 'amcp',
@@ -244,7 +237,6 @@ describe('DELTA-MULTI-CHANNEL-01-A A2 — a held AMCP line answers once this mac
       return realProbes().amcp(host, letIn ? answering : refused, t);
     };
     const inWindow = {
-      ports: PORTS,
       amcpSignInAt: Date.now(),
       amcpTrustWindowMs: 30_000,
       letInRetryMs: 20,
@@ -287,7 +279,7 @@ describe('DELTA-MULTI-CHANNEL-01-A A2 — a held AMCP line answers once this mac
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN, awaitLetIn: true },
       probes({ amcp: (host, _p, t) => realProbes().amcp(host, refused, t) }),
-      { ports: PORTS, amcpSignInAt: signedInAt, amcpTrustWindowMs: 400, letInRetryMs: 20 },
+      { amcpSignInAt: signedInAt, amcpTrustWindowMs: 400, letInRetryMs: 20 },
     );
     expect(Date.now() - signedInAt).toBeGreaterThanOrEqual(400);
     expect(line(lines, 'amcp').status).toBe('fail');
@@ -307,7 +299,7 @@ describe('DELTA-MULTI-CHANNEL-01-A A2 — a held AMCP line answers once this mac
       await runConnectionCheck(
         { playoutAddress: api, origin: ORIGIN, awaitLetIn: true },
         probes({ amcp }),
-        { ports: PORTS, letInRetryMs: 20, ...phase },
+        { letInRetryMs: 20, ...phase },
       );
       expect(asked).toBe(1);
     }
@@ -326,7 +318,7 @@ describe('DELTA-MULTI-CHANNEL-01-A A2 — a held AMCP line answers once this mac
  * console gave up at 8 s with no line at all.
  */
 describe('C2 — every probe bounded, the lines in parallel, each line its own words', () => {
-  it('EVERY probe at a black hole (192.0.2.1): all seven lines come back within the bound, each saying what did not answer', async () => {
+  it('EVERY probe at a black hole (192.0.2.1): every line comes back within the bound, each saying what did not answer', async () => {
     const timings: { id: string; ms: number }[] = [];
     let total = 0;
     const started = Date.now();
@@ -334,7 +326,6 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
       { playoutAddress: 'http://192.0.2.1:8080', origin: ORIGIN },
       probes(),
       {
-        ports: PORTS,
         onTimed: (t, ms) => {
           timings.push(...t);
           total = ms;
@@ -377,10 +368,8 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
       { playoutAddress: api, origin: ORIGIN },
       probes({
         amcp: (host, _p, t) => realProbes().amcp(host, port, t),
-        // Not this machine, so the topology advice does not apply to a loopback fake.
-        resolve: async () => ['10.0.0.1'],
       }),
-      { ports: PORTS },
+      {},
     );
     expect(lines.map((l) => l.id)).toEqual(PROBED_IN_ORDER);
     for (const l of lines) {
@@ -393,9 +382,9 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
     const { lines } = await runConnectionCheck(
       { playoutAddress: 'http://playout.example:8080', origin: ORIGIN },
       probes({ ipv4: async () => null }),
-      { ports: PORTS },
+      {},
     );
-    expect(lines.map((l) => l.id)).toEqual(['proxy', 'route', 'ports', 'topology']);
+    expect(lines.map((l) => l.id)).toEqual(['proxy', 'route']);
     expect(line(lines, 'route')).toEqual({
       id: 'route',
       status: 'fail',
@@ -407,7 +396,6 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
     const api = await fakeApi({ keys: [{ kid: 'k1' }], allowOrigin: ORIGIN });
     const bare = api.replace(/^http:\/\//, '');
     const { lines } = await runConnectionCheck({ playoutAddress: bare, origin: ORIGIN }, probes(), {
-      ports: PORTS,
       amcpTimeoutMs: 300,
     });
     expect(line(lines, 'api').status).toBe('pass');
@@ -416,11 +404,7 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
 
 describe('🔴 R-084 (`RELEASE-0111-01-A` A1) — the Playout’s version, read by CG Bridge with no token', () => {
   const check = (api: string) =>
-    runConnectionCheck(
-      { playoutAddress: api, origin: ORIGIN },
-      probes({ resolve: async () => ['10.0.0.1'] }),
-      { ports: PORTS, amcpTimeoutMs: 300 },
-    );
+    runConnectionCheck({ playoutAddress: api, origin: ORIGIN }, probes(), { amcpTimeoutMs: 300 });
 
   it('served: the Versions line reads the Playout’s `version` — asked with no token and no Origin', async () => {
     const versionHeaders: http.IncomingHttpHeaders[] = [];
@@ -463,7 +447,6 @@ describe('§2F — the Playout API and CORS', () => {
     const failed = line(
       (
         await runConnectionCheck({ playoutAddress: empty, origin: ORIGIN }, probes(), {
-          ports: PORTS,
           amcpTimeoutMs: 300,
         })
       ).lines,
@@ -476,7 +459,6 @@ describe('§2F — the Playout API and CORS', () => {
     const passed = line(
       (
         await runConnectionCheck({ playoutAddress: good, origin: ORIGIN }, probes(), {
-          ports: PORTS,
           amcpTimeoutMs: 300,
         })
       ).lines,
@@ -494,7 +476,6 @@ describe('§2F — the Playout API and CORS', () => {
     const failed = line(
       (
         await runConnectionCheck({ playoutAddress: wrong, origin: ORIGIN }, probes(), {
-          ports: PORTS,
           amcpTimeoutMs: 300,
         })
       ).lines,
@@ -512,7 +493,6 @@ describe('§2F — the Playout API and CORS', () => {
       line(
         (
           await runConnectionCheck({ playoutAddress: right, origin: ORIGIN }, probes(), {
-            ports: PORTS,
             amcpTimeoutMs: 300,
           })
         ).lines,
@@ -530,7 +510,7 @@ describe('§2F — the Playout API and CORS', () => {
         await runConnectionCheck(
           { playoutAddress: `http://127.0.0.1:${String(port)}`, origin: ORIGIN },
           probes(),
-          { ports: PORTS, amcpTimeoutMs: 300 },
+          { amcpTimeoutMs: 300 },
         )
       ).lines,
       'api',
@@ -541,7 +521,7 @@ describe('§2F — the Playout API and CORS', () => {
         await runConnectionCheck(
           { playoutAddress: 'http://192.0.2.1:8080', origin: ORIGIN },
           probes(),
-          { ports: PORTS, amcpTimeoutMs: 300, connectMs: 500, lineMs: 1500 },
+          { amcpTimeoutMs: 300, connectMs: 500, lineMs: 1500 },
         )
       ).lines,
       'api',
@@ -550,7 +530,6 @@ describe('§2F — the Playout API and CORS', () => {
     const empty = line(
       (
         await runConnectionCheck({ playoutAddress: keyless, origin: ORIGIN }, probes(), {
-          ports: PORTS,
           amcpTimeoutMs: 300,
         })
       ).lines,
@@ -560,7 +539,6 @@ describe('§2F — the Playout API and CORS', () => {
     const wrongOrigin = line(
       (
         await runConnectionCheck({ playoutAddress: elsewhere, origin: ORIGIN }, probes(), {
-          ports: PORTS,
           amcpTimeoutMs: 300,
         })
       ).lines,
@@ -591,7 +569,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const { lines } = await runConnectionCheck(
       PLAYOUT_OFF,
       probes({ ...silentApi, ...amcpSays({ kind: 'refused' }) }),
-      { ports: PORTS },
+      {},
     );
     expect(line(lines, 'api')).toEqual({
       id: 'api',
@@ -611,7 +589,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN },
       probes(amcpSays({ kind: 'refused' })),
-      { ports: PORTS },
+      {},
     );
     expect(line(lines, 'api').status).toBe('pass');
     expect(line(lines, 'cors')).toMatchObject({ status: 'fail', command: ORIGIN });
@@ -623,7 +601,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const native = await runConnectionCheck(
       { playoutAddress: api, origin: 'http://tauri.localhost', signIn: 'native' },
       probes(amcpSays({ kind: 'refused' })),
-      { ports: PORTS },
+      {},
     );
     expect(line(native.lines, 'api').status).toBe('pass');
     expect(line(native.lines, 'cors')).toEqual(NATIVE_SIGN_IN_LINE);
@@ -635,7 +613,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const browser = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN },
       probes(amcpSays({ kind: 'refused' })),
-      { ports: PORTS },
+      {},
     );
     expect(line(browser.lines, 'cors')).toMatchObject({ status: 'fail', command: ORIGIN });
     expect(seen.some((r) => r.startsWith('OPTIONS '))).toBe(true);
@@ -646,7 +624,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN },
       probes(amcpSays({ kind: 'refused' })),
-      { ports: PORTS },
+      {},
     );
     expect(line(lines, 'api').status).toBe('fail');
     expect(line(lines, 'cors')).toEqual({
@@ -665,7 +643,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
       const { lines } = await runConnectionCheck(
         PLAYOUT_OFF,
         probes({ ...silentApi, ...amcpSays(outcome) }),
-        { ports: PORTS },
+        {},
       );
       expect(line(lines, 'amcp'), outcome.kind).toEqual({ id: 'amcp', status: 'fail', text });
     }
@@ -676,7 +654,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, origin: ORIGIN },
       probes(amcpSays({ kind: 'refused' })),
-      { ports: PORTS },
+      {},
     );
     expect(line(lines, 'amcp')).toEqual({
       id: 'amcp',
@@ -689,7 +667,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const { lines } = await runConnectionCheck(
       PLAYOUT_OFF,
       probes({ ...silentApi, amcp: () => new Promise<AmcpOutcome>(() => undefined) }),
-      { ports: PORTS, lineMs: 300, connectMs: 200 },
+      { lineMs: 300, connectMs: 200 },
     );
     expect(line(lines, 'amcp')).toEqual({
       id: 'amcp',
@@ -703,7 +681,7 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
     const { lines } = await runConnectionCheck(
       PLAYOUT_OFF,
       probes({ ...silentApi, ...amcpSays({ kind: 'answered', version: '2.3.2' }) }),
-      { ports: PORTS },
+      {},
     );
     expect(line(lines, 'amcp')).toEqual({
       id: 'amcp',
@@ -713,110 +691,151 @@ describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', ()
   });
 });
 
-describe('§2F — the local lines: VPN or proxy, ports, topology', () => {
-  it('a recognisable interceptor is NAMED; control: nothing running passes', async () => {
+/**
+ * 🔴 `B-318` — **A VPN OR PROXY, EXACT OR NOT AT ALL.** The owner quit v2rayN and the line stayed: it
+ * failed on a process NAME, and it ran on CG Bridge's machine. Each planted state below is one the old
+ * line got wrong; the route probe is pinned to a LAN card unless a test says otherwise, because the dev
+ * host itself runs a TUN.
+ */
+describe('§2F / B-318 — VPN or proxy, exact or not at all; R-090 — no verdict about this machine', () => {
+  const lan = (): Promise<{ address: string; iface: string }> =>
+    Promise.resolve({ address: '192.168.1.20', iface: 'Ethernet' });
+  const proxyLine = async (overrides: Partial<CheckProbes>): Promise<ConnectionCheckLine> => {
     const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
-    const intercepted = line(
-      (
-        await runConnectionCheck(
-          { playoutAddress: api, origin: ORIGIN },
-          probes({ processes: async () => ['explorer.exe', 'v2rayN.exe'] }),
-          { ports: PORTS, amcpTimeoutMs: 300 },
-        )
-      ).lines,
-      'proxy',
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes({ route: lan, ...overrides }),
+      { amcpTimeoutMs: 300 },
     );
-    expect(intercepted.status).toBe('fail');
-    expect(intercepted.text).toContain('v2rayN is running');
-    // Control: nothing running, no proxy, and a route out through a LAN card (pinned, because a
-    // developer's own machine may well be running exactly what this line exists to catch).
-    const lan = { route: async () => ({ address: '192.168.1.20', iface: 'Ethernet' }) };
-    expect(
-      line(
-        (
-          await runConnectionCheck({ playoutAddress: api, origin: ORIGIN }, probes(lan), {
-            ports: PORTS,
-            amcpTimeoutMs: 300,
-          })
-        ).lines,
-        'proxy',
-      ),
-    ).toEqual({ id: 'proxy', status: 'pass', text: 'No VPN or proxy in the way.' });
-    // …and the same machine with a tunnel owning the route out is named by its interface.
-    const tunnelled = line(
-      (
-        await runConnectionCheck(
-          { playoutAddress: api, origin: ORIGIN },
-          probes({ route: async () => ({ address: '172.18.0.1', iface: 'singbox_tun' }) }),
-          { ports: PORTS, amcpTimeoutMs: 300 },
-        )
-      ).lines,
-      'proxy',
-    );
-    expect(tunnelled.text).toBe(
-      "A tunnel (singbox_tun) carries this machine's traffic. Turn it off, then check again.",
-    );
+    return line(lines, 'proxy');
+  };
+  const PASS = { id: 'proxy', status: 'pass', text: 'No VPN or proxy in the way.' };
+
+  it('process gone, no proxy, no tunnel: the line passes', async () => {
+    expect(await proxyLine({})).toEqual(PASS);
   });
 
-  it('a port held by another program names it; control: the station’s own ports pass', async () => {
-    const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
-    const held = line(
-      (
-        await runConnectionCheck(
-          { playoutAddress: api, origin: ORIGIN },
-          probes({
-            portHolder: async (proto, port) =>
-              proto === 'udp' && port === 6250
-                ? { kind: 'other', name: 'casparcg.exe', pid: 4242 }
-                : { kind: 'self' },
-          }),
-          { ports: PORTS, amcpTimeoutMs: 300 },
-        )
-      ).lines,
-      'ports',
-    );
-    expect(held.status).toBe('fail');
-    expect(held.text).toContain('6250/udp is held by casparcg.exe (PID 4242)');
-    const ok = line(
-      (
-        await runConnectionCheck(
-          { playoutAddress: api, origin: ORIGIN },
-          probes({ portHolder: async () => ({ kind: 'self' }) }),
-          { ports: PORTS, amcpTimeoutMs: 300 },
-        )
-      ).lines,
-      'ports',
-    );
-    expect(ok).toEqual({
-      id: 'ports',
-      status: 'pass',
-      text: 'Ports 5174, 5280, 7911 and 6250/udp are free for this station.',
+  it('v2rayN RUNNING with no proxy on and no tunnel up intercepts nothing: the line passes (it failed before)', async () => {
+    expect(
+      await proxyLine({
+        processes: async () => [
+          { name: 'explorer.exe', pid: 4 },
+          { name: 'v2rayN.exe', pid: 2136 },
+        ],
+      }),
+    ).toEqual(PASS);
+  });
+
+  it('the proxy setting LEFT BEHIND with nothing listening on its address: the line passes', async () => {
+    const asked: string[] = [];
+    expect(
+      await proxyLine({
+        systemProxy: async () => ({ server: '127.0.0.1:10808', bypass: ['<local>'] }),
+        portHolder: async (proto, port) => {
+          asked.push(`${proto}:${String(port)}`);
+          return { kind: 'free' };
+        },
+      }),
+    ).toEqual(PASS);
+    // The instrument looked where the setting points — the listener, not the setting, decides.
+    expect(asked).toEqual(['tcp:10808']);
+  });
+
+  it('a REAL proxy on: a WARNING naming the proxy, what holds it and the clients with their PIDs', async () => {
+    expect(
+      await proxyLine({
+        processes: async () => [
+          { name: 'v2rayN.exe', pid: 2136 },
+          { name: 'xray.exe', pid: 9132 },
+        ],
+        systemProxy: async () => ({ server: '127.0.0.1:10808', bypass: [] }),
+        portHolder: async (proto, port) =>
+          proto === 'tcp' && port === 10808
+            ? { kind: 'other', name: 'xray.exe', pid: 9132 }
+            : { kind: 'free' },
+      }),
+    ).toEqual({
+      id: 'proxy',
+      status: 'warn',
+      text:
+        "On CG Bridge's machine, the Windows proxy 127.0.0.1:10808 is on, held by xray.exe (PID 9132); " +
+        'running: v2rayN (PID 2136) and the v2ray/xray core (PID 9132).',
     });
   });
 
-  it('the Playout on THIS machine is a warning, not a failure; control: another machine passes', async () => {
+  it('a proxy on ANOTHER host cannot be read here, so it is taken as live: a warning', async () => {
+    const proxied = await proxyLine({
+      systemProxy: async () => ({ server: 'proxy.corp:3128', bypass: [] }),
+    });
+    expect(proxied).toEqual({
+      id: 'proxy',
+      status: 'warn',
+      text: "On CG Bridge's machine, the Windows proxy proxy.corp:3128 is on.",
+    });
+  });
+
+  it('a tunnel UP beside a LAN route: a warning naming the adapter; Windows’ Teredo is not a tunnel', async () => {
+    expect(await proxyLine({ adapters: () => ['Ethernet', 'singbox_tun'] })).toEqual({
+      id: 'proxy',
+      status: 'warn',
+      text: "On CG Bridge's machine, the tunnel singbox_tun is up.",
+    });
+    expect(
+      await proxyLine({ adapters: () => ['Ethernet', 'Teredo Tunneling Pseudo-Interface'] }),
+    ).toEqual(PASS);
+  });
+
+  it('the ROUTE to the Playout through the tunnel is proved interception: a FAILURE', async () => {
+    const tunnelled = await proxyLine({
+      route: async () => ({ address: '172.18.0.1', iface: 'singbox_tun' }),
+      adapters: () => ['singbox_tun'],
+      processes: async () => [{ name: 'sing-box.exe', pid: 8352 }],
+    });
+    expect(tunnelled).toEqual({
+      id: 'proxy',
+      status: 'fail',
+      text:
+        "CG Bridge's traffic to 127.0.0.1 goes through the tunnel singbox_tun; running: sing-box " +
+        '(PID 8352). Turn it off, then check again.',
+    });
+  });
+
+  it('🔴 R-090 — no `ports` and no `topology` line, however the ports are held; no line says "this machine"', async () => {
     const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
-    const here = line(
-      (
-        await runConnectionCheck({ playoutAddress: api, origin: ORIGIN }, probes(), {
-          ports: PORTS,
-          amcpTimeoutMs: 300,
-        })
-      ).lines,
-      'topology',
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes({
+        route: lan,
+        portHolder: async () => ({ kind: 'other', name: 'casparcg.exe', pid: 4242 }),
+      }),
+      { amcpTimeoutMs: 300, ...PAST_WINDOW },
     );
-    expect(here.status).toBe('warn');
-    const away = line(
-      (
-        await runConnectionCheck(
-          { playoutAddress: api, origin: ORIGIN },
-          probes({ resolve: async () => ['10.20.30.40'] }),
-          { ports: PORTS, amcpTimeoutMs: 300 },
-        )
-      ).lines,
-      'topology',
-    );
-    expect(away.status).toBe('pass');
+    // Control: the check ran — its probed lines are all there.
+    expect(lines.map((l) => l.id)).toEqual(PROBED_IN_ORDER);
+    expect(lines.map((l) => l.id)).not.toContain('ports');
+    expect(lines.map((l) => l.id)).not.toContain('topology');
+    for (const l of lines) expect(l.text, l.id).not.toMatch(/this machine/i);
+  });
+
+  it('tasklist CSV gives each process its name and PID', () => {
+    expect(
+      parseTasklist(
+        '"System Idle Process","0","Services","0","8 K"\r\n"v2rayN.exe","2136","Console","1","90,112 K"\r\n',
+      ),
+    ).toEqual([
+      { name: 'System Idle Process', pid: null },
+      { name: 'v2rayN.exe', pid: 2136 },
+    ]);
+  });
+
+  it('a proxy setting names its host and port in each Windows spelling', () => {
+    expect(proxyEndpoint('127.0.0.1:10808')).toEqual({ host: '127.0.0.1', port: 10808 });
+    expect(proxyEndpoint('http=127.0.0.1:10809;https=127.0.0.1:10809')).toEqual({
+      host: '127.0.0.1',
+      port: 10809,
+    });
+    expect(proxyEndpoint('http://127.0.0.1:10810/pac')).toEqual({ host: '127.0.0.1', port: 10810 });
+    expect(proxyEndpoint('proxy.corp')).toEqual({ host: 'proxy.corp', port: null });
   });
 
   it('a mistyped address is one line saying so', async () => {
@@ -825,7 +844,7 @@ describe('§2F — the local lines: VPN or proxy, ports, topology', () => {
     const { lines } = await runConnectionCheck(
       { playoutAddress: 'ftp://playout', origin: ORIGIN },
       probes(),
-      { ports: PORTS },
+      {},
     );
     expect(lines).toEqual([
       {

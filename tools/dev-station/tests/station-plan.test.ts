@@ -261,9 +261,8 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` is a whole station', () => 
     expect(lines).toContain(
       '  CasparCG 127.0.0.1:5250  (fake · channels 1 and 2 · programme feeds on 9250, 9251)',
     );
-    expect(lines.filter((l) => l.includes('The Playout and CasparCG run on this machine'))).toEqual(
-      ['  check    "The Playout and CasparCG run on this machine" is expected here: they do.'],
-    );
+    // `R-090` — the check no longer judges where the Playout and CasparCG run, so nothing promises it.
+    expect(lines.filter((l) => /run on this machine| {2}check {2}/.test(l))).toEqual([]);
     expect(lines).toContain('  log      C:\\x\\fake\\bridge.log');
     // Control: a dev station on a real Playout has no fake CasparCG and no such line.
     const plain = banner({ stateDir: 'C:\\x', playout: 'http://192.168.21.111:8080' });
@@ -567,10 +566,8 @@ describe('`DEV-LOCAL-CASPAR-01` — `--fake --caspar <host:port>`', () => {
     );
     expect(lines).toContain("  PROGRAM  no return feed here — watch CasparCG's own window");
     expect(lines).toContain('  Ctrl+C stops it — what is on air stays on CasparCG.');
-    // The same-machine warning is still said to be expected — it is true here too.
-    expect(
-      lines.filter((l) => l.includes('The Playout and CasparCG run on this machine')),
-    ).toHaveLength(1);
+    // `R-090` — no same-machine warning is promised: the check no longer gives one.
+    expect(lines.filter((l) => /run on this machine/.test(l))).toEqual([]);
     // No fake CasparCG, and no programme feed, is claimed.
     expect(lines.join('\n')).not.toMatch(/fake · channels|programme feeds on/);
   });
