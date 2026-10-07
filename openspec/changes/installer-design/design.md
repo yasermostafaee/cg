@@ -97,8 +97,10 @@ Close. Exit codes stay the engine's contract: 0 done, 1 cancelled, 2 failed.
   Persian text.
 - **The rail** is the splash: its ground, its relit APASAI mark (path data read from
   `apps/runtime/brand/apasai-logo.svg`), its wordmark (`CG` heavy, the role light, tracked 0.3 em), its
-  brand-blue progress with its glow, and its playout scene drawn faintly at the foot. **The page** is the
-  sign-in card: its surface, its raised foot, its buttons and check box.
+  brand-blue progress with its glow, and, drawn faintly at the foot, the product's own scene: CG Control's
+  playout scene, CG Designer's artboard, CG Bridge's own (`installer-rail-art`, `P-067`; until `0.11.3`
+  every rail drew CG Control's). **The page** is the sign-in card: its surface, its raised foot, its
+  buttons and check box.
 - **Icons**: the console's lucide set (1.21.0), drawn as paths with lucide's stroke.
 - **The tile**: the app's own 512 px icon (B-290), rescaled once per DPI with a high-quality filter to
   the exact device size; CG Bridge, which has no window of its own, wears CG Control's dark tile.

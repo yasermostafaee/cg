@@ -3,6 +3,7 @@
 
 use super::gfx::{paint, Device, Frame, Gfx};
 use crate::layout::{Scene, WidgetId, WIN_H, WIN_W};
+use crate::product::ProductId;
 use std::path::Path;
 use windows::core::{Interface, Result, HSTRING};
 use windows::Win32::Graphics::Direct2D::Common::*;
@@ -16,6 +17,7 @@ use windows::Win32::UI::Shell::SHCreateStreamOnFileEx;
 pub struct Shot<'a> {
     pub scene: &'a Scene,
     pub role: &'a str,
+    pub product: ProductId,
     pub tile_png: Option<&'a [u8]>,
     pub focus: Option<WidgetId>,
     pub hover: Option<WidgetId>,
@@ -49,6 +51,7 @@ pub fn render(g: &Gfx, shot: &Shot, scale: f32, out: &Path) -> Result<()> {
         let frame = Frame {
             scene: shot.scene,
             role: shot.role,
+            product: shot.product,
             tile_png: shot.tile_png,
             hover: &hover_fn,
             pressed: None,

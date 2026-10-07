@@ -843,6 +843,7 @@ impl App {
         let frame = Frame {
             scene: &self.scene,
             role: self.model.product.role,
+            product: self.model.product.id,
             tile_png: self.tile.as_deref(),
             hover: &hover_fn,
             pressed: self.pressed.filter(|p| Some(*p) == self.hover),

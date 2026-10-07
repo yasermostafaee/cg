@@ -10,6 +10,8 @@ use crate::layout::{
 };
 use crate::model::{StepState, MAX_STEPS};
 use crate::palette::{self, Rgb};
+use crate::product::ProductId;
+use crate::rail_art::{self, Op as ArtOp};
 use crate::svgpath::{self, Cmd, Xform};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -93,6 +95,8 @@ pub struct Device {
 pub struct Frame<'a> {
     pub scene: &'a Scene,
     pub role: &'a str,
+    /// Whose rail art the foot of the rail carries (`P-067`).
+    pub product: ProductId,
     pub tile_png: Option<&'a [u8]>,
     pub hover: &'a dyn Fn(WidgetId) -> f32,
     pub pressed: Option<WidgetId>,
@@ -628,7 +632,8 @@ pub fn paint(g: &Gfx, rt: &ID2D1RenderTarget, dev: &mut Device, f: &Frame) {
 fn rail(p: &mut Painter, f: &Frame) {
     p.fill(Rect::new(0.0, 0.0, RAIL_W, WIN_H), palette::SPLASH_BG, 1.0);
     p.vline(RAIL_W - 0.5, 0.0, WIN_H, palette::BORDER);
-    splash_scene(p);
+    // `P-067` — the product's OWN scene, faint above Help (CG Control's is the one every rail drew).
+    draw_art(p, &rail_art::display_list(rail_art::rail_art(f.product)));
     // The lockup: the mark, then the wordmark — `CG` heavy, the role light, tracked 0.3 em.
     for (geo, c) in &p.g.logo.clone() {
         let b = p.brush(*c, 1.0);
@@ -703,50 +708,57 @@ fn wordmark(p: &mut Painter, role: &str) {
     };
 }
 
-/// The splash's playout scene — its instrument only (rows, wires, the monitor and its ticks) —
-/// faint behind the rail's foot. Geometry from `apps/runtime/index.html`'s scene (viewBox 360 × 150).
-fn splash_scene(p: &mut Painter) {
-    let s = 192.0 / 360.0;
-    let (ox, oy) = (20.0, WIN_H - 60.0 - 150.0 * s);
-    let at = |x: f32, y: f32| v(ox + x * s, oy + y * s);
-    p.layer(0.4);
-    let line = p.brush(palette::SPLASH_LINE, 1.0);
-    let wire = p.brush(palette::SPLASH_RAIL, 1.0);
-    let bar = p.brush(palette::SPLASH_SCENE_BAR, 1.0);
-    unsafe {
-        for (y, bw) in [(22.0, 62.0), (64.0, 46.0), (106.0, 54.0)] {
-            let r = Rect::new(ox + 10.0 * s, oy + y * s, 120.0 * s, 30.0 * s);
-            p.rt.DrawRoundedRectangle(&rr(r, 5.0 * s), &line, s, None);
-            p.rt.FillRoundedRectangle(
-                &rr(
-                    Rect::new(ox + 22.0 * s, oy + (y + 12.0) * s, bw * s, 5.0 * s),
-                    2.5 * s,
-                ),
-                &bar,
-            );
-        }
-        p.rt.DrawLine(at(130.0, 37.0), at(180.0, 37.0), &wire, s, None);
-        p.rt.DrawLine(at(130.0, 79.0), at(180.0, 79.0), &wire, s, None);
-        p.rt.DrawRoundedRectangle(
-            &rr(
-                Rect::new(ox + 180.0 * s, oy + 20.0 * s, 168.0 * s, 94.0 * s),
-                4.0 * s,
-            ),
-            &line,
-            s,
-            None,
-        );
-        for (x, y, dx, dy) in [
-            (190.0, 32.0, 4.0, -4.0),
-            (338.0, 32.0, -4.0, -4.0),
-            (190.0, 102.0, 4.0, 4.0),
-            (338.0, 102.0, -4.0, 4.0),
-        ] {
-            p.rt.DrawLine(at(x, y), at(x, y + dy), &wire, s, None);
-            p.rt.DrawLine(at(x, y + dy), at(x + dx, y + dy), &wire, s, None);
+/// The rail's art: the product's own scene (`rail_art`), executed call for call. CG Control's list is
+/// the very calls `0.11.3`'s `splash_scene` made (pinned in `rail_art`'s tests), so its rail is unchanged.
+fn draw_art(p: &mut Painter, ops: &[ArtOp]) {
+    for op in ops {
+        match op {
+            ArtOp::Layer(opacity) => p.layer(*opacity),
+            ArtOp::Pop => p.pop(),
+            ArtOp::StrokeRect {
+                rect,
+                radius,
+                color,
+                width,
+            } => {
+                let b = p.brush(*color, 1.0);
+                unsafe {
+                    p.rt.DrawRoundedRectangle(&rr(*rect, *radius), &b, *width, None)
+                };
+            }
+            ArtOp::FillRect {
+                rect,
+                radius,
+                color,
+            } => {
+                let b = p.brush(*color, 1.0);
+                unsafe { p.rt.FillRoundedRectangle(&rr(*rect, *radius), &b) };
+            }
+            ArtOp::Line {
+                from,
+                to,
+                color,
+                width,
+            } => {
+                let b = p.brush(*color, 1.0);
+                unsafe {
+                    p.rt.DrawLine(v(from.0, from.1), v(to.0, to.1), &b, *width, None)
+                };
+            }
+            ArtOp::StrokePath { cmds, color, width } => {
+                if let Ok(geo) = p.g.geometry(cmds, false) {
+                    let b = p.brush(*color, 1.0);
+                    unsafe { p.rt.DrawGeometry(&geo, &b, *width, &p.g.round) };
+                }
+            }
+            ArtOp::FillPath { cmds, color } => {
+                if let Ok(geo) = p.g.geometry(cmds, true) {
+                    let b = p.brush(*color, 1.0);
+                    unsafe { p.rt.FillGeometry(&geo, &b, None) };
+                }
+            }
         }
     }
-    p.pop();
 }
 
 fn rail_step(p: &mut Painter, step: &RailStep, t: f32) {

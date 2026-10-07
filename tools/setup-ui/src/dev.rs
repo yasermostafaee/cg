@@ -172,6 +172,7 @@ pub fn preview(args: &[String]) -> u32 {
                 let shot = Shot {
                     scene: &scene,
                     role: p.role,
+                    product: id,
                     tile_png: Some(tile),
                     focus: *focus,
                     hover: None,

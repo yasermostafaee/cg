@@ -18,6 +18,7 @@ pub mod observe;
 pub mod pack;
 pub mod palette;
 pub mod product;
+pub mod rail_art;
 pub mod server;
 pub mod svgpath;
 pub mod trailer;

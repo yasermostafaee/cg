@@ -145,6 +145,30 @@ jobs:
           rustup target add i686-pc-windows-msvc
           cargo build --release -p cg-setup --target i686-pc-windows-msvc
 
+      # P-067 (RELEASE-0114-01 Part B2) — every page of all three setup windows, rendered by the
+      # program just built, before anything is packed: the bare cg-setup.exe (nothing appended) offers
+      # only its developer preview (`--cg-preview`, src/dev.rs), which paints each page through the
+      # window's own painter onto a bitmap — at 100 %, and Welcome at 150 % and 200 %. The record of
+      # each installer's step rail and the art at its foot. A GUI-subsystem program, so it is waited for.
+      - name: Render CG Setup's pages (each rail's art)
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath target/i686-pc-windows-msvc/release/cg-setup.exe -Wait -PassThru -NoNewWindow -ArgumentList @(
+            '--cg-preview', 'setup-rail-art', 'apps/runtime/src-tauri/icons/icon.png', 'apps/designer/src-tauri/icons/icon.png')
+          if ($p.ExitCode -ne 0) { "The preview exited $($p.ExitCode)."; exit 1 }
+          foreach ($role in 'control', 'designer', 'bridge') {
+            if (-not (Test-Path "setup-rail-art/$role-welcome.png")) { "No $role-welcome.png."; exit 1 }
+          }
+          Get-ChildItem setup-rail-art | Format-Table Name, Length -AutoSize
+
+      - name: Upload CG Setup's pages
+        uses: actions/upload-artifact@v7
+        with:
+          name: setup-rail-art
+          path: setup-rail-art/
+          if-no-files-found: error
+          retention-days: 30
+
       # The install guide the window's Help opens, when this release has one (the release job prints
       # the same file again for the release itself).
       - name: Build the install guide for the installers' Help
