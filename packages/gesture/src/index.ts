@@ -3,7 +3,8 @@
  *
  * ONE headless pointer-drag gesture, shared by the Runtime's `ShellDivider` and
  * the Designer's `Splitter` — and (`TEXT-DIGITS-01`) the ONE keyboard-language
- * detector both apps' editors ask. Behaviour only: no styles, no tokens, no markup,
+ * detector both apps' editors ask, and (`B-319`) the ONE action-row fit both apps'
+ * dialog footers are watched with. Behaviour only: no styles, no tokens, no markup,
  * so `@cg/ui` stays tokens-only and components stay app-local.
  */
 export { useDragGesture, type DragGesture, type DragGestureOptions } from './useDragGesture.js';
@@ -16,3 +17,14 @@ export {
 } from './keyboardLanguage.js';
 // `TEXT-DIGITS-01` — what every editor writes when text is entered: its choice, the caret kept.
 export { enteredBy, writeDigitsInto, writeDigitsIntoEditable } from './enteredDigits.js';
+// `B-319` — the one dialog-footer fit both apps' modal primitives watch their action row with.
+export {
+  ACTION_ROW_STACKED,
+  fitActionRow,
+  rowDoesNotFit,
+  spillsOut,
+  useActionRowFit,
+  watchActionRow,
+  type Extent,
+  type ItemFit,
+} from './actionRowFit.js';
