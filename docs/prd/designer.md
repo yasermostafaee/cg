@@ -5633,3 +5633,14 @@ names CG Designer, `Version <release>` and the build; WHEN the release version i
 Escape). Tests: `about-version.dom.test.ts` (the release read through `tools/release`; the control, a
 dialog planted with `0.0.1`, fails the same check) and `app-version.spec.ts` (the built app).
 `turbo.json`'s new `@cg/designer#test` hashes the version files the spec reads.
+
+## [~] D-162 — The installed CG Designer never loses unsaved work silently ⟨priority: high — the installed app closed at once and the work was lost⟩ — FILED 2026-10-07 by `RELEASE-0114-01-B` B1 · `openspec/changes/close-guard/`
+
+**Repro / Actual (the owner, 2026-10-07):** in the browser, closing the tab with unsaved changes warns; the
+installed CG Designer closes at once and the unsaved work is lost — the webview's `beforeunload` is not asked on
+a window close. **Expected:** any close the shell can intercept, with unsaved changes, is held and one dialog
+shows — `Unsaved changes`, the project's name, `Save` / `Don't save` / `Cancel` (focus on `Cancel`, `Esc` =
+Cancel); `Save` saves and closes, and a failed save keeps the window with its reason; with no unsaved changes the
+window closes at once. The browser's warning stays, and both read ONE dirty predicate. **Acceptance:** the
+desktop smoke (UIA): a change, a close, the dialog with the window kept, `Cancel` keeps it, `Don't save` closes;
+no change closes at once; Playwright: the leave prompt with unsaved changes and none without.

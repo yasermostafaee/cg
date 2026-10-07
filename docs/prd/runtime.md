@@ -4544,3 +4544,50 @@ not available on the backup engine. **Why:** `B-316`. **Acceptance:**
 - WHEN anything goes to A THEN its line is unchanged, line for line, against `0.11.2`'s wire
 - the status bar reads `BACKUP B · n of m channels mapped`; each channel's own view reads `Backup: CH M on
 <host>` or `Backup: not mapped — nothing is sent to the backup`
+
+## [~] R-090 — The console's check judges only what a console needs: no verdict about the machine it runs on ⟨priority: high — the owner's question: "when the Playout runs on another server, why does a console check this machine's ports or engine at all?"⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part A1 · `openspec/changes/console-check-scope/`
+
+**What:** the check (first-run and Station setup → Check) carries no line about local ports ("Ports 5280, 7911 and
+6251/udp are free for this station") and no topology advice ("UDP 6250 belongs to the engine here, so CG Control
+belongs on a separate machine") — leftovers of the era when CG Control carried its own bridge. A console may run
+on any machine, the Playout's included; the ports are CG Bridge's, wherever it runs. CG Bridge's own state comes
+from CG Bridge: its `/health` names a port it cannot open and what holds it, and the console says so naming the
+machine — `CG Bridge on <host> cannot open UDP 6251: held by <process> (PID n)`. Every line CG Bridge writes
+about its own machine names it as CG Bridge's, never "this machine". An older CG Bridge's `ports` and `topology`
+lines are dropped by the console. **Acceptance:** a check against the fakes has no `ports` or `topology` line; a
+CG Bridge whose OSC port is held shows the line above; the old strings are gone from the tree.
+
+## [~] R-091 — CG Bridge on this machine and not running: `Start CG Bridge`, and `Free the port` only for a holder of ours ⟨priority: medium⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part A5 · `openspec/changes/console-check-scope/`
+
+**What:** when the resolved CG Bridge address is this machine and nothing answers there, CG Control reads its
+own Windows (the `CGBridge` service, what listens on TCP 5280) and says, in words:
+`CG Bridge is installed here but not running.` with `Start CG Bridge` — which asks Windows for administrator rights (the UAC prompt is the app's
+own step) and starts the service; or that TCP 5280 is held by `<process> (PID n)`, offering `Free the port` only
+when the holder is ours (an older CG Bridge, or a CG Control `0.9.x` sidecar `cg-bridge.exe`) and never stopping
+anything else; or that CG Bridge is not installed here. No PowerShell line in the app or the guide. **Acceptance:**
+the three states and the two offers in dom tests; the classification (ours or not) and the service read in the
+shell's own tests; a foreign holder is never offered `Free the port`.
+
+## [~] R-092 — The check shows what needs attention, and folds the passes ⟨priority: medium⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part A6 · `openspec/changes/console-check-scope/`
+
+**What:** each group shows its failures, warnings and waits in full; its passes fold into one line
+(`Reachable · 4 OK`); a group with only passes is that one line; one `Show all` control opens every line, and
+the choice is remembered per viewer. **Acceptance:** dom tests for a mixed group, an all-pass group, the toggle
+and its memory; the persisted-key census lists the key.
+
+## [~] R-093 — The last explanatory prose on operator surfaces: the NOT CONNECTED banner and the layer list's wait ⟨priority: low — the owner's standing rule⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part C · `openspec/changes/console-check-scope/`
+
+**What:** the banner keeps the state, the address and the one fact an operator acts on
+(`Takes are refused until it is back.`), and drops the explanations ("nothing is listening on port 5280 there", "switched off, a wrong
+address, or a firewall", "something there answers, but not as CG Bridge", "On-air commands are refused, not
+queued: reissue them …"); `Loading the layer list…` loses "Waiting for the bridge to send the declared rows. This
+is not an empty list — the rows appear as soon as it answers." **Acceptance:** both absences pinned in specs; the
+old strings swept by string and by component.
+
+## [~] R-094 — CG Control does not close on a slip ⟨priority: medium⟩ — FILED 2026-10-07 by `RELEASE-0114-01-B` B2 · `openspec/changes/close-guard/`
+
+**What:** any close the shell can intercept shows one dialog, `Close CG Control?`, with `Close` and `Cancel`
+(focus on `Cancel`, `Esc` = Cancel) and, only when true, the fact `N items stay on air.`; the browser console
+asks with its own leave prompt while signed in. Closing sends nothing to CG Bridge or CasparCG. **Acceptance:**
+the desktop smoke (UIA): a close shows the dialog, `Cancel` keeps the window, `Close` exits; Playwright: the leave
+prompt while signed in; a test that nothing goes on the wire.

@@ -4077,3 +4077,14 @@ matches none of its faces and falls through as before, so Latin keeps Exo 2 by c
 CDP `CSS.getPlatformFontsForNode` (`chrome-persian-font.spec.ts` in each app); red with the old
 stacks planted — the Runtime's Persian row name in `Segoe UI Semibold`, the Designer's probe in
 `Segoe UI, Exo 2`.
+
+## [~] B-319 — A dialog's buttons leave the dialog when their labels are long ⟨priority: medium — the owner's `Cancel` sat outside the clip dialog's left edge⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part B1 · `openspec/changes/dialog-footer-fit/`
+
+**Repro / Actual (the owner's `0.11.3`, picture 1):** CG Designer's "This clip is longer than the composition"
+dialog — `Cancel`, `Add as backdrop — follow the composition`, `Extend the composition` — puts `Cancel` outside
+the dialog, left of its edge, since the labels grew. The footer row does not wrap. **Expected:** the shared
+dialog footer keeps every button inside the dialog at every window size and text scale the app supports — it
+wraps, and stacks to a column when one row cannot hold it; fixed once in the shared footer, not per dialog; a
+label may be shortened with its long form in a `title`. **Acceptance:** measured in Chromium: every button's box
+lies inside the dialog's box, at the smallest supported window and at a large text scale, for every dialog of
+three or more buttons in both apps.

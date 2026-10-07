@@ -3268,3 +3268,27 @@ found the 3 headings `B-315`, `R-088` and `P-066` on `dev`; no stash. The same m
 `R-090`–`R-092` and `P-067`–`P-069`.
 
 ⇒ **Next free after this entry is `B-317`**, **`D-162`**, **`P-067`**, **`R-090`** and **`C-049`**.
+
+### 2026-10-07 — `RELEASE-0114-01` (+ DELTA A, DELTA B) takes `B-317`…`B-319`, `R-090`…`R-094`, `D-162` and `P-067`
+
+- `B-317` — the Set up check runs on whatever CG Bridge the console is already connected to, and Connect then dials
+  another — [bugs-runtime.md](bugs-runtime.md).
+- `B-318` — the VPN/proxy line fires on a process alone, in red, and says "this machine" about CG Bridge's machine
+  — [bugs-runtime.md](bugs-runtime.md).
+- `B-319` — a dialog's buttons leave the dialog when their labels are long — [bugs-designer.md](bugs-designer.md).
+- `R-090` — the console's check judges only what a console needs — [runtime.md](runtime.md).
+- `R-091` — CG Bridge on this machine and not running: `Start CG Bridge`, `Free the port` only for ours —
+  [runtime.md](runtime.md).
+- `R-092` — the check shows what needs attention, and folds the passes — [runtime.md](runtime.md).
+- `R-093` — the last explanatory prose on operator surfaces — [runtime.md](runtime.md).
+- `R-094` — CG Control does not close on a slip (DELTA B) — [runtime.md](runtime.md).
+- `D-162` — the installed CG Designer never loses unsaved work silently (DELTA B) — [designer.md](designer.md).
+- `P-067` — each installer's step rail carries its own art — [platform.md](platform.md).
+
+Measured free before use:
+`git grep -n -E "^## \[.\] (B-31[7-9]|B-32[0-4]|R-09[0-4]|P-06[7-9]|D-16[2-4]|C-049) " <ref> -- docs` on all 9 refs (`ai-stale`, `design/live-source-multibox`, `dev`, `main`, `origin`, `origin/dev`,
+`origin/main`, `origin/wip/release-0112-pictures`, `origin/wip/release-0113-pictures`) returned nothing, and the
+same with `--untracked`; control: the same sweep's shape found the 4 headings `B-316`, `R-089`, `P-066` and
+`D-161` on `dev`; no stash.
+
+⇒ **Next free after this entry is `B-320`**, **`D-163`**, **`P-068`**, **`R-095`** and **`C-049`**.

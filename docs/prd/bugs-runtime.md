@@ -13385,3 +13385,53 @@ was green locally by timing. Now a backup channel carries a line only once a COM
 back clean (`CoreGuard.clearsB`), and a refresh asked for during a reading is one more reading after it. Pinned
 deterministically: a neighbour whose `/health` answers 2.5 s late holds the window open, and the old seam sends
 core B four layer lines inside it (red), the new one none.
+
+## [~] B-317 — The Set up check runs on whatever CG Bridge the console is already connected to, and Connect then dials another ⟨priority: high — the owner was stuck on his own PC with `0.11.3`⟩ — FILED 2026-10-07 by `RELEASE-0114-01` §0 · `openspec/changes/console-check-scope/`
+
+**Repro / Actual (the owner's PC, 2026-10-07, read from the console's own record, nothing dialled):** the
+console's station record said `http://192.168.21.111:8080`, so its socket was on `.111`'s CG Bridge. He typed
+`http://127.0.0.1:8080` and pressed Check. `setup.check` went out over THAT socket (`WebSocketRuntime.setup.check`
+→ `#invoke`), so `.111`'s CG Bridge (`0.11.2`) probed `127.0.0.1` — its OWN loopback — and every line came back
+about `.111`: its Playout `2.9.5`, its CasparCG (`VERSION 2.5.0 6b29237 Dev`), its v2rayN, its ports, and
+"The Playout and CasparCG run on this machine". Before a sign-in the bridge checks only "this station's Playout"
+(`checksThisStation`), and `.111`'s own Playout is configured as `http://127.0.0.1:8080`, so the loopback address
+passed that narrowing by coincidence. "CG Bridge found at 192.168.21.111:5280" was the socket's address, never the
+typed one's. `Connect` then saved `127.0.0.1` and dialled `ws://127.0.0.1:5280` on the owner's PC, where nothing
+listens: `NOT CONNECTED … 127.0.0.1:5280`. A later record held a typed `http://192.168.111:8000` — the URL parser
+reads the three-part `192.168.111` as `192.168.0.111`: picture 5. With no CG Bridge answering, Check on Set up
+said `Bridge disconnected — command rejected. Not sent to CasparCG.` (the console→bridge refusal), the Sign in
+fields stayed disabled with no reason, and first-run's opaque ground covered the red banner's `Retry connection`
+and `Set up again`: nothing more could be done. Two more of the same family, found by reading: a CG Bridge set up
+on the Playout's machine as `http://127.0.0.1:8080` refuses a console's check of the Playout's REAL address
+before a sign-in, and advertises `127.0.0.1` as the sign-in address — so a console on another PC signs in to its
+own loopback.
+
+**Expected:** ONE CG Bridge address — the CG Bridge field if a person typed it, else the Playout's host on
+`5280` — used by the check, its "found at" line, `Connect`, the banner and the reconnect. The check runs on THAT
+CG Bridge; a remembered address from another session is offered as a choice ("Use … (last used)"), never used
+silently; a CG Bridge on another host than the Playout is said in one line. `Connect` only when CG Bridge
+answered there. Set up never shows the console→bridge refusal; it says
+`CG Bridge is not answering at <host>:<port>.` and keeps Check, the address fields and Sign in usable. A loopback address CG Bridge advertises
+names CG Bridge's machine, and a CG Bridge whose own Playout is loopback accepts its machine's own address as
+"this station's Playout".
+
+**Acceptance:**
+
+- WHEN the station record names `.111` and the typed Playout is `127.0.0.1` THEN the check and `Connect` both use
+  `127.0.0.1:5280`, and the check never runs on `.111`
+- WHEN no CG Bridge answers, then one appears, then it disappears THEN Set up says so in words each time and the
+  owner is never left without Check, the fields and Sign in
+- WHEN a CG Bridge whose Playout is `http://127.0.0.1:8080` is asked, before a sign-in, to check its machine's own
+  address on that port THEN it checks it
+
+## [~] B-318 — The VPN/proxy line fires on a process alone, in red, and says "this machine" about CG Bridge's machine ⟨priority: medium — a false alarm that sent the owner to quit software that was not in the way⟩ — FILED 2026-10-07 by `RELEASE-0114-01` §0.3 · `openspec/changes/console-check-scope/`
+
+**Repro / Actual:** `checkInterceptors` (CG Bridge, `connection-check.ts`) failed the line whenever a process
+whose name matched v2rayN, xray, sing-box, … was running — "even with its TUN off" — before it looked at a proxy
+or a route. It runs on CG Bridge's machine, so a v2rayN quit on the console's PC can never clear it (the owner's
+line came from `.111`). **Expected:** the line appears only while something actually intercepts — a known
+process with an active system proxy (a listener on its address), a tunnel adapter up, or a route proved to leave
+through one — and names what it found (process and PID, the proxy and its holder, the adapter). Amber; red only
+when the route to the Playout or CasparCG host goes through the tunnel. Its words name CG Bridge's machine.
+**Acceptance:** planted states — process gone: no line; proxy key left on with no listener: no line; a real proxy
+on: amber, naming it; the route to the Playout through the tunnel: red.

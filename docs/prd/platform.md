@@ -4034,3 +4034,11 @@ Desktop 37331199682 on `65507361` and the tag's run 37337861683): the CG Bridge 
 left exactly one row — 64-bit, `CGBridge`, `CG Bridge`, `0.11.3`; the `v0.11.2` draft's classic install left its
 own row at `0.11.2` (a new upgrade job), and every upgrade — from `0.10.0`, `0.11.0`, `0.11.1` and `0.11.2` — left
 one row reading `0.11.3`.
+
+## [~] P-067 — Each installer's step rail carries its own art ⟨priority: low⟩ — FILED 2026-10-07 by `RELEASE-0114-01` Part B2 · `openspec/changes/installer-rail-art/`
+
+**Repro / Actual (the owner's `0.11.3`, picture 2):** CG Designer's setup window shows CG Control's illustration
+at the foot of its step rail, and a second window frame stood behind it with `Version 0.11.3` at its foot.
+**Expected:** CG Control keeps today's motif; CG Designer and CG Bridge get their own (or none); the second frame
+is identified — ours and fixed so one window shows, or named if it is not ours. **Acceptance:** every installer's
+rail pictured before and after on the clean runner.
