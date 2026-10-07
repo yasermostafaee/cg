@@ -57,6 +57,7 @@ import {
   pressInDialog,
   processCount,
   sendClose,
+  webViewArgs,
 } from './app-window.mjs';
 
 const args = Object.fromEntries(
@@ -330,7 +331,7 @@ function launchControl(cdpPort) {
     stdio: 'ignore',
     env: {
       ...process.env,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${String(cdpPort)}`,
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webViewArgs(cdpPort),
     },
   });
   child.unref();
@@ -958,7 +959,7 @@ function launchDesigner(cdpPort) {
     stdio: 'ignore',
     env: {
       ...process.env,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${String(cdpPort)}`,
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webViewArgs(cdpPort),
     },
   });
   child.unref();

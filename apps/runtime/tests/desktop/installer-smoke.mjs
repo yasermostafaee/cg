@@ -65,6 +65,7 @@ import {
   pressInDialog,
   processCount,
   sendClose,
+  webViewArgs,
 } from './app-window.mjs';
 import { parseRules } from './firewall-rule.mjs';
 
@@ -163,7 +164,7 @@ function launch(exe, cdpPort) {
     stdio: 'ignore',
     env: {
       ...process.env,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}`,
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: webViewArgs(cdpPort),
     },
   });
   child.unref();
