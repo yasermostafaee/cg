@@ -66,8 +66,10 @@ window may close.
       Control → held over first-run, Cancel keeps, Close exits; `shell.log` records the held close;
       `designer-unsaved-dialog.png`, `control-close-dialog.png`. `node --check` only — it runs on the
       Windows CI runner.
-- [ ] 5.2 **OWED** — the `smoke` job on the Windows runner, RAN and green, for the commit that
-      carries this change: run URL here.
+- [x] 5.2 The `smoke` job on the Windows runner RAN green on `126f1f59` (the tagged `v0.11.4`), 232 checks,
+      0 failed, read from the job log — both apps' held `WM_CLOSE`, their dialogs and the two pictures, now of
+      the dialogs (each waits for the start-up splash to leave):
+      https://github.com/yasermostafaee/cg/actions/runs/37621342149 (job 112797547621).
 - [x] 5.3 `RELEASE-0114-01-C` — the smoke's landing-page match was by TEXT (`New project`), and the
       button reads `+ New project` (its NAME is `New project`): both `D-162` steps would have timed out
       at the landing page. Matched by name; proved in local Chrome against the built Designer (the old

@@ -52,5 +52,12 @@
       exit codes unchanged: https://github.com/yasermostafaee/cg/actions/runs/37615205779 — every acceptance job
       RAN green
 - [x] 7.3 The guide `0.11.4` and its pictures (`6957660a`, `59219d96`; `guide.test.ts` 23/23)
-- [ ] 7.4 Tag, the draft "APASAI CG 0.11.4" (five files, read back, sums checked); `v0.11.3` retitled
-- [ ] 7.5 The Playout letter and `CG-BRIDGE-FOR-PLAYOUT-0.11.4.md`
+- [x] 7.4 `v0.11.4` (annotated `3ec13cf0`) on `126f1f59`, whose PR and Desktop runs were green with every job RAN
+      (https://github.com/yasermostafaee/cg/actions/runs/37621342131,
+      https://github.com/yasermostafaee/cg/actions/runs/37621342149); the tag's run repeated every job green and
+      opened the DRAFT "APASAI CG 0.11.4" (https://github.com/yasermostafaee/cg/actions/runs/37626202694): five
+      files, read back, re-downloaded, all four sums OK; CG Bridge's installer 24,763,738 bytes, SHA-256
+      `442f2494…e42c560`. `v0.11.3` retitled "APASAI CG 0.11.3 — superseded, do not use", its tag kept, still a
+      draft (read back). Not published.
+- [x] 7.5 The Playout letter (`Claude outputs/CG-CONTROL-SEND-0114-2026-10-07.md`, with the hash) and
+      `CG-BRIDGE-FOR-PLAYOUT-0.11.4.md` beside it (untracked; the owner sends them)
