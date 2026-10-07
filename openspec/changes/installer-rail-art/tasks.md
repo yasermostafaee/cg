@@ -19,15 +19,18 @@
       one-unit drift in CG Control's table reddens two; CG Bridge on CG Control's scene reddens the dispatch
       and the clearance tests (`top 390.4`)
 - [x] 2.3 72 passed locally (a scratchpad GNU toolchain; CI builds with MSVC)
-- [ ] 2.4 `Test CG Setup` RAN green in CI on the commit (run URL here)
+- [x] 2.4 `Test CG Setup` RAN green in CI on `813123a6` (`cargo test -p cg-setup`: 72 passed, read from the job
+      log): https://github.com/yasermostafaee/cg/actions/runs/37615205779 (job 112771758035)
 
 ## 3. Pictures
 
 - [x] 3.1 `desktop.yml` `installers`: `Render CG Setup's pages (each rail's art)` → artifact `setup-rail-art`
       (rehearsed locally: 31 pictures; a missing tile fails the step)
-- [ ] 3.2 The run on the commit: the render step RAN green, `setup-rail-art` and `setup-window-windows-2022`
-      / `-2025` read (run URL here)
-- [ ] 3.3 Every installer's rail before (`0.11.3`'s `setup-window-*`) and after, shown to the owner
+- [x] 3.2 The run on `813123a6`: the render step RAN green (`setup-rail-art` uploaded, 31 pictures), and
+      `setup-window-windows-2022` / `-2025` RAN green and were read (each Welcome's rail its own art):
+      https://github.com/yasermostafaee/cg/actions/runs/37615205779
+- [x] 3.3 Every installer's rail before (the owner's picture 2 of `0.11.3`) and after (the three Welcome renders,
+      and the guide's pictures 1–3 from the `0.11.4` build), in the release report (`Claude outputs/`, untracked)
 
 ## 4. Archive
 

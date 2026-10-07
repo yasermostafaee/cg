@@ -88,9 +88,9 @@ window may close.
 
 ## 6. Owed before this is done
 
-- [ ] 6.1 **OWED** — a COMPLETED, GREEN Linux `e2e` job on GitHub Actions for the commit carrying
-      this change (CLAUDE.md "E2E coverage"); the Windows runs above do not discharge it. Run URL
-      here.
+- [x] 6.1 A COMPLETED, GREEN Linux `e2e` job on GitHub Actions for a commit carrying this change
+      (`813123a6`), RAN — Runtime 336 passed, Designer 303 passed, both `close-guard.spec.ts` among them, read
+      from the job log: https://github.com/yasermostafaee/cg/actions/runs/37615205789 (job 112771815709).
 - [ ] 6.2 **OWED** — the owner's hand check on the installed apps: Alt+F4 with focus inside the page,
       the taskbar's Close window, and a Windows sign-out with unsaved work (expected: not held — the
       app ends; `design.md` §0.3).
@@ -98,9 +98,11 @@ window may close.
       nsis-tauri-utils `v0.5.3` (pinned by tauri-cli 2.11.5's bundler), `crates/nsis-process/src/lib.rs`
       `fn kill`: `OpenProcess(PROCESS_TERMINATE)` + `TerminateProcess(handle, 1)`, never `WM_CLOSE`; under
       `/S` (every CG Setup run) the template's OK/Cancel prompt is skipped. `design.md` §0.3.
-- [ ] 6.3b **OWED** — measured: the `acceptance-upgrade-0113` job's `upgrade-apps-open` phase, RAN and
-      green — CG Control's and CG Designer's installers over both apps open (Designer with unsaved
-      changes), from `0.11.3` and again over the guarded `0.11.4` apps (a held `WM_CLOSE` first);
-      each exits 0 within its bound, the app ended, nothing on air cleared. Run URL here.
+- [x] 6.3b Measured on `813123a6`: the `acceptance-upgrade-0113` job's `upgrade-apps-open` phase RAN green, 30/30 —
+      over the open `0.11.3` apps (Designer `* Unsaved work`, CG Control connected) CG Control's installer exit 0
+      in 21.4 s and CG Designer's in 22.1 s; over the guarded `0.11.4` apps, each `WM_CLOSE` first HELD and asked
+      (CG Control's with `1 item stays on air.`), then Cancel, the installers exit 0 in 21.0 s and 21.9 s; every
+      app ended, nothing on air cleared, the graphic still on 2-80. A plain silent upgrade of CG Bridge in the
+      same job: 8.0 s. https://github.com/yasermostafaee/cg/actions/runs/37615205779
 - [x] 6.4 PRD items `D-162` and `R-094` read `[~]` with this change dir (checked on `dev`,
       `RELEASE-0114-01-C`: `docs/prd/designer.md`, `docs/prd/runtime.md`).

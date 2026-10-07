@@ -36,14 +36,21 @@
 
 ## 6. Verification
 
-- [ ] 6.1 Full gate green; the Linux `e2e` RAN green on the commit (run URL here)
-- [ ] 6.2 Before/after pictures of the check, the banner and the layer list's wait
+- [x] 6.1 Full gate green (pre-push, `0 cached, 99 total`); the Linux `e2e` RAN green on `813123a6`, which carries
+      every part of this change: https://github.com/yasermostafaee/cg/actions/runs/37615205789 (job
+      112771815709 — Runtime 336 passed, Designer 303 passed, read from the job log). The shell's own
+      `cargo test -p cg-control` (23, `local_bridge` among them) RAN green on Windows in the same commit's Desktop
+      run: https://github.com/yasermostafaee/cg/actions/runs/37615205779 (job 112771758035)
+- [x] 6.2 Before/after pictures: the owner's own `0.11.3` pictures (before) and Chromium on the built `0.11.4`
+      console (after), in the release report (`Claude outputs/`, untracked)
 
 ## 7. Release `0.11.4`
 
-- [ ] 7.1 Version `0.11.4` (`release-version.mjs --set`); `P-031` floor → `0.11.4`
-- [ ] 7.2 Clean-Windows acceptance: fresh, and upgrades from `0.10.0`, `0.11.0` … `0.11.3`; the Installed-apps row;
-      silent paths and exit codes unchanged
-- [ ] 7.3 The guide `0.11.4` and its pictures
+- [x] 7.1 Version `0.11.4` (`release-version.mjs --set`); `P-031` floor → `0.11.4` (`6957660a`, `813123a6`)
+- [x] 7.2 Clean-Windows acceptance on `813123a6`: fresh, and upgrades from `0.10.0`, `0.11.0`, `0.11.1`, `0.11.2` and
+      `0.11.3` (the last with CG Control and CG Designer OPEN), each with the Installed-apps row; silent paths and
+      exit codes unchanged: https://github.com/yasermostafaee/cg/actions/runs/37615205779 — every acceptance job
+      RAN green
+- [x] 7.3 The guide `0.11.4` and its pictures (`6957660a`, `59219d96`; `guide.test.ts` 23/23)
 - [ ] 7.4 Tag, the draft "APASAI CG 0.11.4" (five files, read back, sums checked); `v0.11.3` retitled
 - [ ] 7.5 The Playout letter and `CG-BRIDGE-FOR-PLAYOUT-0.11.4.md`

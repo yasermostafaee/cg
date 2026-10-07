@@ -36,4 +36,6 @@
       their buttons while every box stayed inside the frame — which is why the fit tests for an overrun as well
 - [x] 4.3 Wording sweep (golden rule 9), two axes: by string (the long label in every dash spelling, per pathspec)
       and by component (the dialog's title, handler and component; every test locator for the backdrop button)
-- [ ] 4.4 Linux `e2e` on GitHub Actions for the commit carrying this change — run URL here
+- [x] 4.4 Linux `e2e` on GitHub Actions for a commit carrying this change (`813123a6`), RAN green:
+      https://github.com/yasermostafaee/cg/actions/runs/37615205789 (job 112771815709 — Runtime 336 passed,
+      Designer 303 passed, read from the job log)
