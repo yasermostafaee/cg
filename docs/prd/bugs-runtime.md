@@ -13466,7 +13466,7 @@ Signing in, the gate's place above the lock, its focus trap and every refusal co
 - WHEN the same gate is in a browser THEN it has no `Set up again`
 - WHEN a sign-in can work THEN signing in beside it is unchanged, and nothing is forgotten
 
-## [ ] B-321 — The sign-in gate's line names CG Bridge's loopback, not the address on its card ⟨priority: medium — the owner read `127.0.0.1` under `192.168.21.93`⟩ — FILED 2026-10-10 by `SIGNIN-ESCAPE-01` Part A3 · `openspec/changes/sign-in-gate-escape/`
+## [~] B-321 — The sign-in gate's line names CG Bridge's loopback, not the address on its card ⟨priority: medium — the owner read `127.0.0.1` under `192.168.21.93`⟩ — FILED 2026-10-10 by `SIGNIN-ESCAPE-01` Part A3 · `openspec/changes/sign-in-gate-escape/`
 
 **Repro / Actual:** the gate's card said `http://192.168.21.93:8080` and its one line said
 `127.0.0.1 answers, but nothing listens on port 8080.` Before a sign-in, the console asks CG Bridge's check for

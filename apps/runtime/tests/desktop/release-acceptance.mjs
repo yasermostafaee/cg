@@ -1241,7 +1241,7 @@ async function playoutPower(state) {
 const SIGN_IN_GATE = '[role="dialog"][aria-label="Playout sign-in"]';
 
 /**
- * 🔴 `B-320` (`SIGNIN-ESCAPE-01`) — **THE OWNER'S STUCK CONSOLE, ON THE INSTALLED APPS.** CG Control
+ * 🔴 `B-320` + `B-321` (`SIGNIN-ESCAPE-01`) — **THE OWNER'S STUCK CONSOLE, ON THE INSTALLED APPS.** CG Control
  * `0.11.4` on his PC (2026-10-10) was pointed at his own PC's address, where a CG Bridge had just been
  * installed with no Playout behind it: CG Bridge answered with `auth: playout`, so the console opened on
  * the sign-in gate, the check's one line locked the fields, and nothing on the card led anywhere.
@@ -1318,6 +1318,12 @@ async function phaseStuckStation() {
       String(line),
     );
     await page.screenshot('stuck-1-gate.png');
+    // `B-321` — the line names the host on the card, never CG Bridge's loopback.
+    check(
+      `🔴 …and names that host, never CG Bridge's loopback (B-321)`,
+      line === `${lan} answers, but nothing listens on port 8080.`,
+      String(line),
+    );
 
     // ── 2 · B-320: the way out ──
     const offered = await page.evaluate(

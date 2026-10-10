@@ -94,6 +94,75 @@ export function playoutAsBridgeNamesIt(
   }
 }
 
+/**
+ * 🔴 `B-321` (`SIGNIN-ESCAPE-01` A3) — **…AND SAY ITS ANSWER BACK IN THE NAME THE CONSOLE WAS GIVEN.**
+ * {@link playoutAsBridgeNamesIt} renames the Playout on the way in, and CG Bridge then words its lines in that
+ * name — its own loopback. The console showed them as they came: the owner's gate read
+ * `127.0.0.1 answers, but nothing listens on port 8080.` under a card reading `http://192.168.21.93:8080`.
+ *
+ * This is the ONE way a check is asked by CG Bridge's name, and it renames the answer back in the same breath, so
+ * neither half can run without the other (both doors use it: the console's own socket and a check's own socket).
+ * In the lines about the Playout and CasparCG the origin and host it asked by become the ones it was given; a check
+ * asked as given comes back untouched. Only words change — a line's status, which decides whether a sign-in can
+ * work, is CG Bridge's as it sent it.
+ */
+export async function checkByBridgeName<R extends ConnectionCheckResult>(
+  request: ConnectionCheckRequest,
+  bridgeHost: string,
+  bridgeSignInUrl: string | null | undefined,
+  ask: (request: ConnectionCheckRequest) => Promise<R>,
+): Promise<R> {
+  const asked = playoutAsBridgeNamesIt(request.playoutAddress, bridgeHost, bridgeSignInUrl);
+  const result = await ask({ ...request, playoutAddress: asked });
+  return asked === request.playoutAddress
+    ? result
+    : linesInTheGivenName(result, asked, request.playoutAddress);
+}
+
+/**
+ * The lines that name the address the check was ASKED by: the Playout's (`api`, `cors`, `playout-version`) and
+ * CasparCG's on that host (`amcp`). CG Bridge's lines about its own machine — `route` ("CG Bridge's route to …")
+ * and `proxy` — are CG Bridge's to word, in CG Bridge's names.
+ */
+const NAMED_AS_ASKED: ReadonlySet<string> = new Set(['api', 'cors', 'playout-version', 'amcp']);
+
+const parsed = (address: string): URL | null => {
+  try {
+    return new URL(address);
+  } catch {
+    return null;
+  }
+};
+const bare = (hostname: string): string => hostname.replace(/^\[|\]$/g, '');
+
+/**
+ * `B-321` — `result` with `asked`'s origin and host read as `given`'s, in the lines {@link NAMED_AS_ASKED}. The host
+ * is renamed only as a whole name (`127.0.0.1` never inside `127.0.0.10` or `10.127.0.0.1`). Pure.
+ */
+export function linesInTheGivenName<R extends ConnectionCheckResult>(
+  result: R,
+  asked: string,
+  given: string,
+): R {
+  const from = parsed(normalisePlayoutAddress(asked) ?? asked);
+  const to = parsed(normalisePlayoutAddress(given) ?? given);
+  if (from === null || to === null || from.origin === to.origin) return result;
+  const fromHost = bare(from.hostname);
+  const toHost = bare(to.hostname);
+  const host = new RegExp(
+    `(?<![A-Za-z0-9.:-])${fromHost.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`,
+    'gi',
+  );
+  const rename = (text: string): string =>
+    text.split(from.origin).join(to.origin).replace(host, toHost);
+  return {
+    ...result,
+    lines: result.lines.map((line) =>
+      NAMED_AS_ASKED.has(line.id) ? { ...line, text: rename(line.text) } : line,
+    ),
+  };
+}
+
 /** The host of a `ws://host:port` URL, from its text. */
 export function hostOfBridgeUrl(url: string): string {
   const authority = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').split(/[/?#]/, 1)[0] ?? '';
@@ -217,23 +286,24 @@ export async function checkOnItsOwnSocket(options: {
       if (err instanceof BridgeNotAnsweringError) throw err;
       return null;
     });
-    const request = {
-      ...options.request,
-      playoutAddress: playoutAsBridgeNamesIt(
-        options.request.playoutAddress,
-        hostOfBridgeUrl(url),
-        capabilities?.signInUrl,
-      ),
-    };
-    const raw = await socket.ask(
-      {
-        type: 'request',
-        channel: SetupCheckChannel.name,
-        payload: SetupCheckChannel.request.parse(request),
-      },
-      options.waitMs,
+    // `B-317` / `B-321` — asked by CG Bridge's name for its Playout, answered in the name given.
+    const result = await checkByBridgeName(
+      options.request,
+      hostOfBridgeUrl(url),
+      capabilities?.signInUrl,
+      async (request) =>
+        SetupCheckChannel.response.parse(
+          await socket.ask(
+            {
+              type: 'request',
+              channel: SetupCheckChannel.name,
+              payload: SetupCheckChannel.request.parse(request),
+            },
+            options.waitMs,
+          ),
+        ),
     );
-    return { result: SetupCheckChannel.response.parse(raw), capabilities };
+    return { result, capabilities };
   } finally {
     socket.close();
   }

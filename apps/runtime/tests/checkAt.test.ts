@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { normalisePlayoutAddress, parseWsFrame, serializeWsFrame } from '@cg/shared-ipc';
+import {
+  normalisePlayoutAddress,
+  parseWsFrame,
+  serializeWsFrame,
+  type ConnectionCheckResult,
+} from '@cg/shared-ipc';
 import {
   bridgeAnswersAt,
   BridgeNotAnsweringError,
+  checkByBridgeName,
   checkOnItsOwnSocket,
+  linesInTheGivenName,
   playoutAsBridgeNamesIt,
   stationBridgeAnswers,
   type CheckSocket,
@@ -178,6 +185,138 @@ describe('B-317 — asking by CG Bridge’s own name, only for the same Playout'
     expect(playoutAsBridgeNamesIt('http://192.168.21.111:8080', '192.168.21.111', null)).toBe(
       'http://192.168.21.111:8080',
     );
+  });
+});
+
+/**
+ * 🔴 `B-321` (`SIGNIN-ESCAPE-01` A3) — **THE ANSWER, SAID BACK IN THE NAME THE CONSOLE WAS GIVEN.** The owner's
+ * gate read `127.0.0.1 answers, but nothing listens on port 8080.` under a card reading
+ * `http://192.168.21.93:8080`: the console asked by CG Bridge's name (above) and showed CG Bridge's words as they
+ * came back.
+ */
+describe('B-321 — the check’s answer in the name the console was given', () => {
+  const ITS = 'http://127.0.0.1:8080/api/cg/auth/token';
+  /** CG Bridge on the owner's PC, about its own loopback, with nothing listening there. */
+  const OWNERS_ANSWER: ConnectionCheckResult = {
+    lines: [
+      {
+        id: 'route',
+        status: 'pass',
+        text: "CG Bridge's route to 127.0.0.1 leaves through Loopback Pseudo-Interface 1 (127.0.0.1).",
+      },
+      { id: 'amcp', status: 'fail', text: '127.0.0.1 refused the connection on port 5250.' },
+      { id: 'api', status: 'fail', text: '127.0.0.1 answers, but nothing listens on port 8080.' },
+      {
+        id: 'cors',
+        status: 'skip',
+        text: 'Sign-in from this console: not checked — the Playout does not answer.',
+      },
+    ],
+    localAddress: '127.0.0.1',
+  };
+  const textOf = (result: ConnectionCheckResult, id: string): string | undefined =>
+    result.lines.find((l) => l.id === id)?.text;
+
+  it('🔴 the owner’s gate: asked as 127.0.0.1, the lines about the Playout and CasparCG name 192.168.21.93', async () => {
+    const asked: string[] = [];
+    const result = await checkByBridgeName(
+      { playoutAddress: 'http://192.168.21.93:8080', origin: 'http://tauri.localhost' },
+      '192.168.21.93',
+      ITS,
+      (request) => {
+        asked.push(request.playoutAddress);
+        return Promise.resolve(OWNERS_ANSWER);
+      },
+    );
+    // `B-317`'s half is unchanged: CG Bridge is asked by its own name.
+    expect(asked).toEqual(['http://127.0.0.1:8080']);
+    expect(textOf(result, 'api')).toBe('192.168.21.93 answers, but nothing listens on port 8080.');
+    expect(textOf(result, 'amcp')).toBe('192.168.21.93 refused the connection on port 5250.');
+    // CG Bridge's own machine keeps CG Bridge's words.
+    expect(textOf(result, 'route')).toBe(textOf(OWNERS_ANSWER, 'route'));
+    // Only words change: every status — what decides a sign-in — is CG Bridge's.
+    expect(result.lines.map((l) => l.status)).toEqual(OWNERS_ANSWER.lines.map((l) => l.status));
+    expect(result.localAddress).toBe('127.0.0.1');
+  });
+
+  it('a URL in a line names the origin given', () => {
+    const result = linesInTheGivenName(
+      {
+        lines: [
+          {
+            id: 'api',
+            status: 'fail',
+            text: 'The Playout answered 404 at http://127.0.0.1:8080/api/cg/auth/jwks.',
+          },
+        ],
+        localAddress: null,
+      },
+      'http://127.0.0.1:8080',
+      'http://192.168.21.93:8080',
+    );
+    expect(textOf(result, 'api')).toBe(
+      'The Playout answered 404 at http://192.168.21.93:8080/api/cg/auth/jwks.',
+    );
+  });
+
+  it('CONTROL — only the whole name: 127.0.0.10 and 10.127.0.0.1 are other hosts', () => {
+    const result = linesInTheGivenName(
+      {
+        lines: [
+          {
+            id: 'api',
+            status: 'fail',
+            text: 'No answer from 127.0.0.10 on port 8080; 10.127.0.0.1 too; and 127.0.0.1.',
+          },
+        ],
+        localAddress: null,
+      },
+      'http://127.0.0.1:8080',
+      '192.168.21.93',
+    );
+    expect(textOf(result, 'api')).toBe(
+      'No answer from 127.0.0.10 on port 8080; 10.127.0.0.1 too; and 192.168.21.93.',
+    );
+  });
+
+  it('CONTROL — a check asked as given comes back untouched', async () => {
+    const answer: ConnectionCheckResult = {
+      lines: [
+        {
+          id: 'api',
+          status: 'fail',
+          text: '192.168.21.114 answers, but nothing listens on port 8080.',
+        },
+      ],
+      localAddress: null,
+    };
+    const result = await checkByBridgeName(
+      { playoutAddress: 'http://192.168.21.114:8080', origin: 'http://tauri.localhost' },
+      '192.168.21.111',
+      ITS,
+      () => Promise.resolve(answer),
+    );
+    expect(result).toBe(answer);
+  });
+
+  it('the second door renames back too: a check on CG Bridge’s own socket', async () => {
+    const { result } = await checkOnItsOwnSocket({
+      url: 'ws://192.168.21.93:5280',
+      address: '192.168.21.93:5280',
+      request: { playoutAddress: 'http://192.168.21.93:8080', origin: 'http://tauri.localhost' },
+      createSocket: (url) =>
+        new FakeSocket(
+          url,
+          (channel) =>
+            channel === 'bridge.capabilities'
+              ? { channels: [], bridgeVersion: '0.11.4', auth: 'playout', signInUrl: ITS }
+              : OWNERS_ANSWER,
+          true,
+        ),
+      token: null,
+      waitMs: 500,
+    });
+    expect(textOf(result, 'api')).toBe('192.168.21.93 answers, but nothing listens on port 8080.');
   });
 });
 

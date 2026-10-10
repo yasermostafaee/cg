@@ -40,15 +40,20 @@ what an operator can do, and the check's answer on the path to a sign-in.
 
 ## 2. B-321 — the answer in the name the console was given
 
-- [ ] 2.1 Why the line names the loopback: the console asks by CG Bridge's name (`playoutAsBridgeNamesIt`,
+- [x] 2.1 Why the line names the loopback: the console asks by CG Bridge's name (`playoutAsBridgeNamesIt`,
       `B-317`) and showed CG Bridge's answer as it came back. The fix is the console's. No CG Bridge change,
-      so nothing is filed.
-- [ ] 2.2 `checkByBridgeName` (`platform/checkAt.ts`): the rename and its reverse in one function, used by
+      so nothing is filed. It is not in `decidingLine`, which only picks a line: first-run's full check meets
+      the same mismatch through the same rename.
+- [x] 2.2 `checkByBridgeName` (`platform/checkAt.ts`): the rename and its reverse in one function, used by
       both places a check is asked (`WebSocketRuntime.setup.check` on the console's own socket,
-      `checkOnItsOwnSocket`).
-- [ ] 2.3 Unit tests (`checkAt.test.ts`): the owner's line, a URL in a line, the `route` line kept, a check
-      asked as given left alone, and a host that only looks like the asked one left alone.
-- [ ] 2.4 The e2e and the `stuck-station` phase assert the gate's line names the card's host.
+      `checkOnItsOwnSocket`). `linesInTheGivenName` renames only the `api`, `cors`, `playout-version` and
+      `amcp` lines, the host only as a whole name, and never a status.
+- [x] 2.3 Unit tests (`checkAt.test.ts`), five: the owner's line and the `amcp` line renamed, with the `route`
+      line and every status kept; a URL in a line; only the whole name (`127.0.0.10`, `10.127.0.0.1` left
+      alone); a check asked as given returned untouched; and the second door (a check's own socket).
+      Ablation (the reverse removed from `checkByBridgeName`) reds both door tests.
+- [x] 2.4 The e2e asserts the gate's line names the card's host
+      (`192.0.2.93 answers, but nothing listens on port …`), and so does the `stuck-station` phase.
 - [ ] 2.5 Discharged on the commit that carries it (run URLs here).
 
 ## 3. Report

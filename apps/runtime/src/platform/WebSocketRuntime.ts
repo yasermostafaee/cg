@@ -184,7 +184,7 @@ import {
   bridgeUrlForStation,
   rebaseLoopback,
 } from './bridgeUrl.js';
-import { checkOnItsOwnSocket, hostOfBridgeUrl, playoutAsBridgeNamesIt } from './checkAt.js';
+import { checkByBridgeName, checkOnItsOwnSocket, hostOfBridgeUrl } from './checkAt.js';
 import { loadStationAddress, saveStationAddress, type StationAddress } from './stationAddress.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -1961,20 +1961,15 @@ export class WebSocketRuntime implements RuntimeBridge {
       if (url === null) throw new Error(ipcChannels.NOT_A_PLAYOUT_ADDRESS);
       const address = bridgeHostPort(url);
       if (url === this.#url && this.#status === 'live') {
-        const result = await this.#invoke(
-          ipcChannels.SetupCheckChannel,
-          // Before a sign-in, a loopback-configured CG Bridge is asked for its Playout by its own name.
-          this.#principal === null
-            ? {
-                ...ask,
-                playoutAddress: playoutAsBridgeNamesIt(
-                  ask.playoutAddress,
-                  hostOfBridgeUrl(url),
-                  this.#advertisedSignInUrl,
-                ),
-              }
-            : ask,
-          waitMs,
+        /*
+          Before a sign-in, a loopback-configured CG Bridge is asked for its Playout by its own name — and
+          `B-321`, its answer is said back in the name this console was given (`checkByBridgeName`).
+        */
+        const result = await checkByBridgeName(
+          ask,
+          hostOfBridgeUrl(url),
+          this.#principal === null ? this.#advertisedSignInUrl : null,
+          (request) => this.#invoke(ipcChannels.SetupCheckChannel, request, waitMs),
         );
         const version = this.#authCaps?.bridgeVersion;
         return {

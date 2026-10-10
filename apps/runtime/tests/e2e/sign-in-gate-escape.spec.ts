@@ -12,7 +12,7 @@ import {
 import { stopChild } from './fixtures/child-process.js';
 
 /**
- * 🔴 `B-320` (`SIGNIN-ESCAPE-01`) — **THE OWNER'S STUCK CONSOLE, IN A REAL ENGINE.**
+ * 🔴 `B-320` + `B-321` (`SIGNIN-ESCAPE-01`) — **THE OWNER'S STUCK CONSOLE, IN A REAL ENGINE.**
  *
  * CG Control `0.11.4` on the owner's PC (2026-10-10): its station record named his own PC, where a CG
  * Bridge had just been installed with no Playout behind it (`http://127.0.0.1:8080`, nothing there).
@@ -27,6 +27,7 @@ import { stopChild } from './fixtures/child-process.js';
  * reaches it at a documentation address (`192.0.2.93`, RFC 5737) relayed here to the bridge on this
  * machine — never dialled — so CG Bridge's host is not loopback to the console, as `.93` was not.
  *
+ *   - `B-321` — the gate's one line names the host on the card, never CG Bridge's loopback;
  *   - `B-320` — the gate offers `Set up again` (CG Control only): this console forgets its station and
  *     starts again on the Set up page, and a good address typed there connects.
  *
@@ -199,7 +200,7 @@ async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: path.join(SHOTS, name) });
 }
 
-test('🔴 B-320 — stuck on a CG Bridge whose Playout does not answer: the gate offers Set up again, and a good address connects', async ({
+test('🔴 B-320 + B-321 — stuck on a CG Bridge whose Playout does not answer: the gate names the card’s host, offers Set up again, and a good address connects', async ({
   page,
 }) => {
   // The stuck station: CG Bridge's own Playout is its loopback, and nothing listens there.
@@ -232,6 +233,11 @@ test('🔴 B-320 — stuck on a CG Bridge whose Playout does not answer: the gat
   await expect(line).toHaveAttribute('data-status', 'fail', { timeout: 30_000 });
   await expect(page.locator('#cg-signin-user')).toBeDisabled();
   await shot(page, 'signin-escape-1-gate.png');
+
+  // B-321 — the one line names the host on the card, never CG Bridge's loopback.
+  await expect(line).toHaveText(
+    `${STUCK_HOST} answers, but nothing listens on port ${String(silent)}.`,
+  );
 
   // B-320 — the way out, inside CG Control, without a word of explanation.
   const again = gate.getByRole('button', { name: 'Set up again' });
