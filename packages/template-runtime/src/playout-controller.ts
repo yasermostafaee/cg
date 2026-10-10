@@ -347,9 +347,13 @@ export class PlayoutController {
    * behaviour still runs, so the outro plays and the graphic leaves the way it was designed to.
    * It is emphatically not a cut.
    *
-   * ⚠ A SETTLED controller ignores it: re-arming a finished graphic from a CONFIGURATION verb
-   * would put a picture back on screen that the operator had taken off — a playout effect from
-   * a non-playout action, which is golden rule 10 inverted.
+   * ⚠ A SETTLED controller REMEMBERS it and does nothing else. Re-arming a finished graphic
+   * from a CONFIGURATION verb would put a picture back on screen that the operator had taken
+   * off — a playout effect from a non-playout action, which is golden rule 10 inverted — so
+   * neither `cyclesLeft` nor `phase` is touched. But the value is kept for the next `play()`:
+   * `LOGO-LOOP-01` (`B-323`) measured what dropping it costs. A row stopped after an on-air
+   * count was told `Until stop` by its resident take, ignored it here, and re-ran the stale
+   * count — while every surface said `Until stop`.
    *
    * ⚠ A NON-CYCLIC mode ignores it too. `auto-out` / `manual` / `static` have no pass loop to
    * extend, and extending one would mean changing `mode` — which is DESIGNER-OWNED (ADR 0009)
@@ -369,18 +373,22 @@ export class PlayoutController {
    * ⚠ Deliberately does NOT re-arm a running gap. Re-arming would let a change stretch or
    * truncate a wait already under way, and a truncated gap is a graphic reappearing earlier
    * than the operator was told it would.
+   *
+   * ⚠ A SETTLED controller takes the write too (`LOGO-LOOP-01`, `B-323`). Nothing is scheduled
+   * on one, so writing the value re-arms nothing; it is simply in place for the next `play()`'s
+   * gaps, which is what the resident take's tell is for.
    */
   setDelayMs(ms: number): void {
     // `!cyclic()` for the same reason `setRemainingPasses` has it, and so that the runtime's
     // tree-wide apply can truthfully say it reaches exactly the loops: a gap BETWEEN passes is
     // meaningless where there are no passes, and writing one would leave a value on a scope that
     // could start honouring it if its mode ever changed under a later edit.
-    if (this.settled || !this.cyclic()) return;
+    if (!this.cyclic()) return;
     this.o.playout.delayMs = Math.max(0, ms);
   }
 
   setRemainingPasses(passes: number | 'infinite'): void {
-    if (this.settled || !this.cyclic()) return;
+    if (!this.cyclic()) return;
     /*
       🔴 `DELTA B0` — THE OPERATOR'S VALUE IS REMEMBERED FOR THE NEXT `play()`, whichever state
       it arrives in. One stored number, read two ways — exactly the two the console's own labels
@@ -395,12 +403,14 @@ export class PlayoutController {
     */
     this.pendingPasses = passes === 'infinite' ? 'infinite' : Math.max(0, Math.floor(passes));
     /*
-      NOT RUNNING — `phase` is `idle` only before the first `play()` or after a settle, and a
-      settled controller returned above. So this is the pre-take case: remember it and let
-      `play()` seat it as a total. Seating `cyclesLeft` here instead would be read as a
-      remainder by the first pass boundary and run one pass too many.
+      NOT RUNNING — before the first `play()`, or SETTLED (`LOGO-LOOP-01`: a stopped graphic whose
+      producer stays resident, told its next count by the resident take). Either way this is the
+      pre-take case: remember it and let `play()` seat it as a total. Seating `cyclesLeft` here
+      instead would be read as a remainder by the first pass boundary and run one pass too many,
+      and on a settled controller touching `cyclesLeft` or `phase` would be the re-arm the doc
+      above forbids.
     */
-    if (this.phase === 'idle') return;
+    if (this.settled || this.phase === 'idle') return;
     if (passes === 'infinite') {
       this.cyclesLeft = 'infinite';
       return;

@@ -359,6 +359,12 @@ outro). `delayMs` is re-read at every boundary rather than snapshotted, so a cha
 NEXT gap and can never stretch or truncate one already running. Every other route to a playout knob
 rebuilds the scene, which on air is a black frame.
 
+**Before a run, and after one has settled, the same call is a TOTAL for the next `play()`.** The
+controller keeps the count (and the gap) and changes nothing else, so a settled graphic never
+re-arms from a configuration verb. `LOGO-LOOP-01` (`B-323`): a stopped producer stays resident,
+and its next take tells it the recorded timing on the `CG UPDATE` before the `CG PLAY`; a settled
+controller that dropped that tell re-ran the last count it had been given.
+
 What ends each hold is the orthogonal **`holdSource`** axis (`auto-out` and
 `loop-cycle`; ignored by `manual`): `'timed'` (default) holds for `holdMs`;
 `'content-driven'` holds until the controller's `waitForContent` promise

@@ -213,6 +213,26 @@ describe('TIMING-BUILD-21 §6 — a live pass-count change does not restart the 
     runPasses(h, 3);
     expect(h.events.length, 'a settled graphic came back').toBe(settledAt);
   });
+
+  it('a settled LOOP remembers the count for its next play() and re-arms nothing', () => {
+    // `LOGO-LOOP-01` (`B-323`) — a stopped loop's producer stays resident, and its next take tells
+    // it the recorded count BEFORE the `CG PLAY`. Dropping it here re-ran the stale count.
+    const h = make({ mode: 'loop-cycle', holdSource: 'timed', holdMs: PASS_MS, repeat: 1 });
+    h.controller.play();
+    runPasses(h, 2);
+    expect(h.controller.isSettled(), 'the fixture did not settle — this proves nothing').toBe(true);
+    const settledAt = h.events.length;
+    const framesAt = h.frames.length;
+
+    h.controller.setRemainingPasses('infinite');
+    runPasses(h, 3);
+    expect(h.events.length, 'a settled graphic came back').toBe(settledAt);
+    expect(h.frames.length, 'a settled graphic painted a frame').toBe(framesAt);
+
+    h.controller.play();
+    runPasses(h, 6);
+    expect(h.events.length, 'the next run did not seat the remembered infinite').toBe(settledAt);
+  });
 });
 
 describe('TIMING-BUILD-21 §7 — a live delay change never disturbs the running pass', () => {
@@ -269,6 +289,31 @@ describe('TIMING-BUILD-21 §7 — a live delay change never disturbs the running
     h.clock.advance(100); // still inside the gap
     expect(h.frames.length, 'the gap is not holding — frames kept coming').toBe(atGap);
     h.clock.advance(400); // past it
+    expect(h.frames.length).toBeGreaterThan(atGap);
+  });
+
+  it('a gap told to a SETTLED loop is the gap its next play() runs', () => {
+    // `LOGO-LOOP-01` (`B-323`) — the same hole as the count, on the other member.
+    const h = make({
+      mode: 'loop-cycle',
+      holdSource: 'timed',
+      holdMs: PASS_MS,
+      repeat: 'infinite',
+      delayMs: 0,
+    });
+    h.controller.play();
+    runPasses(h, 1);
+    h.controller.stop();
+    runPasses(h, 1);
+    expect(h.controller.isSettled(), 'the fixture did not settle — this proves nothing').toBe(true);
+
+    h.controller.setDelayMs(400);
+    h.controller.play();
+    runPasses(h, 1);
+    const atGap = h.frames.length;
+    h.clock.advance(100);
+    expect(h.frames.length, 'the remembered gap is not holding — it was dropped').toBe(atGap);
+    h.clock.advance(400);
     expect(h.frames.length).toBeGreaterThan(atGap);
   });
 

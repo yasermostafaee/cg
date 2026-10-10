@@ -3307,3 +3307,15 @@ Measured free before use:
 shape found the 2 headings `B-319` and `R-094` on `dev`; no stash.
 
 ⇒ **Next free after this entry is `B-322`**, **`D-163`**, **`P-068`**, **`R-095`** and **`C-049`**.
+
+### 2026-10-10 — `LOGO-LOOP-01` (v1) takes `B-322` and `B-323`
+
+- `B-322` — a pass count set while a row is stopped never reaches the page: the resident take tells it no
+  timing — [bugs-runtime.md](bugs-runtime.md).
+- `B-323` — a settled loop throws away the pass timing it is told — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use:
+`git grep -n -E "^## \[.\] B-32[2-5] " <ref> -- docs` on all 11 local and remote-tracking refs returned nothing;
+control: the same sweep's shape found the 2 headings `B-320` and `B-321` on `dev`; no stash.
+
+⇒ **Next free after this entry is `B-324`**, **`D-163`**, **`P-068`**, **`R-095`** and **`C-049`**.

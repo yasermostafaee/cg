@@ -13478,3 +13478,46 @@ reading `http://192.0.2.93:…`. **Expected:** the console says the answer back 
 the lines about the Playout and CasparCG, the host and origin it asked by read as the card's. CG Bridge's lines
 about its own machine (`route`, `proxy`) keep its words. **Acceptance:** the owner's line reads
 `192.168.21.93 answers, but nothing listens on port 8080.`; a check asked as given is shown unchanged.
+
+## [~] B-322 — A pass count set while a row is stopped never reaches the page: the resident take tells it no timing ⟨priority: high — every surface says `Until stop` while the graphic closes after one pass⟩ — FILED 2026-10-10 by `LOGO-LOOP-01` · `openspec/changes/resident-take-timing/`
+
+**Repro / Actual (CG Control + CG Bridge `0.11.4`, the owner's logo, a `loop-cycle` template, 2026-10-10):** on
+air he set a count of one more and pressed `Update`; it played one more pass and closed. Stopped, he set
+`Until stop`, pressed `Update`, then `Play`: it played one pass and closed. Off air, `setPassTiming` records and
+sends nothing (golden rule 10) on the promise that the next take carries it. It does on one route only. After
+`out` or a clear the take re-ADDs and `#sendAdd` attaches `timing`. After `stop` the producer stays resident, so
+the take sends `#tellPageTake`'s `CG UPDATE` and `CG PLAY`, and that `CG UPDATE` carried the take token and the
+look and no `timing`. The owner's `amcp.log`, every take after a stop: `CG 1-99 STOP 0` →
+`CG 1-99 UPDATE 0 "{\"__cg\":{\"take\":\"…\"}}"` → `MIXER 1-99 VOLUME 1` → `CG 1-99 PLAY 0`. The same hole
+`B-191` closed for the look and `SELF-STOP-24` for the token.
+
+**Expected:** the resident take's `CG UPDATE` carries the recorded `timing` in the same control object as the
+token and the look, built by the one helper `#sendAdd` also uses. No extra command; an off-air `Update` still
+sends zero AMCP; a row with no override sends today's bytes.
+
+**Acceptance:**
+
+- WHEN a looping row was told a count of one on air, is stopped, set to `Until stop` and taken THEN the take's
+  `CG UPDATE` carries `timing: { passes: 'infinite' }`, with one `CG PLAY` and no `CG ADD`
+- WHEN the same row is taken out instead of stopped THEN the re-ADD carries the same `timing`
+- WHEN a row has no override, or its template does not admit pass timing, THEN no `timing` is sent
+
+**Notes:** the bridge half alone does not fix the owner's sequence; the page dropped the value too (`B-323`).
+
+## [~] B-323 — A settled loop throws away the pass timing it is told, so its next run plays the last count ⟨priority: high — `B-322`'s other half; without it the bridge's fix reaches nothing⟩ — FILED 2026-10-10 by `LOGO-LOOP-01` · `openspec/changes/resident-take-timing/`
+
+**Repro / Actual (confirmed by running, `take-tell-is-inert.test.ts`):** after a stop or a self-end the page's
+loop controller is settled, and `PlayoutController.setRemainingPasses` and `setDelayMs` returned at their
+`settled` guard. So a `CG UPDATE` carrying `timing: { passes: 'infinite' }` before the `CG PLAY` was dropped,
+and `play()` seated the last count the page had been told (`DELTA B0`'s `pendingPasses`), here the on-air "one".
+The guard exists so that a configuration verb never re-arms a finished graphic; it also discarded the value.
+
+**Expected:** a settled `loop-cycle` controller remembers the count and the gap for its next `play()` and changes
+nothing else. It never re-arms. Ships in CG Control: a page is baked at import from the console's own runtime,
+so the template must be re-imported after the upgrade (`C-034`).
+
+**Acceptance:**
+
+- WHEN a settled loop is told `passes: 'infinite'` and played THEN it loops until stopped
+- WHEN a settled loop is told a count THEN no frame is painted and no event fires until it is played
+- WHEN a settled loop is told a gap and played THEN its passes are separated by that gap

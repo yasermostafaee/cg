@@ -277,3 +277,88 @@ describe('SELF-STOP-24 R1 — the pre-PLAY tell carries a token and changes noth
     ]);
   });
 });
+
+/** The tell for a row that DOES carry a recorded override — `timing` beside the token. */
+const theTellWithTiming = (take: string, passes: number | 'infinite'): Partial<FieldValues> =>
+  withCgControl({} as unknown as FieldValues, { take, timing: { passes } });
+
+describe('LOGO-LOOP-01 — the page keeps the last count it was told, so the resident take must tell it', () => {
+  /*
+    🔴 THE OWNER'S SEQUENCE (2026-10-10), at the page. On air he set a count of one more; it
+    played one more pass and closed. Stopped, he set `Until stop` and pressed `Update`, then
+    `Play` — and it played one pass and closed again.
+
+    These two cases split the blame. The first pins the page AS DESIGNED (`DELTA B0`): it
+    remembers the last count it was told and seats it on its next `play()`. The second shows
+    that a resident take which DOES carry the recorded count puts the right one on air. So the
+    defect is the bridge's — its resident-take tell carried no `timing` — and not the page's.
+  */
+  it('without a timing on the tell, the next run seats the LAST count the page was told', async () => {
+    const l = mount(LOOP_FOREVER);
+    await l.rt.play(withCgControl({} as unknown as FieldValues, { take: 'tok-1' }));
+    // On air: "one more pass, then out".
+    await l.rt.update(withCgControl({} as unknown as FieldValues, { timing: { passes: 1 } }));
+    runPasses(l, 2);
+    expect(l.ends, 'the on-air count did not close the run').toEqual(['tok-1']);
+
+    // The resident re-take as the bridge sent it before this change: token only, then a bare play.
+    await l.rt.update(theTell('tok-2'));
+    await l.rt.play({} as unknown as FieldValues);
+    runPasses(l, 1);
+    expect(
+      l.ends,
+      'the page did not seat its last count — the defect would not be the bridge',
+    ).toEqual(['tok-1', 'tok-2']);
+  });
+
+  it('a resident tell carrying `passes: infinite` puts Until stop back on air', async () => {
+    const l = mount(LOOP_FOREVER);
+    await l.rt.play(withCgControl({} as unknown as FieldValues, { take: 'tok-1' }));
+    await l.rt.update(withCgControl({} as unknown as FieldValues, { timing: { passes: 1 } }));
+    runPasses(l, 2);
+    expect(l.ends, 'the on-air count did not close the run').toEqual(['tok-1']);
+
+    await l.rt.update(theTellWithTiming('tok-2', 'infinite'));
+    await l.rt.play({} as unknown as FieldValues);
+    runPasses(l, 6);
+    expect(l.ends, 'the resident take was told Until stop and still closed').toEqual(['tok-1']);
+  });
+
+  it('the same after an operator STOP mid-run, not only after a self-end', async () => {
+    const l = mount(LOOP_FOREVER);
+    await l.rt.play(withCgControl({} as unknown as FieldValues, { take: 'tok-1' }));
+    await l.rt.update(withCgControl({} as unknown as FieldValues, { timing: { passes: 3 } }));
+    runPasses(l, 1);
+    await l.rt.stop();
+    runPasses(l, 1);
+
+    await l.rt.update(theTellWithTiming('tok-2', 'infinite'));
+    await l.rt.play({} as unknown as FieldValues);
+    runPasses(l, 8);
+    expect(l.ends, 'the resident take was told Until stop and still closed').toEqual([]);
+  });
+
+  it('a count told to a SETTLED page is remembered and re-arms NOTHING', async () => {
+    // Golden rule 10 at the page: the tell is a configuration verb. Remembering the count for
+    // the next `play()` must not put the finished graphic back on screen by itself.
+    const l = mount(LOOP_FOREVER);
+    await l.rt.play(withCgControl({} as unknown as FieldValues, { take: 'tok-1' }));
+    await l.rt.update(withCgControl({} as unknown as FieldValues, { timing: { passes: 0 } }));
+    runPasses(l, 1);
+    expect(l.ends, 'the fixture did not settle — this case proves nothing').toEqual(['tok-1']);
+    const before = [...l.events];
+
+    await l.rt.update(theTellWithTiming('tok-2', 2));
+    runPasses(l, 4);
+
+    expect(l.events.slice(before.length), 'the tell re-armed a settled graphic').toEqual([
+      'update',
+    ]);
+    // …and the remembered count is what the next run seats: two passes, then out.
+    await l.rt.play({} as unknown as FieldValues);
+    runPasses(l, 1);
+    expect(l.ends, 'the second run ended a pass early').toEqual(['tok-1']);
+    runPasses(l, 1);
+    expect(l.ends, 'the second run did not seat the remembered count').toEqual(['tok-1', 'tok-2']);
+  });
+});
