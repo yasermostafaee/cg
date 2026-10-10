@@ -12,7 +12,11 @@ what an operator can do, and the check's answer on the path to a sign-in.
       under a card reading `http://192.0.2.93:56466`, and the gate had no `Set up again`.
 - [x] 0.2 The same state on the INSTALLED apps, unfixed: the release acceptance's `stuck-station` phase on a
       reproduction branch at `bf011d79` (`wip/signin-escape-repro`, `desktop.yml` trimmed to `installers`
-      and `acceptance-fresh`), dispatched as run 38065020101.
+      and `acceptance-fresh`), dispatched as run 38065020101. It reproduced the owner's gate exactly:
+      `install` 27/27, `drive` 26/26 and `uninstall` 21/21 passed; `stuck-station` failed 10/22. The card read
+      `http://10.1.0.108:8080`, the line read `127.0.0.1 answers, but nothing listens on port 8080.`, and the
+      gate had no `Set up again` —
+      https://github.com/yasermostafaee/cg/actions/runs/38065020101
 
 ## 1. B-320 — the gate's way back to Set up
 
@@ -35,8 +39,11 @@ what an operator can do, and the check's answer on the path to a sign-in.
       and the fake Playout is offline on its port. Then the gate → `Set up again` → Set up → the Playout back
       online → `127.0.0.1` → Connect → a passing check → signed in. `acceptance-station.mjs` gains
       `/playout/offline` and `/playout/online`.
-- [ ] 1.6 Discharged: a completed, green Linux `e2e` job, and `acceptance-fresh` with `stuck-station`
-      passing, on the commit that carries it (run URLs here).
+- [x] 1.6 Discharged on `f1440540`. The Linux `e2e` job RAN (from its log: runtime 337 passed, 2 skipped;
+      `sign-in-gate-escape.spec.ts` passed) —
+      https://github.com/yasermostafaee/cg/actions/runs/38066342564/job/114254688376 — and the whole Desktop run
+      was green, with `acceptance-fresh`'s `stuck-station` at 21/21 on the installed apps —
+      https://github.com/yasermostafaee/cg/actions/runs/38066342591/job/114256848783
 
 ## 2. B-321 — the answer in the name the console was given
 
@@ -54,9 +61,15 @@ what an operator can do, and the check's answer on the path to a sign-in.
       Ablation (the reverse removed from `checkByBridgeName`) reds both door tests.
 - [x] 2.4 The e2e asserts the gate's line names the card's host
       (`192.0.2.93 answers, but nothing listens on port …`), and so does the `stuck-station` phase.
-- [ ] 2.5 Discharged on the commit that carries it (run URLs here).
+- [x] 2.5 Discharged on `3f80018c`. The Linux `e2e` job RAN (from its log: runtime 337 passed, 2 skipped;
+      the spec, now with B-321's assertion, passed) —
+      https://github.com/yasermostafaee/cg/actions/runs/38068568919/job/114261164326 — and the whole Desktop run
+      was green, with `stuck-station` at 22/22 on the installed apps. Its line read
+      `10.1.0.11 answers, but nothing listens on port 8080.` under `http://10.1.0.11:8080` —
+      https://github.com/yasermostafaee/cg/actions/runs/38068568896/job/114263285031
 
 ## 3. Report
 
-- [ ] 3.1 `Claude outputs/REPORT-SIGNIN-ESCAPE-01-v2-2026-10-10.md`, with before/after pictures and the
+- [x] 3.1 `Claude outputs/REPORT-SIGNIN-ESCAPE-01-v2-2026-10-10.md`, with before/after pictures and the
       owner's one check (H1).
+- [ ] 3.2 The owner's H1 on his own PC, on a CI build of `3f80018c` (not a release).
