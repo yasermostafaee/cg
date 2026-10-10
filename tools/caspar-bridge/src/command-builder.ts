@@ -15,6 +15,18 @@ export interface CommandSlot {
 }
 
 /**
+ * 🔴 `LOGO-LOOP-01` — the control a TAKE hands its page, on either route into air: the take
+ * token always, the row's look and its recorded pass timing when it has them. Built ONCE by the
+ * bridge's take-control helper; `load` carries it in the `CG ADD` payload and
+ * {@link CommandBuilder.updateTake} in the resident route's `CG UPDATE`.
+ */
+export interface TakeControl {
+  readonly take: string;
+  readonly look?: string;
+  readonly timing?: CgPassTiming;
+}
+
+/**
  * The CG "flash layer" index inside the producer. HTML producers use a single
  * layer; `0` matches what `amcp-mock` and CasparCG expect for one template.
  */
@@ -207,11 +219,24 @@ export class CommandBuilder {
    *
    * ⚠ A CONFIGURATION verb (golden rule 10): no `PLAY`, nothing seated, nothing un-muted. It
    * changes what the graphic about to be played will REPORT, not what is on air.
+   *
+   * 🔴 `LOGO-LOOP-01` (`B-322`) — **AND THE ROW'S RECORDED PASS TIMING RIDES IT, for the reason
+   * the look does.** A count set while the row was stopped is only RECORDED (golden rule 10), on
+   * the promise that the next take carries it — and this is the next take on the resident route.
+   * Without it the page plays the last count it was told while every surface says otherwise.
+   * The members come from the bridge's one control helper, which `#sendAdd` uses too.
+   *
+   * ⚠ **THE KEY ORDER IS `take`, `look`, `timing`, and it is not cosmetic.** A row without an
+   * override must put exactly the bytes on the wire it put there before `timing` existed here.
    */
-  updateTake(slot: CommandSlot, take: string, lookId?: string, fields: FieldValues = {}): string {
-    const control: CgControl = { take, ...(lookId !== undefined && { look: lookId }) };
+  updateTake(slot: CommandSlot, control: TakeControl, fields: FieldValues = {}): string {
+    const ordered: CgControl = {
+      take: control.take,
+      ...(control.look !== undefined && { look: control.look }),
+      ...(control.timing !== undefined && { timing: control.timing }),
+    };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
-      serialize(withCgControl(fields, control)),
+      serialize(withCgControl(fields, ordered)),
     )}`;
   }
 

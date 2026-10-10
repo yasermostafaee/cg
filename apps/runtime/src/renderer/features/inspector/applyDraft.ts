@@ -148,7 +148,8 @@ export function applyDraft(
  * count stays staged, the dirty mark stays up, and the operator's number is still theirs.
  *
  * 🔴 **OFF AIR THIS SENDS ZERO AMCP AND THAT IS THE POINT (golden rule 10).** The call is still
- * made — the bridge RECORDS the intent so the next take carries it (`#sendAdd`) — but
+ * made — the bridge RECORDS the intent so the next take carries it, on either route into air
+ * (`#takeControl`: the re-ADD's payload, or a stopped row's tell before its PLAY) — but
  * `setPassTiming` gates its wire send on `#ownsLiveSeats`, so a row that owns no live seats
  * produces no `CG UPDATE`, no `PLAY` and no fill. The console does not decide that; it asks the
  * one predicate that already owns the question, which is why there is no second spelling of

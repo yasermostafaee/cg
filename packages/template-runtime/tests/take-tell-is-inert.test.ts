@@ -18,20 +18,25 @@ import { lowerThirdScene } from './fixtures.js';
  *
  * ── WHAT THE BRIDGE ACTUALLY SENDS ────────────────────────────────────────────────────────
  *
- * `CommandBuilder.updateTake(slot, take, lookId?)` takes `fields` defaulting to `{}`, and
- * `#tellPageTake` never passes any. So the payload is `{"__cg":{"take":"…"}}` and nothing else
- * — **no field data at all**, which is why the "last-sent values versus the Inspector's unsent
- * draft" question cannot arise at this command: neither is on it. What this file has to prove
- * is the consequence — that an empty-field payload LEAVES the on-air values alone rather than
- * resetting them to the authored defaults.
+ * `CommandBuilder.updateTake(slot, control)` takes `fields` defaulting to `{}`, and
+ * `#tellPageTake` never passes any. So for a row with no look and no recorded timing the payload
+ * is `{"__cg":{"take":"…"}}` and nothing else — **no field data at all**, which is why the
+ * "last-sent values versus the Inspector's unsent draft" question cannot arise at this command:
+ * neither is on it. What this file has to prove is the consequence — that an empty-field payload
+ * LEAVES the on-air values alone rather than resetting them to the authored defaults.
+ *
+ * ⚠ `LOGO-LOOP-01` (`B-322`) — a row WITH a recorded pass timing now gets it on this tell too,
+ * deliberately: `timing` is a control member, not a field, and the resident take is the only
+ * place a count set while stopped can reach the page. `theTell` below is the no-override row;
+ * the last block is the one that carries it.
  *
  * ── THE `0f54e00d` CLASS, IN THE OTHER DIRECTION ──────────────────────────────────────────
  *
  * That defect was a `__cg` member READ on one door and dropped on the other. The mirror risk
- * here is a member the tell does not CARRY being CLEARED by it: the tell says nothing about
- * `timing`, and an operator's `Count 2` must survive it and survive the re-take that follows.
- * "Absent means unchanged" is written into `readCgControl` and into both doors; this is the
- * end-to-end proof that it holds for the one payload that carries a token and nothing else.
+ * here is a member the tell does not CARRY being CLEARED by it: a no-override tell says nothing
+ * about `timing`, and an operator's `Count 2` must survive it and survive the re-take that
+ * follows. "Absent means unchanged" is written into `readCgControl` and into both doors; this is
+ * the end-to-end proof that it holds for a payload that carries a token and nothing else.
  */
 
 const PASS_MS = 1000;
@@ -169,7 +174,10 @@ function runPasses(l: Live, n: number): void {
   for (let i = 0; i < n; i++) l.clock.advance(PASS_MS);
 }
 
-/** EXACTLY what `CommandBuilder.updateTake` puts on the wire: `__cg` and no fields. */
+/**
+ * EXACTLY what `CommandBuilder.updateTake` puts on the wire for a row with no look and no
+ * recorded timing: `__cg` carrying the token, and no fields.
+ */
 const theTell = (take: string): Partial<FieldValues> =>
   withCgControl({} as unknown as FieldValues, { take });
 

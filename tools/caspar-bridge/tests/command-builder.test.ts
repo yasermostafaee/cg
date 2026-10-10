@@ -15,6 +15,32 @@ describe('CommandBuilder (ADR 0006 seam — amcp-mock-validated)', () => {
     expect(builder.take(slot)).toBe('CG 1-10 PLAY 0');
   });
 
+  describe('🔴 updateTake — the resident take tell (SELF-STOP-24, B-191, LOGO-LOOP-01)', () => {
+    it("a row with no look and no timing sends today's bytes: the token alone", () => {
+      expect(builder.updateTake(slot, { take: 'abc' })).toBe(
+        'CG 1-10 UPDATE 0 "{\\"__cg\\":{\\"take\\":\\"abc\\"}}"',
+      );
+    });
+
+    it('the key order is take, look, timing — whatever order the control was built in', () => {
+      // The bridge's one control helper builds `look, timing, take` (the `CG ADD` payload's
+      // order). This command's order predates `timing`, and a row without one must keep its bytes.
+      expect(builder.updateTake(slot, { look: 'solo', take: 'abc' })).toBe(
+        'CG 1-10 UPDATE 0 "{\\"__cg\\":{\\"take\\":\\"abc\\",\\"look\\":\\"solo\\"}}"',
+      );
+      expect(
+        builder.updateTake(slot, {
+          look: 'solo',
+          timing: { passes: 'infinite', delayMs: 800 },
+          take: 'abc',
+        }),
+      ).toBe(
+        'CG 1-10 UPDATE 0 "{\\"__cg\\":{\\"take\\":\\"abc\\",\\"look\\":\\"solo\\",' +
+          '\\"timing\\":{\\"passes\\":\\"infinite\\",\\"delayMs\\":800}}}"',
+      );
+    });
+  });
+
   it('update → CG UPDATE with escaped JSON data', () => {
     // JSON quotes are AMCP-escaped via quote(): {"title":"Hi"} → "{\"title\":\"Hi\"}"
     expect(builder.update(slot, { title: 'Hi' })).toBe('CG 1-10 UPDATE 0 "{\\"title\\":\\"Hi\\"}"');

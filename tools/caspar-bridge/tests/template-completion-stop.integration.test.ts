@@ -351,6 +351,12 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
         NEITHER: `updateTake`'s `fields` defaults to `{}` and `#tellPageTake` passes none, so the
         payload's only key is the reserved one.
 
+        ⚠ `LOGO-LOOP-01` (`B-322`) — the tell now carries the row's recorded pass TIMING as well,
+        deliberately. That does not loosen this pin: `timing` is a CONTROL member, inside `__cg`
+        beside `take` and `look`, never a field — so the payload's only key is still `__cg`. What
+        is inside `__cg` is pinned below to exactly the three members a take hands its page.
+        (`resident-take-timing.integration.test.ts` pins when `timing` is and is not there.)
+
         Pinned here rather than on the builder because a builder unit test would still pass if a
         caller started handing it fields. This asserts what left the bridge.
       */
@@ -370,6 +376,11 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
         Object.keys(payload ?? {}),
         'the tell carried field data — a draft or a stale value could ride a take',
       ).toEqual(['__cg']);
+      const members = Object.keys((payload?.['__cg'] ?? {}) as Record<string, unknown>);
+      expect(
+        members.filter((m) => !['take', 'look', 'timing'].includes(m)),
+        'the tell carried a control member a take does not hand its page',
+      ).toEqual([]);
     },
   );
 

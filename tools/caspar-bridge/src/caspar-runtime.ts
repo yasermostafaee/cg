@@ -200,7 +200,12 @@ import {
   type ValidateChangeOptions,
 } from './fixed-layers-store.js';
 import type { AmcpLogEntry } from './amcp-log.js';
-import { CommandBuilder, summarizeWireLine, type CommandSlot } from './command-builder.js';
+import {
+  CommandBuilder,
+  summarizeWireLine,
+  type CommandSlot,
+  type TakeControl,
+} from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import {
   foregroundUnchanged,
@@ -4572,10 +4577,12 @@ export class CasparRuntime {
           and what `#sendAdd` gives a REBUILT page.
 
           ⭐ A page REBUILT later (the operator's take re-ADDs it) starts over by definition, so
-          `#sendAdd`'s payload is the only thing that could tell it.
-          ⚠ What that payload then DOES is `DELTA A3`'s finding, unfixed and filed: `CG ADD … 0
-          <data>` reaches the page through `update()`, and the `CG PLAY` that follows resets
-          `cyclesLeft` from the authored `repeat`, discarding it.
+          `#sendAdd`'s payload is the only thing that could tell it; a RESIDENT page is told by
+          the take's own tell (`#tellPageTake`), from the same `#takeControl` (`LOGO-LOOP-01`).
+          ⚠ `DELTA A3` found that the `CG PLAY` after such a payload reset `cyclesLeft` from the
+          authored `repeat`, discarding it. FIXED in the page by `DELTA B0`: `play()` seats the
+          count it was told (`pendingPasses`) and falls back to `repeat` only when told none —
+          and since `B-323` a SETTLED page keeps a count told to it, too.
         */
         continue;
       }
@@ -5294,14 +5301,22 @@ export class CasparRuntime {
         THIS TELL IS NO LONGER GATED ON HAVING A LOOK.
 
         The look half is unchanged and is `B-191`'s, above. What is new is that this branch —
-        the resident producer, no `CG ADD` — is the ONE route into air that carries no payload,
-        so it is the one place a page keeps the PREVIOUS run's token. A report from the run that
+        the resident producer, no `CG ADD` — is the ONE route into air whose `CG PLAY` carries no
+        payload, so it is the one place a page keeps the PREVIOUS run's token. A report from the run that
         finished would then stop the run that had just started; `template-completion-stop`
         measured exactly that before this line existed.
 
         ⚠ **A look-less template needs the token as much as a look-bearing one does**, so the
         tell is now unconditional. That is one extra `CG UPDATE` on the resident-take path for a
         template with no looks — a configuration verb carrying no fields, seating nothing.
+      */
+      /*
+        🔴 `LOGO-LOOP-01` (`B-322`) — AND THE ROW'S RECORDED PASS TIMING RIDES THE SAME TELL.
+
+        An off-air timing set is only recorded (golden rule 10), on the promise that the next take
+        carries it. The other branch kept that promise (`#sendAdd`); this one did not, so a logo
+        stopped after an on-air count and set to `Until stop` came back with the old count. The
+        control is `#takeControl`'s, the one both branches build from. No command is added.
       */
       const told = await this.#tellPageTake(itemId, slot);
       if (!told.ok && told.lookId !== undefined) lookTellFailed = told.lookId;
@@ -7882,15 +7897,22 @@ export class CasparRuntime {
    * `B-191`'s rule for the look and is if anything clearer here: the graphic is mid-way to air,
    * and a take the operator was told did not happen while the wire had already moved is a
    * larger failure than a run that cannot report its own end.
+   *
+   * 🔴 `LOGO-LOOP-01` (`B-322`) — **AND IT CARRIES THE ROW'S RECORDED PASS TIMING.** A count set
+   * while the row was stopped is only recorded, and this tell is the next take on this route; it
+   * used to carry the token and the look and no timing, so the page re-ran the last count it had
+   * been told. The control comes from {@link #takeControl}, the same helper `#sendAdd` uses, so
+   * the two routes cannot disagree about what a take tells its page. It adds no command: the
+   * timing rides the `CG UPDATE` this take already sent.
    */
   async #tellPageTake(
     itemId: string,
     slot: CommandSlot,
   ): Promise<{ ok: boolean; lookId?: string; errorCode?: string }> {
-    const lookId = this.activeLookId(itemId);
-    const take = this.#mintTakeToken(itemId);
+    const control = this.#takeControl(itemId, this.#reconciler.get(itemId)?.templateId);
+    const lookId = control.look;
     const told = await this.#send(
-      this.#builder.updateTake(slot, take, lookId),
+      this.#builder.updateTake(slot, control),
       this.#nextSeq(),
       'urgent',
     );
@@ -8099,7 +8121,9 @@ export class CasparRuntime {
     };
     /*
       An off-air row REACHES NOTHING, so recording the intent IS the whole action — the same
-      shape `setActiveLook`'s case 2 has, and what makes the next take carry it (`#sendAdd`).
+      shape `setActiveLook`'s case 2 has, and what makes the next take carry it on EITHER route:
+      the re-ADD's payload (`#sendAdd`) or, for a producer a `stop` left resident, the tell
+      before its `CG PLAY` (`#tellPageTake`). Both build from `#takeControl` (`LOGO-LOOP-01`).
     */
     /*
       `PASSES-CYCLE-ONLY-26` — **AND A TEMPLATE WHOSE MODE IS NOT `loop-cycle` REACHES NOTHING
@@ -16028,9 +16052,13 @@ export class CasparRuntime {
 
       A fresh build snapshots its count from the template's AUTHORED `repeat` at `play()`. The
       operator's override lives only in `#passTimings`, so without this every re-ADD — a take
-      after a `stop`, and the re-ADD half of a restore — would put the graphic back on the
-      authored count with the console still showing the operator's. Attaching it at the one
+      after an `out` or a clear, and the re-ADD half of a restore — would put the graphic back on
+      the authored count with the console still showing the operator's. Attaching it at the one
       chokepoint means a plain take carries it as surely as a restore does.
+
+      ⚠ A take after a `stop` is NOT a re-ADD: the producer stays resident and the take tells it
+      instead (`#tellPageTake`). This note once listed it here, and that route carried no timing
+      until `LOGO-LOOP-01` (`B-322`). Both routes now build their control from `#takeControl`.
 
       ⚠ Absent when the row has no override, and `withCgControl` declines to attach an empty
       control object, so an ordinary row's payload is byte-for-byte what it was.
@@ -16048,17 +16076,8 @@ export class CasparRuntime {
       run whether or not anything else about the row changed, and a page carrying the PREVIOUS
       page's token could report a run that is already over.
     */
-    const activeLook = this.#activeLookOf(itemId);
-    // `PASSES-CYCLE-ONLY-26` — a recorded count crosses only for a template whose stated mode
-    // is `loop-cycle`. See `#admitsPassTiming`: the record keeps it either way.
-    const passTiming = this.#admitsPassTiming(itemId, templateId)
-      ? this.#passTimings.get(itemId)
-      : undefined;
-    const control: CgControl = {
-      ...(activeLook !== undefined && { look: activeLook.id }),
-      ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
-      take: this.#mintTakeToken(itemId),
-    };
+    // `LOGO-LOOP-01` — built by the one helper the resident route's tell uses too.
+    const control: CgControl = this.#takeControl(itemId, templateId);
     const addFields = withCgControl(fields, control);
     const { ok, errorCode, command } = await this.#send(
       this.#builder.load(slot, templateArg, addFields),
@@ -16205,6 +16224,39 @@ export class CasparRuntime {
   #admitsPassTiming(itemId: string, templateId: string | undefined): boolean {
     if (templateId === undefined) return false;
     return templateAdmitsPassTiming(this.#templateOfItem(itemId, templateId)?.playout);
+  }
+
+  /**
+   * 🔴 `LOGO-LOOP-01` (`B-322`) — **WHAT A TAKE TELLS ITS PAGE, on BOTH routes into air. The ONE
+   * spelling.**
+   *
+   * There are two routes and each sends its control in a different command: a take that rebuilds
+   * the page puts it in the `CG ADD` payload (`#sendAdd`), and a take of a RESIDENT producer —
+   * after a `stop` — puts it in the `CG UPDATE` before the `CG PLAY` (`#tellPageTake`). The look
+   * reached both routes (`B-191`) and so did the token (`SELF-STOP-24`), each fixed separately;
+   * the recorded pass timing reached the first only. The owner's logo, stopped and set to
+   * `Until stop`, came back with the count it had been told on air, while the console and this
+   * bridge's record both said `Until stop`.
+   *
+   * So the members are built HERE and both routes call it (golden rule 6): the look from
+   * `#activeLookOf`, the timing from {@link #wireTiming} gated by {@link #admitsPassTiming}, and a
+   * fresh token. A third member added later reaches both routes or neither.
+   *
+   * ⚠ Absent members are absent, never defaulted: a row with no override carries no `timing`, so
+   * its wire is what it was. And it MINTS — call it once per take.
+   */
+  #takeControl(itemId: string, templateId: string | undefined): TakeControl {
+    const activeLook = this.#activeLookOf(itemId);
+    // `PASSES-CYCLE-ONLY-26` — a recorded count crosses only for a template whose stated mode
+    // is `loop-cycle`. See `#admitsPassTiming`: the record keeps it either way.
+    const passTiming = this.#admitsPassTiming(itemId, templateId)
+      ? this.#passTimings.get(itemId)
+      : undefined;
+    return {
+      ...(activeLook !== undefined && { look: activeLook.id }),
+      ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
+      take: this.#mintTakeToken(itemId),
+    };
   }
 
   #mintTakeToken(itemId: string): string {

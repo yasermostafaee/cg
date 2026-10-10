@@ -53,7 +53,8 @@ Two causes, each confirmed by running, not by reading:
 ## Impact
 
 - `packages/template-runtime/src/playout-controller.ts`, `packages/template-runtime/README.md`.
-- `tools/caspar-bridge/src/caspar-runtime.ts`, `tools/caspar-bridge/src/command-builder.ts`.
+- `tools/caspar-bridge/src/caspar-runtime.ts`, `tools/caspar-bridge/src/command-builder.ts`; a comment in
+  `apps/runtime/src/renderer/features/inspector/applyDraft.ts`.
 - Tests: `packages/template-runtime/tests/live-pass-timing.test.ts`, `take-tell-is-inert.test.ts`;
   `tools/caspar-bridge/tests/resident-take-timing.integration.test.ts` (new),
   `template-completion-stop.integration.test.ts`, `command-builder.test.ts`.
