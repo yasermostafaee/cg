@@ -43,7 +43,12 @@ Lane: **FULL** for both parts — a take's wire (`B-322`) and what a page puts o
 
 ## 3. Discharge
 
-- [ ] 3.1 Full green gate on each part's commit.
-- [ ] 3.2 A completed, green Linux `e2e` job that RAN, on a commit carrying both parts (run URL here).
+- [x] 3.1 Full green gate on each part's commit: `pnpm gate` (pre-push) 99/99 successful, 0 cached, on
+      `2d7309e9` and again on `8bbf0b4e`.
+- [x] 3.2 A completed, green Linux `e2e` job that RAN, on each commit. `2d7309e9` (B-323): from its log,
+      runtime 337 passed, 2 skipped; designer 303 passed, 13 skipped —
+      https://github.com/yasermostafaee/cg/actions/runs/38082170521/job/114301181694 . `8bbf0b4e` (B-322,
+      carries both parts): runtime 337 passed, 2 skipped; designer 303 passed, 13 skipped —
+      https://github.com/yasermostafaee/cg/actions/runs/38083301863/job/114305550139
 - [ ] 3.3 The owner's check (H1) on his station, after CG Bridge AND CG Control are upgraded and the logo is
       re-imported.
