@@ -245,7 +245,7 @@ test('§4 — the standing notice paints the reference’s own ground, edge and 
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
-  await app.openStationSetupAt('Servers');
+  await app.openStationSetupAt('Connection');
   const notice = setup(page).locator('[data-setup-notice]');
 
   await expect(notice).toBeVisible();
@@ -285,7 +285,7 @@ test('§6 — every tag in the dialog is inert, and reads quieter than a button 
   const rail = dialog.getByRole('tablist', { name: 'Station setup sections' });
 
   const seen: string[] = [];
-  for (const tab of ['Channel', 'Servers', 'Live sources', 'Text file delimiters', 'Layers']) {
+  for (const tab of ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers']) {
     await rail.getByRole('tab', { name: new RegExp(`^${tab}`) }).click();
     await expect(dialog.locator('[data-station-section]')).toBeVisible();
 

@@ -1295,9 +1295,10 @@ async function phaseStuckStation() {
       (sel) => document.querySelector(`${sel} [data-playout-address]`)?.textContent ?? null,
       SIGN_IN_GATE,
     );
+    // `SERVERS-SIMPLIFY-01` (T1) — the address reads as a fact, `host : port`.
     check(
-      `…the card names the station's host, http://${lan}:8080`,
-      card === `http://${lan}:8080`,
+      `…the card names the station's host, ${lan} : 8080`,
+      card === `${lan} : 8080`,
       String(card),
     );
     const line = await until(

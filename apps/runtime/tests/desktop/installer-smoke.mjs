@@ -1173,10 +1173,14 @@ async function controlDrive() {
           (b) => b.textContent?.trim() === 'Connect',
         );
         if (connect === undefined || connect.disabled) return null;
-        // What the gate holds as it is pressed — the address it will save.
-        const typed = document.getElementById('cg-playout-address')?.value ?? '';
+        /*
+          What the gate holds as it is pressed — the address it will save. `SERVERS-SIMPLIFY-01` (T1): the
+          address arrived whole, so it filled both of its fields — `http://` is the default and is not kept.
+        */
+        const host = document.getElementById('cg-playout-address')?.value ?? '';
+        const port = document.getElementById('cg-playout-port')?.value ?? '';
         connect.click();
-        return typed;
+        return `http://${host}:${port}`;
       }),
     15_000,
   ).catch(() => null);

@@ -143,7 +143,8 @@ test('B3 — CG Control’s first question: the Playout’s address, typed', asy
   });
   await page.goto(`${APP}/`);
   const gate = page.locator('[data-playout-address-gate]');
-  await gate.getByLabel('Playout address').fill(EXAMPLE_PLAYOUT);
+  // `SERVERS-SIMPLIFY-01` (T1) — the Playout's host field (its port is left to its placeholder).
+  await gate.getByLabel('Playout host', { exact: true }).fill(EXAMPLE_PLAYOUT);
   await expect(gate.getByRole('button', { name: 'Connect' })).toBeEnabled();
   // The card alone: its title, the field and Connect.
   await gate

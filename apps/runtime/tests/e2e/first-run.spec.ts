@@ -162,7 +162,11 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   // ── 1 · the Playout, a fact, and the check it gets on open ──────────────────
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
   await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 20_000 });
-  await expect(firstRun.locator('[data-playout-address]')).toHaveText(playout.baseUrl);
+  // `SERVERS-SIMPLIFY-01` (T1) — the address reads as a fact, `host : port`.
+  const base = new URL(playout.baseUrl);
+  await expect(firstRun.locator('[data-playout-address]')).toHaveText(
+    `${base.hostname} : ${base.port}`,
+  );
   /*
     🔴 `B-304` — the check is read WHERE IT LIVES, in the Playout section. Read off the whole dialog,
     `[data-check="api"]` met two lines while the check ran — the Sign in section repeated the
@@ -314,7 +318,7 @@ test('first-run: the Playout checked, a station-admin sign-in, the channel — a
   */
   await page.getByRole('button', { name: 'Open Station setup' }).click();
   const setup = page.getByRole('dialog', { name: /Station setup/ });
-  await setup.getByRole('tab', { name: /Servers/ }).click();
+  await setup.getByRole('tab', { name: /Connection/ }).click();
   const again = setup.getByRole('region', { name: 'Playout' });
   await expect(again.locator('[data-check-group]')).toHaveCount(4, { timeout: 20_000 });
   await expect(again.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {

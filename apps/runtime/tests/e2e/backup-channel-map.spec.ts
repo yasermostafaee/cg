@@ -169,7 +169,7 @@ test('🔴 the channel’s lines on the backup engine: the status bar’s count,
   // 3 — Station setup → Servers → Backup engine: one line, from the backup engine's own list.
   await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
   const setup = page.getByRole('dialog', { name: 'Station setup' });
-  const servers = setup.getByRole('tab', { name: /Servers/ });
+  const servers = setup.getByRole('tab', { name: /Connection/ });
   if ((await servers.getAttribute('aria-selected')) !== 'true') await servers.click();
   const card = setup.getByRole('region', { name: 'Backup engine' });
   const row = card.locator('[data-backup-entry-row="1"]');

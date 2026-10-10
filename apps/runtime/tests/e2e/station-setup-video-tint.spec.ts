@@ -79,7 +79,7 @@ test('`MODAL-TRUTH-01` — the video card is green only while the channel has be
     answered), so the reference comes from Servers, whose `Primary server` card is always
     drawn — same dialog, same `[data-modal-size='fixed']` scope, same family.
   */
-  await setup.getByRole('tab', { name: 'Servers' }).click();
+  await setup.getByRole('tab', { name: 'Connection' }).click();
   const plainCard = setup.locator('.cg-card:not(.cg-card--video)').first();
   await expect(plainCard).toBeVisible();
   const plain = await plainCard.evaluate((el) => {

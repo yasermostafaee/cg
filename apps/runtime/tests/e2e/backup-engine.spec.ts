@@ -203,7 +203,7 @@ test('🔴 «Sign in CG Bridge…» names both engines; each is signed in with i
   // The check's Sign-in group: one line per engine, the backup's in words.
   await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
   const setup = page.getByRole('dialog', { name: 'Station setup' });
-  const servers = setup.getByRole('tab', { name: /Servers/ });
+  const servers = setup.getByRole('tab', { name: /Connection/ });
   if ((await servers.getAttribute('aria-selected')) !== 'true') await servers.click();
   const signInGroup = setup.locator('[data-check-group="sign-in"]');
   await expect(signInGroup.locator('[data-check="bridge-session-backup"]')).toContainText(

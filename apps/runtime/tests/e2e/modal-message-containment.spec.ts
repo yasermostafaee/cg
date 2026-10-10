@@ -145,7 +145,7 @@ test('a Servers message is drawn inside the section pane, clear of the footer', 
     .click();
   await expect(page.getByRole('dialog', { name: /^Clear all/ })).toBeHidden();
 
-  await app.openStationSetupAt('Servers');
+  await app.openStationSetupAt('Connection');
   await expect(dialog).toBeVisible();
   await expect(
     dialog.locator('[data-setup-notice]'),
@@ -157,7 +157,7 @@ test('a Servers message is drawn inside the section pane, clear of the footer', 
   const message = dialog.locator('[data-modal-message]');
   await expect(message).toBeVisible();
 
-  await assertContained(dialog, 'Servers');
+  await assertContained(dialog, 'Connection');
 });
 
 /**
@@ -167,7 +167,7 @@ test('a Servers message is drawn inside the section pane, clear of the footer', 
 test('the Servers standing notice is drawn inside the section pane', async ({ app }) => {
   const dialog = app.page.getByRole('dialog', { name: 'Station setup' });
 
-  await app.openStationSetupAt('Servers');
+  await app.openStationSetupAt('Connection');
   await expect(dialog).toBeVisible();
 
   const notice = dialog.locator('[data-setup-notice]');

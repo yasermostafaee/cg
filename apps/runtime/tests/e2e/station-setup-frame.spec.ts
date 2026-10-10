@@ -26,7 +26,7 @@ import { test, expect } from './fixtures/runtime.js';
  *      `maxWidth: 58ch` note, and this assertion is what found it.
  */
 
-const TABS = ['Channel', 'Servers', 'Live sources', 'Text file delimiters', 'Layers'] as const;
+const TABS = ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers'] as const;
 
 /** Rounded, because sub-pixel layout noise is not a moved frame. */
 const round = (n: number): number => Math.round(n);

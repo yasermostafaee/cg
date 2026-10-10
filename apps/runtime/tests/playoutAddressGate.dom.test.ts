@@ -76,7 +76,12 @@ async function press(c: HTMLElement): Promise<void> {
 }
 
 describe('CENTRAL-BRIDGE-01 — the Playout-address gate', () => {
-  it('asks where the Playout is — and, only if it is elsewhere, CG Bridge: two labelled fields, one action', async () => {
+  /*
+    ⚠ REWRITTEN by `SERVERS-SIMPLIFY-01` (T1). It pinned TWO labelled fields: one text box per address. Each
+    address is now a `Host` and a `Port` (`StationAddressFields`, the Connection card's own fields), so the
+    question has four fields under the same two names — and still ONE action.
+  */
+  it('asks where the Playout is — and, only if it is elsewhere, CG Bridge: two addresses, a host and a port each, one action', async () => {
     const c = await render(
       () => true,
       () => undefined,
@@ -84,22 +89,29 @@ describe('CENTRAL-BRIDGE-01 — the Playout-address gate', () => {
     expect(c.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
       'Set up CG Control',
     );
-    expect([...c.querySelectorAll('label')].map((l) => l.textContent)).toEqual([
-      'Playout address',
-      'CG Bridge address',
+    expect(
+      [...c.querySelectorAll('[role="group"]')].map((g) => g.getAttribute('aria-label')),
+    ).toEqual(['Playout address', 'CG Bridge address']);
+    expect([...c.querySelectorAll('input')].map((i) => i.getAttribute('aria-label'))).toEqual([
+      'Playout host',
+      'Playout port',
+      'CG Bridge host',
+      'CG Bridge port',
     ]);
-    expect(c.querySelectorAll('input')).toHaveLength(2);
     expect(c.querySelectorAll('button')).toHaveLength(1);
     // Addresses are not prose: left-to-right, whatever the page's direction.
-    expect(input(c, 'cg-playout-address').getAttribute('dir')).toBe('ltr');
-    expect(input(c, 'cg-bridge-address').getAttribute('dir')).toBe('ltr');
+    for (const field of c.querySelectorAll('input')) expect(field.getAttribute('dir')).toBe('ltr');
     // Connect waits for the Playout address; the CG Bridge address is optional.
     expect(connect(c).disabled).toBe(true);
     await type(input(c, 'cg-playout-address'), '192.0.2.20');
     expect(connect(c).disabled).toBe(false);
   });
 
-  it('🔴 R-080 — the CG Bridge field says it may stay empty: `Found automatically`, and ONE hint line', async () => {
+  /*
+    ⚠ AMENDED by `SERVERS-SIMPLIFY-01` (T1, T5): `Found automatically` is the CG Bridge host's placeholder only
+    while there is no Playout host to name — once there is, CG Bridge is ON that host, so the placeholder says it.
+  */
+  it('🔴 R-080 — the CG Bridge fields say they may stay empty: their placeholders, and ONE hint line', async () => {
     const c = await render(
       () => true,
       () => undefined,
@@ -112,8 +124,37 @@ describe('CENTRAL-BRIDGE-01 — the Playout-address gate', () => {
     // The hint describes the field it sits under, and is the only hint on the form.
     expect(bridge.getAttribute('aria-describedby')?.split(' ')).toContain(hint?.id);
     expect(c.querySelectorAll('[data-bridge-address-hint]')).toHaveLength(1);
-    // Control: the Playout field carries no placeholder and no hint — it must be typed.
+    // Control: the Playout host carries no placeholder and no hint — it must be typed.
     expect(input(c, 'cg-playout-address').getAttribute('placeholder')).toBeNull();
+    // T1 — once the Playout's host is typed, CG Bridge's host field names it: that is where it will be found.
+    await type(input(c, 'cg-playout-address'), '192.0.2.20');
+    expect(bridge.getAttribute('placeholder')).toBe('192.0.2.20');
+  });
+
+  it('🔴 T5 — every default is a placeholder, and an empty field saves the default', async () => {
+    const save = vi.fn(() => true);
+    const c = await render(save, () => undefined);
+    expect(input(c, 'cg-playout-port').getAttribute('placeholder')).toBe('8080');
+    expect(input(c, 'cg-bridge-port').getAttribute('placeholder')).toBe('5280');
+    expect(input(c, 'cg-playout-port').value).toBe('');
+    await type(input(c, 'cg-playout-address'), '192.0.2.20');
+    await press(c);
+    // The Playout port left empty is the API's (8080); CG Bridge's fields left empty: on the Playout's host.
+    expect(save).toHaveBeenCalledWith({ playoutAddress: 'http://192.0.2.20:8080' });
+  });
+
+  it('🔴 T1 — a whole address pasted into a Host fills both fields; a port alone puts CG Bridge on the Playout’s host', async () => {
+    const save = vi.fn(() => true);
+    const c = await render(save, () => undefined);
+    await type(input(c, 'cg-playout-address'), 'http://192.0.2.20:8081/');
+    expect(input(c, 'cg-playout-address').value).toBe('192.0.2.20');
+    expect(input(c, 'cg-playout-port').value).toBe('8081');
+    await type(input(c, 'cg-bridge-port'), '5281');
+    await press(c);
+    expect(save).toHaveBeenCalledWith({
+      playoutAddress: 'http://192.0.2.20:8081',
+      bridgeAddress: '192.0.2.20:5281',
+    });
   });
 
   it('🔴 Connect saves the Playout address, normalised — CG Bridge on its host — and starts the console again', async () => {

@@ -13521,3 +13521,77 @@ so the template must be re-imported after the upgrade (`C-034`).
 - WHEN a settled loop is told `passes: 'infinite'` and played THEN it loops until stopped
 - WHEN a settled loop is told a count THEN no frame is painted and no event fires until it is played
 - WHEN a settled loop is told a gap and played THEN its passes are separated by that gap
+
+## [~] B-324 — The Connection card's typed address is dropped in silence on a tab switch ⟨priority: high — the owner typed an address, changed tab, and could not tell it was gone⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part A · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (CG Control `0.11.4`, the owner's picture 5, 2026-10-10; reproduced by running,
+`stationSetupConnection.dom.test.ts` at `7d68fc8b`):** in Station setup → Servers the Playout card's `Change`
+opened an address field and a CG Bridge field. He typed into the CG Bridge field, changed tab, and came back to the
+card as it was before he typed: the field gone (`undefined`), no mark on the rail, nothing said. The fields lived
+inside `PlayoutConnection`, which unmounts with its tab; nothing outside it knew there was an edit.
+
+**Expected:** what is typed survives a tab switch like every other draft on that tab, the card says `Not connected
+yet`, the rail marks the tab, and closing the dialog (or `Revert`) discards it.
+
+**Acceptance:**
+
+- WHEN a CG Bridge address is typed, the tab changed and changed back THEN the field still holds it, the card says
+  `Not connected yet` and the rail marks the tab
+- WHEN the dialog is closed and opened again THEN the card reads the station as it is, and the rail is quiet
+
+## [~] B-325 — A Station setup draft crosses to another CG Bridge when the console is re-pointed with the dialog open ⟨priority: high — the suspected path of the owner's own PC (`.93`) into `.32`'s server A and serve host⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part A · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (reproduced by running, `stationSetupConnection.dom.test.ts` at `7d68fc8b`):** Station setup stays
+mounted while the console is re-pointed at another CG Bridge (`Connect` retargets the socket), and a reconnect
+re-reads the stack, the health and the lock, never `connections.config`. So the Servers fields AND their baseline
+kept the first CG Bridge's values on the second: no mark on the rail, and `Apply servers` sent them there. Measured:
+open on a CG Bridge whose server A and serve host are `192.168.21.93`, re-pointed at one whose server A is
+`127.0.0.1`, `Apply servers` sent `192.168.21.93`. The owner's `.32` held `.93` in both (his pictures 3 and 4, no
+mark on the rail), and he had been on the `.93` CG Bridge that day.
+
+**Expected:** when the link comes back while the dialog is open, the configuration and the serve state are read
+again. On another CG Bridge the draft is dropped with the baseline it was typed against; on the same one a draft
+being typed stands unless what is stored there changed.
+
+**Acceptance:**
+
+- WHEN the dialog is open on CG Bridge X with a draft and the console is re-pointed at Y THEN every field reads Y,
+  the rail is quiet, and `Apply servers` sends nothing of X
+- WHEN the link blinks back to the SAME CG Bridge THEN the draft being typed stands
+
+## [ ] B-326 — A graphics (serve) host that names another machine is never judged ⟨priority: high — `B-162` again: a take reports success and shows nothing⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (the owner's logs from the `.32` CG Bridge, 2026-10-10):** the serve host held `192.168.21.93` (his
+own PC). CG Bridge logged `template HTTP server LAN-EXPOSED on 0.0.0.0:7911 — CG ADD URL host is 192.168.21.93`, and
+every `CG 1-99 ADD` after it carried `http://192.168.21.93:7911/template/…`, each answered `202 CG OK`: CasparCG on
+`.32` fetched the page from another machine. With the graphics host set back to `127.0.0.1`, the graphic rendered.
+`hostsUnableToFetchTemplates` (the one predicate behind the boot line, the apply answer and the dialog) judges only a
+LOOPBACK bind or host against a remote CasparCG; a host that is neither loopback nor CG Bridge's own passes.
+
+**Expected:** a serve host that is neither loopback nor one of the addresses CG Bridge's machine has (the list the
+candidate chips come from) means every configured CasparCG fetches graphics from another machine: the one predicate
+says so, the check shows a failed line naming the host, and offers `Detect automatically`.
+
+**Acceptance:** WHEN the serve host is `192.0.2.93` on a CG Bridge whose addresses do not include it THEN the check's
+line fails naming it, the boot line and the apply answer name every configured server, and `Detect automatically`
+clears the field; WHEN it is one of CG Bridge's own addresses or loopback THEN nothing is said.
+
+## [ ] B-327 — The check cannot see a CasparCG host that does not join the Playout's, so meters, sources and grants are dropped in silence ⟨priority: high — the owner's programme meter read `— LUFS` with picture and sound present, and the check read all green⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` · `openspec/changes/servers-simplify/`
+
+**Repro / Actual (the owner's pictures 3 and 6, 2026-10-10):** server A read `192.168.21.93`, later
+`192.168.21.32`. A reading from the Playout is kept only if `hostIsOurs(host)` — the Playout's `casparHost`,
+resolved by `resolveCasparHost` against this CG Bridge's own Playout host, must be one of the configured CasparCG
+hosts (`bridge.ts`, the meters, the sources and the grants). On a CG Bridge that sits on the Playout's machine the
+Playout names `127.0.0.1` and nothing is rewritten, so A must read `127.0.0.1`; on a separate server it must read
+the Playout's address. The owner confirmed: A = `.32` left the meter empty, A = `127.0.0.1` brought it back. The
+check judged none of this: the console never sent `casparHost`, so the AMCP line probed the Playout's host, and no
+line reads the join.
+
+**Expected:** the console's check sends the configured server A host; an `After sign-in` line says whether it joins
+the Playout's, through `hostIsOurs`, naming both hosts and the cost when it does not; the CasparCG card then offers
+`Use the Playout's`, which writes `resolveCasparHost(casparHost, <this CG Bridge's Playout host>)` through
+`connections.set-config` (refused on air, as today). The contract's join is reported, never relaxed.
+
+**Acceptance:** both placements, one fixture each — a CG Bridge whose own Playout is `127.0.0.1` (A `127.0.0.1`
+joins, A `192.168.21.32` does not) and one whose Playout is `192.168.21.32` (the reverse); in each the line and `Use
+the Playout's` give the right answer and the meter returns.

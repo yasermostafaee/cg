@@ -1101,6 +1101,12 @@ export const STATION_SETUP_PX = {
   fieldsRowGap: 19,
   fieldsColGap: 18,
   fieldsThreeRatio: '1.8fr 1fr 1fr',
+  /**
+   * `SERVERS-SIMPLIFY-01` (T1) — ONE ADDRESS: a host beside its port. `2.8fr 1fr` is the three-field row's
+   * own split with the two ports' share folded into the host, so a port box is exactly as wide here as an
+   * AMCP or OSC port box in the CasparCG cards below it.
+   */
+  fieldsHostPortRatio: '2.8fr 1fr',
   /** The lede above a field grid — `.card-body p.secondary{font-size:13px;margin-bottom:19px}`. */
   cardLedeText: 13,
   cardLedeGap: 19,
@@ -3119,6 +3125,7 @@ export const cssVars = {
   '--r-setup-field-hint-text': `${String(STATION_SETUP_PX.fieldHintText)}px`,
   '--r-setup-fields-gap': `${String(STATION_SETUP_PX.fieldsRowGap)}px ${String(STATION_SETUP_PX.fieldsColGap)}px`,
   '--r-setup-fields-three': STATION_SETUP_PX.fieldsThreeRatio,
+  '--r-setup-fields-host-port': STATION_SETUP_PX.fieldsHostPortRatio,
   '--r-setup-card-lede-text': `${String(STATION_SETUP_PX.cardLedeText)}px`,
   '--r-setup-card-lede-gap': `${String(STATION_SETUP_PX.cardLedeGap)}px`,
   '--r-setup-server-chip-box': `${String(STATION_SETUP_PX.serverChipBox)}px`,

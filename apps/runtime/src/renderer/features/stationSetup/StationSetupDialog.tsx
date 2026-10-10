@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -26,6 +27,7 @@ import type { ConnectionConfig, TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { useConnections } from '../../hooks/useConnections.js';
+import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
 import { isOnAirStatus } from '@cg/shared-schema';
 import { STATION_SETUP_PX, colors, cssVars } from '../../theme.js';
@@ -60,8 +62,9 @@ import { SetupSection } from './SetupSection.js';
 import { Tag } from '../../ui/Tag.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
-import { PlayoutConnection } from '../firstRun/PlayoutConnection.js';
+import { PlayoutConnection, type ConnectionDraft } from '../firstRun/PlayoutConnection.js';
 import { playoutOriginOf } from '../firstRun/firstRunStation.js';
+import { stationFieldsChanged } from '../firstRun/stationFields.js';
 
 /**
  * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
@@ -545,6 +548,26 @@ export function StationSetupDialog({
   const backupChannels = useBackupChannels();
   // `DESKTOP-APPS-01` — the Playout this station trusts, as the bridge advertises it.
   const playoutOrigin = playoutOriginOf(useAuthCapabilities()?.signInUrl);
+  /*
+    🔴 `SERVERS-SIMPLIFY-01` (`B-324`) — **THE CONNECTION CARD'S OPEN EDIT, HELD HERE.** The card unmounts with
+    its tab, so a draft it kept itself was dropped in silence on a tab switch (the owner's picture 5). Held
+    here it survives the switch like every other draft on this tab, marks the rail, and is discarded on close
+    and by `Revert` with the rest. `null` — nothing open.
+  */
+  const [connectionDraft, setConnectionDraft] = useState<ConnectionDraft | null>(null);
+  const connectionDirty =
+    connectionDraft !== null &&
+    stationFieldsChanged(connectionDraft.fields, playoutOrigin, window.cg.setup.bridgeOverride());
+  /*
+    🔴 `B-325` — **WHICH CG BRIDGE THE DRAFT CAME FROM.** The dialog stays mounted while the console is re-pointed
+    at another CG Bridge, and a reconnect re-reads the stack, the health and the lock, never the configuration.
+    So the fields and their baseline kept the first CG Bridge's values on the second one — no mark on the rail,
+    and `Apply servers` sent them there. Measured: open on `192.168.21.93`, re-pointed at a CG Bridge whose server
+    A is `127.0.0.1`, `Apply servers` sent `192.168.21.93`. The suspected path of the owner's `.93` into `.32`.
+  */
+  const loadedFrom = useRef<string | null>(null);
+  const link = useLink();
+  const wasLive = useRef(link === 'live');
   const footerSlot = holdsStationAdmin ? footerSlotEl : null;
   /** §6 — the backup server's own small second dialog. */
   const [addingBackup, setAddingBackup] = useState(false);
@@ -638,6 +661,8 @@ export function StationSetupDialog({
       if (cancelled) return;
       restoreServersDraft(config);
       setLoaded(config);
+      // `B-325` — the CG Bridge this baseline came from.
+      loadedFrom.current = window.cg.link.bridgeAddress?.() ?? null;
     };
     void window.cg.connections.config().then(applyConfig);
     /*
@@ -659,6 +684,48 @@ export function StationSetupDialog({
       unsubscribe();
     };
   }, [open, restoreServersDraft]);
+
+  /*
+    🔴 `B-325` — **BACK ON A CG BRIDGE: READ IT AGAIN, AND NEVER CARRY A DRAFT ACROSS.** When the link comes back
+    while the dialog is open, the configuration and the serve state are read again. On ANOTHER CG Bridge (the
+    console was re-pointed) the draft goes with the baseline it was typed against — every field reads the CG
+    Bridge the console is on now, and so does the card. On the SAME one, a draft being typed stands unless what
+    is stored there changed meanwhile (a blink of the LAN is not a reason to drop the operator's typing).
+  */
+  const loadedRef = useRef(loaded);
+  loadedRef.current = loaded;
+  useEffect(() => {
+    const back = link === 'live' && !wasLive.current;
+    wasLive.current = link === 'live';
+    if (!open || !back) return;
+    let cancelled = false;
+    const now = window.cg.link.bridgeAddress?.() ?? null;
+    const elsewhere = now !== loadedFrom.current;
+    if (elsewhere) setConnectionDraft(null);
+    void window.cg.connections
+      .config()
+      .then((config) => {
+        if (cancelled) return;
+        const before = loadedRef.current;
+        if (!elsewhere && before !== null && sameServerConfig(before, config)) return;
+        restoreServersDraft(config);
+        setLoaded(config);
+        loadedFrom.current = now;
+        // An outcome or a refusal from before is a statement about an act on another baseline.
+        setStatus(null);
+        setRefusal(null);
+      })
+      .catch(() => undefined);
+    void window.cg.connections
+      .templateServe()
+      .then((info) => {
+        if (!cancelled) setServeInfo(info);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [link, open, restoreServersDraft]);
 
   /**
    * 🔴 `MODAL-TRUTH-01` §2 — **CLOSING DISCARDS THE UNAPPLIED DRAFT, AT THE MOMENT OF
@@ -705,6 +772,8 @@ export function StationSetupDialog({
     setRefusal(null);
     setAddingBackup(false);
     restoreServersDraft(loaded);
+    // `B-324` — the Connection card's open edit is a draft like the rest: closing discards it.
+    setConnectionDraft(null);
   }, [open, loaded, restoreServersDraft]);
 
   /*
@@ -849,8 +918,17 @@ export function StationSetupDialog({
   const isBlocked = (id: StationSetupSection): boolean =>
     (id === 'servers' && serversOnAirBlock !== null) ||
     messagesFor(id).some((m) => m.role === 'refusal');
+  /*
+    `B-324` — the tab holds TWO commits now: the card's `Connect` (this console's station record) and `Apply
+    servers` (what the bridge drives). Either one open marks the tab, and the rail's count is how many of the
+    two are waiting — a commit each, never a count of keystrokes.
+  */
   const isDirty = (id: StationSetupSection): boolean =>
-    id === 'servers' ? serversDirty : (sectionDirty[id] ?? false);
+    id === 'servers' ? serversDirty || connectionDirty : (sectionDirty[id] ?? false);
+  const dirtyCount = (id: StationSetupSection): number =>
+    id === 'servers'
+      ? (serversDirty ? 1 : 0) + (connectionDirty ? 1 : 0)
+      : (sectionDirtyCount[id] ?? 1);
 
   const tabs: readonly TabSpec[] = STATION_SETUP_SECTIONS.map((s) => ({
     id: s.id,
@@ -868,8 +946,8 @@ export function StationSetupDialog({
               label: `${s.title} has unapplied changes`,
               // `SETTINGS-MATCH-02` — the chip says HOW MANY. Servers is one draft however
               // many fields were typed into it: the section applies atomically, so `1` is the
-              // honest number rather than a count of keystrokes.
-              count: sectionDirtyCount[s.id] ?? 1,
+              // honest number rather than a count of keystrokes (`B-324`: one more for the card).
+              count: dirtyCount(s.id),
             },
           }
         : {}),
@@ -898,6 +976,8 @@ export function StationSetupDialog({
       how the defect comes back. `restoreServersDraft` answers `null` itself now.
     */
     restoreServersDraft(loaded);
+    // `B-324` — the tab's discard is the whole tab's: the card's open edit goes with the fields.
+    setConnectionDraft(null);
     setRefusal(null);
     setStatus(null);
   };
@@ -1190,14 +1270,14 @@ export function StationSetupDialog({
                 DIALOG-level and lives in the ✕, Escape and the backdrop — see the guard on
                 `dismiss` below, which is what the two blurred names were hiding.
 
-                `serversDirty` is the SAME read the rail's blue dot makes, so the button and
-                the dot cannot disagree about whether there is anything to revert.
+                `isDirty('servers')` is the SAME read the rail's blue dot makes, so the button
+                and the dot cannot disagree about whether there is anything to revert.
               */}
-              {serversDirty && (
+              {isDirty('servers') && (
                 <ModalAction
                   actionRole="cancel"
                   onClick={revertServers}
-                  title="Puts the Servers fields back to what the bridge holds. Nothing is sent, and the dialog stays open."
+                  title="Puts this tab's fields back to what is in force. Nothing is sent, and the dialog stays open."
                 >
                   Revert
                 </ModalAction>
@@ -1217,7 +1297,7 @@ export function StationSetupDialog({
                 variant={modalActionVariant('primary')}
                 data-modal-role="primary"
                 aria-label="Apply server settings"
-                title="Applies the Servers section. Refused while anything is on air."
+                title="Applies this tab's server settings. Refused while anything is on air."
                 disabled={onAirCount > 0 || validationError !== null}
                 run={async () => {
                   if (typeof validated === 'string') return { accepted: false };
@@ -1346,6 +1426,9 @@ export function StationSetupDialog({
                     origin={playoutOrigin}
                     startEditing={playoutOrigin === null}
                     mayChange={holdsStationAdmin}
+                    // 🔴 `B-324` — the open edit outlives the tab: held by the dialog, discarded on close.
+                    draft={connectionDraft}
+                    onDraft={setConnectionDraft}
                     // `CENTRAL-BRIDGE-01` (D8) — where this console reaches CG Bridge, and an admin's override.
                     showBridge
                     /*

@@ -26,7 +26,7 @@ pane SHALL say plainly `Not available on the backup engine` for the return, its 
 
 ### Requirement: Station setup SHALL take a station admin's backup channel for each declared channel
 
-With a server B, Station setup → Servers SHALL carry a `Backup engine` card with one line per declared channel,
+With a server B, Station setup → Connection (named `Servers` until 2026-10-11, `SERVERS-SIMPLIFY-01`) SHALL carry a `Backup engine` card with one line per declared channel,
 `CH N (primary) → CH M (backup)`, where a station admin types M (any other principal reads it), and beside it the
 line's state in words: where the mapping comes from, or why it is not used. It SHALL be built from the shared
 primitives, and saving it SHALL NOT wait for anything to leave air.

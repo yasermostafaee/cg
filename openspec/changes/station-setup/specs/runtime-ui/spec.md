@@ -59,7 +59,7 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 
 #### Scenario: The on-air block is scoped to Servers
 
-- **WHEN** anything is on air or unsettled **THEN** `Apply servers` is disabled and the Servers section's standing notice reads that Apply is blocked for Servers and every other section stays editable, while the pinned message region carries no copy of it
+- **WHEN** anything is on air or unsettled **THEN** `Apply servers` is disabled and the Servers section's (the Connection tab's since 2026-10-11, `SERVERS-SIMPLIFY-01`) standing notice reads that Apply is blocked for Servers and every other section stays editable, while the pinned message region carries no copy of it
 - **WHEN** anything is on air or unsettled **THEN** that notice sits between the section head and the first card, on the same left and right edges as the cards below it, and the footer's clause reads `Unavailable while on air` in the caution ink
 
 #### Scenario: Each tab's footer carries its own commit, in sentence case
@@ -69,7 +69,7 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 > Revert, and reads as read-only for this sign-in — the read-only case below. The two lines naming
 > a commit hold for a station-admin.
 
-- **WHEN** the Servers tab is shown to a station-admin **THEN** its footer holds a `primary`-role `Apply servers`, and no other tab's action
+- **WHEN** the Connection tab (named `Servers` until 2026-10-11, `SERVERS-SIMPLIFY-01`) is shown to a station-admin **THEN** its footer holds a `primary`-role `Apply servers`, and no other tab's action
 - **WHEN** the Layers tab is shown to a station-admin **THEN** its footer holds `Apply layers`, and no other tab's action
 - **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds its commit contract and a single `Close` (amended by `SETTINGS-MATCH-02`, 2026-09-11 — see **One job, one control, one name in the dialog's footer** below)
 

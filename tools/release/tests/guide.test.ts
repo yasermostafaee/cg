@@ -36,13 +36,24 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
   },
   // `CENTRAL-BRIDGE-01` (D8) — CG Control's first question, and where a separate server goes.
+  // `SERVERS-SIMPLIFY-01` (T1) — each a `Host` and a `Port`, in the fields Set up and Station setup share.
   {
     shown: 'Playout address',
-    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+    file: 'apps/runtime/src/renderer/features/firstRun/StationAddressFields.tsx',
   },
   {
     shown: 'CG Bridge address',
-    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
+    file: 'apps/runtime/src/renderer/features/firstRun/StationAddressFields.tsx',
+  },
+  {
+    shown: 'Host',
+    text: 'label="Host"',
+    file: 'apps/runtime/src/renderer/features/firstRun/StationAddressFields.tsx',
+  },
+  {
+    shown: 'Port',
+    text: 'label="Port"',
+    file: 'apps/runtime/src/renderer/features/firstRun/StationAddressFields.tsx',
   },
   // `CENTRAL-BRIDGE-01` §1 C — the lines a console shows, each with what to do.
   {
@@ -148,11 +159,6 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     shown: 'Connect',
     file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
   },
-  // `CONSOLE-POLISH-01` (`R-080`) — CG Control's first question: CG Bridge's address may stay empty.
-  {
-    shown: 'Found automatically',
-    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutAddressGate.tsx',
-  },
   // `CONSOLE-POLISH-01` (`R-081`) — the check in four groups, the sign-in the gate between them.
   { shown: 'Reachable', text: "title: 'Reachable'", file: 'packages/shared-ipc/src/channels/setup.ts' },
   { shown: 'Versions', text: "title: 'Versions'", file: 'packages/shared-ipc/src/channels/setup.ts' },
@@ -176,8 +182,13 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     text: '>Channel<',
     file: 'apps/runtime/src/renderer/features/firstRun/FirstRunScreen.tsx',
   },
-  // `R-081` — Station setup runs the same check again: SETTINGS → Servers → Playout → Check.
-  { shown: 'Servers', text: "title: 'Servers'", file: 'apps/runtime/src/renderer/features/stationSetup/sections.ts' },
+  // `R-081` — Station setup runs the same check again: SETTINGS → Connection → Playout → Check.
+  // `SERVERS-SIMPLIFY-01` (T1) — the tab was `Servers`.
+  {
+    shown: 'Connection',
+    text: "title: 'Connection'",
+    file: 'apps/runtime/src/renderer/features/stationSetup/sections.ts',
+  },
   {
     shown: 'Playout',
     text: '<span className="cg-card__title">Playout</span>',

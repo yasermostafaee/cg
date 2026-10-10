@@ -56,7 +56,8 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
     );
     expect(labels).toEqual([
       'Channel',
-      'Servers',
+      // `SERVERS-SIMPLIFY-01` (T1) — was `Servers`; the deep-link id below is unchanged.
+      'Connection',
       'Live sources',
       'Text file delimiters',
       'Layers',
@@ -93,7 +94,7 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
     // But nothing is HIDDEN: the rail still says Servers is blocked, from here.
     expect(tabOf(dialog, 'servers').querySelector('[data-tab-badge="warn"]')).not.toBeNull();
     // …and it says so to a screen reader too — the signal never depends on colour.
-    expect(tabOf(dialog, 'servers').textContent).toContain('Servers is blocked');
+    expect(tabOf(dialog, 'servers').textContent).toContain('Connection is blocked');
 
     // …and one press lands on the sentence.
     await selectSetupTab(dialog, 'servers');
@@ -118,7 +119,7 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
 
     await setSetupInput(dialog, 'Primary host', '192.168.21.114');
     expect(tabOf(dialog, 'servers').querySelector('[data-tab-badge="edited"]')).not.toBeNull();
-    expect(tabOf(dialog, 'servers').textContent).toContain('Servers has unapplied changes');
+    expect(tabOf(dialog, 'servers').textContent).toContain('Connection has unapplied changes');
     // AMBER is "you are blocked" and must not be spent on "you have typed something".
     expect(tabOf(dialog, 'servers').querySelector('[data-tab-badge="warn"]')).toBeNull();
 

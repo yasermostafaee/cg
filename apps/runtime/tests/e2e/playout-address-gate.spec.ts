@@ -108,8 +108,8 @@ test('🔴 a fresh CG Control asks ONE question; given the Playout, it connects 
   const connect = gate.getByRole('button', { name: 'Connect' });
   await expect(connect).toBeDisabled();
 
-  // Typed as an operator types it: the host alone.
-  await gate.getByLabel('Playout address').fill(EXAMPLE);
+  // Typed as an operator types it: the host alone (`SERVERS-SIMPLIFY-01` T5 — the port left to its placeholder).
+  await gate.getByLabel('Playout host', { exact: true }).fill(EXAMPLE);
 
   /*
     🔴 `B-317` — nothing answers there yet: Connect asks once (its probe is the one socket) and says
@@ -165,8 +165,8 @@ test('🔴 R-080 + R-082 — the question says CG Bridge may stay empty, on the 
   const card = gate.getByRole('dialog', { name: 'Set up CG Control' });
   await expect(card).toBeVisible({ timeout: 20_000 });
 
-  // R-080 — empty, `Found automatically`, and ONE hint line under the field.
-  const bridge = gate.getByLabel('CG Bridge address');
+  // R-080 — empty, `Found automatically`, and ONE hint line under the fields.
+  const bridge = gate.getByLabel('CG Bridge host', { exact: true });
   await expect(bridge).toHaveValue('');
   await expect(bridge).toHaveAttribute('placeholder', 'Found automatically');
   const hint = gate.locator('[data-bridge-address-hint]');
@@ -176,6 +176,27 @@ test('🔴 R-080 + R-082 — the question says CG Bridge may stay empty, on the 
   expect(hintBox.y, 'the hint sits UNDER its field').toBeGreaterThanOrEqual(
     fieldBox.y + fieldBox.height,
   );
+  /*
+    `SERVERS-SIMPLIFY-01` (T1, T5) — each address a host and a port, every default its placeholder, and the
+    port beside its host on one row (measured here, in a real engine: jsdom has no layout).
+  */
+  const playoutHost = gate.getByLabel('Playout host', { exact: true });
+  const playoutPort = gate.getByLabel('Playout port', { exact: true });
+  await expect(playoutPort).toHaveAttribute('placeholder', '8080');
+  await expect(gate.getByLabel('CG Bridge port', { exact: true })).toHaveAttribute(
+    'placeholder',
+    '5280',
+  );
+  const [hostBox, portBox] = [await playoutHost.boundingBox(), await playoutPort.boundingBox()];
+  if (hostBox === null || portBox === null) throw new Error('the host and its port need a box');
+  expect(Math.abs(hostBox.y - portBox.y), 'the port sits on its host’s row').toBeLessThan(2);
+  expect(portBox.x, 'after it').toBeGreaterThan(hostBox.x + hostBox.width);
+  expect(portBox.x + portBox.width, 'inside the card').toBeLessThanOrEqual(
+    ((await card.boundingBox())?.x ?? 0) + ((await card.boundingBox())?.width ?? 0),
+  );
+  // Once the Playout's host is typed, CG Bridge's host field names it: that is where it is found.
+  await playoutHost.fill(EXAMPLE);
+  await expect(bridge).toHaveAttribute('placeholder', EXAMPLE);
 
   /*
     R-082 — measured in a real engine (golden rule 12c): the APASAI mark is DRAWN (a box, not an
@@ -203,8 +224,11 @@ test('a separate server: CG Bridge’s own address, typed beside the Playout’s
   await asCgControl(page, dialed);
   const gate = page.locator('[data-playout-address-gate]');
   await expect(gate).toBeVisible({ timeout: 20_000 });
-  await gate.getByLabel('Playout address').fill(EXAMPLE);
-  await gate.getByLabel('CG Bridge address').fill('192.0.2.30:5281');
+  await gate.getByLabel('Playout host', { exact: true }).fill(EXAMPLE);
+  // `SERVERS-SIMPLIFY-01` (T1) — a whole `host:port` pasted into the host fills both of its fields.
+  await gate.getByLabel('CG Bridge host', { exact: true }).fill('192.0.2.30:5281');
+  await expect(gate.getByLabel('CG Bridge host', { exact: true })).toHaveValue('192.0.2.30');
+  await expect(gate.getByLabel('CG Bridge port', { exact: true })).toHaveValue('5281');
   // `B-317` — CG Bridge answers on the separate server (and only there).
   await bridgeAnswersOnce(page, '192.0.2.30:5281', dialed);
   await gate.getByRole('button', { name: 'Connect' }).click();
@@ -239,7 +263,7 @@ test('CONTROL — an address that is not a Playout’s is refused in one line: n
   const gate = page.locator('[data-playout-address-gate]');
   await expect(gate).toBeVisible({ timeout: 20_000 });
 
-  await gate.getByLabel('Playout address').fill(`ftp://${EXAMPLE}`);
+  await gate.getByLabel('Playout host', { exact: true }).fill(`ftp://${EXAMPLE}`);
   await gate.getByRole('button', { name: 'Connect' }).click();
   await expect(gate.getByRole('status')).toHaveText('That is not a Playout address.');
   // Still the gate, the same page: nothing saved, and no socket opened.

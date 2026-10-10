@@ -1,15 +1,17 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import fs from 'node:fs';
-import net from 'node:net';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import {
   startFakePlayout,
   type FakePlayout,
 } from '../../../../tools/caspar-bridge/tests/support/fake-playout.js';
-import { stopChild } from './fixtures/child-process.js';
+import {
+  APP,
+  STATION_KEY,
+  Stage,
+  asCgControl,
+  deadPort,
+  relay,
+  shot,
+} from './fixtures/cg-control.js';
 
 /**
  * 🔴 `B-320` + `B-321` (`SIGNIN-ESCAPE-01`) — **THE OWNER'S STUCK CONSOLE, IN A REAL ENGINE.**
@@ -34,171 +36,27 @@ import { stopChild } from './fixtures/child-process.js';
  * Nothing reaches a real station: the stuck bridge's Playout and CasparCG are on `127.0.0.2` (refused),
  * the good one's Playout is the fake on this loopback, and both bridges dial CasparCG on port 1.
  * `CG_SHOTS_DIR` set: the report's before/after pictures are written there; unset, nothing is.
+ *
+ * The staging — CG Control's own page, scratch-folder bridges, the relay — is `fixtures/cg-control.ts`, shared
+ * with `connection-card.spec.ts` since `SERVERS-SIMPLIFY-01`.
  */
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(here, '../../../..');
-const BRIDGE_CLI = path.join(REPO, 'tools/caspar-bridge/bin/caspar-bridge.mjs');
-const SHOTS = process.env['CG_SHOTS_DIR'];
-
-const APP = 'http://tauri.localhost';
-const STATION_KEY = 'cg.runtime.station.v1';
 /** Where the stuck station's CG Bridge is, as the console sees it (the owner's `.93`). */
 const STUCK_HOST = '192.0.2.93';
 /** Where the good station's CG Bridge is (the owner's `.32`). */
 const GOOD_HOST = '192.0.2.32';
-/** Every request to the documentation block is refused here, never dialled (the dev host intercepts TEST-NET). */
-const EXAMPLE_HTTP = /^https?:\/\/192\.0\.2\.\d{1,3}[:/]/;
 
-const children: ChildProcess[] = [];
-const stateDirs: string[] = [];
+const stage = new Stage();
 let playout: FakePlayout | null = null;
 
 test.afterEach(async () => {
-  for (const child of children.splice(0)) await stopChild(child);
+  await stage.dispose();
   await playout?.stop();
   playout = null;
-  for (const dir of stateDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/** A port on `host` that nothing listens on: bound, read, and closed again. */
-async function deadPort(host: string): Promise<number> {
-  const server = net.createServer();
-  await new Promise<void>((resolve) => server.listen(0, host, resolve));
-  const { port } = server.address() as net.AddressInfo;
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  return port;
-}
-
-/**
- * The CG Bridge CLI in `auth: 'playout'` mode with every persisted path in a scratch folder, its WS on
- * this loopback; `playout` is its Playout flags. CasparCG is port 1 (nothing). Its URL.
- */
-async function startBridge(playoutFlags: readonly string[]): Promise<string> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-escape-'));
-  stateDirs.push(dir);
-  const scratch = (name: string): string => path.join(dir, name);
-  const child = spawn(
-    process.execPath,
-    [
-      BRIDGE_CLI,
-      '--auth',
-      'playout',
-      ...playoutFlags,
-      '--playout-config-path',
-      scratch('playout.json'),
-      '--persist-path',
-      scratch('connection.json'),
-      '--fixed-layers-path',
-      scratch('fixed.json'),
-      '--reserved-layers-path',
-      scratch('reserved.json'),
-      '--source-catalog-path',
-      scratch('catalog.json'),
-      '--source-assignments-path',
-      scratch('assignments.json'),
-      '--playout-inputs-path',
-      scratch('inputs.json'),
-      '--bound-media-path',
-      scratch('media.json'),
-      '--live-layers-path',
-      scratch('live.json'),
-      '--audit-log-path',
-      scratch('audit.ndjson'),
-      '--templates-dir',
-      scratch('templates'),
-      '--caspar-host',
-      '127.0.0.1',
-      '--amcp-port',
-      '1',
-      '--port',
-      '0',
-      '--template-serve-port',
-      '0',
-    ],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
-  );
-  children.push(child);
-  let boot = '';
-  child.stderr?.on('data', (chunk: Buffer) => {
-    boot += chunk.toString();
-  });
-  // Both lines: the URL, then the auth mode — a bridge with no gate would make this file vacuous.
-  const deadline = Date.now() + 30_000;
-  while (Date.now() < deadline) {
-    const match = /WS listening on (ws:\/\/[^\s]+)/.exec(boot);
-    if (match?.[1] !== undefined && boot.includes('auth: PLAYOUT')) return match[1];
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`the bridge never started in auth mode; its boot output was:\n${boot}`);
-}
-
-/**
- * The page's socket to `ws://<host>:5280` carried, frame for frame, to the real bridge at `target` —
- * so the console believes CG Bridge is on `host`, and nothing is dialled there.
- */
-async function relay(page: Page, host: string, target: string): Promise<void> {
-  await page.routeWebSocket(new RegExp(`^ws://${host.replace(/\./g, '\\.')}:5280/?$`), (ws) => {
-    const upstream = new WebSocket(target);
-    const waiting: string[] = [];
-    upstream.addEventListener('open', () => {
-      for (const frame of waiting.splice(0)) upstream.send(frame);
-    });
-    upstream.addEventListener('message', (event) => ws.send(String(event.data)));
-    upstream.addEventListener('close', () => ws.close());
-    upstream.addEventListener('error', () => ws.close());
-    ws.onMessage((frame) => {
-      const text = String(frame);
-      if (upstream.readyState === WebSocket.OPEN) upstream.send(text);
-      else waiting.push(text);
-    });
-    ws.onClose(() => upstream.close());
-  });
-}
-
-/**
- * The built console as CG Control's own page, with `station` as its record on the FIRST load only (a
- * reload is the console's own). Every socket but the relayed ones is closed, never dialled.
- */
-async function asCgControl(page: Page, station: { playoutAddress: string }): Promise<void> {
-  const base = test.info().project.use.baseURL;
-  if (typeof base !== 'string') throw new Error('the suite names no baseURL');
-  await page.route(`${APP}/**`, async (route) => {
-    const url = new URL(route.request().url());
-    try {
-      const response = await route.fetch({ url: `${base}${url.pathname}${url.search}` });
-      await route.fulfill({ response });
-    } catch (err) {
-      // A request of a page that Set up again or Connect has just reloaded.
-      if (!/has been closed|has been disposed/.test(String(err))) throw err;
-    }
-  });
-  await page.route(EXAMPLE_HTTP, (route) => route.abort('connectionrefused'));
-  await page.routeWebSocket(/.*/, (ws) => ws.close());
-  await page.addInitScript(
-    ({ key, record }) => {
-      (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;
-      // The shell's IPC global, as CG Control's webview has it; no command is answered but the one read.
-      (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
-        invoke: (command: string) =>
-          command === 'keyboard_language'
-            ? Promise.resolve('latin')
-            : Promise.reject(new Error(`no ${command} in this test`)),
-      };
-      if (sessionStorage.getItem('e2e.seeded') === null) {
-        sessionStorage.setItem('e2e.seeded', '1');
-        localStorage.setItem(key, record);
-      }
-    },
-    { key: STATION_KEY, record: JSON.stringify(station) },
-  );
-}
-
-async function shot(page: Page, name: string): Promise<void> {
-  if (SHOTS === undefined) return;
-  fs.mkdirSync(SHOTS, { recursive: true });
-  await page.screenshot({ path: path.join(SHOTS, name) });
-}
+const startBridge = (playoutFlags: readonly string[]): Promise<string> =>
+  stage.startBridge(playoutFlags);
 
 test('🔴 B-320 + B-321 — stuck on a CG Bridge whose Playout does not answer: the gate names the card’s host, offers Set up again, and a good address connects', async ({
   page,
@@ -226,8 +84,9 @@ test('🔴 B-320 + B-321 — stuck on a CG Bridge whose Playout does not answer:
   // ── the owner's picture 4: the gate, the card naming the station's host, the fields locked ──
   const gate = page.getByRole('dialog', { name: 'Playout sign-in' });
   await expect(gate).toBeVisible({ timeout: 30_000 });
+  // `SERVERS-SIMPLIFY-01` (T1) — the address reads as a fact, `host : port`.
   await expect(gate.locator('[data-playout-address]')).toHaveText(
-    `http://${STUCK_HOST}:${String(silent)}`,
+    `${STUCK_HOST} : ${String(silent)}`,
   );
   const line = gate.locator('[data-check="api"]');
   await expect(line).toHaveAttribute('data-status', 'fail', { timeout: 30_000 });
@@ -271,7 +130,7 @@ test('🔴 B-320 + B-321 — stuck on a CG Bridge whose Playout does not answer:
   await shot(page, 'signin-escape-2-set-up.png');
 
   // …and a good address connects: the Playout's IP alone, as an operator types it.
-  await setUp.getByLabel('Playout address').fill(GOOD_HOST);
+  await setUp.getByLabel('Playout host', { exact: true }).fill(GOOD_HOST);
   await setUp.getByRole('button', { name: 'Connect' }).click();
   await expect(setUp).toHaveCount(0, { timeout: 30_000 });
   expect(
@@ -280,10 +139,9 @@ test('🔴 B-320 + B-321 — stuck on a CG Bridge whose Playout does not answer:
 
   // Connected to the good CG Bridge: its gate, its Playout on the card, and a sign-in that can work.
   const next = page.getByRole('dialog', { name: 'Playout sign-in' });
-  await expect(next.locator('[data-playout-address]')).toHaveText(
-    `http://${GOOD_HOST}:${goodPort}`,
-    { timeout: 30_000 },
-  );
+  await expect(next.locator('[data-playout-address]')).toHaveText(`${GOOD_HOST} : ${goodPort}`, {
+    timeout: 30_000,
+  });
   await expect(next.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 30_000,
   });

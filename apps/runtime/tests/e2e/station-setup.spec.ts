@@ -41,7 +41,7 @@ const dismiss = (dialog: Locator): Locator =>
   dialog.getByRole('button', { name: 'Close', exact: true });
 
 /** The rail, in the owner's order. */
-const TABS = ['Channel', 'Servers', 'Live sources', 'Text file delimiters', 'Layers'];
+const TABS = ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers'];
 
 test('the rail: Settings opens on Channel, and every section is one press away', async ({
   app,
@@ -71,7 +71,7 @@ test('the rail: Settings opens on Channel, and every section is one press away',
   // SERVERS is the one tab with an APPLY, and it is named for its scope — in SENTENCE case
   // since `STATION-CHROME-02` §3, like `Apply layers` one tab along and like every dialog
   // title. The shout was a leftover from the dialog this grew out of.
-  await rail.getByRole('tab', { name: /^Servers/ }).click();
+  await rail.getByRole('tab', { name: /^Connection/ }).click();
   await expect(dialog.getByRole('button', { name: 'Apply server settings' })).toHaveText(
     'Apply servers',
   );
@@ -114,7 +114,7 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
   */
   await expect(dialog.getByText(/Server changes are paused while on air/)).toHaveCount(0);
 
-  await rail.getByRole('tab', { name: /^Servers/ }).click();
+  await rail.getByRole('tab', { name: /^Connection/ }).click();
   await expect(dialog.getByText(/Server changes are paused while on air/)).toBeVisible();
   await expect(dialog.getByText(/Every other section stays editable/)).toBeVisible();
   /*
@@ -131,9 +131,9 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
 
   // …and nothing is HIDDEN: the rail still marks Servers, from here, in words as well as
   // colour — one press lands back on the sentence.
-  const serversTab = rail.getByRole('tab', { name: /^Servers/ });
+  const serversTab = rail.getByRole('tab', { name: /^Connection/ });
   await expect(serversTab.locator('[data-tab-badge="warn"]')).toHaveCount(1);
-  await expect(serversTab).toContainText('Servers is blocked');
+  await expect(serversTab).toContainText('Connection is blocked');
   await serversTab.click();
   await expect(dialog.getByText(/Server changes are paused while on air/)).toBeVisible();
 

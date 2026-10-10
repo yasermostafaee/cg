@@ -72,7 +72,7 @@ air** stops and clears that one layer and nothing else on that channel.
 
 The console opens, signed in, with its controls — no reload. Everything is in **SETTINGS**
 afterwards: the Playout, where this console finds CG Bridge (a station admin can change both) and the
-check under **Servers**, the CasparCG host beside them, and the rows under **Layers**. Every layer row is shown after setup; hide the ones you do not use there once
+check under **Connection**, the CasparCG host beside them, and the rows under **Layers**. Every layer row is shown after setup; hide the ones you do not use there once
 CasparCG is connected. **A row's `#` and its default name are its real CasparCG layer** — the top
 row is `99`, _Layer 99_; beds read _Bed 59_ … _Bed 50_. A name you give a row replaces the default.
 

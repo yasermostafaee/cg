@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import {
-  NOT_A_BRIDGE_ADDRESS,
-  NOT_A_PLAYOUT_ADDRESS,
-  normaliseBridgeAddress,
-  normalisePlayoutAddress,
-} from '@cg/shared-ipc';
-import { colors, cssVars } from '../../theme.js';
+import { NOT_A_BRIDGE_ADDRESS, NOT_A_PLAYOUT_ADDRESS } from '@cg/shared-ipc';
+import { cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { SignInCard } from '../../ui/SignInCard.js';
-import { TextInput } from '../../ui/TextInput.js';
+import { StationAddressFields } from './StationAddressFields.js';
+import {
+  NO_HOST_PORT,
+  bridgeAddressOf,
+  playoutAddressOf,
+  playoutHostOf,
+  type StationFields,
+} from './stationFields.js';
 
 /**
  * 🔴 `CENTRAL-BRIDGE-01` (D8) — **CG CONTROL'S FIRST QUESTION: WHERE IS THE PLAYOUT?**
@@ -30,30 +32,15 @@ import { TextInput } from '../../ui/TextInput.js';
  * Labels, fields, one action and one refusal line: the design system's rule for an operator
  * surface. `SignInOverlay`'s card, in the same tokens, so the two gates read as one kind of stop.
  *
+ * 🔴 `SERVERS-SIMPLIFY-01` (T1, T5) — **THE SAME FIELDS AS THE CONNECTION CARD** (`StationAddressFields`):
+ * each address a `Host` and a `Port`, every default a placeholder, a whole address pasted into a `Host`
+ * filling both. One set of fields and one rule (`stationFields.ts`), never two copies.
+ *
  * ⚠ A PAGE, NOT AN OVERLAY. `main.tsx` renders this INSTEAD of the app — there is nothing behind it
  * to cover or to dismiss to — so it is laid out in the page's own flow, full height, and hand-rolls
  * no full-window scrim (`modalMessageRegion.dom.test.ts` allows two, the two gates over the app).
  */
 const styles = {
-  label: {
-    fontSize: cssVars['--r-text-sm'],
-    fontWeight: 500,
-    color: colors.textSecondary,
-    marginBottom: 6,
-  },
-  // The second field's label sits below the first field.
-  labelAfter: {
-    fontSize: cssVars['--r-text-sm'],
-    fontWeight: 500,
-    color: colors.textSecondary,
-    margin: '14px 0 6px',
-  },
-  // `R-080` — the one hint line under the CG Bridge field: the muted ink, one line.
-  hint: {
-    fontSize: cssVars['--r-text-xs'],
-    color: colors.textMuted,
-    marginTop: 6,
-  },
   // A message is ATTENTION, never red (`design.md` §29).
   error: {
     color: cssVars['--r-caution-text'],
@@ -62,11 +49,6 @@ const styles = {
     margin: '6px 0 0',
   },
 } as const;
-
-/** `R-080` — the CG Bridge field while it is empty: nothing to type, it is found. */
-export const BRIDGE_ADDRESS_PLACEHOLDER = 'Found automatically';
-/** `R-080` — the field's one hint line (`CONSOLE-POLISH-01` §5, the owner's words). */
-export const BRIDGE_ADDRESS_HINT = 'Leave empty unless CG Bridge runs on a separate server.';
 
 /** What the gate saves: this console's station record. */
 export interface GateStation {
@@ -89,19 +71,22 @@ export function PlayoutAddressGate({
   /** Start the console again once the address is saved (a test passes its own). */
   reload?: () => void;
 }): JSX.Element {
-  const [typed, setTyped] = useState('');
-  const [bridgeTyped, setBridgeTyped] = useState('');
+  const [fields, setFields] = useState<StationFields>({
+    playout: NO_HOST_PORT,
+    bridge: NO_HOST_PORT,
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const nothingTyped = fields.playout.host.trim() === '';
 
   const connect = async (): Promise<void> => {
     if (busy) return;
-    const playoutAddress = normalisePlayoutAddress(typed);
+    const playoutAddress = playoutAddressOf(fields.playout);
     if (playoutAddress === null) {
       setError(NOT_A_PLAYOUT_ADDRESS);
       return;
     }
-    const bridgeAddress = normaliseBridgeAddress(bridgeTyped);
+    const bridgeAddress = bridgeAddressOf(fields.bridge, playoutHostOf(playoutAddress));
     if (bridgeAddress === null) {
       setError(NOT_A_BRIDGE_ADDRESS);
       return;
@@ -128,9 +113,6 @@ export function PlayoutAddressGate({
     }
     reload();
   };
-  const onEnter = (e: { key: string }): void => {
-    if (e.key === 'Enter' && typed.trim() !== '') void connect();
-  };
 
   /*
     🔴 `R-082` — **ONE SIGN-IN LOOK** (`SignInCard`, as a PAGE): the splash's ground, the APASAI mark
@@ -144,58 +126,29 @@ export function PlayoutAddressGate({
       title="Set up"
       groundData={{ 'data-playout-address-gate': '' }}
       footer={
-        <Button
-          variant="primary"
-          disabled={typed.trim() === '' || busy}
-          onClick={() => void connect()}
-        >
+        <Button variant="primary" disabled={nothingTyped || busy} onClick={() => void connect()}>
           {busy ? 'Connecting…' : 'Connect'}
         </Button>
       }
     >
-      <label htmlFor="cg-playout-address" style={styles.label}>
-        Playout address
-      </label>
-      <TextInput
-        id="cg-playout-address"
-        value={typed}
-        onChange={(value) => {
-          setTyped(value);
-          setError(null);
-        }}
-        // An address is not prose: LTR is a statement about the CONTENT.
-        dir="ltr"
-        autoComplete="off"
-        aria-label="Playout address"
-        aria-describedby="cg-playout-address-error"
-        onKeyDown={onEnter}
-      />
-      <label htmlFor="cg-bridge-address" style={styles.labelAfter}>
-        CG Bridge address
-      </label>
       {/*
-          🔴 `R-080` — **EMPTY IS THE ANSWER FOR MOST STATIONS, AND THE FIELD SAYS SO.** The owner's run of
-          `0.10.0` (2026-09-30): nothing told him this field may be left empty — CG Bridge is found on
-          the Playout's host, port 5280, by itself. The placeholder says it, and ONE hint line (the
-          owner's own allowance for a setup form, `CONSOLE-POLISH-01` §5) says when to type anything.
+          🔴 `R-080` — **EMPTY IS THE ANSWER FOR MOST STATIONS, AND THE FIELDS SAY SO.** The owner's run of
+          `0.10.0` (2026-09-30): nothing told him CG Bridge's address may be left empty — CG Bridge is found
+          on the Playout's host, port 5280, by itself. The placeholders say it (the Playout's host once it is
+          typed, `5280`), and ONE hint line (`CONSOLE-POLISH-01` §5) says when to type anything.
         */}
-      <TextInput
-        id="cg-bridge-address"
-        value={bridgeTyped}
-        onChange={(value) => {
-          setBridgeTyped(value);
+      <StationAddressFields
+        value={fields}
+        onChange={(next) => {
+          setFields(next);
           setError(null);
         }}
-        dir="ltr"
-        autoComplete="off"
-        placeholder={BRIDGE_ADDRESS_PLACEHOLDER}
-        aria-label="CG Bridge address"
-        aria-describedby="cg-bridge-address-hint cg-playout-address-error"
-        onKeyDown={onEnter}
+        hint
+        statusId="cg-playout-address-error"
+        onEnter={() => {
+          if (!nothingTyped) void connect();
+        }}
       />
-      <div id="cg-bridge-address-hint" style={styles.hint} data-bridge-address-hint="">
-        {BRIDGE_ADDRESS_HINT}
-      </div>
       <div id="cg-playout-address-error" style={styles.error} role="status">
         {error}
       </div>

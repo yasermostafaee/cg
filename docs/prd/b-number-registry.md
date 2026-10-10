@@ -3319,3 +3319,25 @@ Measured free before use:
 control: the same sweep's shape found the 2 headings `B-320` and `B-321` on `dev`; no stash.
 
 ⇒ **Next free after this entry is `B-324`**, **`D-163`**, **`P-068`**, **`R-095`** and **`C-049`**.
+
+### 2026-10-11 — `SERVERS-SIMPLIFY-01` (v1) takes `B-324` to `B-327` and `R-095` to `R-098`
+
+- `B-324` — the Connection card's typed address is dropped in silence on a tab switch —
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-325` — a Station setup draft crosses to another CG Bridge when the console is re-pointed with the dialog
+  open — [bugs-runtime.md](bugs-runtime.md).
+- `B-326` — a graphics (serve) host that names another machine is never judged — [bugs-runtime.md](bugs-runtime.md).
+- `B-327` — the check cannot see a CasparCG host that does not join the Playout's, so meters, sources and grants
+  are dropped in silence — [bugs-runtime.md](bugs-runtime.md).
+- `R-095` — one address to give: each address a host and a port, the defaults placeholders, one `Connect` —
+  [runtime.md](runtime.md).
+- `R-096` — CasparCG is derived in a Playout station, and the cards say `CasparCG` — [runtime.md](runtime.md).
+- `R-097` — a status-bar fact while the Playout's readings are dropped (filed only) — [runtime.md](runtime.md).
+- `R-098` — a station with no Playout is an explicit choice — [runtime.md](runtime.md).
+
+Measured free before use:
+`git grep -n -E "^## \[.\] (B-32[4-9]|R-09[5-9]) " <ref> -- docs` on all 11 local and remote-tracking refs
+returned nothing, and the same with `--untracked`; control: the same sweep's shape found the 2 headings `B-323`
+and `R-094` on `dev`; no stash.
+
+⇒ **Next free after this entry is `B-328`**, **`D-163`**, **`P-068`**, **`R-099`** and **`C-049`**.

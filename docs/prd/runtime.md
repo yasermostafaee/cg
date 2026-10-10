@@ -4591,3 +4591,39 @@ old strings swept by string and by component.
 asks with its own leave prompt while signed in. Closing sends nothing to CG Bridge or CasparCG. **Acceptance:**
 the desktop smoke (UIA): a close shows the dialog, `Cancel` keeps the window, `Close` exits; Playwright: the leave
 prompt while signed in; a test that nothing goes on the wire.
+
+## [~] R-095 — One address to give: each address a host and a port, the defaults placeholders, one `Connect` ⟨priority: high — the owner, 2026-10-10: "a station is one Playout; I give only its address"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part A (T1, T5) · `openspec/changes/servers-simplify/`
+
+**What:** Station setup's `Servers` tab is `Connection`. Its Playout card states the two addresses as facts —
+`192.168.21.32 : 8080`, and CG Bridge's with where it is (`On the Playout machine` or `Separate server`) — each
+with `Change`. An address is edited as a `Host` and a `Port`, the defaults their placeholders (the Playout's port
+`8080`; CG Bridge's host the Playout's, its port `5280`); an empty field IS the default; a whole address pasted into
+a `Host` fills both. `Connect` is the one commit, offered as soon as a field changed beside the fact `Not connected
+yet`; it runs the check where the fields resolve and saves only where CG Bridge answers (`B-317`). `Check` stays a
+test. The Set up page asks with the same fields (one component, one rule). **Acceptance:** jsdom for the fields
+(split, paste, empty = default, the comparison); Chromium for the card and the Set up page, the port on its host's
+row; a Linux `e2e` run.
+
+## [ ] R-096 — CasparCG is derived in a Playout station, and the cards say `CasparCG` ⟨priority: high — the owner read `Primary server` as "where the bridge is"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T2, T3) · `openspec/changes/servers-simplify/`
+
+**What:** a Playout station is one whose CG Bridge advertises `auth: playout`. There, server A is not typed: a
+fact row reads `On the Playout machine`, its host as stored, its ports and its health. The cards are `CasparCG A`
+and `CasparCG B · backup`, the rail's foot `CasparCG`; the status bar and the subtitle keep `Primary A` (the
+redundancy role). B stays addable and editable, the Add dialog's ports placeholders. The graphics address sits
+behind `Advanced` (collapsed in a Playout station), titled `Where CasparCG fetches graphics`, `Host` and `Port`
+with `Detect automatically` / `Assign automatically`; no sentence calls CG Bridge's machine "this machine", and the
+candidates are labelled as CG Bridge's machine's addresses.
+
+## [ ] R-097 — A status-bar fact while the Playout's readings are dropped ⟨priority: low — filed only⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T6) · `openspec/changes/servers-simplify/`
+
+**What:** while this station's CasparCG host does not join the Playout's (`B-327`), the Playout's meters, sources
+and grants are dropped. Say so in the status bar as a fact, beside the server it is about, so an operator who
+never opens Station setup still learns it. **Not built in `SERVERS-SIMPLIFY-01`** (the owner's instruction: file, do
+not build).
+
+## [ ] R-098 — A station with no Playout is an explicit choice ⟨priority: medium⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T4) · `openspec/changes/servers-simplify/`
+
+**What:** Set up offers a plain `No Playout` choice; the station record then holds CG Bridge's address alone. The
+Connection card reads `No Playout`, the CasparCG card is editable — `Host` (placeholder `127.0.0.1`), `AMCP port`
+(`5250`), `OSC port` (`6251`) — and CG Bridge has `Host` and `Port`. The persisted record (`cg.runtime.station.v1`)
+keeps every old record valid, and the persisted-key census is updated.

@@ -65,6 +65,7 @@ async function mount(opts: {
   const checks = vi.fn((_req: unknown, _where?: { bridgeAddress: string }) =>
     reply instanceof Error ? Promise.reject(reply) : Promise.resolve(reply),
   );
+  const setPlayoutAddress = vi.fn((_address: string, _bridge?: string) => Promise.resolve('saved'));
   const signedOut: AuthSessionState = { kind: 'signed-out' };
   const stub = fillBridgeStub({
     auth: authStub(signedOut),
@@ -77,6 +78,7 @@ async function mount(opts: {
       ...setupStub(),
       check: checks,
       canSetPlayoutAddress: () => true,
+      setPlayoutAddress,
       bridgeAddressFor: (playout: string, bridge: string) => {
         const normal = normalisePlayoutAddress(playout);
         return normal === null ? null : bridgeAddressFor(normal, bridge);
@@ -109,6 +111,7 @@ async function mount(opts: {
   return {
     el,
     checks,
+    setPlayoutAddress,
     setReply: (next: Reply) => {
       reply = next;
     },
@@ -192,8 +195,14 @@ describe('B-317 — no CG Bridge, then one, then none: never stranded', () => {
   });
 });
 
-describe('B-317 — one address: Connect only where CG Bridge answered; the last used one is a choice', () => {
-  it('🔴 a stale .111 and a typed 127.0.0.1: the check goes to 127.0.0.1, .111 is OFFERED — never a line', async () => {
+/*
+  ⚠ REWRITTEN by `SERVERS-SIMPLIFY-01` (T1). These pinned that `Connect` was ABSENT until a check had found CG
+  Bridge at the fields' own address. The owner's rule now is one commit, offered the moment a field changed, that
+  runs the check itself — so what `B-317` protects is asserted where it actually lives: NOTHING IS SAVED unless
+  CG Bridge answered at the address the fields resolve to. The rule is unchanged; only the button's visibility is.
+*/
+describe('B-317 — one address: Connect saves only where CG Bridge answered; the last used one is a choice', () => {
+  it('🔴 a stale .111 and a typed 127.0.0.1: Connect checks 127.0.0.1 and saves nothing there; .111 is OFFERED — never a line', async () => {
     const h = await mount({
       phase: 'target',
       reply: new BridgeNotAnsweringError('127.0.0.1:5280'),
@@ -206,18 +215,15 @@ describe('B-317 — one address: Connect only where CG Bridge answered; the last
     expect(h.el.querySelector('[aria-label="Connection check"]')?.textContent ?? '').not.toMatch(
       /192\.168\.21\.111/,
     );
+    // T1 — the one commit is offered as soon as the fields say something, beside the fact that it is not done.
+    expect(h.button(/^Connect$/)).toBeDefined();
+    expect(h.el.textContent).toContain('Not connected yet');
 
-    await h.press(/^Check$/);
-    // The check was asked with the field as it is (empty: the Playout's host).
+    // Pressed while nothing answers at 127.0.0.1: the check runs THERE, its line says so, and nothing is saved.
+    await h.press(/^Connect$/);
     expect(h.checks.mock.calls.at(-1)?.[1]).toEqual({ bridgeAddress: '' });
     expect(h.lineText('bridge')).toBe('CG Bridge is not answering at 127.0.0.1:5280.');
-    expect(h.button(/^Connect$/)).toBeUndefined();
-
-    // CG Bridge answers at 127.0.0.1: now Connect is offered.
-    h.setReply(answered('127.0.0.1:5280'));
-    await h.press(/^Check$/);
-    expect(h.lineText('bridge')).toBe('CG Bridge found at 127.0.0.1:5280.');
-    expect(h.button(/^Connect$/)).toBeDefined();
+    expect(h.setPlayoutAddress).not.toHaveBeenCalled();
 
     // Choosing the last used one fills the CG Bridge field and checks THERE.
     h.setReply(answered('192.168.21.111:5280'));
@@ -227,13 +233,26 @@ describe('B-317 — one address: Connect only where CG Bridge answered; the last
       '192.168.21.111',
     );
     expect(h.lineText('bridge')).toBe('CG Bridge on a separate server: 192.168.21.111:5280.');
+
+    // …and Connect saves exactly the fields, where CG Bridge answered — never the address it remembered.
+    await h.press(/^Connect$/);
+    expect(h.setPlayoutAddress).toHaveBeenCalledWith('http://127.0.0.1:8080', '192.168.21.111');
   });
 
-  it('an answer from ANOTHER address than the fields resolve to never offers Connect', async () => {
+  it('an answer from ANOTHER address than the fields resolve to never saves', async () => {
     const h = await mount({ phase: 'target', reply: answered('192.168.21.111:5280') });
     await h.type('#cg-playout-address', '127.0.0.1');
-    await h.press(/^Check$/);
-    expect(h.button(/^Connect$/)).toBeUndefined();
+    await h.press(/^Connect$/);
+    expect(h.checks).toHaveBeenCalled();
+    expect(h.setPlayoutAddress).not.toHaveBeenCalled();
+  });
+
+  it('CONTROL — CG Bridge answering at the fields’ own address: Connect saves, and the card reads as a fact again', async () => {
+    const h = await mount({ phase: 'target', reply: answered('127.0.0.1:5280') });
+    await h.type('#cg-playout-address', '127.0.0.1');
+    await h.press(/^Connect$/);
+    expect(h.setPlayoutAddress).toHaveBeenCalledWith('http://127.0.0.1:8080', '');
+    expect(h.el.querySelector('#cg-playout-address')).toBeNull();
   });
 
   it('R-090 — a port CG Bridge cannot open is said naming CG Bridge’s host', async () => {

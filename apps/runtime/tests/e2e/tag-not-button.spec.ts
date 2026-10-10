@@ -69,7 +69,7 @@ test('every visible tag on every Station setup tab is inert', async ({ app, page
   // The rail's own titles, verbatim from `sections.ts` — "Text file delimiters", not
   // "Text delimiters". A near-miss here selects nothing and the sweep silently covers one
   // tab fewer, which is the failure mode this whole prompt is about.
-  const tabs = ['Channel', 'Servers', 'Live sources', 'Text file delimiters', 'Layers'];
+  const tabs = ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers'];
   let seen = 0;
 
   for (const name of tabs) {
@@ -152,7 +152,7 @@ test('the same measurements report PRESSABLE for a real control', async ({ app, 
   const setup = page.getByRole('dialog', { name: 'Station setup' });
   const control = setup
     .getByRole('tablist', { name: 'Station setup sections' })
-    .getByRole('tab', { name: /^Servers/ });
+    .getByRole('tab', { name: /^Connection/ });
   await expect(control).toBeVisible();
 
   // 1. The pointer DOES promise an action here.

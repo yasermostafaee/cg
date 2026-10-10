@@ -163,8 +163,10 @@ words — `Default (…)`, `Use template assignment (…)` — SHALL carry the n
 
 The question CG Control asks with no station record SHALL show the `CG Bridge address` field empty with the
 placeholder `Found automatically` and ONE hint line under it — `Leave empty unless CG Bridge runs on a
-separate server.` — and nothing else of explanation. Once the console has connected, the connection check
-SHALL carry `CG Bridge found at <host>:<port>` — the address this console dialled.
+separate server.` — and nothing else of explanation. (Amended 2026-10-11, `SERVERS-SIMPLIFY-01`,
+`openspec/changes/servers-simplify/`: the address is a `Host` and a `Port`, and once the Playout's host is
+typed, that host is the CG Bridge host's placeholder — where it will be found.) Once the console has connected,
+the connection check SHALL carry `CG Bridge found at <host>:<port>` — the address this console dialled.
 
 #### Scenario: The question, and where it was found
 
@@ -183,7 +185,7 @@ can sign in, this console's sign-in, CG Bridge's own Playout session), **After s
 Bridge, OSC, the CG license, the channels, where the Playout and CasparCG run) — so the sign-in reads as the
 gate between them. Before any sign-in every line of the last group SHALL wait, neutral, saying what it waits
 for. The order SHALL come from one constant both the bridge and the console read. Station setup SHALL run the
-same check for a station admin on its Servers pane.
+same check for a station admin on its Connection pane (named `Servers` until 2026-10-11, `SERVERS-SIMPLIFY-01`).
 
 #### Scenario: Before and after the sign-in
 
@@ -193,7 +195,7 @@ same check for a station admin on its Servers pane.
 
 #### Scenario: Run again from Station setup
 
-- **WHEN** a station admin presses Check in Station setup → Servers **THEN** the same four groups run again
+- **WHEN** a station admin presses Check in Station setup → Connection **THEN** the same four groups run again
 
 #### Scenario: The Playout's version
 

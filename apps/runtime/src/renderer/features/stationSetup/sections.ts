@@ -137,8 +137,14 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
     footerIcon: 'info',
   },
   {
+    /*
+      🔴 `SERVERS-SIMPLIFY-01` (T1) — RENAMED from "Servers" at the owner's direction (2026-10-10): the tab held
+      three unrelated-looking things under one word — the Playout this console uses, where it reaches CG Bridge,
+      and the CasparCG engines — and he read the first CasparCG card as "where the bridge is". The id is
+      unchanged: it is a deep link, and an id is not an operator's word (golden rule 11).
+    */
     id: 'servers',
-    title: 'Servers',
+    title: 'Connection',
     commit: 'apply-servers',
     group: 'Playout',
     /* §3 — the legend NAMES the button, so it moved to sentence case with it. */

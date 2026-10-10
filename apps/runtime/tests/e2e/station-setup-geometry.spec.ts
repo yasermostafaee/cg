@@ -211,7 +211,7 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   await expect(dialog).toBeVisible();
   await dialog
     .getByRole('tablist', { name: 'Station setup sections' })
-    .getByRole('tab', { name: /^Servers/ })
+    .getByRole('tab', { name: /^Connection/ })
     .click();
 
   const tokens = await page.evaluate(() => {

@@ -23,7 +23,7 @@ import { test, expect } from './fixtures/runtime.js';
  * it adds to those two is the RAIL's height — which is what defect 4 turned out to be.
  */
 
-const TABS = ['Channel', 'Servers', 'Live sources', 'Text file delimiters', 'Layers'] as const;
+const TABS = ['Channel', 'Connection', 'Live sources', 'Text file delimiters', 'Layers'] as const;
 
 /** `rgb(r, g, b)` → its relative luminance, for "is this lighter than that". */
 function luminance(rgb: string): number {
@@ -124,7 +124,7 @@ test('§1 — the frame AND the rail are one size on every tab, and clamp to the
   expect(w, 'the frame has a real width').toBe(1140);
   expect(h, 'the frame has a real height').toBe(736);
   expect(first.railH, 'the rail is a real column').toBeGreaterThan(400);
-  await rail.getByRole('tab', { name: /^Servers/ }).click();
+  await rail.getByRole('tab', { name: /^Connection/ }).click();
   await expect(dialog.locator('[data-setup-notice]')).toHaveCount(1);
   await rail.getByRole('tab', { name: /^Channel/ }).click();
   await expect(dialog.locator('[data-setup-notice]')).toHaveCount(0);
@@ -161,7 +161,7 @@ test('§2 — a card is lighter than the dialog it sits on, and the table bands 
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
-  await app.openStationSetupAt('Servers');
+  await app.openStationSetupAt('Connection');
 
   const paint = await dialog.evaluate((el) => {
     const of = (node: Element | null): string =>
@@ -582,7 +582,7 @@ test('§9 — the banner sits in the pane’s column, clear of the footer, and n
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
-  await app.openStationSetupAt('Servers');
+  await app.openStationSetupAt('Connection');
 
   // ── 9a — TWO WEIGHTS, AND THE SECOND ONE SAYS WHAT TO DO ──────────────────────────
   /*
@@ -750,7 +750,7 @@ test('§10 — a port takes Persian digits and refuses letters, through typing A
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
-  await app.openStationSetupAt('Servers');
+  await app.openStationSetupAt('Connection');
   const amcp = dialog.getByLabel('Primary AMCP port');
 
   // 🔴 §10.2 — THE PERSIAN-DIGIT TRAP. `۵۲۵۰` is what the digit keys emit on that layout.
@@ -850,7 +850,7 @@ test('§5 — Close sits only where there is nothing to commit, and it is the di
     await go(tab);
     await expect(footClose, `${tab} has nothing to commit, so it offers the way out`).toBeVisible();
   }
-  for (const tab of ['Servers', 'Layers'] as const) {
+  for (const tab of ['Connection', 'Layers'] as const) {
     await go(tab);
     await expect(footClose, `${tab} carries a Close beside its Apply`).toHaveCount(0);
     await expect(dialog.getByRole('button', { name: /^Apply / })).toBeVisible();

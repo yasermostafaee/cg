@@ -4938,6 +4938,35 @@ input[type='checkbox']:disabled:checked {
   grid-template-columns: var(--r-setup-fields-three);
 }
 
+/*
+ * 🔴 `SERVERS-SIMPLIFY-01` (T1) — ONE ADDRESS: a host beside its one port, the port as wide as a port in the
+ * three-field row. The Set up page and the Connection card render the same fields (`StationAddressFields`).
+ */
+.cg-setup-fields--host-port {
+  grid-template-columns: var(--r-setup-fields-host-port);
+}
+
+/* The two addresses, one above the other, each under its name. */
+.cg-station-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-setup-field-gap);
+}
+
+.cg-station-fields__group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--r-setup-field-gap);
+}
+
+/* An address's name over its two fields: the field label's rank, one weight up. */
+.cg-station-fields__name {
+  font-size: var(--r-setup-field-label-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text-secondary);
+}
+
 /* A cell that spans the grid — the reference's `.field.full` (its `Server strategy`). */
 .cg-setup-field--full {
   grid-column: 1 / -1;

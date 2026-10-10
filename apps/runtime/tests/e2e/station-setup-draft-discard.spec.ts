@@ -53,7 +53,7 @@ test('`MODAL-TRUTH-01 · DELTA A` — closing without saving discards, on two pa
   await page.setViewportSize({ width: 1280, height: 900 });
 
   // ── PANE 1: SERVERS, the pane the defect was reported on ──────────────────
-  let setup = await reopenAt(page, 'Servers');
+  let setup = await reopenAt(page, 'Connection');
   const host = setup.locator('input[aria-label="Primary host"]');
   const applied = await host.inputValue();
   /*
@@ -77,7 +77,7 @@ test('`MODAL-TRUTH-01 · DELTA A` — closing without saving discards, on two pa
   ).toHaveCount(1);
 
   await closeWithoutSaving(page);
-  setup = await reopenAt(page, 'Servers');
+  setup = await reopenAt(page, 'Connection');
   await expect(
     setup.locator('input[aria-label="Primary host"]'),
     'the unapplied host survived a close',

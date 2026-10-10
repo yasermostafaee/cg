@@ -280,7 +280,7 @@ backup engine; `0.11.3` replaces it.
 when the mirror was made, never refreshed).
 
 **A backup engine before `2.9.5`** publishes no `mirrorOf`, so nothing is mapped and nothing is sent to it until
-a station admin enters each channel by hand in CG Control: Station setup → Servers → Backup engine, one line
+a station admin enters each channel by hand in CG Control: Station setup → Connection → Backup engine, one line
 per channel, `CH N (primary) → CH M (backup)`. Each entry is checked against the backup engine's D4, as your §2
 proposes — row M exists on server B, its `videoMode` is the primary's, `cgLicensed` is `true`, and it is not
 another channel's mirror — and a failed check is refused in words beside that line. The entries are kept with
@@ -322,7 +322,7 @@ machine it also works, but if that machine dies CG Bridge dies with it and the b
 from CG until it is back. A CG Bridge must never run on the backup engine's machine as well: two senders on
 one core apply each other's half-built `MIXER` changes, because a core keeps one `DEFER` list per channel.
 
-**Server B.** A station admin adds the backup engine in CG Control (Station setup → Servers → Backup server);
+**Server B.** A station admin adds the backup engine in CG Control (Station setup → Connection → Backup server);
 it is saved with the station and kept across a service restart and an upgrade. It is never an installer
 switch.
 

@@ -7,13 +7,15 @@ import { test, expect } from './fixtures/runtime.js';
  * `STATION-CHROME-01` §2 — the status bar's button is SETTINGS now and opens the dialog at
  * its default tab, CHANNEL, which is the tab that asks nothing of the operator. This whole
  * file is about the Servers tab, so it says so once, here, rather than fifteen times.
+ *
+ * `SERVERS-SIMPLIFY-01` (T1) — the tab is `Connection` now (its deep-link id is still `servers`).
  */
 async function openServers(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
   await page
     .getByRole('dialog', { name: 'Station setup' })
     .getByRole('tablist', { name: 'Station setup sections' })
-    .getByRole('tab', { name: /^Servers/ })
+    .getByRole('tab', { name: /^Connection/ })
     .click();
 }
 
