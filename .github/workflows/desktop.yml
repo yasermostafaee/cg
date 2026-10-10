@@ -532,8 +532,9 @@ jobs:
   # network CUT (a positive control proves it); then the INSTALLED CG Control driven end to end against
   # the INSTALLED CG Bridge and a fake Playout with CasparCG's stand-in (`acceptance-station.mjs`) —
   # sign in, sign CG Bridge in, channel 2, a take ON AIR, a clear, read off the stand-in's wire too;
-  # then all three uninstalled. The fakes are the test suite's own TypeScript, so this job installs the
-  # workspace and runs Node 24 (type stripping).
+  # then the owner's stuck console (B-320: a record naming CG Bridge at this runner's LAN address, the
+  # Playout silent → Set up again → a good address); then all three uninstalled. The fakes are the test
+  # suite's own TypeScript, so this job installs the workspace and runs Node 24 (type stripping).
   acceptance-fresh:
     name: Release acceptance — fresh install, offline (clean Windows)
     needs: installers
@@ -598,11 +599,14 @@ jobs:
           "::group::drive (medium integrity)"
           & $gsudo --integrity Medium $node $acceptance --phase drive --mode fresh --version $v --out acceptance
           "::endgroup::"
+          "::group::stuck-station (medium integrity) - B-320, the owner's stuck console"
+          & $gsudo --integrity Medium $node $acceptance --phase stuck-station --version $v --out acceptance
+          "::endgroup::"
           "::group::uninstall (elevated)"
           & $node $acceptance --phase uninstall --version $v --out acceptance
           "::endgroup::"
           "station alive at the end: $(-not $station.HasExited)"
-          & $node $acceptance --phase summary --expect install,drive,uninstall --out acceptance
+          & $node $acceptance --phase summary --expect install,drive,stuck-station,uninstall --out acceptance
           $code = $LASTEXITCODE
           Stop-Process -Id $station.Id -Force -ErrorAction SilentlyContinue
           exit $code

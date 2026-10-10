@@ -11,7 +11,10 @@ That sign-in SHALL be in English — every word of the console's own, with Persi
 that come from the Playout (`DELTA-MULTI-CHANNEL-01-B` B3) — and built from the shared control
 primitives with no raw control and no locally styled one. It SHALL carry the Playout's address with
 CHECK beside it and ONE line of the connection check, a username, a password, ONE action and ONE
-message line, and nothing else — no explanation of how sign-in works and no advice. The check SHALL
+message line, and nothing else — no explanation of how sign-in works and no advice. (Amended
+2026-10-10, `B-320`, `openspec/changes/sign-in-gate-escape/`: inside CG Control it SHALL also carry
+`Set up again` under the action — the way back to Set up, never locked with the fields, and no way
+past the sign-in.) The check SHALL
 run once when the sign-in opens, and the username, the password and the action SHALL be enabled
 only while the check says a sign-in can work — the Playout's keys and this console's CORS entry
 both pass; while it does not, the one line SHALL be the check's own line saying why, and CHECK SHALL
@@ -42,7 +45,8 @@ closing the socket.
 - **WHEN** the bridge reports that it does not authenticate, or has not answered yet **THEN** no
   sign-in is rendered and no surface changes
 - **WHEN** the bridge reports that it authenticates and no principal is held **THEN** a modal
-  sign-in is rendered over the console with CHECK and one action, and no way past it
+  sign-in is rendered over the console with CHECK and one action, and no way past it — inside CG
+  Control, also `Set up again`, which starts the console again on Set up (`B-320`, 2026-10-10)
 
 #### Scenario: A sign-in is offered only when it can work
 

@@ -16,6 +16,7 @@ import {
   signInLocked,
   type ShownCheckLine,
 } from '../firstRun/firstRunStation.js';
+import { SetUpAgain } from '../shell/SetUpAgain.js';
 import { signInFailureLine } from './signInMessages.js';
 
 /**
@@ -35,9 +36,20 @@ import { signInFailureLine } from './signInMessages.js';
  * work.
  *
  * It is `LockOverlay`'s shape, and deliberately so: the same scrim, the same card, the same
- * focus trap, one control and no way out. Two gates that look alike is not duplication here —
+ * focus trap, one way through and no way past. Two gates that look alike is not duplication here —
  * an operator meeting either one is in the same situation (nothing will work until I do this
  * one thing), and a second visual language for it would be a second thing to learn.
+ *
+ * ── THE WAY BACK TO SET UP ──────────────────────────────────────────────────
+ *
+ * 🔴 `B-320` (`SIGNIN-ESCAPE-01`) — inside CG Control the foot also offers `Set up again`
+ * (`SetUpAgain`, the NOT CONNECTED banner's own control). The owner's console was pointed at his own
+ * PC, where a fresh CG Bridge answered with no Playout behind it: the gate opened, its one line locked
+ * the fields, and nothing on the card led anywhere — reinstalling kept the record. `Set up again` is
+ * not a way PAST the gate (nothing behind it is revealed): it forgets this console's station and
+ * starts it again on Set up's one question, another gate. Always offered, whatever the check says —
+ * a wrong station that answers cannot be told from the right one by its lines. Signing in, the order
+ * above `LockOverlay`, the focus trap and the lock on the fields are unchanged.
  *
  * ── THE ORDER WHEN BOTH ARE UP ──────────────────────────────────────────────
  *
@@ -107,7 +119,12 @@ function decidingLine(lines: readonly ShownCheckLine[]): readonly ShownCheckLine
   return api === undefined ? [] : [api];
 }
 
-export function SignInOverlay(): JSX.Element | null {
+export function SignInOverlay({
+  reload,
+}: {
+  /** `B-320` — start the console again after `Set up again` (a test passes its own). */
+  reload?: () => void;
+}): JSX.Element | null {
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
   const [username, setUsername] = useState('');
@@ -212,15 +229,22 @@ export function SignInOverlay(): JSX.Element | null {
       title="Sign in"
       cardRef={cardRef}
       footer={
-        // The one way through. No ✕, no Cancel — there is nothing behind this to go back to.
-        <Button
-          variant="primary"
-          className="cg-gate-submit"
-          disabled={locked || username === '' || password === ''}
-          onClick={() => void submit()}
-        >
-          {busy ? 'Signing in…' : 'Sign in'}
-        </Button>
+        /*
+          The one way through. No ✕, no Cancel — there is nothing behind this to go back to. `B-320` —
+          and, inside CG Control, the way back to Set up: never locked with the fields, because the
+          station that locks them is the thing it changes.
+        */
+        <>
+          <Button
+            variant="primary"
+            className="cg-gate-submit"
+            disabled={locked || username === '' || password === ''}
+            onClick={() => void submit()}
+          >
+            {busy ? 'Signing in…' : 'Sign in'}
+          </Button>
+          <SetUpAgain {...(reload === undefined ? {} : { reload })} />
+        </>
       }
     >
       {auth.kind === 'expired' && (

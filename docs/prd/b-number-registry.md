@@ -3292,3 +3292,18 @@ same with `--untracked`; control: the same sweep's shape found the 4 headings `B
 `D-161` on `dev`; no stash.
 
 ⇒ **Next free after this entry is `B-320`**, **`D-163`**, **`P-068`**, **`R-095`** and **`C-049`**.
+
+### 2026-10-10 — `SIGNIN-ESCAPE-01` (v2) takes `B-320` and `B-321`
+
+- `B-320` — the sign-in gate has no way out of a wrong station — [bugs-runtime.md](bugs-runtime.md).
+- `B-321` — the sign-in gate's line names CG Bridge's loopback, not the address on its card —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use:
+`git grep -n -E "^## \[.\] (B-32[0-4]|R-09[5-9]) " <ref> -- docs` on all 12 refs (`ai-stale`,
+`design/live-source-multibox`, `dev`, `main`, `wip/signin-escape-repro`, `origin`, `origin/dev`, `origin/main`,
+`origin/wip/release-0112-pictures`, `origin/wip/release-0113-pictures`, `origin/wip/release-0114-pictures`,
+`origin/wip/signin-escape-repro`) returned nothing, and the same with `--untracked`; control: the same sweep's
+shape found the 2 headings `B-319` and `R-094` on `dev`; no stash.
+
+⇒ **Next free after this entry is `B-322`**, **`D-163`**, **`P-068`**, **`R-095`** and **`C-049`**.

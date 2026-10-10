@@ -8055,6 +8055,10 @@ input[type='checkbox']:disabled:checked {
 .cg-signin-card__foot > .cg-btn {
   width: 100%;
 }
+/* `B-320` — the sign-in gate's second control, `Set up again` (CG Control only), under the way through. */
+.cg-signin-card__foot > .cg-btn + .cg-btn {
+  margin-top: var(--r-space-2);
+}
 .cg-signin-version {
   padding: var(--r-space-2) var(--r-space-3);
   color: var(--r-splash-ink-dim);

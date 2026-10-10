@@ -23,6 +23,9 @@
  *                              apps OPEN (CG Designer with unsaved changes), then again over the
  *                              guarded upgraded apps; bounded, exit 0, never waiting on a dialog
  *   drive-upgraded  (medium)   the upgraded CG Control: the station kept, the row still ON AIR, cleared
+ *   stuck-station   (medium)   `B-320`: the owner's stuck console — a record naming CG Bridge at this
+ *                              runner's LAN address, no session, the Playout silent — gate → Set up
+ *                              again → Set up → a good address connects, signed in
  *   uninstall       (elevated) all three: the service, its rules and the shortcuts gone; data kept
  *   summary                    every phase's results; a phase that never ran is a failure
  *
@@ -1215,6 +1218,187 @@ async function phaseDriveUpgraded() {
   }
 }
 
+/** This runner's own IPv4 address on a network card — where a console on another PC would reach it. */
+function lanAddress() {
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list ?? []) {
+      if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) return a.address;
+    }
+  }
+  return null;
+}
+/** The fake Playout stops answering (`offline`) or answers again (`online`), on the same port. */
+async function playoutPower(state) {
+  try {
+    const res = await fetch(`${station().control}/playout/${state}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+const SIGN_IN_GATE = '[role="dialog"][aria-label="Playout sign-in"]';
+
+/**
+ * 🔴 `B-320` (`SIGNIN-ESCAPE-01`) — **THE OWNER'S STUCK CONSOLE, ON THE INSTALLED APPS.** CG Control
+ * `0.11.4` on his PC (2026-10-10) was pointed at his own PC's address, where a CG Bridge had just been
+ * installed with no Playout behind it: CG Bridge answered with `auth: playout`, so the console opened on
+ * the sign-in gate, the check's one line locked the fields, and nothing on the card led anywhere.
+ * Reinstalling kept the record (it lives in the WebView2 profile).
+ *
+ * That state, here: the console's record names CG Bridge at this runner's own LAN address (as `.93`
+ * was the owner's own PC's), it holds no session, and the Playout behind the INSTALLED CG Bridge stops
+ * answering on its port. Then the way out: `Set up again` → the Set up page → the Playout answers again,
+ * `127.0.0.1` typed → Connect → the gate says a sign-in can work → signed in, the gate lifted.
+ */
+async function phaseStuckStation() {
+  const facts = station();
+  const lan = lanAddress();
+  if (
+    !check(
+      'this runner has a LAN address to reach its CG Bridge at, as a console on another PC does',
+      lan !== null,
+      String(lan),
+    )
+  )
+    return;
+  check(
+    'the Playout stops answering (offline, its port and URLs kept)',
+    await playoutPower('offline'),
+  );
+  const page = await openControl(9250 + 76);
+  if (page === null) return;
+  try {
+    // ── the owner's record: CG Bridge on this machine's LAN address; no session held ──
+    const record = JSON.stringify({ playoutAddress: `http://${lan}:8080` });
+    const seeded = await page.evaluate((r) => {
+      localStorage.setItem('cg.runtime.station.v1', r);
+      localStorage.removeItem('cg.runtime.playoutSession');
+      return (
+        localStorage.getItem('cg.runtime.station.v1') === r &&
+        localStorage.getItem('cg.runtime.playoutSession') === null
+      );
+    }, record);
+    check(`the console's record names CG Bridge at ${lan}, and it holds no session`, seeded);
+    // The page is gone mid-answer: DevTools may say so, and that is the reload.
+    await page.evaluate(() => location.reload()).catch(() => undefined);
+
+    // ── 1 · the gate: the card names the station's host, the line locks the fields ──
+    const gate = await until(
+      'the sign-in gate',
+      () => page.evaluate((sel) => document.querySelector(sel) !== null, SIGN_IN_GATE),
+      90_000,
+    ).catch(() => false);
+    check('the console opens on the sign-in gate (CG Bridge answers; no session)', gate);
+    const card = await page.evaluate(
+      (sel) => document.querySelector(`${sel} [data-playout-address]`)?.textContent ?? null,
+      SIGN_IN_GATE,
+    );
+    check(
+      `…the card names the station's host, http://${lan}:8080`,
+      card === `http://${lan}:8080`,
+      String(card),
+    );
+    const line = await until(
+      'the check to decide',
+      () =>
+        page.evaluate((sel) => {
+          const l = document.querySelector(`${sel} [data-check="api"]`);
+          return l?.getAttribute('data-status') === 'fail' ? (l.textContent ?? '') : null;
+        }, SIGN_IN_GATE),
+      60_000,
+    ).catch(() => null);
+    const locked = await page.evaluate(
+      () => document.getElementById('cg-signin-user')?.disabled === true,
+    );
+    check(
+      '…its one line says the Playout does not answer, and the fields are locked',
+      line !== null && locked,
+      String(line),
+    );
+    await page.screenshot('stuck-1-gate.png');
+
+    // ── 2 · B-320: the way out ──
+    const offered = await page.evaluate(
+      (sel) =>
+        [...(document.querySelector(sel)?.querySelectorAll('button') ?? [])].some(
+          (b) => b.textContent?.trim() === 'Set up again',
+        ),
+      SIGN_IN_GATE,
+    );
+    check('🔴 the gate offers "Set up again"', offered);
+    check('…pressed', await press(page, SIGN_IN_GATE, 'Set up again'));
+    const setUp = await until(
+      'the Set up page',
+      () => page.evaluate(() => document.querySelector('[data-playout-address-gate]') !== null),
+      60_000,
+    ).catch(() => false);
+    check('…the console starts again on the Set up page', setUp);
+    check(
+      '…its station record is forgotten',
+      await page.evaluate(() => localStorage.getItem('cg.runtime.station.v1') === null),
+    );
+    await page.screenshot('stuck-2-set-up.png');
+
+    // ── 3 · a good address connects ──
+    check('the Playout answers again (online, the same port)', await playoutPower('online'));
+    check('…127.0.0.1 typed', await type(page, '#cg-playout-address', '127.0.0.1'));
+    check(
+      '…Connect',
+      await until(
+        'Connect to be pressable',
+        () => press(page, '[data-playout-address-gate]', 'Connect'),
+        15_000,
+      ).catch(() => false),
+    );
+    const connected = await until(
+      'the console to connect',
+      () =>
+        page.evaluate(
+          () =>
+            document.querySelector('[data-playout-address-gate]') === null &&
+            window.cg.link.status() === 'live',
+        ),
+      90_000,
+    ).catch(() => false);
+    check('…the console connects to CG Bridge there', connected);
+    const answered = await until(
+      'the check to reach the Playout',
+      () =>
+        page.evaluate(
+          (sel) =>
+            document.querySelector(`${sel} [data-check="api"]`)?.getAttribute('data-status') ===
+            'pass',
+          SIGN_IN_GATE,
+        ),
+      60_000,
+    ).catch(() => false);
+    check('…its gate says a sign-in can work', answered);
+    check('…the username typed', await type(page, '#cg-signin-user', facts.username));
+    check('…the password typed', await type(page, '#cg-signin-pass', facts.password));
+    check(
+      '…Sign in',
+      await until(
+        'Sign in to be pressable',
+        () => press(page, SIGN_IN_GATE, 'Sign in'),
+        15_000,
+      ).catch(() => false),
+    );
+    const lifted = await until(
+      'the gate to lift',
+      () => page.evaluate((sel) => document.querySelector(sel) === null, SIGN_IN_GATE),
+      60_000,
+    ).catch(() => false);
+    check('the gate lifts: the console works again', lifted);
+    await page.screenshot('stuck-3-signed-in.png');
+  } finally {
+    page.close();
+    closeControl();
+    await playoutPower('online');
+  }
+}
+
 /** All three uninstalled: the service, its rules and the shortcuts gone; the data kept. */
 async function phaseUninstall() {
   // CONTROL — the reader sees CG Bridge's three rules while it is installed, so "gone" below means it.
@@ -1318,6 +1502,7 @@ const PHASES = {
   upgrade: phaseUpgrade,
   'upgrade-apps-open': phaseUpgradeAppsOpen,
   'drive-upgraded': phaseDriveUpgraded,
+  'stuck-station': phaseStuckStation,
   uninstall: phaseUninstall,
 };
 if (PHASE === 'summary') phaseSummary();

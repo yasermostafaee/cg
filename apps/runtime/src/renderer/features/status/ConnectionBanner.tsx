@@ -3,6 +3,7 @@ import { Button } from '../../ui/Button.js';
 import { useLink } from '../../hooks/useLink.js';
 import { setTestMode } from '../../../platform/testMode.js';
 import { reloadOnPurpose } from '../shell/leavePrompt.js';
+import { SetUpAgain } from '../shell/SetUpAgain.js';
 
 /**
  * R-006 — the loud half of "the Runtime never pretends to be on air".
@@ -140,18 +141,10 @@ export function ConnectionBanner({
         `CENTRAL-BRIDGE-01` (D8) — THE WAY BACK, inside CG Control: a console pointed at a CG Bridge it
         cannot reach (a mistyped address, a server that moved) cannot reach Station setup either — that
         is behind a station admin's sign-in, over that very bridge. So it forgets this console's
-        station and asks again. Absent in a browser, which follows the page's host.
+        station and asks again. Absent in a browser, which follows the page's host. `B-320` — the
+        sign-in gate offers the same control, so it is one component (`SetUpAgain`).
       */}
-      {window.cg.setup.canSetPlayoutAddress() && (
-        <Button
-          variant="ghost"
-          onClick={() => {
-            if (window.cg.setup.forgetStation()) reload();
-          }}
-        >
-          Set up again
-        </Button>
-      )}
+      <SetUpAgain reload={reload} />
     </div>
   );
 }

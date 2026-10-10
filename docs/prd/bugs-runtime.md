@@ -13438,3 +13438,43 @@ through one — and names what it found (process and PID, the proxy and its hold
 when the route to the Playout or CasparCG host goes through the tunnel. Its words name CG Bridge's machine.
 **Acceptance:** planted states — process gone: no line; proxy key left on with no listener: no line; a real proxy
 on: amber, naming it; the route to the Playout through the tunnel: red.
+
+## [~] B-320 — The sign-in gate has no way out of a wrong station ⟨priority: high — the owner was stuck, and reinstalling did not help⟩ — FILED 2026-10-10 by `SIGNIN-ESCAPE-01` Part A1 · `openspec/changes/sign-in-gate-escape/`
+
+**Repro / Actual (CG Control `0.11.4`, the owner's PC, 2026-10-10; reproduced by running, nothing dialled):** the
+console's station record named his own PC (`192.168.21.93`), where a CG Bridge had just been installed to test.
+Its Playout was `http://127.0.0.1:8080`, and nothing runs there. CG Bridge answered and advertised
+`auth: playout`, so the console opened on the sign-in gate. The check's one line
+(`127.0.0.1 answers, but nothing listens on port 8080.`) locked the fields (`signInLocked`), and the card had
+nothing else: `PlayoutConnection` is given `mayChange={false}`, so no Change; the NOT CONNECTED banner's
+`Set up again` exists only while the link is down, and it was live; and there is no ✕. Reinstalling changed
+nothing: the record (`cg.runtime.station.v1`) lives in the WebView2 profile
+(`%LOCALAPPDATA%\app.cgbroadcast.control\EBWebView`), outside the install folder. `RELEASE-0114-01` A4 ("no dead
+end") covered Set up and the banner, not the gate. Reproduced at `bf011d79` by
+`tests/e2e/sign-in-gate-escape.spec.ts` (a real CG Bridge CLI whose Playout is its own loopback, reached at a
+documentation address) and on the installed apps by the release acceptance's `stuck-station` phase.
+
+**Expected:** inside CG Control the gate offers the banner's own `Set up again` (one component): always,
+whatever the check says, and never locked with the fields. It forgets this console's station and starts it
+again on Set up's question, and it sends nothing to CG Bridge or CasparCG. A browser has no such control.
+Signing in, the gate's place above the lock, its focus trap and every refusal condition are unchanged.
+
+**Acceptance:**
+
+- WHEN the record names a CG Bridge that answers and whose Playout does not THEN the gate offers `Set up again`
+  under `Sign in`; pressing it forgets the record and shows Set up; a good address typed there connects
+- WHEN the same gate is in a browser THEN it has no `Set up again`
+- WHEN a sign-in can work THEN signing in beside it is unchanged, and nothing is forgotten
+
+## [ ] B-321 — The sign-in gate's line names CG Bridge's loopback, not the address on its card ⟨priority: medium — the owner read `127.0.0.1` under `192.168.21.93`⟩ — FILED 2026-10-10 by `SIGNIN-ESCAPE-01` Part A3 · `openspec/changes/sign-in-gate-escape/`
+
+**Repro / Actual:** the gate's card said `http://192.168.21.93:8080` and its one line said
+`127.0.0.1 answers, but nothing listens on port 8080.` Before a sign-in, the console asks CG Bridge's check for
+the Playout by the address CG Bridge knows it by: `B-317`'s `playoutAsBridgeNamesIt` turns `.93` into
+`127.0.0.1`. CG Bridge probes that, correctly for its own machine, and words its line in that name
+(`noAnswer`, `connection-check.ts`). The console showed the answer as it came back. The cause is the console's,
+so no CG Bridge change is needed. Reproduced by running: the same e2e read `127.0.0.2 answers, …` under a card
+reading `http://192.0.2.93:…`. **Expected:** the console says the answer back in the address it was given. In
+the lines about the Playout and CasparCG, the host and origin it asked by read as the card's. CG Bridge's lines
+about its own machine (`route`, `proxy`) keep its words. **Acceptance:** the owner's line reads
+`192.168.21.93 answers, but nothing listens on port 8080.`; a check asked as given is shown unchanged.

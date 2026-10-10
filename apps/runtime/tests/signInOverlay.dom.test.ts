@@ -7,6 +7,7 @@ import type { ConnectionCheckResult } from '@cg/shared-ipc';
 import { SignInOverlay } from '../src/renderer/features/auth/SignInOverlay.js';
 import { signInMessage } from '../src/renderer/features/auth/signInMessages.js';
 import { PlayoutSignInError } from '../src/platform/playoutSession.js';
+import { buttonClass } from '../src/renderer/ui/Button.js';
 import type { AuthCapabilities, AuthSessionState } from '../src/shared/runtime-bridge.js';
 import { fillBridgeStub, setupStub } from './support/authStub.js';
 
@@ -105,6 +106,16 @@ interface Harness {
   click(selector: string): Promise<void>;
   clickButton(label: RegExp): Promise<void>;
   text(): string;
+  /** `B-320` — every `forgetStation` call, and every restart the gate asked for. */
+  readonly forgets: ReturnType<typeof vi.fn>;
+  readonly reloads: ReturnType<typeof vi.fn>;
+}
+
+/** `B-320` — the desktop door: CG Control (Set up again offered) or a browser (none). */
+interface Door {
+  readonly insideCgControl?: boolean;
+  /** What `forgetStation` answers. Default: forgotten. */
+  readonly forget?: () => boolean;
 }
 
 async function flush(): Promise<void> {
@@ -116,6 +127,7 @@ async function flush(): Promise<void> {
 async function mount(
   initial: AuthSessionState,
   check: ConnectionCheckResult = PLAYOUT_UP,
+  door: Door = {},
 ): Promise<Harness> {
   const listeners = new Set<Listener>();
   let state = initial;
@@ -123,6 +135,8 @@ async function mount(
   const calls: { username: string; password: string }[] = [];
   let signInResult: Error | null = null;
   const checks = vi.fn(() => Promise.resolve(checkResult));
+  const forgets = vi.fn(door.forget ?? (() => true));
+  const reloads = vi.fn();
 
   const stub = fillBridgeStub({
     auth: {
@@ -139,7 +153,12 @@ async function mount(
       },
       signOut: () => Promise.resolve(),
     },
-    setup: { ...setupStub(), check: checks },
+    setup: {
+      ...setupStub(),
+      check: checks,
+      canSetPlayoutAddress: () => door.insideCgControl === true,
+      forgetStation: forgets,
+    },
   });
   (window as unknown as { cg: typeof stub }).cg = stub;
 
@@ -148,7 +167,7 @@ async function mount(
   root = createRoot(container);
   const r = root;
   await act(async () => {
-    r.render(createElement(StrictMode, null, createElement(SignInOverlay)));
+    r.render(createElement(StrictMode, null, createElement(SignInOverlay, { reload: reloads })));
   });
   await flush();
 
@@ -163,6 +182,8 @@ async function mount(
     el,
     calls,
     checks,
+    forgets,
+    reloads,
     setSignInResult: (result) => {
       signInResult = result;
     },
@@ -250,6 +271,7 @@ describe('R-066 §1 — the sign-in appears when the bridge says so, and not oth
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
     // Three controls and no way past: CHECK (B2), the password's show control (`R-082`) and SIGN IN.
     // A ✕ or a Cancel would be a way out. Read by accessible name: the show control is an icon.
+    // (This is a browser. Inside CG Control a fourth, `Set up again`, leads back to Set up — `B-320`.)
     expect(
       [...h.el.querySelectorAll('button')].map(
         (b) => b.getAttribute('aria-label') ?? b.textContent,
@@ -465,6 +487,88 @@ describe('DELTA-MULTI-CHANNEL-01-B B2 — a sign-in is offered only when it can 
     await h.click('button.cg-gate-submit');
     expect(h.text()).toContain(signInMessage('unexpected'));
     expect(h.text()).not.toContain('something else entirely');
+  });
+});
+
+/**
+ * 🔴 `B-320` (`SIGNIN-ESCAPE-01`) — **THE GATE'S WAY BACK TO SET UP.** The owner's console was pointed at
+ * his own PC, where a fresh CG Bridge answered with no Playout behind it: the gate opened, its one line
+ * locked the fields, and nothing on the card led anywhere — reinstalling kept the record. Inside CG
+ * Control the gate now offers the NOT CONNECTED banner's own `Set up again`; in a browser there is no
+ * station to forget, and no such control. Nothing else about the gate changes (A2).
+ */
+const OWNERS_STATE: ConnectionCheckResult = {
+  lines: [
+    line('amcp', 'fail', '192.168.21.93 refused the connection on port 5250.'),
+    line('api', 'fail', '192.168.21.93 answers, but nothing listens on port 8080.'),
+    line('cors', 'skip', 'Sign-in from this console: not checked — the Playout does not answer.'),
+  ],
+  localAddress: '127.0.0.1',
+};
+const setUpAgain = (h: Harness): HTMLButtonElement | undefined =>
+  [...h.el.querySelectorAll<HTMLButtonElement>('button')].find(
+    (b) => b.textContent?.trim() === 'Set up again',
+  );
+const controls = (h: Harness): (string | null)[] =>
+  [...h.el.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent);
+
+describe('B-320 — the sign-in gate’s way back to Set up', () => {
+  it('🔴 the owner’s state, inside CG Control: the fields stay locked, Set up again is offered, and pressing it forgets this console’s station and starts it again — sending nothing', async () => {
+    const h = await mount(SIGNED_OUT, OWNERS_STATE, { insideCgControl: true });
+    // A2 — the lock on the fields stands: the check still says a sign-in cannot work.
+    expect(field(h, 'cg-signin-user')?.disabled).toBe(true);
+    expect(field(h, 'cg-signin-pass')?.disabled).toBe(true);
+    expect(submitButton(h)?.disabled).toBe(true);
+    // …and the way back is not locked with them.
+    expect(setUpAgain(h)?.disabled).toBe(false);
+    const checked = h.checks.mock.calls.length;
+
+    await h.clickButton(/^Set up again$/);
+
+    expect(h.forgets).toHaveBeenCalledTimes(1);
+    expect(h.reloads).toHaveBeenCalledTimes(1);
+    // It sends nothing: no check, no sign-in — the record is this console's own.
+    expect(h.checks).toHaveBeenCalledTimes(checked);
+    expect(h.calls).toEqual([]);
+  });
+
+  it('offered whatever the check says — a wrong station that answers reads like the right one', async () => {
+    const h = await mount(SIGNED_OUT, PLAYOUT_UP, { insideCgControl: true });
+    expect(controls(h)).toEqual(['Check', 'Show password', 'Sign in', 'Set up again']);
+  });
+
+  it('is the banner’s own control: the shared Button, `ghost`, no local style — and no prose comes with it', async () => {
+    const h = await mount(SIGNED_OUT, OWNERS_STATE, { insideCgControl: true });
+    const again = setUpAgain(h);
+    expect(again?.className).toBe(buttonClass('ghost'));
+    expect(again?.getAttribute('style')).toBeNull();
+    // Pinned as an ABSENCE: the card says what it said before, plus the control's own two words.
+    const card = h.el.querySelector('[role="dialog"]');
+    expect(card?.querySelector('.cg-signin-card__foot')?.textContent).toBe('Sign inSet up again');
+  });
+
+  it('a store that will not forget does not restart into the same failure', async () => {
+    const h = await mount(SIGNED_OUT, OWNERS_STATE, { insideCgControl: true, forget: () => false });
+    await h.clickButton(/^Set up again$/);
+    expect(h.forgets).toHaveBeenCalledTimes(1);
+    expect(h.reloads).not.toHaveBeenCalled();
+  });
+
+  it('A2 — signing in is unchanged beside it: the typed pair goes to the bridge, and nothing is forgotten', async () => {
+    const h = await mount(SIGNED_OUT, PLAYOUT_UP, { insideCgControl: true });
+    await fill(h);
+    await h.click('button.cg-gate-submit');
+    expect(h.calls).toEqual([{ username: 'cg-op1', password: 'test-only-not-a-secret' }]);
+    expect(h.forgets).not.toHaveBeenCalled();
+    expect(h.reloads).not.toHaveBeenCalled();
+  });
+
+  it('CONTROL — in a browser there is no station to forget, and no such control', async () => {
+    const h = await mount(SIGNED_OUT, OWNERS_STATE);
+    expect(setUpAgain(h)).toBeUndefined();
+    // The gate itself is there — the absence is the control's, not the gate's.
+    expect(submitButton(h)).not.toBeNull();
+    expect(h.forgets).not.toHaveBeenCalled();
   });
 });
 
