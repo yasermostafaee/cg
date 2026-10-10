@@ -16,6 +16,8 @@
  *
  *   GET /lines            every AMCP line CasparCG received, in order
  *   GET /layer?channel&layer   what is on that layer (`MockHandle.layerState`), or null
+ *   GET /playout/offline  `B-320` — the Playout stops answering, its port and every URL kept
+ *   GET /playout/online   …and answers again, on the same port
  *
  * It runs until it is killed. Test instrumentation only: nothing here ships.
  *
@@ -95,6 +97,20 @@ const server = http.createServer((req, res) => {
     const channel = Number(url.searchParams.get('channel'));
     const layer = Number(url.searchParams.get('layer'));
     send(200, caspar.layerState({ channel, layer }) ?? null);
+    return;
+  }
+  /*
+    `B-320` (`SIGNIN-ESCAPE-01`) — the owner's stuck station is a CG Bridge whose Playout does not
+    answer. The fake goes OFFLINE keeping its port, its key and every URL, so CG Bridge's configuration
+    does not change, and comes back ONLINE as it was.
+  */
+  if (url.pathname === '/playout/offline' || url.pathname === '/playout/online') {
+    const going =
+      url.pathname === '/playout/offline' ? station.playout.goOffline() : station.playout.goOnline();
+    going.then(
+      () => send(200, { ok: true }),
+      (err) => send(500, { error: String(err) }),
+    );
     return;
   }
   send(404, { error: 'unknown' });
