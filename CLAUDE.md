@@ -584,7 +584,8 @@ count does not reset on its own.
     `[installers]` on its **final** commit even unasked (`OWNER CHOICE`; the owner may delete this
     line), pushed together with the code it exercises. Everything else never carries it unless
     he asks.
-  - A manual run also runs `guide-shots` (~40 runner-minutes); the marker does not. A dispatch
+  - A manual run also runs `guide-shots` (2.5 runner-minutes on run 38160390947); the marker
+    does not. A dispatch
     queued behind a running Desktop run is replaced by the next push (one pending run per group).
 - **CC PAUSES AND FLAGS — out loud, in its final report — when a commit falls in one of
   these three classes.** They are about RISK, not about PRs, so retiring the PR model does
