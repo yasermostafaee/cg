@@ -1627,7 +1627,7 @@ signal, not the eventual verification.
 
 ---
 
-## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.4`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0`, `0.11.1`, `0.11.2` and `0.11.3` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, `RELEASE-0112-01` to `0.11.2`, `RELEASE-0113-01` to `0.11.3`, and `RELEASE-0114-01` moves it to `0.11.4`, the build the client receives (2026-10-07 — see the sections at this item's foot)
+## [~] P-031 — the schema-migration registry is DEAD CODE that advertises itself as the migration path ⟨priority: medium⟩ — DECIDED (owner, 2026-08-11) and implemented: **DELETE**, and with it every other legacy compatibility path, under the compatibility-floor policy recorded below. `openspec/changes/schema-compatibility-floor/` · 🔴 **THE FLOOR IS `0.11.4`** — `0.9.0`, `0.9.1`, `0.10.0`, `0.11.0`, `0.11.1`, `0.11.2` and `0.11.3` were never delivered; `CENTRAL-BRIDGE-01` set it at `0.10.0` (2026-09-30), `RELEASE-0110-01` moved it to `0.11.0`, `RELEASE-0111-01` to `0.11.1`, `RELEASE-0112-01` to `0.11.2`, `RELEASE-0113-01` to `0.11.3`, and `RELEASE-0114-01` moves it to `0.11.4`, the build the client receives (2026-10-07); `RELEASE-0115-01` keeps it there, `0.11.4` being installed at a station (2026-10-11 — see the sections at this item's foot)
 
 **What:** `packages/shared-schema/src/migrations/index.ts` exports a `SchemaMigration` registry and a
 `migrate()` walker that **nothing in production calls**. Either wire it to a real load path or delete
@@ -1942,6 +1942,33 @@ older CG Bridge (`RETIRED_CHECK_IDS`).
 floor:** `0.11.4`'s installers upgrade each in place, settings kept, tested on a clean runner from each
 draft's own installers — from `0.11.3` with CG Designer and CG Control OPEN through it (`RELEASE-0114-01-C`).
 That is a test of this release, not a promise to any one's formats.
+
+### 🔴 THE FLOOR STAYS — `0.11.4` (2026-10-11, `RELEASE-0115-01` Part B)
+
+**Why it does not move:** `0.11.4` is the first release installed where it is used — CG Bridge on a real
+station (`.32`) and CG Control on the owner's PC. It is delivered, so `0.11.5` keeps every path that reads
+what `0.11.4` wrote. A release that moved the floor past a delivered build would delete those paths.
+
+**Measured at `0.11.5`:** the five files that define the `.vcg` manifest and scene, the `.cgproj`, CG
+Bridge's `cg-bridge.json` and CG Control's station record read an empty `git diff v0.11.4` (2026-10-11,
+against a control file in the same command — `packages/shared-ipc/src/channels/setup.ts`, 26 insertions
+and 3 deletions — that did change). Neither persisted-key census changed (`persistedKeyCensus.test.ts`,
+`persisted-files-census.test.ts`); CG Control gains no storage key and CG Bridge no station file;
+`@cg/shared-schema` is unchanged. The console ↔ CG Bridge protocol stays one release line (`0.11`): the
+check's answer gains an OPTIONAL `casparJoin` and the serve state an OPTIONAL `elsewhere`, which a `0.11.4`
+console's plain `z.object` strips; the two new check lines (`graphics`, `caspar-join`) are worded by the
+console from those fields and never sent as lines, so an older console meets no unknown line id. A `0.11.5`
+console reading a `0.11.4` CG Bridge gets neither field and shows neither line. ⚠ **One skew, read from the
+code and reported by `RELEASE-0115-01`, not fixed in the release:** a `0.11.5` console's Station setup check
+names server A (`casparHost`) for the station's own Playout, and a `0.11.4` CG Bridge answers a named host
+without its own lines (session, OSC, license, channels) — a diagnostic surface that says less, never a
+refusal and nothing on the path to air. A take's tell gains an optional `timing` member inside `__cg`
+(`B-322`), which a page baked by `0.11.4` already reads (`applyPassTiming`) and keeps only until its loop
+settles (`B-323`, fixed in pages imported from `0.11.5`).
+
+**The `0.11.4`, `0.11.3`, `0.11.2`, `0.11.1`, `0.11.0` and `0.10.0` installs are upgraded in place:**
+`0.11.5`'s installers are tested on a clean runner from each draft's own installers — from `0.11.4` with CG
+Designer and CG Control OPEN through it (`acceptance-upgrade-0114`).
 
 ## [ ] P-032 — `PlayoutSchema`'s legacy `mode: 'content-driven'` shim is the LAST surviving legacy compatibility path ⟨priority: medium⟩ — the owner's call; **do NOT remove it without one**
 

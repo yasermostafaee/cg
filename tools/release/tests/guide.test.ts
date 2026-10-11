@@ -66,9 +66,23 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     shown: 'Takes are refused until it is back.',
     file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
   },
+  // `B-320` — ONE control for the banner and the sign-in gate; `ConnectionBanner.tsx` names it only in a
+  // comment since then, so the pin is the control's own line (`RELEASE-0115-01`).
   {
     shown: 'Set up again',
-    file: 'apps/runtime/src/renderer/features/status/ConnectionBanner.tsx',
+    text: '\n      Set up again\n',
+    file: 'apps/runtime/src/renderer/features/shell/SetUpAgain.tsx',
+  },
+  // `B-320` (`SIGNIN-ESCAPE-01`) — the sign-in gate, which carries `Set up again` under its `Sign in`.
+  {
+    shown: 'Sign in',
+    text: 'title="Sign in"',
+    file: 'apps/runtime/src/renderer/features/auth/SignInOverlay.tsx',
+  },
+  {
+    shown: 'Sign in',
+    text: '<SetUpAgain',
+    file: 'apps/runtime/src/renderer/features/auth/SignInOverlay.tsx',
   },
   // `B-317` / `R-090` — Set up names where it found no CG Bridge; `R-091` — and, on this machine, the one step.
   {
@@ -198,6 +212,59 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
     shown: 'Check',
     text: "'Checking…' : 'Check'",
     file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
+  // `SERVERS-SIMPLIFY-01` A (`R-095`) — the Connection card: the addresses as facts, where CG Bridge is, its
+  // own `Change`, and `Connect` the one commit, beside `Not connected yet` (`RELEASE-0115-01` Part D).
+  {
+    shown: 'On the Playout machine',
+    text: "'On the Playout machine'",
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
+  {
+    shown: 'Separate server',
+    text: "'Separate server'",
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
+  {
+    shown: 'Change',
+    text: '\n              Change\n',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
+  {
+    shown: 'Connect',
+    text: "'Connecting…' : 'Connect'",
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
+  {
+    shown: 'Not connected yet',
+    text: '\n              Not connected yet\n',
+    file: 'apps/runtime/src/renderer/features/firstRun/PlayoutConnection.tsx',
+  },
+  // `SERVERS-SIMPLIFY-01` C (`B-327`) — the join line of the check, and its one remedy on CasparCG A's card.
+  {
+    shown: 'CasparCG A is',
+    text: '`CasparCG A is ${casparJoin.casparHost}; the Playout names ` +',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: 'the Playout names',
+    text: '`CasparCG A is ${casparJoin.casparHost}; the Playout names ` +',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: 'meters, sources and grants are dropped.',
+    text: '`${casparJoin.playoutCasparHost}: meters, sources and grants are dropped.`',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: 'CasparCG A',
+    text: '<span className="cg-card__title">CasparCG A</span>',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
+  },
+  {
+    shown: "Use the Playout's",
+    text: 'Use the Playout&apos;s',
+    file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   // `INSTALLER-DESIGN-01` (`P-063`) — the setup window every installer opens: its pages and buttons.
   { shown: 'Install CG Bridge?', text: 'format!("Install {name}?")', file: 'tools/setup-ui/src/model.rs' },
@@ -589,6 +656,15 @@ describe('CLIENT-TEST-RELEASE-01 B3 — the guide’s source', () => {
     const backup = sectionLines(BACKUP_SECTION).join('\n');
     expect(backup).toContain('روی سروری جدا، کنارِ هر دو موتور');
     expect(backup).toContain('**هر دو** رایانهٔ موتور');
+  });
+
+  it('`RELEASE-0115-01` (`LOGO-LOOP-01`) — ONE line in the prerequisites says to import a looping template again after the upgrade', () => {
+    // A page is baked at import from CG Control's own runtime, so a template imported before the upgrade keeps
+    // its old loop until it is imported again (`C-034`'s manual step). Said once, where an upgrade is described.
+    const again = sectionLines('۲. پیش‌نیازها').filter((line) => line.includes('`Import a .vcg`'));
+    expect(again).toHaveLength(1);
+    expect(again[0]).toContain('یک بار دیگر');
+    expect(again[0]).toContain('`.vcg`');
   });
 
   it('`RELEASE-0111-01` §D2 — a separate server is the installer’s page, never a PowerShell line', () => {
