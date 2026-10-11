@@ -118,13 +118,22 @@ never relaxed.
       `127.0.0.1` → `Use the Playout's` → the line passes → `−23.2 LUFS`); `station-setup-geometry.spec.ts` measures
       B's two tags. Runtime e2e green locally (Windows; not a discharge).
 - [x] C.6 The Playout letter needs no line: the contract is unchanged, and the join it fixes is only reported.
-- [ ] C.7 A Linux `e2e` run that RAN, on the commit carrying Part C — URL here.
+- [x] C.7 Discharged on `35f4a09e`. The Linux `e2e` job RAN (from its log: runtime 341 passed, 2 skipped; designer
+      303 passed; `caspar-join.spec.ts` and `station-setup-geometry.spec.ts` passed) —
+      https://github.com/yasermostafaee/cg/actions/runs/38116432285/job/114402151711 — and the Desktop run on the
+      same commit is green: https://github.com/yasermostafaee/cg/actions/runs/38116432314
 
 ## D. A station with no Playout (`R-098`; T4)
 
-- [ ] D.1 Not started.
+- [ ] D.1 Not built — stopped after Part C, as the prompt directs when T4 reaches more places than expected. Beyond
+      `cg.runtime.station.v1`, a record with no Playout reaches the check's request schema
+      (`ConnectionCheckRequest.playoutAddress` is required, and CG Bridge keys its own Playout on it — a second CG
+      Bridge release change with an older-bridge skew), CG Setup (`tools/setup-ui/src/server.rs` reads
+      `playoutAddress`), the console's boot gate (`loadStationAddress`), the bridge URL's derivation
+      (`bridgeUrlForStation`, `bridgeAddressFor` on the `window.cg` contract), and the desktop acceptance. Already in
+      place: with no Playout, CasparCG A is typed and its ports' defaults are placeholders.
 
 ## E. Report
 
-- [ ] E.1 `Claude outputs/REPORT-SERVERS-SIMPLIFY-01-v1-<date>.md`, with before/after pictures and the owner's one
-      check (H1).
+- [x] E.1 `Claude outputs/REPORT-SERVERS-SIMPLIFY-01-v1-2026-10-11.md`, with before/after pictures and the owner's
+      one check (H1).
