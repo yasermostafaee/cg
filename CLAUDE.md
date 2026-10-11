@@ -559,6 +559,26 @@ count does not reset on its own.
   and carries the B-098 load-flake class, so a green local gate is a reason to push, never
   a claim that the change is verified. CI is what verifies it; the owner's read at merge
   is the judgment layer on top.
+- 🔴 **A PUSH TO `dev` RUNS THE LINUX `pr.yml` ONLY — THE WINDOWS INSTALLERS ARE BUILT ON
+  REQUEST (`CI-INSTALLERS-ON-DEMAND-01`).** `desktop.yml`'s `installers` job, and with it every
+  smoke and acceptance job, runs on a **tag `v*`**, a **manual run**
+  (`gh workflow run Desktop --ref dev`), or a push whose **head commit message contains
+  `[installers]`** — nothing else. An ordinary push starts the Desktop workflow and skips all of
+  it. The owner asks for installers in words ("build the installers"); CC then pushes an empty
+  commit carrying the marker, or dispatches.
+  - **A report no longer says "Desktop run green".** It says **"Desktop skipped by design"**
+    unless the prompt asked for installers. A skipped Desktop run is the expected state, not a
+    missing result.
+  - ⚠ **The marker is a plain substring match.** A commit message that QUOTES `[installers]` or
+    `[guide-shots]` — a message about this very rule — triggers the build. Spell a marker without
+    its brackets unless the build is meant.
+  - **A change only the Windows pipeline can exercise** — under `apps/*/src-tauri/**`, `Cargo.*`,
+    `tools/bridge-installer/**`, `tools/release/**`,
+    `tools/caspar-bridge/scripts/stage-bridge.mjs` or `.github/workflows/desktop.yml` — carries
+    `[installers]` on its **final** commit even unasked (`OWNER CHOICE`; the owner may delete this
+    line). Everything else never carries it unless he asks.
+  - A manual run also runs `guide-shots` (~40 runner-minutes); the marker does not. A dispatch
+    queued behind a running Desktop run is replaced by the next push (one pending run per group).
 - **CC PAUSES AND FLAGS — out loud, in its final report — when a commit falls in one of
   these three classes.** They are about RISK, not about PRs, so retiring the PR model does
   not retire them. CC still commits and pushes; what it must not do is let one of these

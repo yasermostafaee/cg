@@ -102,6 +102,9 @@ from a checkout — which assumes a developer.
     them, and only the per-machine install and uninstall run elevated: WebView2 ignores its
     DevTools variable in an elevated process (wry#1782), which is what kept both page checks dark
     on the first two runs.
+    **When** (`CI-INSTALLERS-ON-DEMAND-01`, 2026-10-11): on request only — a tag `v*`, a manual run,
+    or `[installers]` in the head commit message. An ordinary push to `dev` or `main` runs the Linux
+    `pr.yml` alone; a tag rebuilds and checks everything from its own commit, as before.
 
 ## What the client's Playout must provide (install-time dependencies)
 
