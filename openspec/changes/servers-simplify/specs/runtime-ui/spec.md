@@ -100,3 +100,29 @@ automatically` empties the field and opens `Advanced`
 
 - **WHEN** the Connection tab of a Playout station opens **THEN** `Advanced` is collapsed **AND** with no Playout it
   is open
+
+### Requirement: Station setup SHALL say whether CasparCG A joins the Playout's, and offer the derived host
+
+Station setup's check of the station's own Playout SHALL send the configured server A host as `casparHost`, once
+the configuration is read. When CG Bridge answers whether server A joins the Playout's, the check SHALL carry an
+`After sign-in` line: a pass naming the host, or a failure naming both hosts and the cost (`meters, sources and
+grants are dropped.`). While it fails, the CasparCG A card SHALL offer a station admin `Use the Playout's`, which
+writes the host CG Bridge derived through `connections.set-config` and asks the check again; it SHALL be unavailable
+while anything is on air, as `Apply servers` is. A CasparCG card whose fields differ from what is in force SHALL
+read `Not applied`.
+
+#### Scenario: The owner's state
+
+- **WHEN** server A is `192.168.21.93` and the Playout names `127.0.0.1` on a CG Bridge on the Playout's machine
+  **THEN** the line fails reading `CasparCG A is 192.168.21.93; the Playout names 127.0.0.1: meters, sources and
+grants are dropped.` **AND** `Use the Playout's` sets server A to `127.0.0.1` **AND** the meter returns
+
+#### Scenario: A separate server
+
+- **WHEN** CG Bridge sits on a separate server whose Playout is `192.168.21.32` and server A is `127.0.0.1` **THEN**
+  the line fails naming `192.168.21.32` **AND** `Use the Playout's` sets server A to `192.168.21.32`
+
+#### Scenario: On air
+
+- **WHEN** anything is on air **THEN** `Use the Playout's` is unavailable **AND** a backup added in the draft reads
+  `Not applied` **AND** nothing is sent

@@ -597,6 +597,18 @@ export function StationSetupDialog({
   const [advancedOpen, setAdvancedOpen] = useState<boolean | null>(null);
   const advancedShown = advancedOpen ?? !playoutStation;
   /*
+    🔴 `B-327` (T6) — **DOES SERVER A JOIN THE PLAYOUT'S?** CG Bridge's verdict from the last check of this
+    station's own Playout (`casparJoin`), through the same `hostIsOurs` its meters, sources and grants read.
+    `null` — not judged (not signed in, the Playout's list not read, or a CG Bridge too old to say).
+  */
+  const [casparJoin, setCasparJoin] = useState<{
+    readonly casparHost: string;
+    readonly playoutCasparHost: string;
+    readonly joins: boolean;
+  } | null>(null);
+  /** Bumped to run the card's check again — after `Use the Playout's`, so the line says what is now in force. */
+  const [recheck, setRecheck] = useState(0);
+  /*
     🔴 `SERVERS-SIMPLIFY-01` (`B-324`) — **THE CONNECTION CARD'S OPEN EDIT, HELD HERE.** The card unmounts with
     its tab, so a draft it kept itself was dropped in silence on a tab switch (the owner's picture 5). Held
     here it survives the switch like every other draft on this tab, marks the rail, and is discarded on close
@@ -753,7 +765,11 @@ export function StationSetupDialog({
     let cancelled = false;
     const now = window.cg.link.bridgeAddress?.() ?? null;
     const elsewhere = now !== loadedFrom.current;
-    if (elsewhere) setConnectionDraft(null);
+    if (elsewhere) {
+      setConnectionDraft(null);
+      // T6 — another CG Bridge's verdict says nothing about this one.
+      setCasparJoin(null);
+    }
     void window.cg.connections
       .config()
       .then((config) => {
@@ -828,6 +844,8 @@ export function StationSetupDialog({
     setConnectionDraft(null);
     // T3 — `Advanced` opens again as the station has it.
     setAdvancedOpen(null);
+    // T6 — a verdict is the check's that produced it; the next opening runs its own.
+    setCasparJoin(null);
   }, [open, loaded, restoreServersDraft]);
 
   /*
@@ -924,6 +942,49 @@ export function StationSetupDialog({
           ),
         }
       : undefined;
+  /*
+    🔴 `B-327` (T6) — **THE JOIN, AS A LINE OF THE CHECK.** CG Bridge's verdict, worded: a pass names the host; a
+    failure is never a pass and names both hosts and the cost in a few words — the owner's meter read `— LUFS`
+    with picture and sound present, and nothing said why.
+  */
+  const joinLines: readonly ShownCheckLine[] =
+    casparJoin === null
+      ? []
+      : [
+          casparJoin.joins
+            ? {
+                id: 'caspar-join',
+                status: 'pass',
+                text: `CasparCG A is the Playout's: ${casparJoin.casparHost}.`,
+              }
+            : {
+                id: 'caspar-join',
+                status: 'fail',
+                text:
+                  `CasparCG A is ${casparJoin.casparHost}; the Playout names ` +
+                  `${casparJoin.playoutCasparHost}: meters, sources and grants are dropped.`,
+              },
+        ];
+  /*
+    T6 — **A CHANGED CASPARCG HOST IS SHOWN AS NOT APPLIED, NEVER AS SAVED.** `Apply servers` is refused while
+    anything is on air, so a typed host can sit in its field for a whole show: the card says, as a fact, that
+    what it shows is not in force.
+  */
+  const sameEndpoint = (
+    a: { host: string; amcpPort: number; oscPort: number },
+    b: { host: string; amcpPort: number; oscPort: number },
+  ): boolean => a.host === b.host && a.amcpPort === b.amcpPort && a.oscPort === b.oscPort;
+  const draftA = parseEndpoint(primary, PRIMARY_DEFAULTS);
+  const aNotApplied =
+    loaded !== null && (typeof draftA === 'string' || !sameEndpoint(draftA, loaded.servers.A));
+  const draftB = backupEnabled ? parseEndpoint(backup, BACKUP_DEFAULTS) : null;
+  const bNotApplied =
+    loaded !== null &&
+    (backupEnabled !== (loaded.servers.B !== undefined) ||
+      (draftB !== null &&
+        (typeof draftB === 'string' ||
+          loaded.servers.B === undefined ||
+          !sameEndpoint(draftB, loaded.servers.B))));
   // T2 — server A's state, whichever role it holds now (the health names each server by its label).
   const serverAState =
     health === null
@@ -1555,9 +1616,14 @@ export function StationSetupDialog({
                       runs it again; anyone else presses CHECK, as before.
                     */
                     grouped
-                    checkOnOpen={holdsStationAdmin}
-                    // 🔴 `B-326` — where CasparCG fetches graphics, when CG Bridge says it is elsewhere.
-                    extraLines={graphicsLines}
+                    // `B-327` — once server A is read, so the first check names the host CG Bridge drives.
+                    checkOnOpen={holdsStationAdmin && loaded !== null}
+                    // 🔴 `B-327` — the configured CasparCG host rides the check, so the AMCP line judges it.
+                    casparHost={loaded?.servers.A.host}
+                    onAnswer={(answer) => setCasparJoin(answer?.casparJoin ?? null)}
+                    recheck={recheck}
+                    // 🔴 `B-327` / `B-326` — the join, and where CasparCG fetches graphics.
+                    extraLines={[...joinLines, ...graphicsLines]}
                     lineActions={graphicsActions}
                   />
                 </div>
@@ -1577,9 +1643,14 @@ export function StationSetupDialog({
                     A
                   </Tag>
                   <span className="cg-card__title">CasparCG A</span>
+                  <span className="cg-card__spacer" />
+                  {aNotApplied && (
+                    <Tag className="cg-setup-card-tag" data-not-applied="">
+                      Not applied
+                    </Tag>
+                  )}
                   {playoutStation && (
                     <>
-                      <span className="cg-card__spacer" />
                       <Tag className="cg-setup-card-tag" data-caspar-placement="">
                         On the Playout machine
                       </Tag>
@@ -1590,6 +1661,51 @@ export function StationSetupDialog({
                       )}
                     </>
                   )}
+                  {/*
+                      🔴 `B-327` (T6) — **`Use the Playout's`**, offered only while CG Bridge says server A does not
+                      join the Playout's. It writes the host CG Bridge derived — `resolveCasparHost` by its own
+                      Playout host: `127.0.0.1` on the Playout's machine, the Playout's address on a separate one
+                      — never the Playout's network address written by hand. Through `connections.set-config`, so
+                      it is refused while anything is on air, exactly as `Apply servers` is (and is unavailable
+                      here for the same reason).
+                    */}
+                  {casparJoin !== null &&
+                    !casparJoin.joins &&
+                    holdsStationAdmin &&
+                    loaded !== null && (
+                      <AsyncButton
+                        variant="secondary"
+                        data-use-playouts=""
+                        disabled={onAirCount > 0}
+                        title={
+                          onAirCount > 0
+                            ? 'Refused while anything is on air.'
+                            : `Sets CasparCG A to ${casparJoin.playoutCasparHost}.`
+                        }
+                        run={async () => {
+                          const host = casparJoin.playoutCasparHost;
+                          const next: ConnectionConfig = {
+                            ...loaded,
+                            servers: { ...loaded.servers, A: { ...loaded.servers.A, host } },
+                          };
+                          setRefusal(null);
+                          setStatus(null);
+                          const result = await window.cg.connections.setConfig(next);
+                          if (!result.ok) {
+                            setRefusal(
+                              result.message ?? 'The bridge refused the new configuration.',
+                            );
+                            return { accepted: false, errorCode: result.reason ?? 'refused' };
+                          }
+                          setStatus(`Applied. CasparCG A is ${host}.`);
+                          // The line says what is now in force: the check runs again.
+                          setRecheck((n) => n + 1);
+                          return { accepted: true };
+                        }}
+                      >
+                        Use the Playout&apos;s
+                      </AsyncButton>
+                    )}
                 </div>
                 <div className="cg-card__body">
                   {endpointFields(primary, setPrimary, 'Primary', PRIMARY_DEFAULTS, playoutStation)}
@@ -1616,6 +1732,12 @@ export function StationSetupDialog({
                     */}
                   <Tag className="cg-setup-card-tag">Optional</Tag>
                   <span className="cg-card__spacer" />
+                  {/* T6 — a changed backup is shown as not applied, never as saved. */}
+                  {bNotApplied && (
+                    <Tag className="cg-setup-card-tag" data-not-applied="">
+                      Not applied
+                    </Tag>
+                  )}
                   {/* `MULTI-CHANNEL-01` §2 I — adding or removing a server is a Servers commit. */}
                   {holdsStationAdmin && backupEnabled && (
                     <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>

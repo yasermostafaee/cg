@@ -22,6 +22,7 @@ import {
   waitingIds,
   type ShownCheckLine,
 } from './firstRunStation.js';
+import type { SetupCheckAnswer } from '../../../shared/runtime-bridge.js';
 import {
   bridgeAddressOf,
   bridgeFact,
@@ -129,6 +130,8 @@ export function PlayoutConnection({
   onDraft,
   extraLines = [],
   lineActions,
+  casparHost,
+  onAnswer,
 }: {
   /** The configured Playout's origin, or `null` when this station has none. */
   origin: string | null;
@@ -183,6 +186,14 @@ export function PlayoutConnection({
   extraLines?: readonly ShownCheckLine[];
   /** `B-326` — the one act a line offers, by its id (`Detect automatically`). */
   lineActions?: Readonly<Partial<Record<string, ReactNode>>> | undefined;
+  /**
+   * 🔴 `SERVERS-SIMPLIFY-01` (`B-327`, T6) — the CasparCG host this station's CG Bridge is CONFIGURED to drive
+   * (server A), sent with a check of the station's own Playout so the AMCP line judges what CG Bridge actually
+   * drives — never the Playout's host by default. Station setup knows it; a surface that does not passes none.
+   */
+  casparHost?: string | undefined;
+  /** `B-327` — told each check's answer (`null` — none came), so the surface reads CG Bridge's verdicts. */
+  onAnswer?: ((answer: SetupCheckAnswer | null) => void) | undefined;
 }): JSX.Element {
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
@@ -264,6 +275,11 @@ export function PlayoutConnection({
   judgeRef.current = judgeNow;
   const onJudgedRef = useRef(onJudged);
   onJudgedRef.current = onJudged;
+  const onAnswerRef = useRef(onAnswer);
+  onAnswerRef.current = onAnswer;
+  // `B-327` — read when a check RUNS, not when the callback was made: the host arrives with the config.
+  const casparHostRef = useRef(casparHost);
+  casparHostRef.current = casparHost;
   const linesRef = useRef(lines);
   linesRef.current = lines;
   /** The one automatic re-run has been spent; a PRESS starts a new cycle. */
@@ -349,15 +365,20 @@ export function PlayoutConnection({
         : { kind: 'pending', address: going, playout: target };
     if (mode !== 'auto') setRanAt(at);
     let shown: readonly ShownCheckLine[] | null = null;
+    // `B-327` — the configured CasparCG host rides a check of the station's OWN Playout, on its own CG Bridge.
+    const casparHost = casparHostRef.current;
+    const named = casparHost !== undefined && where === undefined && target === origin;
     try {
       const result = await window.cg.setup.check(
         {
           playoutAddress: target,
           origin: window.location.origin,
+          ...(named ? { casparHost } : {}),
           ...(mode === 'auto' ? { awaitLetIn: true as const } : {}),
         },
         where,
       );
+      onAnswerRef.current?.(result);
       if (result.bridge !== null) {
         at = { kind: 'answered', ...result.bridge, playout: target };
         setRanAt(at);
@@ -375,6 +396,7 @@ export function PlayoutConnection({
       ) {
         // 🔴 `B-317` — no CG Bridge there: said as the check's own CG Bridge line; nothing else is
         // known, so no other line stands — and nothing locks the fields or the sign-in.
+        onAnswerRef.current?.(null);
         at = { kind: 'silent', address: silentAt, playout: target };
         setRanAt(at);
         shown = [];
@@ -403,10 +425,16 @@ export function PlayoutConnection({
     else settled(shown);
   }, [judgeNow]);
 
-  // B2 — a sign-in form's own first check, once, when it opens with nothing shown.
+  /*
+    B2 — a sign-in form's own first check, once, when it opens with nothing shown. `B-327` — or once it may: a
+    surface whose check needs what it is still reading (Station setup's server A) turns this on when it has it.
+  */
+  const openChecked = useRef(false);
   useEffect(() => {
-    if (checkOnOpen && linesRef.current === null) void check('first');
-  }, []);
+    if (!checkOnOpen || openChecked.current) return;
+    openChecked.current = true;
+    if (linesRef.current === null && !inFlight.current) void check('first');
+  }, [checkOnOpen]);
 
   // B2 — the lines, to whoever gates on them.
   const onLinesRef = useRef(onLines);

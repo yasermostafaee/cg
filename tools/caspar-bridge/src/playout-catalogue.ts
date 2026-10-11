@@ -208,6 +208,62 @@ export function hostJoinsStation(casparHost: string, configuredHosts: readonly s
   return configuredHosts.includes(casparHost);
 }
 
+/**
+ * 🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — **"IS THIS HOST OURS?", BUILT ONCE.** A Playout's `casparHost` (a meter
+ * reading's, a D10 input's, a grant's) resolved by THIS bridge's own Playout host ({@link resolveCasparHost}) and
+ * joined to the CasparCG hosts it is configured to drive ({@link hostJoinsStation}). The meters, the sources and
+ * the check's join line all read the function this returns, so the line that says "your readings are dropped"
+ * cannot disagree with the code that drops them (golden rule 6).
+ *
+ * `configuredHosts` is read at CALL time: an applied configuration is in force for the next reading.
+ */
+export function hostIsOursFor(
+  playoutHost: string | undefined,
+  configuredHosts: () => readonly string[],
+): (casparHost: string) => boolean {
+  return (casparHost) =>
+    hostJoinsStation(resolveCasparHost(casparHost, playoutHost), configuredHosts());
+}
+
+/**
+ * 🔴 `B-327` — **DOES THIS STATION'S CASPARCG JOIN THE PLAYOUT'S?** The owner's `.32`: server A read
+ * `192.168.21.93`, then `192.168.21.32`, while the Playout named `127.0.0.1` — and every meter reading was dropped
+ * with picture and sound present, the check reading green. The pair (`casparHost` + `casparChannel`) is the
+ * contract's join key (§3.2, §4.4); this REPORTS it and never relaxes it.
+ */
+export interface CasparJoin {
+  /** Server A's host, as configured. */
+  readonly casparHost: string;
+  /**
+   * The CasparCG host the Playout names for this station's channel, as THIS bridge must read it —
+   * {@link resolveCasparHost} by its own Playout host: `127.0.0.1` on the Playout's machine, the Playout's address
+   * on a separate server. What server A should read; what `Use the Playout's` writes.
+   */
+  readonly playoutCasparHost: string;
+  /** {@link hostIsOursFor}'s verdict on it. */
+  readonly joins: boolean;
+}
+
+/**
+ * The join for the first channel this station declares that the Playout's list names; `null` when the list is
+ * absent or names none of them — nothing to judge, so nothing is said.
+ */
+export function casparJoinOf(
+  rows: readonly CatalogueRow[] | null,
+  isDeclaredChannel: (channel: number) => boolean,
+  casparHost: string,
+  playoutHost: string | undefined,
+  hostIsOurs: (casparHost: string) => boolean,
+): CasparJoin | null {
+  const row = rows?.find((r) => isDeclaredChannel(r.casparChannel));
+  if (row === undefined) return null;
+  return {
+    casparHost,
+    playoutCasparHost: resolveCasparHost(row.casparHost, playoutHost),
+    joins: hostIsOurs(row.casparHost),
+  };
+}
+
 export class PlayoutCatalogue {
   readonly #url: string;
   readonly #bearer: () => string | null;

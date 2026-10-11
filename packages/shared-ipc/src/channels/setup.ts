@@ -199,6 +199,11 @@ export const CONSOLE_CHECK_IDS = [
     bridge's verdict, never judged by it.
   */
   'graphics',
+  /*
+    🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — whether this station's CasparCG joins the Playout's, worded by the console
+    from CG Bridge's `casparJoin` verdict.
+  */
+  'caspar-join',
 ] as const;
 export type ConsoleCheckId = (typeof CONSOLE_CHECK_IDS)[number];
 /** Any line of the check as a console shows it. */
@@ -233,8 +238,8 @@ export const CONNECTION_CHECK_GROUPS = [
   {
     id: 'session',
     title: 'After sign-in',
-    // `B-326` — where CasparCG fetches graphics, beside CasparCG's own line.
-    lines: ['amcp', 'graphics', 'osc', 'license', 'channels'],
+    // `B-327` — whether it joins the Playout's, and `B-326` — where it fetches graphics, beside CasparCG's line.
+    lines: ['amcp', 'caspar-join', 'graphics', 'osc', 'license', 'channels'],
   },
 ] as const satisfies readonly {
   readonly id: string;
@@ -357,6 +362,17 @@ export const ConnectionCheckResultSchema = z.object({
    * itself (CG Control's webview does not reach loopback HTTP). Absent from an older CG Bridge.
    */
   bridgeProblems: z.array(z.object({ code: z.string(), message: z.string() })).optional(),
+  /**
+   * 🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — **DOES THIS STATION'S CASPARCG JOIN THE PLAYOUT'S?** Server A's host as
+   * configured; the host the Playout names for this station's channel as CG Bridge must read it (its one
+   * `resolveCasparHost`); and CG Bridge's verdict through the same `hostIsOurs` its meters, sources and grants read.
+   * Answered for this station's own Playout, to a signed-in asker, once the Playout's list is read; absent
+   * otherwise, and from an older CG Bridge. A FACT beside the lines, never a line of its own: an older console
+   * parses line ids strictly, and drops an unknown field.
+   */
+  casparJoin: z
+    .object({ casparHost: z.string(), playoutCasparHost: z.string(), joins: z.boolean() })
+    .optional(),
 });
 export type ConnectionCheckResult = z.infer<typeof ConnectionCheckResultSchema>;
 

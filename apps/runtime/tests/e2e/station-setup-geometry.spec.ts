@@ -403,14 +403,21 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
 
     The tag reuses the section contract tag's chip tokens: one tag treatment at two levels.
   */
-  const tag = await dialog
-    .getByRole('region', { name: 'CasparCG B' })
-    .locator('.cg-setup-card-tag')
-    .evaluate((el) => {
-      const c = getComputedStyle(el);
-      return { text: el.textContent, size: c.fontSize, radius: c.borderTopLeftRadius };
-    });
+  const tags = dialog.getByRole('region', { name: 'CasparCG B' }).locator('.cg-setup-card-tag');
+  const tag = await tags.filter({ hasText: 'Optional' }).evaluate((el) => {
+    const c = getComputedStyle(el);
+    return { text: el.textContent, size: c.fontSize, radius: c.borderTopLeftRadius };
+  });
   expect(tag).toEqual({ text: 'Optional', size: tokens.tagText, radius: tokens.tagRadius });
+  /*
+    `B-327` (T6) — the backup this spec adds is a draft, and its card says so as a fact, in the same tag
+    treatment: one tag at two levels, and now two tags on this head.
+  */
+  const notApplied = await tags.filter({ hasText: 'Not applied' }).evaluate((el) => {
+    const c = getComputedStyle(el);
+    return { size: c.fontSize, radius: c.borderTopLeftRadius };
+  });
+  expect(notApplied).toEqual({ size: tokens.tagText, radius: tokens.tagRadius });
 
   /*
     🔴 `SERVERS-SIMPLIFY-01` (T3) — **THE LEDE IS GONE, AND THAT IS PINNED AS AN ABSENCE.** The graphics card

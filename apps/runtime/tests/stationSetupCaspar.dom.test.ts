@@ -225,3 +225,131 @@ describe('B-326 — a graphics host on another machine is the check’s failed l
     expect(dialog.querySelector('[data-detect-graphics]')).toBeNull();
   });
 });
+
+/**
+ * 🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — **THE OWNER'S STATE: EVERY LINE GREEN, THE METER `— LUFS`.** Server A named
+ * his own PC (`.93`); the Playout names `127.0.0.1`. CG Bridge now says whether A joins the Playout's, the line names
+ * both hosts and the cost, and `Use the Playout's` writes the host CG Bridge derived — refused on air, as Apply is.
+ */
+describe('B-327 — whether CasparCG A joins the Playout’s', () => {
+  const OWNERS: ConnectionConfig = {
+    servers: { A: { host: '192.168.21.93', amcpPort: 5250, oscPort: 6251 } },
+    strategy: 'mirror-sync',
+    autoFailoverEnabled: true,
+  };
+  const ON_AIR = { itemId: 'i-1', templateId: 't1', fields: {}, status: 'on-air', pending: false };
+
+  /** This station's Playout, so the check runs on open; `join` is CG Bridge's verdict. */
+  function answering(join: { casparHost: string; playoutCasparHost: string; joins: boolean }): {
+    check: ReturnType<typeof vi.fn>;
+  } {
+    const cg = window.cg as unknown as {
+      auth: { capabilities: () => object };
+      setup: { check: (r: unknown) => Promise<unknown> };
+    };
+    const caps = cg.auth.capabilities();
+    cg.auth.capabilities = () => ({
+      ...caps,
+      signInUrl: 'http://192.168.21.32:8080/api/cg/auth/token',
+    });
+    const check = vi.fn(() =>
+      Promise.resolve({ lines: [], localAddress: null, bridge: null, casparJoin: join }),
+    );
+    cg.setup.check = check;
+    return { check };
+  }
+
+  it('🔴 the owner’s state: the line FAILS naming both hosts and the cost; `Use the Playout’s` writes 127.0.0.1', async () => {
+    const { setConfig } = stationSetupStub({ auth: ADMIN, config: OWNERS, health: HEALTH });
+    const { check } = answering({
+      casparHost: '192.168.21.93',
+      playoutCasparHost: '127.0.0.1',
+      joins: false,
+    });
+    const dialog = await renderStationSetup({ section: 'servers' });
+    // The check asks about the CasparCG host this bridge drives.
+    expect(check.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ casparHost: '192.168.21.93' }),
+    );
+    const line = dialog.querySelector('[data-check="caspar-join"]');
+    expect(line?.getAttribute('data-status')).toBe('fail');
+    expect(line?.textContent).toContain(
+      'CasparCG A is 192.168.21.93; the Playout names 127.0.0.1: meters, sources and grants are dropped.',
+    );
+    const use = dialog.querySelector<HTMLButtonElement>('[data-use-playouts]');
+    expect(use?.textContent).toBe('Use the Playout’s'.replace('’', "'"));
+    await press(use);
+    expect(setConfig).toHaveBeenCalledWith({
+      ...OWNERS,
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } },
+    });
+    // …and the line is asked again, so it says what is now in force.
+    expect(check.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('placement 2 — CG Bridge on a separate server: the derived host is the Playout’s address', async () => {
+    const { setConfig } = stationSetupStub({
+      auth: ADMIN,
+      config: { ...OWNERS, servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6251 } } },
+    });
+    answering({ casparHost: '127.0.0.1', playoutCasparHost: '192.168.21.32', joins: false });
+    const dialog = await renderStationSetup({ section: 'servers' });
+    expect(dialog.querySelector('[data-check="caspar-join"]')?.textContent).toContain(
+      'the Playout names 192.168.21.32',
+    );
+    await press(dialog.querySelector('[data-use-playouts]'));
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        servers: { A: { host: '192.168.21.32', amcpPort: 5250, oscPort: 6251 } },
+      }),
+    );
+  });
+
+  it('CONTROL — A joins: the line passes, and there is nothing to use', async () => {
+    stationSetupStub({ auth: ADMIN });
+    answering({ casparHost: '127.0.0.1', playoutCasparHost: '127.0.0.1', joins: true });
+    const dialog = await renderStationSetup({ section: 'servers' });
+    const line = dialog.querySelector('[data-check="caspar-join"]');
+    expect(line?.getAttribute('data-status')).toBe('pass');
+    expect(line?.textContent).toContain("CasparCG A is the Playout's: 127.0.0.1.");
+    expect(dialog.querySelector('[data-use-playouts]')).toBeNull();
+  });
+
+  it('🔴 on air: `Use the Playout’s` is refused like Apply — and a changed host reads `Not applied`', async () => {
+    const { setConfig } = stationSetupStub({
+      auth: ADMIN,
+      config: OWNERS,
+      items: [ON_AIR as never],
+    });
+    answering({ casparHost: '192.168.21.93', playoutCasparHost: '127.0.0.1', joins: false });
+    const dialog = await renderStationSetup({ section: 'servers' });
+    const use = dialog.querySelector<HTMLButtonElement>('[data-use-playouts]');
+    expect(use?.disabled).toBe(true);
+    expect(use?.getAttribute('title')).toBe('Refused while anything is on air.');
+    // A backup typed during the show is a draft, and the card says so as a fact.
+    const b = dialog.querySelector('section[aria-label="CasparCG B"]');
+    expect(b?.querySelector('[data-not-applied]')).toBeNull();
+    await press(dialog.querySelector('button[aria-label="Add backup"]'));
+    const sub = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    if (sub === undefined) throw new Error('the Add backup dialog did not open');
+    await setSetupInput(sub, 'New backup host', '192.0.2.51');
+    await press([...sub.querySelectorAll('button')].find((x) => x.textContent === 'Add to draft'));
+    expect(b?.querySelector('[data-not-applied]')?.textContent).toBe('Not applied');
+    expect(
+      dialog.querySelector<HTMLButtonElement>('button[aria-label="Apply server settings"]')
+        ?.disabled,
+    ).toBe(true);
+    expect(setConfig).not.toHaveBeenCalled();
+  });
+
+  it('`Not applied` on A’s typed host, with no Playout; CONTROL: the stored value reads as nothing', async () => {
+    stationSetupStub({ items: [ON_AIR as never] });
+    const dialog = await renderStationSetup({ section: 'servers' });
+    const a = dialog.querySelector('section[aria-label="CasparCG A"]');
+    expect(a?.querySelector('[data-not-applied]')).toBeNull();
+    await setSetupInput(dialog, 'Primary host', '192.0.2.50');
+    expect(a?.querySelector('[data-not-applied]')?.textContent).toBe('Not applied');
+    await setSetupInput(dialog, 'Primary host', '127.0.0.1');
+    expect(a?.querySelector('[data-not-applied]')).toBeNull();
+  });
+});

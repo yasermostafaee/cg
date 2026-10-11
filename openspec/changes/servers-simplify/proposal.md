@@ -37,7 +37,13 @@ server`), each with `Change`. An address is edited as a `Host` and a `Port`, eve
   machine "this machine". CG Bridge's one predicate of who cannot fetch graphics now also judges a host that names
   ANOTHER machine (`servesFromAnotherMachine`, against its own addresses), and says so as `elsewhere`; the console
   shows it as the check's failed line with `Detect automatically`.
-- **Part C — a wrong CasparCG host never fails in silence (`B-327`; T6).** Not yet built. `R-097` is filed only.
+- **Part C — a wrong CasparCG host never fails in silence (`B-327`; T6).** CG Bridge says, with its check's answer,
+  whether server A joins the Playout's — through the same `hostIsOurs` its meters, sources and grants read, built
+  once (`hostIsOursFor`) — and Station setup shows it as an `After sign-in` line naming both hosts and the cost.
+  `Use the Playout's` writes the host CG Bridge derived through `connections.set-config`, refused on air; a CasparCG
+  card whose fields differ from what is in force reads `Not applied`. The console sends server A with the check and
+  asks by the name CG Bridge advertises; the route keeps the station's lines when a CasparCG host is named.
+  `R-097` (a status-bar fact while readings are dropped) is filed only.
 - **Part D — a station with no Playout (`R-098`; T4).** Not yet built.
 
 ## Decisions
@@ -62,6 +68,13 @@ server`), each with `Change`. An address is edited as a `Host` and a `Port`, eve
   tagged 0.11.4 is unchanged. Its picture of the Set up page (`img/4-playout-address.png`) shows the old field
   until the next release's pictures are taken.
 
+- **The join travels as a fact beside the lines, and the console words it.** An older console parses the check's
+  line ids strictly and would refuse a whole answer carrying an id it does not know; an unknown field is dropped.
+  So CG Bridge answers `casparJoin` and the console composes the `caspar-join` line, as it does `graphics`.
+- **`Use the Playout's` writes CG Bridge's derived host, never the Playout's address by hand.** Which host joins is
+  opposite in the two placements (`127.0.0.1` on the Playout's machine, the Playout's address on a separate server),
+  so the one place that knows is the one that resolves it.
+
 ## Out of scope
 
 - The status bar's own wording (`PRIMARY A`, `A: ANOTHER CG BRIDGE`).
@@ -79,3 +92,9 @@ server`), each with `Change`. An address is edited as a `Host` and a `Port`, eve
   read the Playout card; the desktop acceptance (`release-acceptance.mjs`, `installer-smoke.mjs`).
 - `docs/release/0.11.4/install-guide.fa.md` and `tools/release/tests/guide.test.ts`;
   `docs/integration/playout/CG-BRIDGE-FOR-PLAYOUT.md`.
+- Part C: `tools/caspar-bridge/src/playout-catalogue.ts` (`hostIsOursFor`, `casparJoinOf`), `bridge.ts` (the one
+  predicate built once, the route's two questions, `casparJoin` in the answer); `packages/shared-ipc` (`casparJoin`,
+  `caspar-join`); `apps/runtime/src/platform/WebSocketRuntime.ts` (asked by CG Bridge's name); `PlayoutConnection.tsx`
+  (`casparHost`, `onAnswer`); `StationSetupDialog.tsx` (the line, `Use the Playout's`, `Not applied`). Tests: bridge
+  `caspar-join.test.ts`, `caspar-join.integration.test.ts`; jsdom `stationSetupCaspar.dom.test.ts`; e2e
+  `caspar-join.spec.ts`, `station-setup-geometry.spec.ts`.

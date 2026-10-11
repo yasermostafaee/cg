@@ -297,10 +297,12 @@ import {
 import type { BackupChannelMap } from './server-b-line.js';
 import {
   airOf,
+  casparJoinOf,
+  hostIsOursFor,
   hostJoinsStation,
   isLoopbackCasparHost,
   PlayoutCatalogue,
-  resolveCasparHost,
+  type CasparJoin,
   type CatalogueRow,
   type PlayoutCatalogueOptions,
 } from './playout-catalogue.js';
@@ -2607,11 +2609,10 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     can delete a binding. An explicit in-process catalogue (tests) is pre-resolved: no reader.
   */
   const sourcesPlayoutHost = auth.playout === null ? undefined : playoutHostOf(auth.playout);
-  const hostIsOurs = (host: string): boolean =>
-    hostJoinsStation(
-      resolveCasparHost(host, sourcesPlayoutHost),
-      configuredCasparHosts(runtime.config()),
-    );
+  // 🔴 `B-327` — the ONE "is this host ours?": the meters, the sources and the check's join line read it.
+  const hostIsOurs = hostIsOursFor(sourcesPlayoutHost, () =>
+    configuredCasparHosts(runtime.config()),
+  );
   const sourcesProvider: PlayoutSourcesProvider | null =
     options.playoutSources ??
     (playoutAuth !== null && auth.playout !== null
@@ -2903,6 +2904,15 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     refreshCatalogue: () => playoutCatalogue?.refresh() ?? Promise.resolve(),
     pgmReturnStatus: () => pgmReturn.status(),
     connectionCheck,
+    // 🔴 `B-327` — does server A join the Playout's? Through the same `hostIsOurs` the meters read.
+    casparJoin: () =>
+      casparJoinOf(
+        playoutCatalogue?.rows() ?? null,
+        (channel) => runtime.isDeclaredChannel(channel),
+        runtime.config().servers.A.host,
+        sourcesPlayoutHost,
+        hostIsOurs,
+      ),
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
     ...(options.oscPort !== undefined ? { oscPort: options.oscPort } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
@@ -4281,6 +4291,12 @@ export function buildRoutes(
     refreshCatalogue?: () => Promise<void>;
     /** `DESKTOP-APPS-01` §2F — the connection check, bound to this station's own ports. */
     connectionCheck?: (req: ConnectionCheckRequest) => Promise<ConnectionCheckResult>;
+    /**
+     * 🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — whether server A joins the Playout's `casparHost`, through the one
+     * `hostIsOurs`; `null` when the Playout's list is not read. Absent (auth OFF, the route-coverage guard):
+     * nothing to judge.
+     */
+    casparJoin?: () => CasparJoin | null;
     /** `DESKTOP-APPS-01` §2E — this machine's address on the route to a host. */
     routeAddress?: (host: string) => Promise<string | null>;
     /**
@@ -4333,8 +4349,16 @@ export function buildRoutes(
     reads off `signInUrl`, which is this `tokenUrl`'s), so the narrowing costs it nothing. A named
     CasparCG host is a signed-in principal's question.
   */
-  const checksThisStation = (r: ConnectionCheckRequest): boolean => {
-    if (playoutUrls === null || r.casparHost !== undefined) return false;
+  /*
+    🔴 `SERVERS-SIMPLIFY-01` (`B-327`) — **TWO QUESTIONS, NO LONGER ONE.** "Is this the station's own Playout?"
+    decides whether CG Bridge's own lines (its session, OSC, the license, the channels, the CasparCG join) belong
+    in the answer; "may an unsigned caller ask this?" is the narrowing above. They were one predicate, so a
+    signed-in console naming the CasparCG host it judges — what Station setup now does, so the AMCP line probes
+    what this bridge actually drives — lost every line of its own station. The narrowing is unchanged, byte for
+    byte: before a sign-in, only this Playout, and never a named CasparCG host.
+  */
+  const isThisStationsPlayout = (r: ConnectionCheckRequest): boolean => {
+    if (playoutUrls === null) return false;
     const typed = normalisePlayoutAddress(r.playoutAddress);
     if (typed === null) return false;
     try {
@@ -4343,6 +4367,8 @@ export function buildRoutes(
       return false;
     }
   };
+  const checksThisStation = (r: ConnectionCheckRequest): boolean =>
+    r.casparHost === undefined && isThisStationsPlayout(r);
   const routeAddress =
     paths.routeAddress ??
     (async (host: string): Promise<string | null> =>
@@ -5078,10 +5104,12 @@ export function buildRoutes(
       narrowing applies to every socket without a valid principal.
     */
     route(SetupCheckChannel, 'read', 'read', async (r: ConnectionCheckRequest) => {
-      const ownPlayout = checksThisStation(r);
-      if (!mayBeTold(authState(currentAuthSession())) && !ownPlayout) {
+      // The narrowing before a sign-in — unchanged (`DELTA-MULTI-CHANNEL-01-B` B1).
+      if (!mayBeTold(authState(currentAuthSession())) && !checksThisStation(r)) {
         throw new Error(CHECK_BEFORE_SIGN_IN_REFUSAL);
       }
+      // `B-327` — whose lines belong in the answer: the station's own Playout, whatever CasparCG host is named.
+      const ownPlayout = isThisStationsPlayout(r);
       const result = await connectionCheck(r);
       /*
         🔴 `R-081` — **CG BRIDGE'S OWN STATE, IN THE SAME LIST**: its Playout session, OSC, the CG
@@ -5093,7 +5121,14 @@ export function buildRoutes(
       const principal = currentAuthSession()?.token?.principal ?? null;
       const rows = authMode === 'off' ? null : catalogueRows();
       const health = b.health();
-      return withStationLines(result, {
+      /*
+        🔴 `B-327` (`SERVERS-SIMPLIFY-01` T6) — **WHETHER SERVER A JOINS THE PLAYOUT'S**, for the console's After
+        sign-in line and its `Use the Playout's`. A FACT beside the lines rather than a line of its own: an older
+        console parses line ids strictly and would refuse the whole answer, while an unknown field is dropped.
+        Told to a signed-in asker only: it names the station's hosts.
+      */
+      const join = authMode !== 'off' && principal !== null ? (paths.casparJoin?.() ?? null) : null;
+      const answered = withStationLines(result, {
         playout: authMode !== 'off',
         session: paths.bridgeSession?.state() ?? { state: 'off' },
         primary: health.primary,
@@ -5108,6 +5143,7 @@ export function buildRoutes(
                   grantsChannel(principal.channels, [row.casparHost], row.casparChannel),
                 ).length,
       });
+      return join === null ? answered : { ...answered, casparJoin: join };
     }),
     route(SetupRouteAddressChannel, 'read', 'read', async (r: { host: string }) => ({
       address: await routeAddress(r.host),

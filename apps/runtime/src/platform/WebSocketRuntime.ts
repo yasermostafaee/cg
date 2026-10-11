@@ -325,8 +325,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   #url: string;
   readonly #createWs: WebSocketFactory;
   /**
-   * `B-317` — the sign-in address CG Bridge ADVERTISED, before `rebaseLoopback`: a check before a sign-in
-   * asks a loopback-configured CG Bridge for its Playout by this name (`playoutAsBridgeNamesIt`).
+   * `B-317` — the sign-in address CG Bridge ADVERTISED, before `rebaseLoopback`: a check asks CG Bridge for
+   * its Playout by this name (`playoutAsBridgeNamesIt`) — signed in or not since `B-327`.
    */
   #advertisedSignInUrl: string | null = null;
   #ws: WebSocketLike | null = null;
@@ -1962,13 +1962,21 @@ export class WebSocketRuntime implements RuntimeBridge {
       const address = bridgeHostPort(url);
       if (url === this.#url && this.#status === 'live') {
         /*
-          Before a sign-in, a loopback-configured CG Bridge is asked for its Playout by its own name — and
-          `B-321`, its answer is said back in the name this console was given (`checkByBridgeName`).
+          CG Bridge is asked for its Playout by its own name — and `B-321`, its answer is said back in the
+          name this console was given (`checkByBridgeName`).
         */
         const result = await checkByBridgeName(
           ask,
           hostOfBridgeUrl(url),
-          this.#principal === null ? this.#advertisedSignInUrl : null,
+          /*
+            🔴 `SERVERS-SIMPLIFY-01` (`B-327`) — BY CG BRIDGE'S OWN NAME, SIGNED IN OR NOT. It was before a sign-in
+            only, and after one the console asked by the address it reaches CG Bridge at (`192.168.21.32:8080`)
+            while a CG Bridge on the Playout's machine knows its Playout as `127.0.0.1:8080`: it did not know its
+            own Playout, so it answered without any of its own lines — the owner's `Sign-in · 2 OK` and
+            `After sign-in · 1 OK` — and would never have said whether its CasparCG joins the Playout's. The
+            answer is said back in the given name, as before a sign-in (`B-321`).
+          */
+          this.#advertisedSignInUrl,
           (request) => this.#invoke(ipcChannels.SetupCheckChannel, request, waitMs),
         );
         const version = this.#authCaps?.bridgeVersion;

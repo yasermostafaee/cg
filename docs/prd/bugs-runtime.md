@@ -13576,7 +13576,7 @@ says so, the check shows a failed line naming the host, and offers `Detect autom
 line fails naming it, the boot line and the apply answer name every configured server, and `Detect automatically`
 clears the field; WHEN it is one of CG Bridge's own addresses or loopback THEN nothing is said.
 
-## [ ] B-327 — The check cannot see a CasparCG host that does not join the Playout's, so meters, sources and grants are dropped in silence ⟨priority: high — the owner's programme meter read `— LUFS` with picture and sound present, and the check read all green⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` · `openspec/changes/servers-simplify/`
+## [~] B-327 — The check cannot see a CasparCG host that does not join the Playout's, so meters, sources and grants are dropped in silence ⟨priority: high — the owner's programme meter read `— LUFS` with picture and sound present, and the check read all green⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` · Part C · `openspec/changes/servers-simplify/`
 
 **Repro / Actual (the owner's pictures 3 and 6, 2026-10-10):** server A read `192.168.21.93`, later
 `192.168.21.32`. A reading from the Playout is kept only if `hostIsOurs(host)` — the Playout's `casparHost`,
@@ -13595,3 +13595,10 @@ the Playout's, through `hostIsOurs`, naming both hosts and the cost when it does
 **Acceptance:** both placements, one fixture each — a CG Bridge whose own Playout is `127.0.0.1` (A `127.0.0.1`
 joins, A `192.168.21.32` does not) and one whose Playout is `192.168.21.32` (the reverse); in each the line and `Use
 the Playout's` give the right answer and the meter returns.
+
+**Two more found on the way, both on the path the line needs (Part C):** a signed-in console asked the check by the
+address its own record held, and CG Bridge compares that with its own Playout's origin — on the owner's station the
+two differ, so `After sign-in` carried no line of CG Bridge's own (his picture: `After sign-in · 1 OK`). And the
+route answered CG Bridge's own lines only when NO CasparCG host was named, so a console that sent one lost them all.
+The console now always asks by the name CG Bridge advertises; the route asks two questions — is this the station's
+own Playout (its lines and the join), and may an unsigned caller ask this (the narrowing, byte for byte as before).

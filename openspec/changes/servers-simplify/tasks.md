@@ -75,11 +75,50 @@ release matter: the boot line, the apply answer and the serve state change. No r
       `Detect automatically` → applied → gone, through a real CG Bridge), `server-settings.spec.ts`,
       `station-setup-geometry.spec.ts` (the lede's absence pinned). Green locally (Windows; not a discharge).
 - [x] B.7 Swept by STRING and by COMPONENT; the 0.11.4 guide on `dev` and its pin name `CasparCG B · backup`.
-- [ ] B.8 A Linux `e2e` run that RAN, on the commit carrying Part B — URL here.
+- [x] B.8 Discharged on `1263b057`. The Linux `e2e` job RAN (from its log: runtime 340 passed, 2 skipped; designer
+      303 passed; `connection-card.spec.ts` ×3 and `station-setup-geometry.spec.ts` passed) —
+      https://github.com/yasermostafaee/cg/actions/runs/38114128077/job/114395545576 — and the Desktop run on the
+      same commit is green: https://github.com/yasermostafaee/cg/actions/runs/38114128108
 
 ## C. A wrong CasparCG host never fails in silence (`B-327`; T6)
 
-- [ ] C.1 Not started.
+Lane: **FULL** — CG Bridge's `setup.check` route (which lines a named CasparCG host keeps), an IPC schema field
+(`ConnectionCheckResult.casparJoin`), the console's check request, and a write through `connections.set-config`. A CG
+Bridge release matter. No refusal condition changes: the narrowing before a sign-in is byte for byte as before, and
+`Use the Playout's` is refused on air by the same door as `Apply servers`. The Playout contract's join is reported,
+never relaxed.
+
+- [x] C.0 The owner's state staged: a real CG Bridge driving server A at `127.0.0.9` against the fake Playout's
+      meters on `127.0.0.1` — the badge reads `— LUFS` while the Playout's stream is open. That the check read green
+      in this state is the owner's picture (`After sign-in · 1 OK`), not a run of the unchanged code here; the red
+      halves are the ablations in C.5.
+- [x] C.1 CG Bridge: the ONE "is this host ours?" is built once (`hostIsOursFor`) and read by the meters, the sources
+      and the join (`casparJoinOf`: the first row on a declared channel, its derived host, and whether A joins). The
+      check's answer carries it as `casparJoin`, to a signed-in asker only — a FACT beside the lines, because an
+      older console parses line ids strictly. `@cg/shared-ipc`: `ConnectionCheckResult.casparJoin` (optional),
+      `caspar-join` among the console's lines, in the After sign-in group.
+- [x] C.2 The route asks two questions: is this the station's own Playout (its lines and the join), and may an
+      unsigned caller ask this (the narrowing, unchanged). A signed-in console naming the CasparCG host keeps its
+      station's lines.
+- [x] C.3 The console sends server A as `casparHost` with a check of the station's own Playout, once the
+      configuration is read (the check on open waits for it); and asks by the name CG Bridge advertises, signed in
+      or not — on the owner's station the record's address and CG Bridge's Playout differ, and `After sign-in`
+      carried no line of CG Bridge's own.
+- [x] C.4 Station setup: the `caspar-join` line (pass: `CasparCG A is the Playout's: <host>.`; fail: both hosts and
+      `meters, sources and grants are dropped.`); `Use the Playout's` on CasparCG A while it fails, writing CG
+      Bridge's derived host through `connections.set-config`, disabled on air, and the check asked again after it;
+      `Not applied` on a CasparCG card whose fields differ from what is in force.
+- [x] C.5 Tests: bridge `caspar-join.test.ts` (both placements, the one predicate read at call time) and
+      `caspar-join.integration.test.ts` (the fake Playout's meters through a real CG Bridge: silent in the owner's
+      state and back after the write, in both placements; the join told to a signed-in asker only; a named host keeps
+      the station's lines). Red-first by ablation: the join withheld reds all three; the route's old single question
+      reds them too. jsdom `stationSetupCaspar.dom.test.ts` (+5: the owner's state, placement 2, the passing
+      control, refused on air with `Not applied`, `Not applied` on A's typed host); the on-open gate ablated, the
+      first check carried no host. Chromium `caspar-join.spec.ts` (`— LUFS` → the line fails naming `127.0.0.9` and
+      `127.0.0.1` → `Use the Playout's` → the line passes → `−23.2 LUFS`); `station-setup-geometry.spec.ts` measures
+      B's two tags. Runtime e2e green locally (Windows; not a discharge).
+- [x] C.6 The Playout letter needs no line: the contract is unchanged, and the join it fixes is only reported.
+- [ ] C.7 A Linux `e2e` run that RAN, on the commit carrying Part C — URL here.
 
 ## D. A station with no Playout (`R-098`; T4)
 
