@@ -4,7 +4,8 @@
 
 The `installers` job of the Desktop workflow (`.github/workflows/desktop.yml`) SHALL run only when the
 workflow was not started by a push (a manual run), when the ref is a tag `v*`, or when the head commit
-message contains `[installers]`; on any other push it SHALL be skipped, and with it every job that needs
+message contains `[installers]` (a push that changes only paths the workflow ignores, or none, starts no
+run at all, so its marker is never read); on any other push it SHALL be skipped, and with it every job that needs
 it. A tag SHALL build and check everything it did before this requirement, and the draft release SHALL
 still be opened on a tag only. The Linux gate and `e2e` (`pr.yml`) are not governed by this and run on
 every push. Where another requirement says "when the desktop workflow runs", it means a run in which the
@@ -25,8 +26,14 @@ the engines (`installer-engines`, read only by the same run's smokes) 2 days.
 
 #### Scenario: The marker builds on a push
 
-- **WHEN** a commit whose message contains `[installers]` is the head of a push to `dev` **THEN** the
-  installers are built and every smoke and acceptance job runs
+- **WHEN** a commit whose message contains `[installers]` is the head of a push to `dev` whose changes
+  include a path outside the workflow's `paths-ignore` **THEN** the installers are built and every smoke
+  and acceptance job runs
+
+#### Scenario: An empty or docs-only push starts no Desktop run, marker or not
+
+- **WHEN** a push changes no file, or only paths in the workflow's `paths-ignore` **THEN** no Desktop run
+  is started, whatever its head commit message says; installers are then asked for by a manual run
 
 #### Scenario: A tag is unchanged
 

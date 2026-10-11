@@ -22,8 +22,17 @@
 - [x] 4.1 A push without the marker: Desktop run
       https://github.com/yasermostafaee/cg/actions/runs/38158607451 on `dfed7b9b` — all 13 job entries
       `skipped` (`Installers (Windows)` included), 0 artifacts
-- [ ] 4.2 An empty push reaches the workflow (the marker's commit is empty)
-- [ ] 4.3 A manual run (`gh workflow run Desktop --ref dev`) end to end, green; artifact sizes and lives
+- [x] 4.2 Does an EMPTY push reach the workflow? **No — measured.** The empty probe `e9094b4d` (no marker,
+      no file) got its `pr.yml` run https://github.com/yasermostafaee/cg/actions/runs/38160319450 (the
+      positive control: the push event fired) and **no Desktop run at all**: `paths-ignore` treats a push
+      that changes no file as all-ignored. So an empty marker commit builds nothing; the marker works only on
+      the head of a push that changes a non-docs path, and otherwise installers are asked for by a manual
+      run. `CLAUDE.md` and this change's spec say so
+- [x] 4.3 A manual run (`gh workflow run Desktop --ref dev`) end to end, green: Desktop run
+      https://github.com/yasermostafaee/cg/actions/runs/38160390947 on `e9094b4d` — `completed/success`,
+      all 13 build and test jobs RAN and passed (`Draft release` skipped: not a tag). Its artifacts: the
+      three installers 220.4 / 228.9 / 24.5 MB, each expiring 7.0 days on; `installer-engines` 471.3 MB, 2.0
+      days on — so `upload-artifact@v7` takes the expression; every other artifact unchanged (14 or 30 days)
 - [x] 4.4 The tag path, by reading only (no tag cut): on a tag push `github.event_name` is `push` and
       `github.ref_type` is `tag`, so the second clause makes the new `if` true; the workflow's diff from
       `6a49e8a8` to `dfed7b9b` is the header comment, the one `if`, and four `retention-days` —

@@ -18,6 +18,10 @@ rule: **the installers are built when he gives a specific command, not on every 
   ordinary push skips them all. No job-level condition uses `always()`, `failure()` or `!cancelled()`
   (those are step-level only). `release` keeps `if: github.ref_type == 'tag'`; a tag satisfies the new
   condition, so the tag path is unchanged.
+- **Measured on the way: an empty push starts no Desktop run.** `paths-ignore` judges the push's whole
+  diff, so a push changing no file (or only docs) never reaches the `installers` condition. The marker
+  therefore works on the head of a push that changes a non-docs path; with nothing to push, installers
+  are asked for by a manual run. (`paths-ignore` is left unchanged, as the prompt requires.)
 - **Shorter artifact lives**: `installer-engines` 14 days → 2 (job to job only); the three installers 30
   days on a tag's run, 7 on any other run. Every other artifact is unchanged.
 - **The rule, written down**: `CLAUDE.md` ("Commit & merge policy") and ADR 0011 §12. A change's report

@@ -564,8 +564,14 @@ count does not reset on its own.
   smoke and acceptance job, runs on a **tag `v*`**, a **manual run**
   (`gh workflow run Desktop --ref dev`), or a push whose **head commit message contains
   `[installers]`** — nothing else. An ordinary push starts the Desktop workflow and skips all of
-  it. The owner asks for installers in words ("build the installers"); CC then pushes an empty
-  commit carrying the marker, or dispatches.
+  it. The owner asks for installers in words ("build the installers").
+  - 🔴 **An EMPTY commit carrying the marker builds NOTHING — measured, not assumed.** The
+    workflow's `paths-ignore` judges the PUSH's whole diff, and a push that changes no file (or
+    only docs) never starts the Desktop workflow at all, so the marker is never read: the empty
+    probe `e9094b4d` got its `pr.yml` run (the positive control) and no Desktop run. So when CC
+    has code commits to push, the marker goes on the push's HEAD commit (the diff then carries a
+    non-docs path); when it has nothing to push, CC **dispatches**
+    (`gh workflow run Desktop --ref dev`) — after checking no Desktop run is queued for `dev`.
   - **A report no longer says "Desktop run green".** It says **"Desktop skipped by design"**
     unless the prompt asked for installers. A skipped Desktop run is the expected state, not a
     missing result.
@@ -576,7 +582,8 @@ count does not reset on its own.
     `tools/bridge-installer/**`, `tools/release/**`,
     `tools/caspar-bridge/scripts/stage-bridge.mjs` or `.github/workflows/desktop.yml` — carries
     `[installers]` on its **final** commit even unasked (`OWNER CHOICE`; the owner may delete this
-    line). Everything else never carries it unless he asks.
+    line), pushed together with the code it exercises. Everything else never carries it unless
+    he asks.
   - A manual run also runs `guide-shots` (~40 runner-minutes); the marker does not. A dispatch
     queued behind a running Desktop run is replaced by the next push (one pending run per group).
 - **CC PAUSES AND FLAGS — out loud, in its final report — when a commit falls in one of
