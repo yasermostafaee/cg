@@ -12,6 +12,15 @@ name: Desktop
 # CLIENT-TEST-RELEASE-01 B4 — a tag `v<version>` runs the same jobs from the tagged commit, and
 # then `release` opens a DRAFT pre-release holding exactly the three installers, SHA256SUMS.txt and
 # the Persian install guide. CI never publishes it: the owner does, or hands the files over.
+#
+# CI-INSTALLERS-ON-DEMAND-01 — WHAT RUNS WHEN. The installers are built when they are asked for, never
+# on every push: the `installers` job runs on a tag `v*`, on a manual run (`gh workflow run Desktop
+# --ref dev`), or on a push whose head commit message contains `[installers]` — the expression style
+# of `guide-shots`' own `[guide-shots]`, for the same reason ("a push never pays for it"). Every
+# other job but `guide-shots` `needs: installers`, so an ordinary push to `dev` or `main` starts this
+# workflow and skips all of it; the Linux gate and `e2e` (`pr.yml`) still run on every push. A tag
+# is unchanged: it builds and checks everything from the tagged commit, and `release` still runs on
+# a tag only. A dev build never ships anyway — the tag rebuilds from its own commit.
 
 on:
   workflow_dispatch:
@@ -36,6 +45,10 @@ concurrency:
 jobs:
   installers:
     name: Installers (Windows)
+    # On request only (see the header): not a push (a manual run), a tag, or `[installers]` in the
+    # head commit message. Written as "not a push" rather than "a dispatch", so a trigger added later
+    # builds rather than being skipped by a guess.
+    if: ${{ github.event_name != 'push' || github.ref_type == 'tag' || contains(github.event.head_commit.message, '[installers]') }}
     runs-on: windows-latest
     timeout-minutes: 75
     outputs:
