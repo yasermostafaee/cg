@@ -257,13 +257,16 @@ jobs:
           node tools/release/src/scan-payload.mjs @dirs --binaries ($ours -join ',')
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      # CI-INSTALLERS-ON-DEMAND-01 Part B — an installer lives 30 days from a tag's run (the release's
+      # own build) and 7 from any other run (a manual run, or `[installers]`): long enough to hand over
+      # or test, short enough not to pile up. The release job reads them from this same run.
       - name: Upload CG Control
         uses: actions/upload-artifact@v7
         with:
           name: CG-Control-installer
           path: installers/CG Control_*-setup.exe
           if-no-files-found: error
-          retention-days: 30
+          retention-days: ${{ github.ref_type == 'tag' && 30 || 7 }}
 
       - name: Upload CG Designer
         uses: actions/upload-artifact@v7
@@ -271,7 +274,7 @@ jobs:
           name: CG-Designer-installer
           path: installers/CG Designer_*-setup.exe
           if-no-files-found: error
-          retention-days: 30
+          retention-days: ${{ github.ref_type == 'tag' && 30 || 7 }}
 
       - name: Upload CG Bridge
         uses: actions/upload-artifact@v7
@@ -279,16 +282,17 @@ jobs:
           name: CG-Bridge-installer
           path: installers/CG-Bridge_*-setup.exe
           if-no-files-found: error
-          retention-days: 30
+          retention-days: ${{ github.ref_type == 'tag' && 30 || 7 }}
 
-      # Not a deliverable: the three engines, for the smokes' engine-vs-installer exit codes.
+      # Not a deliverable: the three engines, for the smokes' engine-vs-installer exit codes. Read only
+      # by this run's own jobs (job to job), so 2 days (CI-INSTALLERS-ON-DEMAND-01 Part B): ~471 MB a run.
       - name: Upload the engines (for the smokes)
         uses: actions/upload-artifact@v7
         with:
           name: installer-engines
           path: engines/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 2
 
   # CENTRAL-BRIDGE-01 1E — CG Bridge on a clean Windows, as the Playout's installer will chain it:
   # silent install, the service (automatic, recovery, no dependency), /health under a second, our
