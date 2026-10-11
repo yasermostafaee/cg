@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { orderCheckLines, type CheckLineId } from '@cg/shared-ipc';
 import { APP_VERSION } from '../../appVersion.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
@@ -127,6 +127,8 @@ export function PlayoutConnection({
   grouped = false,
   draft: heldDraft,
   onDraft,
+  extraLines = [],
+  lineActions,
 }: {
   /** The configured Playout's origin, or `null` when this station has none. */
   origin: string | null;
@@ -173,6 +175,14 @@ export function PlayoutConnection({
   draft?: ConnectionDraft | null;
   /** `B-324` — told every change to the open edit, and `null` when it closes (connected, or nothing changed). */
   onDraft?: (next: ConnectionDraft | null) => void;
+  /**
+   * 🔴 `SERVERS-SIMPLIFY-01` (`B-326`) — lines the surface that holds the facts writes into the grouped check
+   * (Station setup: where CasparCG fetches graphics, from CG Bridge's serve state). Shown with the check's own
+   * lines, in their groups.
+   */
+  extraLines?: readonly ShownCheckLine[];
+  /** `B-326` — the one act a line offers, by its id (`Detect automatically`). */
+  lineActions?: Readonly<Partial<Record<string, ReactNode>>> | undefined;
 }): JSX.Element {
   const auth = useAuthSession();
   const capabilities = useAuthCapabilities();
@@ -585,8 +595,10 @@ export function PlayoutConnection({
         (grouped ? (
           <ConnectionCheckList
             grouped
+            actions={lineActions}
             lines={orderCheckLines([
               ...lines,
+              ...extraLines,
               // `CHECK-RERUN-01` — a running check starts clean: the console's lines too.
               ...consoleCheckLines({
                 // 🔴 `B-317` — where the CHECK found CG Bridge, never the socket this console is on.

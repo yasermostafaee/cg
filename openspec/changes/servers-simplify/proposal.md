@@ -30,7 +30,13 @@ server`), each with `Change`. An address is edited as a `Host` and a `Port`, eve
   The open edit is held by Station setup, survives a tab switch, marks the rail and is discarded on close. A
   reconnect while the dialog is open reads the configuration again, and a draft never crosses to another CG Bridge.
   The Set up page asks with the same fields (`StationAddressFields`, `stationFields.ts`): one set, one rule.
-- **Part B — CasparCG, derived (`R-096`, `B-326`; T2, T3).** Not yet built.
+- **Part B — CasparCG, derived (`R-096`, `B-326`; T2, T3).** The cards are `CasparCG A` and `CasparCG B · backup`;
+  in a Playout station (its CG Bridge advertises `auth: playout`) A is a fact — `On the Playout machine`, its host,
+  ports and state — and B stays addable, every port's default its placeholder. The graphics address sits behind
+  `Advanced` (collapsed in a Playout station) as `Where CasparCG fetches graphics`, and nothing calls CG Bridge's
+  machine "this machine". CG Bridge's one predicate of who cannot fetch graphics now also judges a host that names
+  ANOTHER machine (`servesFromAnotherMachine`, against its own addresses), and says so as `elsewhere`; the console
+  shows it as the check's failed line with `Detect automatically`.
 - **Part C — a wrong CasparCG host never fails in silence (`B-327`; T6).** Not yet built. `R-097` is filed only.
 - **Part D — a station with no Playout (`R-098`; T4).** Not yet built.
 

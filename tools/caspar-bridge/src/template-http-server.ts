@@ -120,11 +120,21 @@ export function deriveServeOptions(
  * The predicate is deliberately ONE function used by every surface (boot line,
  * apply response, operator dialog) rather than three re-derivations — a second
  * local copy of "who can reach us" is how the name comes to lie (`B-100`/`P-012`).
+ *
+ * 🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — **AND A THIRD WAY: A HOST THAT IS NOT THIS MACHINE.** The
+ * owner's `.32` advertised `http://192.168.21.93:7911/…`, his own PC, and every `CG ADD` came back
+ * `CG OK` while CasparCG fetched the page from a machine that does not serve it. Neither half above
+ * sees it — the bind was `0.0.0.0` and the host was routable. So `ownAddresses` (this machine's,
+ * `detectServeHostCandidates()`: the list Station setup's chips show) is an input of the ONE
+ * predicate, and a host {@link servesFromAnotherMachine} names leaves EVERY configured server unable,
+ * a local one included. Required, not defaulted: every caller states what it judged against.
  */
 export function hostsUnableToFetchTemplates(
   casparHosts: readonly string[],
   options: TemplateServeOptions,
+  ownAddresses: readonly string[],
 ): readonly string[] {
+  if (servesFromAnotherMachine(options.serveHost, ownAddresses)) return [...casparHosts];
   const remote = casparHosts.filter((h) => !isLoopbackHost(h));
   if (remote.length === 0) return [];
   // Either half alone is fatal for a remote reader: a loopback BIND means the
@@ -133,6 +143,28 @@ export function hostsUnableToFetchTemplates(
   // routable, so `isLoopbackHost` is the right test for the bind too.
   const loopbackOnly = isLoopbackHost(options.bindHost) || isLoopbackHost(options.serveHost);
   return loopbackOnly ? remote : [];
+}
+
+/**
+ * 🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — **DOES THE ADVERTISED HOST NAME ANOTHER MACHINE THAN THIS ONE?**
+ *
+ * `true` when the host is an IPv4 address that is neither loopback (`127.0.0.0/8`) nor one of
+ * `ownAddresses` — this machine's, as {@link hostsUnableToFetchTemplates} is given them. Read inside that
+ * one predicate and by the serve state's `elsewhere`, so the boot line, the apply answer and Station
+ * setup's check say the same thing about the same host.
+ *
+ * ⚠ **A NAME IS NOT JUDGED.** `cg-bridge.local` may well be this machine, and only a lookup could say;
+ * a false alarm on a correct name would teach the operator to read past the true one. An IPv4 literal
+ * is a fact about which machine it is, so only that is judged — the owner's case was one.
+ */
+export function servesFromAnotherMachine(
+  serveHost: string,
+  ownAddresses: readonly string[],
+): boolean {
+  const host = serveHost.trim();
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return false;
+  if (host.startsWith('127.')) return false;
+  return !ownAddresses.includes(host);
 }
 
 /**
@@ -149,7 +181,20 @@ export function hostsUnableToFetchTemplates(
 export function templateServeUnreachableWarning(
   unreachable: readonly string[],
   options: TemplateServeOptions,
+  ownAddresses: readonly string[],
 ): string {
+  // `B-326` — the third way, in its own words: the host is not this machine, so no bind can help.
+  if (servesFromAnotherMachine(options.serveHost, ownAddresses)) {
+    return (
+      `[caspar-bridge] ⚠ the CG ADD URL host ${options.serveHost} is NOT this machine ` +
+      `(${ownAddresses.length > 0 ? ownAddresses.join(', ') : 'no LAN address'}), so these CasparCG ` +
+      `servers would fetch graphics from another machine: ${unreachable.join(', ')}. ` +
+      `Those servers will show live sources but NO TEMPLATE — no background, no text — ` +
+      `and CG ADD will still report success. ` +
+      `Clear the graphics host in Station setup → Connection → Advanced to detect it again, ` +
+      `or drop --template-serve-host if it is set there.\n`
+    );
+  }
   return (
     `[caspar-bridge] ⚠ template HTTP server is LOOPBACK-ONLY ` +
     `(bind ${options.bindHost}, CG ADD URL host ${options.serveHost}:${String(options.port)}) ` +

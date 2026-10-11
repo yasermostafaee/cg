@@ -291,9 +291,10 @@ const LABELS: readonly { shown: string; text?: string; file: string }[] = [
   },
   // `RELEASE-0112-01` (`R-085`) — «با موتورِ پشتیبان»: server B in Station setup, the backup engine's
   // sign-in, and the status bar's words beside `BACKUP B`.
+  // `SERVERS-SIMPLIFY-01` (T2) — the card was `Backup server`.
   {
-    shown: 'Backup server',
-    text: '<span className="cg-card__title">Backup server</span>',
+    shown: 'CasparCG B · backup',
+    text: '<span className="cg-card__title">CasparCG B · backup</span>',
     file: 'apps/runtime/src/renderer/features/stationSetup/StationSetupDialog.tsx',
   },
   {

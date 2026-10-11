@@ -13559,7 +13559,7 @@ being typed stands unless what is stored there changed.
   the rail is quiet, and `Apply servers` sends nothing of X
 - WHEN the link blinks back to the SAME CG Bridge THEN the draft being typed stands
 
-## [ ] B-326 — A graphics (serve) host that names another machine is never judged ⟨priority: high — `B-162` again: a take reports success and shows nothing⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` · `openspec/changes/servers-simplify/`
+## [~] B-326 — A graphics (serve) host that names another machine is never judged ⟨priority: high — `B-162` again: a take reports success and shows nothing⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part B · `openspec/changes/servers-simplify/`
 
 **Repro / Actual (the owner's logs from the `.32` CG Bridge, 2026-10-10):** the serve host held `192.168.21.93` (his
 own PC). CG Bridge logged `template HTTP server LAN-EXPOSED on 0.0.0.0:7911 — CG ADD URL host is 192.168.21.93`, and

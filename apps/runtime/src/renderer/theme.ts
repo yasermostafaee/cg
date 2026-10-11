@@ -1107,9 +1107,11 @@ export const STATION_SETUP_PX = {
    * AMCP or OSC port box in the CasparCG cards below it.
    */
   fieldsHostPortRatio: '2.8fr 1fr',
-  /** The lede above a field grid — `.card-body p.secondary{font-size:13px;margin-bottom:19px}`. */
-  cardLedeText: 13,
-  cardLedeGap: 19,
+  /*
+    `SERVERS-SIMPLIFY-01` (T3) — the card LEDE (`.card-body p.secondary`) is gone with the one sentence it
+    carried: the graphics card's explanation, which an operator surface does not carry. Its two tokens went
+    with it, so nothing declares a size no element reads.
+  */
   /**
    * The A/B chip on a server card's head — `.server-label`, a 25 × 25 grid-centred 12 px box
    * with a 6 px corner. ⚠ Its mint ground is NOT adopted: green means air or health by the
@@ -3126,8 +3128,6 @@ export const cssVars = {
   '--r-setup-fields-gap': `${String(STATION_SETUP_PX.fieldsRowGap)}px ${String(STATION_SETUP_PX.fieldsColGap)}px`,
   '--r-setup-fields-three': STATION_SETUP_PX.fieldsThreeRatio,
   '--r-setup-fields-host-port': STATION_SETUP_PX.fieldsHostPortRatio,
-  '--r-setup-card-lede-text': `${String(STATION_SETUP_PX.cardLedeText)}px`,
-  '--r-setup-card-lede-gap': `${String(STATION_SETUP_PX.cardLedeGap)}px`,
   '--r-setup-server-chip-box': `${String(STATION_SETUP_PX.serverChipBox)}px`,
   '--r-setup-server-chip-text': `${String(STATION_SETUP_PX.serverChipText)}px`,
   '--r-setup-server-chip-radius': `${String(STATION_SETUP_PX.serverChipRadius)}px`,

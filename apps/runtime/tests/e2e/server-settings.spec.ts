@@ -170,20 +170,22 @@ test('settings panel: the serve address sits beside the server hosts, offers can
     reach this machine, and the operator sets it in the same visit where they set the hosts it
     depends on.
   */
-  const serve = panel.getByRole('region', { name: 'Template serve address' });
-  await expect(serve).toBeVisible();
   /*
-    ⚠ `STATION-CHROME-02` §3 — matched case-INSENSITIVELY on purpose. The card head's
-    treatment is the ONE treatment (`.cg-card__title`) — uppercase-by-CSS then, the reference's
-    16 px sentence case since `RUNTIME-REDESIGN-01` Phase 7 — and the string in the DOM was
-    sentence case throughout; Playwright matches the DOM. Pinning either spelling would pin the
-    mechanism rather than the words, and the words are the claim.
+    `SERVERS-SIMPLIFY-01` (T3) — named for what it is: `Where CasparCG fetches graphics`, under `Advanced`
+    (open here: the offline mock is not a Playout station). It was `How those servers reach this machine`,
+    and the owner read "this machine" as his own PC.
   */
-  await expect(serve.getByText(/how those servers reach this machine/i)).toBeVisible();
+  const serve = panel.getByRole('region', { name: 'Where CasparCG fetches graphics' });
+  await expect(serve).toBeVisible();
+  // ⚠ `STATION-CHROME-02` §3 — case-INSENSITIVE on purpose: the words are the claim, not their case.
+  await expect(serve.getByText(/where casparcg fetches graphics/i)).toBeVisible();
+  await expect(panel.getByText(/this machine/i)).toHaveCount(0);
 
-  // The port's meaning is stated where it is set: empty is today's behaviour, pinning it is what
-  // makes a firewall rule possible — the only reason the field exists.
-  await expect(serve.getByText(/Empty = ephemeral/)).toBeVisible();
+  // T5 — the port's default is said where it is set, as its placeholder: empty is assigned automatically.
+  await expect(panel.getByLabel('Graphics port')).toHaveAttribute(
+    'placeholder',
+    'Assign automatically',
+  );
 
   /*
     🔴 NOTHING HERE OFFERS TO RESTART THE BRIDGE. Its lifetime is deliberately outside this
@@ -192,14 +194,14 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   */
   await expect(panel.getByRole('button', { name: /restart/i })).toHaveCount(0);
 
-  await panel.getByLabel('Template serve host').fill('192.168.21.93');
-  await panel.getByLabel('Template serve port').fill('7911');
+  await panel.getByLabel('Graphics host').fill('192.168.21.93');
+  await panel.getByLabel('Graphics port').fill('7911');
   await panel.getByRole('button', { name: 'Apply server settings' }).click();
   await expect(panel.getByText(/^Applied\./)).toBeVisible();
 
   // The value survives a close/reopen — which is the whole point of giving it a stored layer.
   await panel.getByRole('button', { name: 'Close' }).click();
   await openServers(page);
-  await expect(panel.getByLabel('Template serve host')).toHaveValue('192.168.21.93');
-  await expect(panel.getByLabel('Template serve port')).toHaveValue('7911');
+  await expect(panel.getByLabel('Graphics host')).toHaveValue('192.168.21.93');
+  await expect(panel.getByLabel('Graphics port')).toHaveValue('7911');
 });

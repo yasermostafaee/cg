@@ -116,6 +116,7 @@ export {
   guessLanHost,
   hostsUnableToFetchTemplates,
   isLoopbackHost,
+  servesFromAnotherMachine,
   templateServeUnreachableWarning,
 } from './template-http-server.js';
 export type { TemplateServeOptions, TemplateServeOverride } from './template-http-server.js';

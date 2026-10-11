@@ -7,6 +7,8 @@ import {
   guessLanHost,
   hostsUnableToFetchTemplates,
   isLoopbackHost,
+  servesFromAnotherMachine,
+  templateServeUnreachableWarning,
 } from '../src/template-http-server.js';
 import type { TemplateInfo } from '@cg/shared-ipc';
 
@@ -193,19 +195,60 @@ describe('deriveServeOptions (host/reachability)', () => {
 describe('hostsUnableToFetchTemplates (B-162 — the correctness verdict)', () => {
   const loopbackServe = { bindHost: '127.0.0.1', port: 7911, serveHost: '127.0.0.1' };
   const lanServe = { bindHost: '0.0.0.0', port: 7911, serveHost: '192.168.21.93' };
+  /*
+    `B-326` — the machine's own addresses are an input now (the list Station setup's chips show). These
+    cases are about the two LOOPBACK halves, so the machine is the one the routable host names.
+  */
+  const thisMachine = ['192.168.21.93'];
 
   it('names a remote server that a loopback serve address cannot reach', () => {
-    expect(hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], loopbackServe)).toEqual([
-      '192.168.21.50',
-    ]);
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], loopbackServe, thisMachine),
+    ).toEqual(['192.168.21.50']);
   });
 
   it('is silent when every configured server is loopback', () => {
-    expect(hostsUnableToFetchTemplates(['127.0.0.1', 'localhost'], loopbackServe)).toEqual([]);
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', 'localhost'], loopbackServe, thisMachine),
+    ).toEqual([]);
   });
 
   it('is silent when the serve address is routable', () => {
-    expect(hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], lanServe)).toEqual([]);
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], lanServe, thisMachine),
+    ).toEqual([]);
+  });
+
+  /*
+    🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — THE OWNER'S `.32`: the serve host was `192.168.21.93`, his own
+    PC. The bind was `0.0.0.0` and the host routable, so neither loopback half saw it — and CasparCG fetched
+    every page from a machine that does not serve it.
+  */
+  it('🔴 B-326 — a host that is not this machine leaves EVERY server unable, a local one too', () => {
+    expect(
+      hostsUnableToFetchTemplates(['127.0.0.1', '192.168.21.50'], lanServe, ['192.168.21.32']),
+    ).toEqual(['127.0.0.1', '192.168.21.50']);
+  });
+
+  it('B-326 — loopback, this machine’s own address, and a NAME are not judged as another machine', () => {
+    expect(servesFromAnotherMachine('127.0.0.1', ['192.168.21.32'])).toBe(false);
+    expect(servesFromAnotherMachine('127.0.0.2', ['192.168.21.32'])).toBe(false);
+    expect(servesFromAnotherMachine('192.168.21.32', ['192.168.21.32'])).toBe(false);
+    expect(servesFromAnotherMachine('cg-bridge.local', ['192.168.21.32'])).toBe(false);
+    // Positive control: the owner's host on the owner's `.32`, and an unspecified address.
+    expect(servesFromAnotherMachine('192.168.21.93', ['192.168.21.32'])).toBe(true);
+    expect(servesFromAnotherMachine('0.0.0.0', ['192.168.21.32'])).toBe(true);
+  });
+
+  it('B-326 — the boot and apply line says it in its own words, never "loopback-only"', () => {
+    const line = templateServeUnreachableWarning(['127.0.0.1'], lanServe, ['192.168.21.32']);
+    expect(line).toContain('192.168.21.93 is NOT this machine (192.168.21.32)');
+    expect(line).toContain('NO TEMPLATE');
+    expect(line).not.toContain('LOOPBACK-ONLY');
+    // Control: the loopback half keeps its own sentence.
+    expect(
+      templateServeUnreachableWarning(['192.168.21.50'], loopbackServe, ['192.168.21.32']),
+    ).toContain('LOOPBACK-ONLY');
   });
 
   /*
@@ -216,21 +259,21 @@ describe('hostsUnableToFetchTemplates (B-162 — the correctness verdict)', () =
   */
   it('names the server when the bind is routable but the advertised host is loopback', () => {
     expect(
-      hostsUnableToFetchTemplates(['192.168.21.50'], {
-        bindHost: '0.0.0.0',
-        port: 7911,
-        serveHost: '127.0.0.1',
-      }),
+      hostsUnableToFetchTemplates(
+        ['192.168.21.50'],
+        { bindHost: '0.0.0.0', port: 7911, serveHost: '127.0.0.1' },
+        thisMachine,
+      ),
     ).toEqual(['192.168.21.50']);
   });
 
   it('names the server when the advertised host is routable but the bind is loopback', () => {
     expect(
-      hostsUnableToFetchTemplates(['192.168.21.50'], {
-        bindHost: '127.0.0.1',
-        port: 7911,
-        serveHost: '192.168.21.93',
-      }),
+      hostsUnableToFetchTemplates(
+        ['192.168.21.50'],
+        { bindHost: '127.0.0.1', port: 7911, serveHost: '192.168.21.93' },
+        thisMachine,
+      ),
     ).toEqual(['192.168.21.50']);
   });
 });

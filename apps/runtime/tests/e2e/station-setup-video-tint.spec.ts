@@ -76,7 +76,7 @@ test('`MODAL-TRUTH-01` — the video card is green only while the channel has be
   /*
     The PLAIN card ground, read off a real one rather than from a token name. The Channel
     pane's only card IS the video card (Outputs renders one only once the bridge has
-    answered), so the reference comes from Servers, whose `Primary server` card is always
+    answered), so the reference comes from Connection, whose `Playout` card is always
     drawn — same dialog, same `[data-modal-size='fixed']` scope, same family.
   */
   await setup.getByRole('tab', { name: 'Connection' }).click();

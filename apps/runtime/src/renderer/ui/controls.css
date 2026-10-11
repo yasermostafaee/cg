@@ -4967,6 +4967,24 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-secondary);
 }
 
+/*
+ * 🔴 `SERVERS-SIMPLIFY-01` (T3) — `Advanced`: a card that opens and closes by its own head (a `<details>` whose
+ * `<summary>` IS the card head). The browser's own marker goes; the head carries the shared `Icon` chevron.
+ * Collapsed, the head is the whole card, so it loses the rule it draws above the body.
+ */
+.cg-setup-advanced > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.cg-setup-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.cg-setup-advanced:not([open]) > summary {
+  border-bottom: 0;
+}
+
 /* A cell that spans the grid — the reference's `.field.full` (its `Server strategy`). */
 .cg-setup-field--full {
   grid-column: 1 / -1;
@@ -5077,14 +5095,6 @@ input[type='checkbox']:disabled:checked {
      the same chip at a second level and "inert" must not be a property only one of them has. */
   cursor: default;
   transition: none;
-}
-
-/* The lede a card puts ABOVE its field grid — `.card-body p.secondary`. */
-.cg-setup-lede {
-  margin: 0 0 var(--r-setup-card-lede-gap);
-  font-size: var(--r-setup-card-lede-text);
-  line-height: 1.55;
-  color: var(--r-text-secondary);
 }
 
 /*

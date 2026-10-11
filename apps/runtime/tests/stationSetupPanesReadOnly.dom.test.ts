@@ -117,10 +117,18 @@ describe('Servers', () => {
     expect(again.pane.textContent).toContain('Server changes are paused while on air');
   });
 
-  it('CONTROL — a station-admin sees the fields, Apply servers and Add backup', async () => {
+  /*
+    ⚠ AMENDED by `SERVERS-SIMPLIFY-01` (T2). A signed-in station is a PLAYOUT station, and there CasparCG A is
+    where the Playout is — a fact for everyone, a station-admin included. So the control is the fields that
+    ARE a station-admin's: the graphics address, server B, and the commit.
+  */
+  it('CONTROL — a station-admin sees the fields that are theirs, Apply servers and Add backup', async () => {
     const { pane, dialog } = await open('servers', { auth: ADMIN });
-    expect(pane.querySelector('input[aria-label="Primary host"]')).not.toBeNull();
-    expect(pane.querySelector('[data-setup-readonly]')).toBeNull();
+    expect(pane.querySelector('input[aria-label="Graphics host"]')).not.toBeNull();
+    expect(
+      pane.querySelector('input[aria-label="Primary host"]'),
+      'CasparCG A is a fact',
+    ).toBeNull();
     expect(buttonNamed(dialog, 'Apply server settings')).toBeDefined();
     expect(buttonNamed(pane, 'Add backup')).toBeDefined();
     expect(contract(pane).tag).toBe('Apply together');

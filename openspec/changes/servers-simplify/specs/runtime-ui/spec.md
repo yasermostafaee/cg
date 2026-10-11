@@ -60,3 +60,43 @@ changed meanwhile.
 #### Scenario: A blink of the link
 
 - **WHEN** the link drops and comes back to the same CG Bridge **THEN** the draft being typed stands
+
+### Requirement: Station setup SHALL name the CasparCG engines, and in a Playout station SHALL show CasparCG A as a fact
+
+Station setup's server cards SHALL be named `CasparCG A` and `CasparCG B · backup`, and the rail's foot SHALL name
+`CasparCG`; the redundancy role (`Primary A`) SHALL stay in the status bar and the dialog's subtitle. In a Playout
+station — one whose CG Bridge advertises `auth: playout` — CasparCG A SHALL NOT be typed by anyone: its card SHALL
+read `On the Playout machine`, its host as stored, its ports and its state, as facts. CasparCG B SHALL stay addable
+and editable by a station admin. Every port's default SHALL be its field's placeholder — AMCP `5250`, OSC `6251` for
+A and `6252` for B, in the Add backup dialog too — and an empty port field SHALL be applied as its default.
+
+#### Scenario: A Playout station
+
+- **WHEN** a station admin opens the Connection tab of a Playout station **THEN** `CasparCG A` reads `On the
+Playout machine`, `127.0.0.1`, `5250`, `6251` and its state, with nothing to type **AND** `Add backup` is offered
+
+#### Scenario: Defaults as placeholders
+
+- **WHEN** a station has no Playout and its server A is on the default ports **THEN** both port fields are empty
+  with `5250` and `6251` as placeholders **AND** applying sends `5250` and `6251`
+
+### Requirement: The graphics address SHALL sit behind Advanced, named for what it is
+
+Station setup SHALL show the address CasparCG fetches graphics from under `Advanced` — collapsed in a Playout
+station, open otherwise — titled `Where CasparCG fetches graphics`, as a `Host` and a `Port` with the placeholders
+`Detect automatically` and `Assign automatically`. The candidate addresses SHALL be labelled as CG Bridge's
+machine's, none marked as the answer, and no sentence on the tab SHALL call CG Bridge's machine "this machine".
+When CG Bridge reports that the graphics host in force names another machine, the connection check SHALL carry a
+failed line naming that host, and for a station admin SHALL offer `Detect automatically`, which clears the field
+and opens `Advanced`; `Apply servers` commits it, as every edit on the tab.
+
+#### Scenario: The owner's `.32` serving from `.93`
+
+- **WHEN** CG Bridge reports the graphics host `192.168.21.93` as another machine **THEN** the check reads `CasparCG
+would fetch graphics from 192.168.21.93, another machine than CG Bridge's.` as a failure **AND** `Detect
+automatically` empties the field and opens `Advanced`
+
+#### Scenario: Collapsed in a Playout station
+
+- **WHEN** the Connection tab of a Playout station opens **THEN** `Advanced` is collapsed **AND** with no Playout it
+  is open

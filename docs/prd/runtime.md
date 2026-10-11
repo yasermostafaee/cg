@@ -4604,7 +4604,7 @@ test. The Set up page asks with the same fields (one component, one rule). **Acc
 (split, paste, empty = default, the comparison); Chromium for the card and the Set up page, the port on its host's
 row; a Linux `e2e` run.
 
-## [ ] R-096 — CasparCG is derived in a Playout station, and the cards say `CasparCG` ⟨priority: high — the owner read `Primary server` as "where the bridge is"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` (T2, T3) · `openspec/changes/servers-simplify/`
+## [~] R-096 — CasparCG is derived in a Playout station, and the cards say `CasparCG` ⟨priority: high — the owner read `Primary server` as "where the bridge is"⟩ — FILED 2026-10-11 by `SERVERS-SIMPLIFY-01` Part B (T2, T3) · `openspec/changes/servers-simplify/`
 
 **What:** a Playout station is one whose CG Bridge advertises `auth: playout`. There, server A is not typed: a
 fact row reads `On the Playout machine`, its host as stored, its ports and its health. The cards are `CasparCG A`

@@ -36,12 +36,46 @@ decides when `Connect` commits.
       deltas that named `Servers` (amended in place, dated).
 - [x] A.8 The release guide on `dev` (`docs/release/0.11.4/install-guide.fa.md`) and its pins
       (`tools/release/tests/guide.test.ts`) follow the labels.
-- [ ] A.9 A Linux `e2e` run that RAN, on the commit carrying Part A — URL here.
-- [ ] A.10 The Desktop run's `installer-smoke` and `acceptance-fresh` green on the commit carrying Part A — URL here.
+- [x] A.9 Discharged on `11c3df68`. The Linux `e2e` job RAN (from its log: runtime 339 passed, 2 skipped; designer
+      303 passed; `connection-card.spec.ts` and `playout-address-gate.spec.ts` passed) —
+      https://github.com/yasermostafaee/cg/actions/runs/38092929277/job/114332915528
+- [x] A.10 The whole Desktop run green on `11c3df68`: `installer-smoke` read the split fields back
+      (`…the address typed, and CONNECT pressed — http://127.0.0.1:59999`) —
+      https://github.com/yasermostafaee/cg/actions/runs/38092929297/job/114335011797 — and `acceptance-fresh`'s
+      `stuck-station` was 22/22, its card reading `10.1.0.100 : 8080` —
+      https://github.com/yasermostafaee/cg/actions/runs/38092929297/job/114335011735
 
 ## B. CasparCG, derived (`R-096`, `B-326`; T2, T3)
 
-- [ ] B.1 Not started.
+Lane: **FULL** — CG Bridge's one predicate of who cannot fetch graphics (`hostsUnableToFetchTemplates`), an IPC
+schema field (`TemplateServeInfo.elsewhere`), and a surface that decides what a station admin may type. A CG Bridge
+release matter: the boot line, the apply answer and the serve state change. No refusal condition changes —
+`unreachable` reports and never refuses.
+
+- [x] B.0 Reproduced first: the owner's `.32` advertising `.93`. For the servers `127.0.0.1` and `192.168.21.50`,
+      bound on `0.0.0.0` and advertising `192.168.21.93`, `hostsUnableToFetchTemplates` answered `[]` (routable,
+      so "reachable"). Ablation on the fix (the new judgement removed) reds exactly that case: it answered `[]`
+      where both servers are named.
+- [x] B.1 CG Bridge: `servesFromAnotherMachine` (an IPv4 host neither loopback nor one of this machine's addresses;
+      a name is not judged) inside the ONE predicate, whose third input is this machine's addresses
+      (`detectServeHostCandidates`, the chips' list) at every call site; `elsewhere` in the serve state and the apply
+      answer; the boot/apply line in its own words. `@cg/shared-ipc`: `TemplateServeInfo.elsewhere` (optional),
+      `graphics` among the console's lines, in the After sign-in group.
+- [x] B.2 The cards are `CasparCG A` / `CasparCG B · backup`, the rail's foot `CasparCG`; in a Playout station A is
+      a fact row (`On the Playout machine`, host, ports, the status bar's word for its state).
+- [x] B.3 T5 for the CasparCG ports: empty is the default, the default the placeholder (A `5250`/`6251`, B
+      `5250`/`6252`, the Add backup dialog too).
+- [x] B.4 `Advanced` (collapsed in a Playout station): `Where CasparCG fetches graphics`, `Host` / `Port`, the chips
+      labelled as CG Bridge's machine's addresses; the lede, the port hint and every "this machine" gone; the
+      remote-host note and the apply sentences reworded. The unused `.cg-setup-lede` and its two tokens removed.
+- [x] B.5 The `graphics` line in the check when CG Bridge says `elsewhere`, with `Detect automatically`.
+- [x] B.6 Tests: bridge `template-http-server.test.ts` (B-326 ×3); jsdom `stationSetupCaspar.dom.test.ts` (10);
+      the specs that pinned the old names, port values or wording, amended; Chromium `connection-card.spec.ts`
+      (`CasparCG A` a fact, `Advanced` collapsed, the owner's `.93` applied → the failed line →
+      `Detect automatically` → applied → gone, through a real CG Bridge), `server-settings.spec.ts`,
+      `station-setup-geometry.spec.ts` (the lede's absence pinned). Green locally (Windows; not a discharge).
+- [x] B.7 Swept by STRING and by COMPONENT; the 0.11.4 guide on `dev` and its pin name `CasparCG B · backup`.
+- [ ] B.8 A Linux `e2e` run that RAN, on the commit carrying Part B — URL here.
 
 ## C. A wrong CasparCG host never fails in silence (`B-327`; T6)
 

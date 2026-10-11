@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { DEFAULT_OSC_PORT } from '@cg/shared-ipc';
 import { hostError, hostValue, oscPortError, portError } from '../../ui/fieldValue.js';
+import { AMCP_PORT } from '../firstRun/firstRunStation.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
 
@@ -27,13 +29,17 @@ export function BackupServerDialog({
   onAdd: (draft: { host: string; amcpPort: string; oscPort: string }) => void;
 }): JSX.Element {
   const [host, setHost] = useState('');
-  const [amcpPort, setAmcpPort] = useState('5250');
-  // `CENTRAL-BRIDGE-01` rule 7 — the backup session's own port, one above the primary's (never 6250).
-  const [oscPort, setOscPort] = useState('6252');
+  /*
+    🔴 `SERVERS-SIMPLIFY-01` (T2, T5) — the ports are their DEFAULTS, shown as placeholders: an empty field
+    is the default (`5250`; the backup session's own OSC port, one above the primary's — `CENTRAL-BRIDGE-01`
+    rule 7, never 6250), and Station setup's draft reads it so.
+  */
+  const [amcpPort, setAmcpPort] = useState('');
+  const [oscPort, setOscPort] = useState('');
 
   const hostBad = hostError(host, { label: 'Host address' });
-  const amcpBad = portError(amcpPort, { min: 1, label: 'AMCP port' });
-  const oscBad = oscPortError(oscPort);
+  const amcpBad = portError(amcpPort, { min: 1, label: 'AMCP port', blankAllowed: true });
+  const oscBad = oscPort.trim() === '' ? null : oscPortError(oscPort);
   const invalid = hostBad !== null || amcpBad !== null || oscBad !== null;
 
   return (
@@ -82,6 +88,7 @@ export function BackupServerDialog({
             dir="ltr"
             allow="digits"
             aria-label="New backup AMCP port"
+            placeholder={String(AMCP_PORT)}
             value={amcpPort}
             onValueChange={setAmcpPort}
           />
@@ -92,6 +99,7 @@ export function BackupServerDialog({
             dir="ltr"
             allow="digits"
             aria-label="New backup OSC port"
+            placeholder={String(DEFAULT_OSC_PORT + 1)}
             value={oscPort}
             onValueChange={setOscPort}
           />

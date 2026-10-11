@@ -149,7 +149,9 @@ describe('Station setup — Servers (R-010)', () => {
     expect(el.textContent).toContain('192.168.21.50');
     expect(el.textContent).toContain('NO TEMPLATE');
     // `C-024` — the remedy is the field the operator is already looking at, never a restart.
-    expect(el.textContent).toContain('Serve host');
+    // `SERVERS-SIMPLIFY-01` (T3) — that field is the graphics Host, under Advanced; never "this machine".
+    expect(el.textContent).toContain('graphics Host under Advanced');
+    expect(el.textContent).not.toContain('this machine');
     expect(el.textContent).toContain('does not need restarting');
     expect(el.textContent).not.toContain('Restart the bridge');
     // The false reassurance must be GONE, not merely accompanied.
@@ -327,8 +329,8 @@ describe('Station setup — Servers (R-010)', () => {
   it('C-024: the serve host and a pinned port are submitted; an empty port is omitted', async () => {
     const { setConfig } = stub();
     const el = await renderStationSetup({ section: 'servers' });
-    await setSetupInput(el, 'Template serve host', '192.168.21.93');
-    await setSetupInput(el, 'Template serve port', '7911');
+    await setSetupInput(el, 'Graphics host', '192.168.21.93');
+    await setSetupInput(el, 'Graphics port', '7911');
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();
@@ -380,7 +382,7 @@ describe('Station setup — Servers (R-010)', () => {
     expect(struck?.textContent).toBe('192.168.21.93');
     expect(struck?.style.textDecoration).toContain('line-through');
 
-    const input = el.querySelector<HTMLInputElement>('input[aria-label="Template serve host"]');
+    const input = el.querySelector<HTMLInputElement>('input[aria-label="Graphics host"]');
     expect(input).not.toBeNull();
     expect(input?.disabled).toBe(false);
     expect(input?.value).toBe('192.168.21.93');
@@ -396,18 +398,26 @@ describe('Station setup — Servers (R-010)', () => {
   it('C-024: candidates are offered as CANDIDATES, and picking one fills the field', async () => {
     stub({ serveInfo: { ...SETUP_SERVE_INFO, candidates: ['192.168.21.93', '172.17.0.1'] } });
     const el = await renderStationSetup({ section: 'servers' });
-    // ⚠ The wording is the point: this list must never read as a verdict about which
-    // interface the plant can reach. That is exactly `guessLanHost()`'s failure.
-    expect(el.textContent).toContain('not a verdict');
+    /*
+      ⚠ The point is unchanged: this list must never read as a verdict about which interface the plant can
+      reach — exactly `guessLanHost()`'s failure. ⚠ REWRITTEN by `SERVERS-SIMPLIFY-01` (T3): the sentence that
+      said so called CG Bridge's machine "this machine", which the owner read as his own PC. The chips are now
+      LABELLED as what they are — CG Bridge's machine's addresses — and none is marked as the answer.
+    */
+    const chips = el.querySelector('[data-serve-candidates]');
+    expect(chips?.getAttribute('aria-label')).toBe("CG Bridge's machine's addresses");
+    expect(chips?.textContent).toContain("CG Bridge's machine");
+    expect(el.textContent).not.toContain("This machine's addresses");
+    expect(chips?.querySelectorAll('[aria-pressed="true"], [data-recommended]')).toHaveLength(0);
     const pick = el.querySelector<HTMLButtonElement>(
-      'button[aria-label="Use serve host 172.17.0.1"]',
+      'button[aria-label="Use graphics host 172.17.0.1"]',
     );
     expect(pick).not.toBeNull();
     await act(async () => {
       pick?.click();
       await Promise.resolve();
     });
-    const input = el.querySelector<HTMLInputElement>('input[aria-label="Template serve host"]');
+    const input = el.querySelector<HTMLInputElement>('input[aria-label="Graphics host"]');
     expect(input?.value).toBe('172.17.0.1');
   });
 
@@ -415,10 +425,10 @@ describe('Station setup — Servers (R-010)', () => {
     stub();
     const el = await renderStationSetup({ section: 'servers' });
     const port = (): HTMLInputElement | null =>
-      el.querySelector<HTMLInputElement>('input[aria-label="Template serve port"]');
+      el.querySelector<HTMLInputElement>('input[aria-label="Graphics port"]');
 
     // `79x11` cannot be typed into it at all now — the `x` never lands (§10.3).
-    await setSetupInput(el, 'Template serve port', '79x11');
+    await setSetupInput(el, 'Graphics port', '79x11');
     expect(port()?.value).toBe('7911');
     expect(applyButton(el).disabled, 'a valid port does not block the commit').toBe(false);
 
@@ -427,12 +437,12 @@ describe('Station setup — Servers (R-010)', () => {
       "assign one automatically" — the one state this field has that the endpoint ports do not,
       and the one a `required` rule would have quietly broken.
     */
-    await setSetupInput(el, 'Template serve port', '');
+    await setSetupInput(el, 'Graphics port', '');
     expect(el.querySelector('[data-setup-field="serve-port"] [data-field-error]')).toBeNull();
     expect(applyButton(el).disabled).toBe(false);
 
     // …and out of range is refused beside the field, with the commit dead.
-    await setSetupInput(el, 'Template serve port', '99999');
+    await setSetupInput(el, 'Graphics port', '99999');
     expect(
       el.querySelector('[data-setup-field="serve-port"] [data-field-error]')?.textContent,
     ).toContain('65535');

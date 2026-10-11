@@ -74,8 +74,14 @@ describe('§3(b) — Station setup below station-admin', () => {
     expect(setup.querySelectorAll('input[disabled]')).toHaveLength(0);
   });
 
-  /** ⭐ THE POSITIVE CONTROL — the same dialog, a principal who CAN commit. */
-  it('a STATION-ADMIN gets the real inputs, and no read-only values', async () => {
+  /**
+   * ⭐ THE POSITIVE CONTROL — the same dialog, a principal who CAN commit.
+   *
+   * ⚠ AMENDED by `SERVERS-SIMPLIFY-01` (T2): signed in, this is a PLAYOUT station, and there CasparCG A is
+   * where the Playout is — its values are facts for everyone. So the control reads the inputs that ARE a
+   * station-admin's (the graphics address), and the only values shown as values are CasparCG A's.
+   */
+  it('a STATION-ADMIN gets the real inputs; only CasparCG A reads as values', async () => {
     stationSetupStub({
       config: config(),
       auth: signedInStub('admin', [1], ['station-admin', 'operator', 'viewer']),
@@ -83,10 +89,17 @@ describe('§3(b) — Station setup below station-admin', () => {
     const setup = await renderStationSetup({ section: 'servers' });
 
     expect(
-      setup.querySelector('[aria-label="Primary host"]'),
-      'the admin lost the host input — every absence above is void',
+      setup.querySelector('[aria-label="Graphics host"]'),
+      'the admin lost the graphics input — every absence above is void',
     ).not.toBeNull();
-    expect(setup.querySelectorAll('[data-setup-readonly]')).toHaveLength(0);
+    const facts = [...setup.querySelectorAll('[data-setup-readonly]')];
+    expect(facts.length).toBeGreaterThan(0);
+    for (const fact of facts) {
+      expect(
+        fact.closest('section[aria-label="CasparCG A"]'),
+        'a value outside CasparCG A',
+      ).not.toBeNull();
+    }
   });
 
   /**

@@ -238,8 +238,6 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
       weightSemibold: read('--r-weight-semibold'),
       tagText: read('--r-setup-tag-text'),
       tagRadius: read('--r-setup-tag-radius'),
-      ledeText: read('--r-setup-card-lede-text'),
-      ledeGap: read('--r-setup-card-lede-gap'),
     };
   });
   /*
@@ -262,7 +260,8 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
     a `Host` field — which is correct, and is why an unscoped read is a strict-mode violation
     rather than a passing test that happened to pick one of the two.
   */
-  const primaryCard = dialog.getByRole('region', { name: 'Primary server' });
+  // `SERVERS-SIMPLIFY-01` (T2) — the card is `CasparCG A` (it was `Primary server`).
+  const primaryCard = dialog.getByRole('region', { name: 'CasparCG A' });
   const hostField = primaryCard.getByText('Host', { exact: true }).locator('..');
   const field = await hostField.evaluate((el) => {
     const s = getComputedStyle(el);
@@ -319,7 +318,7 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   });
   expect(chip).toEqual({ w: px(tokens.chipBox), h: px(tokens.chipBox) });
   // And the head's title is the NAME now — `Primary (A)` spent one title on two facts.
-  await expect(primaryCard.getByText('Primary server')).toBeVisible();
+  await expect(primaryCard.getByText('CasparCG A', { exact: true })).toBeVisible();
 
   // ── THE BACKUP EMPTY STATE — the reference's `.empty-backup` ───────────────────────
   /*
@@ -405,7 +404,7 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
     The tag reuses the section contract tag's chip tokens: one tag treatment at two levels.
   */
   const tag = await dialog
-    .getByRole('region', { name: 'Backup server' })
+    .getByRole('region', { name: 'CasparCG B' })
     .locator('.cg-setup-card-tag')
     .evaluate((el) => {
       const c = getComputedStyle(el);
@@ -413,29 +412,25 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
     });
   expect(tag).toEqual({ text: 'Optional', size: tokens.tagText, radius: tokens.tagRadius });
 
-  const lede = await dialog
-    .getByRole('region', { name: 'Template serve address' })
-    .locator('.cg-setup-lede')
-    .evaluate((el) => {
-      const c = getComputedStyle(el);
-      return { size: c.fontSize, mb: c.marginBottom };
-    });
-  expect(lede).toEqual({ size: tokens.ledeText, mb: tokens.ledeGap });
-
   /*
-    🔴 REDUNDANCY IS FOLDED IN, and this is the assertion that says so: the strategy and
-    the failover switch are INSIDE the region that holds the template address, because the
-    reference draws one card for all three and they are facts about the same pair of servers.
-    The `Redundancy options` region is gone — pinned as an absence, since a second card is
-    exactly what a later reader would restore.
+    🔴 `SERVERS-SIMPLIFY-01` (T3) — **THE LEDE IS GONE, AND THAT IS PINNED AS AN ABSENCE.** The graphics card
+    carried a sentence explaining how it works, which an operator surface does not carry; its title now says
+    what it is (`Where CasparCG fetches graphics`). The next helpful line is the regression, so it is the absence
+    that is asserted.
+
+    🔴 REDUNDANCY STAYS FOLDED IN with the graphics address, both under `Advanced` (open here: the e2e station is
+    not a Playout station). The `Redundancy options` region is gone — pinned as an absence, since a second card
+    is exactly what a later reader would restore.
   */
-  const serve = dialog.getByRole('region', { name: 'Template serve address' });
-  await expect(serve.getByLabel('Redundancy strategy')).toBeVisible();
-  await expect(serve.getByLabel('Auto-failover enabled')).toBeVisible();
+  await expect(dialog.locator('.cg-setup-lede')).toHaveCount(0);
+  const advanced = dialog.locator('[data-setup-advanced]');
+  await expect(
+    advanced.getByRole('region', { name: 'Where CasparCG fetches graphics' }),
+  ).toBeVisible();
+  await expect(advanced.getByLabel('Redundancy strategy')).toBeVisible();
+  await expect(advanced.getByLabel('Auto-failover enabled')).toBeVisible();
   await expect(dialog.getByRole('region', { name: 'Redundancy options' })).toHaveCount(0);
-  // ⚠ And the card keeps the app's OWN name, which `server-settings.spec.ts` queries by:
-  // the reference's `Station connection` is not adopted and nothing is reworded.
-  await expect(serve.getByText(/how those servers reach this machine/i)).toBeVisible();
+  await expect(dialog.getByText(/this machine/i)).toHaveCount(0);
 
   /*
     🔴 `SETTINGS-POLISH-04` §4 — **THIS ASSERTION WAS INVERTED, AND THE PARAGRAPH THAT JUSTIFIED

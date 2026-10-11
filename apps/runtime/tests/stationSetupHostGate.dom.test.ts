@@ -99,12 +99,12 @@ describe('MODAL-TRUTH-01 — an impossible address is refused, and cannot be app
     stationSetupStub();
     const el = await renderStationSetup({ section: 'servers' });
 
-    await setSetupInput(el, 'Template serve host', '10.0.999.1');
+    await setSetupInput(el, 'Graphics host', '10.0.999.1');
     expect(fieldError(el, 'serve-host')).toContain('four parts');
     expect(applyButton(el).disabled).toBe(true);
 
     // Blank is a real state on this one field and means "derive it" (`C-024`).
-    await setSetupInput(el, 'Template serve host', '');
+    await setSetupInput(el, 'Graphics host', '');
     expect(fieldError(el, 'serve-host')).toBe('');
     expect(applyButton(el).disabled).toBe(false);
   });

@@ -8,7 +8,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CONNECTION_CHECK_GROUPS } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -137,9 +137,15 @@ function writeShowAll(on: boolean): void {
 export function ConnectionCheckList({
   lines,
   grouped = false,
+  actions,
 }: {
   lines: readonly ShownCheckLine[];
   grouped?: boolean | undefined;
+  /**
+   * 🔴 `SERVERS-SIMPLIFY-01` (`B-326`) — the ONE act a line offers, under its sentence, keyed by the line's
+   * id: the graphics line's `Detect automatically`. A line with nothing to do has none.
+   */
+  actions?: Readonly<Partial<Record<string, ReactNode>>> | undefined;
 }): JSX.Element {
   const still = usePrefersReducedMotion();
   const [showAll, setShowAll] = useState(readShowAll);
@@ -168,7 +174,7 @@ export function ConnectionCheckList({
             <div key={group.id} role="group" aria-label={group.title} data-check-group={group.id}>
               {(!folded || attention > 0) && <h4 style={styles.groupHead}>{group.title}</h4>}
               <ul style={styles.list}>
-                <CheckLineItems lines={mine} still={still} hidePasses={folded} />
+                <CheckLineItems lines={mine} still={still} hidePasses={folded} actions={actions} />
                 {folded && (
                   <li style={styles.line} data-check-fold={group.id}>
                     <span
@@ -209,7 +215,7 @@ export function ConnectionCheckList({
   }
   return (
     <ul style={styles.list} aria-label="Connection check" aria-busy={checking}>
-      <CheckLineItems lines={lines} still={still} />
+      <CheckLineItems lines={lines} still={still} actions={actions} />
     </ul>
   );
 }
@@ -218,11 +224,13 @@ function CheckLineItems({
   lines,
   still,
   hidePasses = false,
+  actions,
 }: {
   lines: readonly ShownCheckLine[];
   still: boolean;
   /** `R-092` — passes folded into their group's one line: kept, `hidden`. */
   hidePasses?: boolean;
+  actions?: Readonly<Partial<Record<string, ReactNode>>> | undefined;
 }): JSX.Element {
   return (
     <>
@@ -269,6 +277,11 @@ function CheckLineItems({
               >
                 <Icon icon={Copy} size={14} />
               </Button>
+            </div>
+          )}
+          {actions?.[line.id] !== undefined && line.status !== 'checking' && (
+            <div style={styles.command} data-check-action={line.id}>
+              {actions[line.id]}
             </div>
           )}
         </li>

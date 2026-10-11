@@ -189,6 +189,14 @@ function healthDotStyle(label: SessionLabel): { color: string } {
   return label.style;
 }
 
+/**
+ * `SERVERS-SIMPLIFY-01` (T2) — a server's state in THIS bar's own word, for Station setup's `CasparCG A` fact
+ * row: one spelling of the state, read in two places, never a second map of it.
+ */
+export function serverStateWord(state: string): string {
+  return sessionLabel(state).text;
+}
+
 function sessionLabel(state: string): SessionLabel {
   switch (state) {
     case 'healthy':

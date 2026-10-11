@@ -193,6 +193,12 @@ export const CONSOLE_CHECK_IDS = [
   'signin',
   // `RELEASE-0112-01` (`R-085`) — CG Bridge's own session on the BACKUP engine (from `bridgeSession.engines`).
   'bridge-session-backup',
+  /*
+    🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — where CasparCG fetches graphics, when CG Bridge's serve state says
+    the host in force names another machine (`TemplateServeInfo.elsewhere`): worded by the console from the
+    bridge's verdict, never judged by it.
+  */
+  'graphics',
 ] as const;
 export type ConsoleCheckId = (typeof CONSOLE_CHECK_IDS)[number];
 /** Any line of the check as a console shows it. */
@@ -210,8 +216,8 @@ export type CheckLineId = ConnectionCheckId | ConsoleCheckId;
  *      (`R-084`: `GET /api/v1/system/version`, read by CG Bridge; `not served` is never a refusal);
  *   3. **Sign-in** — whether this console CAN sign in, this console's own sign-in, then CG Bridge's
  *      own Playout session;
- *   4. **After sign-in** — what needs a signed-in session: CasparCG through CG Bridge, OSC, the CG
- *      license, the channels.
+ *   4. **After sign-in** — what needs a signed-in session: CasparCG through CG Bridge, where CasparCG
+ *      fetches graphics (`B-326`, a console line), OSC, the CG license, the channels.
  *
  * ONE constant: the bridge orders its answer by it and the console groups by it (golden rule 6). The
  * retired `ports` and `topology` (`R-090`) are in no group.
@@ -227,7 +233,8 @@ export const CONNECTION_CHECK_GROUPS = [
   {
     id: 'session',
     title: 'After sign-in',
-    lines: ['amcp', 'osc', 'license', 'channels'],
+    // `B-326` — where CasparCG fetches graphics, beside CasparCG's own line.
+    lines: ['amcp', 'graphics', 'osc', 'license', 'channels'],
   },
 ] as const satisfies readonly {
   readonly id: string;

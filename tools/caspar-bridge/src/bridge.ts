@@ -257,7 +257,7 @@ import {
   templateServeUnreachableWarning,
   type TemplateServeOverride,
 } from './template-http-server.js';
-import { normalizeServeHost } from './serve-host-config.js';
+import { detectServeHostCandidates, normalizeServeHost } from './serve-host-config.js';
 import { AuthSession } from './auth-session.js';
 import {
   AMCP_PROBE_TIMEOUT_MS,
@@ -3339,9 +3339,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const exposed =
     serve !== null && serve.bindHost !== '127.0.0.1' && serve.bindHost !== 'localhost';
   // B-162 — the CORRECTNESS verdict, from the SAME predicate the apply path
-  // uses, over EVERY declared server rather than the primary alone.
+  // uses, over EVERY declared server rather than the primary alone — and (`B-326`) against this
+  // machine's own addresses, the list Station setup's chips show.
+  const ownAddresses = detectServeHostCandidates();
   const unreachable =
-    serve === null ? [] : hostsUnableToFetchTemplates(configuredCasparHosts(connection), serve);
+    serve === null
+      ? []
+      : hostsUnableToFetchTemplates(configuredCasparHosts(connection), serve, ownAddresses);
   /*
     C-024 — WHICH LAYER ANSWERED, computed from the same two inputs the resolution used.
 
@@ -3376,7 +3380,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // privacy. Quiet when every declared server can reach us; loud, naming the
   // servers and the flag that fixes it, when one cannot.
   if (unreachable.length > 0 && serve !== null) {
-    process.stderr.write(templateServeUnreachableWarning(unreachable, serve));
+    process.stderr.write(templateServeUnreachableWarning(unreachable, serve, ownAddresses));
   }
 
   /*

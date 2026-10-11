@@ -390,6 +390,14 @@ const TemplateServeInfoSchema = z.object({
    */
   unreachable: z.array(z.string()).optional(),
   /**
+   * 🔴 `B-326` (`SERVERS-SIMPLIFY-01` T3) — **WHY, when it is the third way:** the host in force names
+   * another machine than CG Bridge's (an IPv4 address that is neither loopback nor one of `candidates`),
+   * so every configured server would fetch graphics from there. The bridge's verdict, from the same
+   * predicate as `unreachable`; a surface words it and never judges a host itself. Optional: an older
+   * bridge does not say, and absent means it was not judged.
+   */
+  elsewhere: z.boolean().optional(),
+  /**
    * `C-024` — **which fields a COMMAND-LINE FLAG is currently forcing, and to what.**
    *
    * 🔴 The panel cannot be allowed to show a stored value the bridge is not using. That is this

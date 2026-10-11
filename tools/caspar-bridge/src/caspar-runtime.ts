@@ -284,6 +284,7 @@ import {
   deriveServeOptions,
   hostsUnableToFetchTemplates,
   isLoopbackHost,
+  servesFromAnotherMachine,
   templateServeUnreachableWarning,
   type TemplateServeOptions,
   type TemplateServeOverride,
@@ -13650,10 +13651,12 @@ export class CasparRuntime {
     // "did you mean to expose this?"; this one says a configured server will get
     // NO GRAPHICS, which nothing else reports: the `CG ADD` succeeds, the
     // journal records success and health stays green.
+    // `B-326` — judged against this machine's own addresses: the list Station setup's chips show.
+    const own = detectServeHostCandidates();
     const unreachable =
-      serve === null ? [] : hostsUnableToFetchTemplates(configuredCasparHosts(next), serve);
+      serve === null ? [] : hostsUnableToFetchTemplates(configuredCasparHosts(next), serve, own);
     if (unreachable.length > 0 && serve !== null) {
-      process.stderr.write(templateServeUnreachableWarning(unreachable, serve));
+      process.stderr.write(templateServeUnreachableWarning(unreachable, serve, own));
     }
     return {
       ok: true,
@@ -13664,6 +13667,7 @@ export class CasparRuntime {
               port: serve.port,
               exposed,
               unreachable: [...unreachable],
+              elsewhere: servesFromAnotherMachine(serve.serveHost, own),
             },
           }
         : {}),
@@ -13689,25 +13693,29 @@ export class CasparRuntime {
     port: number;
     exposed: boolean;
     unreachable: readonly string[];
+    elsewhere: boolean;
     flagOverrides: { serveHost?: string; port?: number };
     candidates: readonly string[];
   } {
     const serve = this.templateServe;
     const options = serve ?? this.#serveOptions;
     const exposed = options.bindHost !== '127.0.0.1' && options.bindHost !== 'localhost';
+    const own = detectServeHostCandidates();
     return {
       serveHost: options.serveHost,
       port: options.port,
       exposed,
       // B-162's ONE predicate, never a second local spelling of "who can reach us".
-      unreachable: hostsUnableToFetchTemplates(configuredCasparHosts(this.#config), options),
+      unreachable: hostsUnableToFetchTemplates(configuredCasparHosts(this.#config), options, own),
+      // `B-326` — the same judgement, said as WHY: the host in force names another machine.
+      elsewhere: servesFromAnotherMachine(options.serveHost, own),
       flagOverrides: {
         ...(this.#serveOverride.serveHost !== undefined
           ? { serveHost: this.#serveOverride.serveHost }
           : {}),
         ...(this.#serveOverride.port !== undefined ? { port: this.#serveOverride.port } : {}),
       },
-      candidates: detectServeHostCandidates(),
+      candidates: own,
     };
   }
 

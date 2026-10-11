@@ -12,6 +12,8 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  ChevronDown,
+  ChevronRight,
   CircleCheck,
   Info,
   Layers,
@@ -23,7 +25,7 @@ import {
   Type,
   type LucideIcon,
 } from 'lucide-react';
-import type { ConnectionConfig, TemplateServeInfo } from '@cg/shared-ipc';
+import { DEFAULT_OSC_PORT, type ConnectionConfig, type TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { useConnections } from '../../hooks/useConnections.js';
@@ -63,8 +65,13 @@ import { Tag } from '../../ui/Tag.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { PlayoutConnection, type ConnectionDraft } from '../firstRun/PlayoutConnection.js';
-import { playoutOriginOf } from '../firstRun/firstRunStation.js';
+import {
+  AMCP_PORT as STANDARD_AMCP_PORT,
+  playoutOriginOf,
+  type ShownCheckLine,
+} from '../firstRun/firstRunStation.js';
 import { stationFieldsChanged } from '../firstRun/stationFields.js';
+import { serverStateWord } from '../status/StatusBar.js';
 
 /**
  * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
@@ -275,8 +282,36 @@ function sameServerConfig(a: ConnectionConfig, b: ConnectionConfig): boolean {
   return key(a) === key(b);
 }
 
-function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): EndpointDraft {
-  return { host: ep.host, amcpPort: String(ep.amcpPort), oscPort: String(ep.oscPort) };
+/**
+ * 🔴 `SERVERS-SIMPLIFY-01` (T5) — **A SERVER'S DEFAULT PORTS, SHOWN AS PLACEHOLDERS.** An empty port field IS
+ * its default: what is stored and applied is the number, and a field shows text only when it overrides it.
+ * Server A's OSC port is CG Bridge's own (`DEFAULT_OSC_PORT`), server B's the one above it (`CENTRAL-BRIDGE-01`
+ * rule 7, never `6250`); both engines answer AMCP on the standard `5250`, each on its own machine.
+ */
+interface EndpointDefaults {
+  readonly amcpPort: string;
+  readonly oscPort: string;
+}
+const PRIMARY_DEFAULTS: EndpointDefaults = {
+  amcpPort: String(STANDARD_AMCP_PORT),
+  oscPort: String(DEFAULT_OSC_PORT),
+};
+const BACKUP_DEFAULTS: EndpointDefaults = {
+  amcpPort: String(STANDARD_AMCP_PORT),
+  oscPort: String(DEFAULT_OSC_PORT + 1),
+};
+
+function toDraft(
+  ep: { host: string; amcpPort: number; oscPort: number },
+  defaults: EndpointDefaults,
+): EndpointDraft {
+  const amcpPort = String(ep.amcpPort);
+  const oscPort = String(ep.oscPort);
+  return {
+    host: ep.host,
+    amcpPort: amcpPort === defaults.amcpPort ? '' : amcpPort,
+    oscPort: oscPort === defaults.oscPort ? '' : oscPort,
+  };
 }
 
 /**
@@ -299,8 +334,9 @@ function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): Endpo
  * cannot be forgotten, because it is the same object the initial state is built from.
  */
 // `CENTRAL-BRIDGE-01` rule 7 — never 6250, the Playout engine's; server B's is one above A's.
-const PRIMARY_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5250', oscPort: '6251' };
-const BACKUP_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5251', oscPort: '6252' };
+// `SERVERS-SIMPLIFY-01` (T5) — the ports are their defaults, so their fields are empty.
+const PRIMARY_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '', oscPort: '' };
+const BACKUP_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '', oscPort: '' };
 /*
   ⚠ TYPED, never `as const`. The first spelling was, and the literal types it produced
   (`false`, `true`, `''`) flowed into `useState` as `useState<false>` and friends — nine
@@ -452,14 +488,16 @@ function parsePort(raw: string, min: number): number | null {
  */
 function parseEndpoint(
   d: EndpointDraft,
+  defaults: EndpointDefaults,
 ): { host: string; amcpPort: number; oscPort: number } | string {
   const hostProblem = hostError(d.host, { label: 'Host' });
   if (hostProblem !== null) return hostProblem;
   const host = d.host.trim();
-  const amcpPort = parsePort(d.amcpPort, 1);
+  // T5 — an empty port is its default.
+  const amcpPort = parsePort(d.amcpPort.trim() === '' ? defaults.amcpPort : d.amcpPort, 1);
   if (amcpPort === null) return 'AMCP port must be an integer between 1 and 65535.';
   // OSC port 0 is a valid ephemeral-bind request (matches the schema).
-  const oscPort = parsePort(d.oscPort, 0);
+  const oscPort = parsePort(d.oscPort.trim() === '' ? defaults.oscPort : d.oscPort, 0);
   if (oscPort === null) return 'OSC port must be an integer between 0 and 65535.';
   return { host, amcpPort, oscPort };
 }
@@ -547,7 +585,17 @@ export function StationSetupDialog({
   // `RELEASE-0113-01` (`R-089`) — each channel's backup line, for the Backup engine card.
   const backupChannels = useBackupChannels();
   // `DESKTOP-APPS-01` — the Playout this station trusts, as the bridge advertises it.
-  const playoutOrigin = playoutOriginOf(useAuthCapabilities()?.signInUrl);
+  const capabilities = useAuthCapabilities();
+  const playoutOrigin = playoutOriginOf(capabilities?.signInUrl);
+  /*
+    🔴 `SERVERS-SIMPLIFY-01` (T2) — **A PLAYOUT STATION**: one whose CG Bridge advertises `auth: playout`. There
+    CasparCG is where the Playout is and the Playout names it (`casparHost`, the contract's join key), so server A
+    is not the operator's to type: it is a fact.
+  */
+  const playoutStation = capabilities?.mode === 'playout';
+  /** `T3` — `Advanced` (the graphics address and the redundancy): `null` — as the station has it. */
+  const [advancedOpen, setAdvancedOpen] = useState<boolean | null>(null);
+  const advancedShown = advancedOpen ?? !playoutStation;
   /*
     🔴 `SERVERS-SIMPLIFY-01` (`B-324`) — **THE CONNECTION CARD'S OPEN EDIT, HELD HERE.** The card unmounts with
     its tab, so a draft it kept itself was dropped in silence on a tab switch (the owner's picture 5). Held
@@ -644,9 +692,13 @@ export function StationSetupDialog({
       setServePort(UNREAD_SERVERS.servePort);
       return;
     }
-    setPrimary(toDraft(config.servers.A));
+    setPrimary(toDraft(config.servers.A, PRIMARY_DEFAULTS));
     setBackupEnabled(config.servers.B !== undefined);
-    setBackup(config.servers.B === undefined ? UNREAD_SERVERS.backup : toDraft(config.servers.B));
+    setBackup(
+      config.servers.B === undefined
+        ? UNREAD_SERVERS.backup
+        : toDraft(config.servers.B, BACKUP_DEFAULTS),
+    );
     setStrategy(config.strategy);
     setAutoFailover(config.autoFailoverEnabled);
     setServeHost(config.templateServeHost ?? '');
@@ -774,6 +826,8 @@ export function StationSetupDialog({
     restoreServersDraft(loaded);
     // `B-324` — the Connection card's open edit is a draft like the rest: closing discards it.
     setConnectionDraft(null);
+    // T3 — `Advanced` opens again as the station has it.
+    setAdvancedOpen(null);
   }, [open, loaded, restoreServersDraft]);
 
   /*
@@ -788,11 +842,11 @@ export function StationSetupDialog({
   const onAirCount = anyOnAirOrUnsettled(items);
 
   const validated = useMemo((): ConnectionConfig | string => {
-    const a = parseEndpoint(primary);
+    const a = parseEndpoint(primary, PRIMARY_DEFAULTS);
     if (typeof a === 'string') return `Primary: ${a}`;
     let b: { host: string; amcpPort: number; oscPort: number } | undefined;
     if (backupEnabled) {
-      const parsed = parseEndpoint(backup);
+      const parsed = parseEndpoint(backup, BACKUP_DEFAULTS);
       if (typeof parsed === 'string') return `Backup: ${parsed}`;
       b = parsed;
     }
@@ -806,16 +860,12 @@ export function StationSetupDialog({
       `hostError` since `C-024`; the gate never read it, so the second address on this pane
       had the identical split the primary one did. Blank is legal here and means "derive it".
     */
-    const serveProblem = hostError(serveHost, { label: 'Serve host', blankAllowed: true });
+    // `SERVERS-SIMPLIFY-01` (T3) — the field's own words: its `Host` and `Port`, as the field's error says them.
+    const serveProblem = hostError(serveHost, { label: 'Host', blankAllowed: true });
     if (serveProblem !== null) return serveProblem;
     const port = servePort.trim();
-    if (port.length > 0) {
-      if (!/^\d+$/.test(port)) return 'Template serve port must be an integer between 0 and 65535.';
-      const n = Number(port);
-      if (!Number.isInteger(n) || n < 0 || n > 65535) {
-        return 'Template serve port must be an integer between 0 and 65535.';
-      }
-    }
+    const portProblem = portError(port, { min: 0, label: 'Port', blankAllowed: true });
+    if (portProblem !== null) return portProblem;
     return {
       servers: { A: a, ...(b !== undefined ? { B: b } : {}) },
       strategy,
@@ -840,6 +890,49 @@ export function StationSetupDialog({
   const flagServeHost = serveInfo?.flagOverrides?.serveHost;
   const flagServePort = serveInfo?.flagOverrides?.port;
   const serveCandidates = serveInfo?.candidates ?? [];
+
+  /*
+    🔴 `B-326` (T3) — **A GRAPHICS HOST THAT IS ANOTHER MACHINE IS THE CHECK'S OWN FAILED LINE.** CG Bridge
+    judges it (`elsewhere`, from the one predicate behind its boot line and its apply answer, against its own
+    addresses); this only words the verdict and offers the one remedy. `Detect automatically` clears the field
+    and opens `Advanced` so the cleared field is in view — and, like every edit here, `Apply servers` commits it.
+  */
+  const graphicsLines: readonly ShownCheckLine[] =
+    serveInfo?.elsewhere === true
+      ? [
+          {
+            id: 'graphics',
+            status: 'fail',
+            text: `CasparCG would fetch graphics from ${serveInfo.serveHost}, another machine than CG Bridge's.`,
+          },
+        ]
+      : [];
+  const graphicsActions =
+    serveInfo?.elsewhere === true && holdsStationAdmin
+      ? {
+          graphics: (
+            <Button
+              variant="secondary"
+              data-detect-graphics=""
+              onClick={() => {
+                setServeHost('');
+                setAdvancedOpen(true);
+              }}
+            >
+              Detect automatically
+            </Button>
+          ),
+        }
+      : undefined;
+  // T2 — server A's state, whichever role it holds now (the health names each server by its label).
+  const serverAState =
+    health === null
+      ? null
+      : health.primary.label === 'A'
+        ? health.primary.state
+        : health.backup?.label === 'A'
+          ? health.backup.state
+          : null;
 
   if (!open) return null;
 
@@ -1036,10 +1129,16 @@ export function StationSetupDialog({
    * `stationSetupServers.dom.test.ts` and `server-settings.spec.ts` query by. The visible label
    * moved; the name a test holds did not.
    */
+  /*
+    `SERVERS-SIMPLIFY-01` (T5) — each port's default is its placeholder, and an empty port is legal: it IS the
+    default. (T2) — `fact`: server A in a Playout station, its values as facts and nothing typed.
+  */
   const endpointFields = (
     draft: EndpointDraft,
     set: (next: EndpointDraft) => void,
     prefix: string,
+    defaults: EndpointDefaults,
+    fact = false,
   ): JSX.Element => (
     /*
       ⭐ `SETTINGS-MATCH-02` — THE MONO FACE ON AN ADDRESS, which the reference sets on every
@@ -1062,7 +1161,7 @@ export function StationSetupDialog({
     <div className="cg-setup-fields cg-setup-fields--three">
       <SetupField
         label="Host"
-        {...(holdsStationAdmin ? {} : { readOnlyValue: draft.host })}
+        {...(holdsStationAdmin && !fact ? {} : { readOnlyValue: draft.host })}
         error={hostError(draft.host, { label: 'Host' })}
         id={`${prefix}-host`}
       >
@@ -1079,8 +1178,10 @@ export function StationSetupDialog({
       </SetupField>
       <SetupField
         label="AMCP port"
-        {...(holdsStationAdmin ? {} : { readOnlyValue: draft.amcpPort })}
-        error={portError(draft.amcpPort, { min: 1, label: 'AMCP port' })}
+        {...(holdsStationAdmin && !fact
+          ? {}
+          : { readOnlyValue: draft.amcpPort.trim() === '' ? defaults.amcpPort : draft.amcpPort })}
+        error={portError(draft.amcpPort, { min: 1, label: 'AMCP port', blankAllowed: true })}
         id={`${prefix}-amcp`}
       >
         {/* R-020 + §10.2 — Persian/Arabic-Indic digits normalize to Latin BEFORE anything
@@ -1090,14 +1191,17 @@ export function StationSetupDialog({
           dir="ltr"
           allow="digits"
           aria-label={`${prefix} AMCP port`}
+          placeholder={defaults.amcpPort}
           value={draft.amcpPort}
           onValueChange={(v) => set({ ...draft, amcpPort: v })}
         />
       </SetupField>
       <SetupField
         label="OSC port"
-        {...(holdsStationAdmin ? {} : { readOnlyValue: draft.oscPort })}
-        error={oscPortError(draft.oscPort)}
+        {...(holdsStationAdmin && !fact
+          ? {}
+          : { readOnlyValue: draft.oscPort.trim() === '' ? defaults.oscPort : draft.oscPort })}
+        error={draft.oscPort.trim() === '' ? null : oscPortError(draft.oscPort)}
         id={`${prefix}-osc`}
       >
         <NumericInput
@@ -1105,6 +1209,7 @@ export function StationSetupDialog({
           dir="ltr"
           allow="digits"
           aria-label={`${prefix} OSC port`}
+          placeholder={defaults.oscPort}
           value={draft.oscPort}
           onValueChange={(v) => set({ ...draft, oscPort: v })}
         />
@@ -1182,7 +1287,8 @@ export function StationSetupDialog({
           foot={
             <RailStationCard
               label={health?.currentPrimary ?? 'A'}
-              name={health?.currentPrimary === 'B' ? 'Backup server' : 'Primary server'}
+              // T2 — the engine by its name; its chip still says which one, A or B.
+              name="CasparCG"
               host={
                 loaded === null
                   ? null
@@ -1319,12 +1425,23 @@ export function StationSetupDialog({
                   void window.cg.connections.templateServe().then(setServeInfo);
                   const unreachable = result.templateServe?.unreachable ?? [];
                   if (unreachable.length > 0) {
+                    /*
+                      `B-326` — the bridge says WHY (`elsewhere`), and the sentence follows it: a host
+                      that is another machine is not fixed by any address of CG Bridge's — it is
+                      cleared, and detected again. Never "this machine": the owner read it as his PC.
+                    */
                     setRefusal(
-                      `Applied, but the template server is loopback-only and ${unreachable.join(', ')} ` +
-                        `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
-                        `background, no text — and their CG ADD will still report success. Set Serve ` +
-                        `host above to this machine's address as those servers see it, then Apply ` +
-                        `again — the bridge does not need restarting.`,
+                      result.templateServe?.elsewhere === true
+                        ? `Applied, but CasparCG would fetch graphics from ${result.templateServe.serveHost}, ` +
+                            `another machine than CG Bridge's: ${unreachable.join(', ')} will show live ` +
+                            `sources with NO TEMPLATE — no background, no text — and their CG ADD will ` +
+                            `still report success. Press Detect automatically, then Apply again — CG ` +
+                            `Bridge does not need restarting.`
+                        : `Applied, but the graphics address is loopback-only and ${unreachable.join(', ')} ` +
+                            `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
+                            `background, no text — and their CG ADD will still report success. Set the ` +
+                            `graphics Host under Advanced to CG Bridge's address as those servers see it, ` +
+                            `then Apply again — CG Bridge does not need restarting.`,
                     );
                     return { accepted: true };
                   }
@@ -1439,28 +1556,53 @@ export function StationSetupDialog({
                     */
                     grouped
                     checkOnOpen={holdsStationAdmin}
+                    // 🔴 `B-326` — where CasparCG fetches graphics, when CG Bridge says it is elsewhere.
+                    extraLines={graphicsLines}
+                    lineActions={graphicsActions}
                   />
                 </div>
               </section>
 
-              <section className="cg-card" aria-label="Primary server">
+              {/*
+                  🔴 `SERVERS-SIMPLIFY-01` (T2) — **`CasparCG A`, NOT `Primary server`.** The owner read
+                  `Primary server` as "where the bridge is" and typed his own PC into it. The card names
+                  what it is; the redundancy ROLE (`Primary A`) stays where it belongs, in the status bar
+                  and the subtitle. In a Playout station CasparCG is where the Playout is and the Playout
+                  names it, so nothing here is typed: its values are facts, beside where it is and how
+                  it is.
+                */}
+              <section className="cg-card" aria-label="CasparCG A">
                 <div className="cg-card__head">
                   <Tag className="cg-setup-server-chip" aria-hidden="true">
                     A
                   </Tag>
-                  <span className="cg-card__title">Primary server</span>
+                  <span className="cg-card__title">CasparCG A</span>
+                  {playoutStation && (
+                    <>
+                      <span className="cg-card__spacer" />
+                      <Tag className="cg-setup-card-tag" data-caspar-placement="">
+                        On the Playout machine
+                      </Tag>
+                      {serverAState !== null && (
+                        <Tag className="cg-setup-card-tag" data-caspar-health="">
+                          {serverStateWord(serverAState)}
+                        </Tag>
+                      )}
+                    </>
+                  )}
                 </div>
                 <div className="cg-card__body">
-                  {endpointFields(primary, setPrimary, 'Primary')}
+                  {endpointFields(primary, setPrimary, 'Primary', PRIMARY_DEFAULTS, playoutStation)}
                 </div>
               </section>
 
-              <section className="cg-card" aria-label="Backup server">
+              {/* T2 — `CasparCG B · backup`: the engine, and its role, in the operator's words. */}
+              <section className="cg-card" aria-label="CasparCG B">
                 <div className="cg-card__head">
                   <Tag className="cg-setup-server-chip" aria-hidden="true">
                     B
                   </Tag>
-                  <span className="cg-card__title">Backup server</span>
+                  <span className="cg-card__title">CasparCG B · backup</span>
                   {/*
                       The reference's `.tag` on this head, and it says something TRUE that the
                       card otherwise only implies: a station may run on one server, so the
@@ -1482,7 +1624,9 @@ export function StationSetupDialog({
                   )}
                 </div>
                 {backupEnabled ? (
-                  <div className="cg-card__body">{endpointFields(backup, setBackup, 'Backup')}</div>
+                  <div className="cg-card__body">
+                    {endpointFields(backup, setBackup, 'Backup', BACKUP_DEFAULTS)}
+                  </div>
                 ) : (
                   /*
                       The reference's `.empty-backup` — a glyph, the state, the consequence, and
@@ -1527,99 +1671,111 @@ export function StationSetupDialog({
                   address they fetch templates from. 🔴 The bridge is NOT restarted, and nothing
                   here offers to: `connections.set-config` rebuilds template serving on the
                   running process.
+
+                  🔴 `SERVERS-SIMPLIFY-01` (T3) — **BEHIND `Advanced`, AND NAMED FOR WHAT IT IS.** It was
+                  `How those servers reach this machine`, and the owner read "this machine" as his own PC:
+                  `.32` then served every graphic from `.93` while `CG ADD` came back `CG OK`. It is
+                  `Where CasparCG fetches graphics`, its fields `Host` and `Port` with their defaults as
+                  placeholders, the chips labelled as CG Bridge's machine's addresses — and collapsed in a
+                  Playout station, where nothing here needs touching. A host that names another machine is
+                  the check's own failed line (`B-326`), with `Detect automatically` beside it.
                 */}
-              <section className="cg-card" aria-label="Template serve address">
-                <div className="cg-card__head">
-                  <span className="cg-card__title">How those servers reach this machine</span>
-                </div>
+              <details
+                className="cg-card cg-setup-advanced"
+                open={advancedShown}
+                onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}
+                data-setup-advanced=""
+              >
+                <summary className="cg-card__head cg-setup-advanced__head">
+                  <Icon icon={advancedShown ? ChevronDown : ChevronRight} size={16} flipRtl />
+                  <span className="cg-card__title">Advanced</span>
+                </summary>
                 <div className="cg-card__body">
                   {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
                         ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
-                  {/* The reference's `.card-body p.secondary` — the card's LEDE, which sets up
-                        the fields under it rather than sitting in the body's flex rhythm as one
-                        more equal child. */}
-                  <p className="cg-setup-lede">
-                    The address CasparCG fetches templates from. Leave it empty to derive it. Get it
-                    wrong and those servers show live sources with no graphic over them, while CG
-                    ADD still reports success.
-                  </p>
-                  <div className="cg-setup-fields">
-                    {/* The reference's `.optional` — a fact about the FIELD, said where the
-                          operator decides whether to fill it. Both of these genuinely derive
-                          when left empty, which is why blank is legal on both (§10.3). */}
-                    <SetupField
-                      label="Serve host"
-                      {...(holdsStationAdmin
-                        ? {}
-                        : {
-                            readOnlyValue: serveHost === '' ? 'derived automatically' : serveHost,
-                          })}
-                      optional
-                      id="serve-host"
-                      error={hostError(serveHost, {
-                        label: 'Serve host',
-                        blankAllowed: true,
-                      })}
-                      {...(serveCandidates.length > 0
-                        ? {
-                            hint: `This machine's addresses — not a verdict about which one those servers can reach. Leave the field empty to derive it.`,
-                            after: (
-                              <div className="cg-setup-chips" data-serve-candidates="">
-                                {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates this
-                                      machine's interfaces; it cannot know which one the plant
-                                      routes to. The hint under them says exactly that. */}
-                                {serveCandidates.map((candidate) => (
-                                  <Button
-                                    key={candidate}
-                                    className="cg-setup-chip"
-                                    aria-label={`Use serve host ${candidate}`}
-                                    title={`Use ${candidate}`}
-                                    onClick={() => setServeHost(candidate)}
-                                  >
-                                    {candidate}
-                                  </Button>
-                                ))}
-                              </div>
-                            ),
-                          }
-                        : {})}
-                    >
-                      <input
-                        className="cg-field cg-field--mono"
-                        dir="ltr"
-                        aria-label="Template serve host"
-                        placeholder="Detect automatically"
-                        value={serveHost}
-                        onChange={(e) => setServeHost(hostValue(e.target.value))}
-                      />
-                    </SetupField>
-                    <SetupField
-                      label="Serve port"
-                      {...(holdsStationAdmin
-                        ? {}
-                        : {
-                            readOnlyValue: servePort === '' ? 'assigned automatically' : servePort,
-                          })}
-                      optional
-                      id="serve-port"
-                      error={portError(servePort, {
-                        min: 0,
-                        label: 'Serve port',
-                        blankAllowed: true,
-                      })}
-                      hint="Empty = ephemeral (today's default). Pin it to make a firewall rule possible."
-                    >
-                      <NumericInput
-                        className="cg-field cg-field--mono"
-                        dir="ltr"
-                        allow="digits"
-                        aria-label="Template serve port"
-                        placeholder="Assign automatically"
-                        value={servePort}
-                        onValueChange={setServePort}
-                      />
-                    </SetupField>
-                  </div>
+                  <section
+                    className="cg-station-fields__group"
+                    aria-label="Where CasparCG fetches graphics"
+                  >
+                    <span className="cg-station-fields__name" aria-hidden="true">
+                      Where CasparCG fetches graphics
+                    </span>
+                    <div className="cg-setup-fields">
+                      {/* Both genuinely derive when left empty, which is why blank is legal on both
+                          (§10.3) — and why their placeholders say so. */}
+                      <SetupField
+                        label="Host"
+                        {...(holdsStationAdmin
+                          ? {}
+                          : {
+                              readOnlyValue: serveHost === '' ? 'derived automatically' : serveHost,
+                            })}
+                        id="serve-host"
+                        error={hostError(serveHost, { label: 'Host', blankAllowed: true })}
+                        {...(serveCandidates.length > 0
+                          ? {
+                              after: (
+                                <div
+                                  className="cg-setup-chips"
+                                  data-serve-candidates=""
+                                  role="group"
+                                  aria-label="CG Bridge's machine's addresses"
+                                >
+                                  {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates its own
+                                        machine's interfaces; it cannot know which one the plant
+                                        routes to. So they are labelled as what they are, and none is
+                                        marked as the answer. */}
+                                  <span className="cg-setup-field__hint" aria-hidden="true">
+                                    CG Bridge&apos;s machine
+                                  </span>
+                                  {serveCandidates.map((candidate) => (
+                                    <Button
+                                      key={candidate}
+                                      className="cg-setup-chip"
+                                      aria-label={`Use graphics host ${candidate}`}
+                                      title={`Use ${candidate}`}
+                                      onClick={() => setServeHost(candidate)}
+                                    >
+                                      {candidate}
+                                    </Button>
+                                  ))}
+                                </div>
+                              ),
+                            }
+                          : {})}
+                      >
+                        <input
+                          className="cg-field cg-field--mono"
+                          dir="ltr"
+                          aria-label="Graphics host"
+                          placeholder="Detect automatically"
+                          value={serveHost}
+                          onChange={(e) => setServeHost(hostValue(e.target.value))}
+                        />
+                      </SetupField>
+                      <SetupField
+                        label="Port"
+                        {...(holdsStationAdmin
+                          ? {}
+                          : {
+                              readOnlyValue:
+                                servePort === '' ? 'assigned automatically' : servePort,
+                            })}
+                        id="serve-port"
+                        error={portError(servePort, { min: 0, label: 'Port', blankAllowed: true })}
+                      >
+                        <NumericInput
+                          className="cg-field cg-field--mono"
+                          dir="ltr"
+                          allow="digits"
+                          aria-label="Graphics port"
+                          placeholder="Assign automatically"
+                          value={servePort}
+                          onValueChange={setServePort}
+                        />
+                      </SetupField>
+                    </div>
+                  </section>
                   {flagServeHost === undefined ? null : (
                     <div style={styles.maskedNote} data-testid="serve-host-masked">
                       <span style={styles.inForce}>In force: {flagServeHost}</span>
@@ -1651,10 +1807,10 @@ export function StationSetupDialog({
                       (`Redundancy`) for the last two. They are facts about the SAME pair of
                       servers, and the split cost a card head and a rule to say nothing.
 
-                      ⚠ The card keeps the app's own name and region label — `Template serve
-                      address` / `How those servers reach this machine` — which
-                      `server-settings.spec.ts` queries by and which say what the block is FOR.
-                      The reference's `Station connection` is not adopted; nothing is reworded.
+                      ⚠ The reference's `Station connection` is not adopted. Since
+                      `SERVERS-SIMPLIFY-01` (T3) the card is `Advanced`, and the graphics block in it
+                      is named for what it is — `Where CasparCG fetches graphics` — which
+                      `server-settings.spec.ts` queries by.
 
                       ⚠ And the strategy keeps all THREE of the app's options. The reference
                       draws two (`Mirror sync` / `Primary only`); `ConnectionConfig['strategy']`
@@ -1726,17 +1882,18 @@ export function StationSetupDialog({
                     ⚠ It stays INSIDE this card, which is §9b's rule: a help strip belongs to
                     one card and is not a pane-level band.
                   */}
+                {/* T3 — "this machine" was read as the operator's own PC: it is CG Bridge's. */}
                 {remoteHosts.length > 0 && (
                   <p className="cg-card__note cg-card__note--inline" data-remote-host-note="">
                     <Icon icon={Info} size={STATION_SETUP_PX.helpIcon} />
                     <span>
                       Remote server ({remoteHosts.join(', ')}): the template server and OSC listener
-                      will use a LAN address so CasparCG can reach this machine. The control
-                      connection stays on 127.0.0.1.
+                      will use a LAN address so CasparCG can reach CG Bridge&apos;s machine. The
+                      control connection stays on 127.0.0.1.
                     </span>
                   </p>
                 )}
-              </section>
+              </details>
             </SetupSection>
           )}
 

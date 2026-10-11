@@ -87,7 +87,8 @@ describe('MODAL-TRUTH-01 — Station setup discards an unapplied draft on close'
 
     el = await reopenStationSetup();
     expect(valueOf(el, 'Primary host')).toBe('127.0.0.1');
-    expect(valueOf(el, 'Primary AMCP port')).toBe('5250');
+    // `SERVERS-SIMPLIFY-01` (T5) — the stored port is the default, so its field is empty: the placeholder says it.
+    expect(valueOf(el, 'Primary AMCP port')).toBe('');
     expect(answer, 'the reopen read was never made').not.toBeNull();
   });
 
@@ -148,7 +149,8 @@ describe('MODAL-TRUTH-01 — Station setup discards an unapplied draft on close'
 
     el = await reopenStationSetup();
     expect(valueOf(el, 'Primary host')).toBe(suggested);
-    expect(valueOf(el, 'Primary OSC port')).toBe('6251');
+    // `SERVERS-SIMPLIFY-01` (T5) — the suggestion's port is the default: an empty field, never `7777`.
+    expect(valueOf(el, 'Primary OSC port')).toBe('');
   });
 
   it('LAYERS — a typed row name is gone on reopen (already held; pinned)', async () => {

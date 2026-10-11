@@ -57,6 +57,8 @@ export const SETUP_SERVE_INFO = {
   port: 0,
   exposed: false,
   unreachable: [] as string[],
+  // `B-326` — CG Bridge's verdict that the host in force is another machine: not, by default.
+  elsewhere: false as boolean,
   flagOverrides: {} as { serveHost?: string; port?: number },
   candidates: [] as string[],
 };

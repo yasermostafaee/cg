@@ -172,10 +172,16 @@ test('🔴 B-325 — re-pointed at another CG Bridge with Station setup open: th
   await signIn(page);
 
   const { card, tab, setup } = await openConnection(page);
-  const a = setup.getByLabel('Primary host', { exact: true });
-  await expect(a).toHaveValue('127.0.0.9', { timeout: 30_000 });
-  // A draft typed against the FIRST CG Bridge — the owner's own PC, typed where the bridge was meant.
-  await a.fill('192.0.2.93');
+  // T2 — a Playout station: CasparCG A is a fact, read off the CG Bridge the console is on.
+  const a = setup
+    .getByRole('region', { name: 'CasparCG A' })
+    .locator('[data-setup-readonly]')
+    .first();
+  await expect(a).toHaveText('127.0.0.9', { timeout: 30_000 });
+  // A draft typed against the FIRST CG Bridge — the owner's own PC, typed as the graphics host.
+  await setup.locator('[data-setup-advanced] > summary').click();
+  const graphics = setup.getByLabel('Graphics host', { exact: true });
+  await graphics.fill('192.0.2.93');
   await expect(tab.locator('[data-tab-badge="edited"]')).toHaveCount(1);
 
   // Re-pointed: CG Bridge's Change, the other host, Connect — the check answers there, so it saves the card
@@ -189,7 +195,65 @@ test('🔴 B-325 — re-pointed at another CG Bridge with Station setup open: th
     .toEqual({ playoutAddress: `http://${GOOD_HOST}:${playoutPort}`, bridgeAddress: OTHER_HOST });
 
   // Still open: every field reads the CG Bridge the console is on now, and nothing waits to be applied.
-  await expect(a).toHaveValue('127.0.0.1', { timeout: 30_000 });
+  await expect(a).toHaveText('127.0.0.1', { timeout: 30_000 });
   await expect(tab.locator('[data-tab-badge]')).toHaveCount(0);
   await expect(card.locator('[data-bridge-address]')).toHaveText(`${OTHER_HOST} : 5280`);
+  await setup.locator('[data-setup-advanced]').evaluate((d) => {
+    (d as HTMLDetailsElement).open = true;
+  });
+  await expect(setup.getByLabel('Graphics host', { exact: true })).toHaveValue('');
+});
+
+test('🔴 T2 + T3 + B-326 — CasparCG A is a fact, Advanced is collapsed, and a graphics host on another machine is the check’s failed line', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  playout = await startFakePlayout();
+  const good = await stage.startBridge([
+    '--playout-issuer',
+    playout.issuer,
+    '--playout-jwks-url',
+    playout.jwksUrl,
+  ]);
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await asCgControl(page, { playoutAddress: `http://${GOOD_HOST}:8080` }, { signIn: true });
+  await relay(page, GOOD_HOST, good);
+  await page.goto(`${APP}/`);
+  await signIn(page);
+  const { setup, card } = await openConnection(page);
+
+  // T2 — CasparCG A in a Playout station: where it is, its values as facts, nothing to type.
+  const a = setup.getByRole('region', { name: 'CasparCG A' });
+  await expect(a.locator('[data-caspar-placement]')).toHaveText('On the Playout machine');
+  await expect(a.locator('input')).toHaveCount(0);
+  await expect(a.locator('[data-setup-readonly]').first()).toHaveText('127.0.0.1');
+  await shotOf(a, 'SERVERS-SIMPLIFY-01-after-3-casparcg-a.png');
+
+  // T3 — the graphics address is behind Advanced, collapsed in a Playout station.
+  const advanced = setup.locator('[data-setup-advanced]');
+  await expect(
+    advanced.getByRole('region', { name: 'Where CasparCG fetches graphics' }),
+  ).toBeHidden();
+  await advanced.locator('summary').click();
+  await expect(
+    advanced.getByRole('region', { name: 'Where CasparCG fetches graphics' }),
+  ).toBeVisible();
+  await expect(setup.getByText(/this machine/i)).toHaveCount(0);
+  await shotOf(advanced, 'SERVERS-SIMPLIFY-01-after-4-advanced.png');
+
+  // B-326 — the owner's `.93`: applied as the graphics host, CG Bridge judges it another machine.
+  await setup.getByLabel('Graphics host', { exact: true }).fill('192.0.2.93');
+  await setup.getByRole('button', { name: 'Apply server settings' }).click();
+  const line = card.locator('[data-check="graphics"]');
+  await expect(line).toHaveAttribute('data-status', 'fail', { timeout: 30_000 });
+  await expect(line).toContainText(
+    "CasparCG would fetch graphics from 192.0.2.93, another machine than CG Bridge's.",
+  );
+  await shotOf(card, 'SERVERS-SIMPLIFY-01-after-5-graphics-line.png');
+
+  // Detect automatically clears the field; applied, CG Bridge derives its own address and the line goes.
+  await line.getByRole('button', { name: 'Detect automatically' }).click();
+  await expect(setup.getByLabel('Graphics host', { exact: true })).toHaveValue('');
+  await setup.getByRole('button', { name: 'Apply server settings' }).click();
+  await expect(line).toHaveCount(0, { timeout: 30_000 });
 });

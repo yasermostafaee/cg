@@ -322,7 +322,7 @@ machine it also works, but if that machine dies CG Bridge dies with it and the b
 from CG until it is back. A CG Bridge must never run on the backup engine's machine as well: two senders on
 one core apply each other's half-built `MIXER` changes, because a core keeps one `DEFER` list per channel.
 
-**Server B.** A station admin adds the backup engine in CG Control (Station setup → Connection → Backup server);
+**Server B.** A station admin adds the backup engine in CG Control (Station setup → Connection → CasparCG B · backup);
 it is saved with the station and kept across a service restart and an upgrade. It is never an installer
 switch.
 
