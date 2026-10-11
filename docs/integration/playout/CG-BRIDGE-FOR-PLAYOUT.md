@@ -1,7 +1,7 @@
 # CG Bridge — for the Playout team
 
-Release `0.11.4` (`RELEASE-0114-01`, 2026-10-07; first written for `0.10.0` by `CENTRAL-BRIDGE-01`, then
-`0.11.0`, `0.11.1`, `0.11.2` and `0.11.3`). **One CG Bridge per Playout client.** A station's Playout client may run a
+Release `0.11.5` (`RELEASE-0115-01`, 2026-10-11; first written for `0.10.0` by `CENTRAL-BRIDGE-01`, then
+`0.11.0`, `0.11.1`, `0.11.2`, `0.11.3` and `0.11.4`). **One CG Bridge per Playout client.** A station's Playout client may run a
 primary engine and a backup engine; one CG Bridge serves both (§3). CG Bridge is a Windows service on the
 primary engine's machine, or on a server beside the engines. Every CG Control is a console that connects to it;
 a console never talks to CasparCG. This document is what your engine and your installer need from us, and what
@@ -27,7 +27,8 @@ without a version we tell you about. Our schema test refuses any field not liste
 `casparcg.channels`, `playout.backup` and three problem codes; `0.11.3` adds `casparcg.servers[].channels` and
 the problem code `backup-channels`. `0.11.4` adds no field and no code: a `port-refused` problem can now also
 be about CG Bridge's OSC port, naming the program that holds it — for example
-`cannot open UDP 6251 (OSC from CasparCG): held by example.exe (PID 4120).`
+`cannot open UDP 6251 (OSC from CasparCG): held by example.exe (PID 4120).` `0.11.5` adds no field and no
+code.
 
 | Field                                           | Meaning                                                                                                                                                                    |
 | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -64,7 +65,7 @@ Example (a fresh install, no CasparCG yet, no station-admin sign-in yet, no back
 ```json
 {
   "app": "cg-bridge",
-  "version": "0.11.4",
+  "version": "0.11.5",
   "startedAt": "2026-09-30T10:48:34.772Z",
   "uptimeS": 11,
   "casparcg": {
@@ -104,7 +105,7 @@ exits `2`). It asks for administrator rights. **What it is:** our setup program,
 Bridge's NSIS installer inside it. Double-clicked, it shows CG Setup's window. **Run with `/S`, it shows
 nothing: it runs the NSIS installer with exactly your command line and returns that installer's exit
 code — every switch, the uninstall line and every exit code in this section are the NSIS installer's
-own, unchanged in `0.11.4`.** Our clean-Windows test runs each silent path against the NSIS installer alone
+own, unchanged in `0.11.5`.** Our clean-Windows test runs each silent path against the NSIS installer alone
 and against the file you receive, and requires the same codes. It needs Windows 10 or later, as CG Bridge's
 own Node runtime does. **Size:** about 23.5 MB — `0.11.1`'s was 24,677,440 bytes, as your letter measured
 (the release lists the exact size and SHA-256 of each release's). It carries everything: the official
@@ -137,10 +138,10 @@ CG-Bridge_<version>_x64-setup.exe /S [/PLAYOUT=http://host:8080] [/AMCPHOST=127.
   server; it never runs under `/S`. **Nothing in this section changed for a silent install:** the same
   switches, the same defaults, the same exit codes.
 - `/OSCPORT=6250` is refused: that port is yours.
-- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.4_x64-setup.exe'), '/S', '', SW_HIDE,
+- From Inno Setup: `Exec(ExpandConstant('{tmp}\CG-Bridge_0.11.5_x64-setup.exe'), '/S', '', SW_HIDE,
 ewWaitUntilTerminated, ResultCode)`. Your `2.9.4` chains it exactly this way, after your engine's service
   has started, behind «CG Bridge هم نصب شود» under «CG Control (اگر CG Bridge روی سرورِ جداست، تیک را
-  بردارید):» (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2); `0.11.4` keeps every part of that line as
+  بردارید):» (`PLAYOUT-CG-RESPONSE-0111-INSTALLER-v1.md` §2); `0.11.5` keeps every part of that line as
   it was. **On a pair, untick it on both engine machines** (`/MERGETASKS="!cgbridge"` silently), as your
   `PLAYOUT-CG-RESPONSE-0112-PAIR-v1.md` §4 says, and install CG Bridge once, beside them (§3).
 
@@ -172,11 +173,11 @@ Your `2.9.4` reads it to decide whether to run our file at all, so it is a contr
   `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CGBridge`. Nothing of ours is written to the
   32-bit view, so your read of both views finds one row.
 - `DisplayName` = **`CG Bridge`**, exactly.
-- `DisplayVersion` = the release, **`major.minor.patch`** (`0.11.4`), never a fourth part or a suffix.
+- `DisplayVersion` = the release, **`major.minor.patch`** (`0.11.5`), never a fourth part or a suffix.
 - Publisher `APASAI`.
 
 Read on a clean Windows runner after the install and after every upgrade path we test — over the
-`0.10.0`, `0.11.0`, `0.11.1` and `0.11.2` installers and over itself — and pinned there: a change to any of these
+`0.10.0`, `0.11.0`, `0.11.1`, `0.11.2`, `0.11.3` and `0.11.4` installers and over itself — and pinned there: a change to any of these
 fails our build by name. If one ever has to change, we tell you in a letter before a release carries it.
 
 ### The service
@@ -210,7 +211,7 @@ plays is adopted; a row whose layer is empty is reported off air (§6).
 | `bridgeAddress`  | The host CasparCG fetches templates from (a separate server) | this machine       |
 
 The file is strict: an unknown key is refused, and the service then does not start; the log names the
-file. `0.11.4` adds no key. To change a value, re-run the installer with it, or edit the file and restart
+file. `0.11.5` adds no key. To change a value, re-run the installer with it, or edit the file and restart
 the service. The same values can be given on the command line (`cg-bridge.exe caspar-bridge.mjs
 --service-config <file> --port …`); the command line wins.
 
@@ -388,7 +389,7 @@ station admin signs in again once the user is enabled. That is safe, and it is w
 
 ## 5. Versions
 
-- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.4`).
+- CG Bridge, CG Control and CG Designer carry ONE version per release (`0.11.5`).
 - CG Bridge reads each engine's version from `GET /api/v1/system/version` (your §3.1; no token, so no
   `Authorization` header): at start, then at most once a minute. CG Control shows the primary's under
   `Versions` in its connection check. An answer that is missing or not a version is said as "not served" and
@@ -407,9 +408,13 @@ station admin signs in again once the user is enabled. That is safe, and it is w
   running our installer.
 - `0.11.4` is the compatibility floor — the first release a station installs (`0.11.3` and earlier were never
   installed at a station, and are superseded; `0.11.2` and earlier also write the backup core on the primary's
-  channel numbers; your `2.9.5` carries `0.11.2` and needs `0.11.4` in its place): every later release opens
-  what `0.11.4` wrote — the configuration, the state, the template packages. `0.11.4` reads what `0.11.3` and
-  `0.11.2` wrote unchanged, and adds no file.
+  channel numbers): every later release opens what `0.11.4` wrote — the configuration, the state, the template
+  packages. `0.11.5` reads what `0.11.4` wrote unchanged, and adds no file and no configuration key. Your engine
+  installer should carry `0.11.5` in place of the CG Bridge it carries now.
+- **One fact on the wire in `0.11.5`, no new command.** When an operator has recorded a pass count or a gap for a
+  row whose graphic was stopped, that row's next take carries a `timing` member inside the `__cg` control of the
+  one `CG UPDATE` it already sent before `CG PLAY`, and only when the template admits that timing. A row with no
+  such recording sends the same bytes as `0.11.4`. You may see it in `amcp.log`.
 - `/health.version` always names the running version.
 
 ## 6. Where we differ from your letter
