@@ -137,6 +137,23 @@ export interface PlayoutCatalogueOptions {
    * consumer (first-run, `channels.list`'s join, the host rule) sees one value.
    */
   readonly playoutHost?: string | undefined;
+  /** Where {@link channelLicenseLine} goes — the bridge's stderr by default. */
+  readonly log?: (line: string) => void;
+}
+
+/**
+ * 🔴 `DONGLE-RECOVER-01` A2 — **D4'S PER-CHANNEL LICENSE WORDS, ONE LINE WHEN THEY CHANGE FOR A
+ * CHANNEL.** `playlist` (`unlicensed` refuses a take, D12) and `cgLicensed` (`false` refuses one, D) are
+ * the two D4 fields a take reads, and nothing recorded when either moved. Printed against the last value
+ * this reader KNEW for the channel, so a read that fails (D4 goes absent) and recovers with the same words
+ * prints nothing: an unreachable Playout is not a license change. `-` — the Playout sent no value.
+ */
+export function channelLicenseLine(row: CatalogueRow, atMs: number): string {
+  return (
+    `Playout channel ${row.casparHost} ${String(row.casparChannel)}: ` +
+    `playlist=${row.playlist ?? '-'} cgLicensed=${row.cgLicensed === undefined ? '-' : String(row.cgLicensed)} ` +
+    `(read ${new Date(atMs).toISOString()})`
+  );
 }
 
 /** `127.0.0.0/8`, `localhost`, `::1` — the engine naming its own machine. */
@@ -271,6 +288,9 @@ export class PlayoutCatalogue {
   readonly #now: () => number;
   readonly #tickMs: number;
   readonly #playoutHost: string | undefined;
+  readonly #log: (line: string) => void;
+  /** `DONGLE-RECOVER-01` A2 — per channel (`host channel`), the license words last printed. */
+  readonly #knownLicenseWords = new Map<string, string>();
 
   /** The last answer, or `null` — ABSENT. */
   #rows: readonly CatalogueRow[] | null = null;
@@ -290,6 +310,7 @@ export class PlayoutCatalogue {
     this.#now = options.now ?? ((): number => Date.now());
     this.#tickMs = options.tickMs ?? CATALOGUE_TICK_MS;
     this.#playoutHost = options.playoutHost;
+    this.#log = options.log ?? ((line) => process.stderr.write(`[caspar-bridge] ${line}\n`));
   }
 
   /** The catalogue as last read, or `null` when ABSENT. Synchronous — nothing waits on the Playout. */
@@ -390,6 +411,13 @@ export class PlayoutCatalogue {
   #set(next: readonly CatalogueRow[] | null): void {
     if (JSON.stringify(next) === JSON.stringify(this.#rows)) return;
     this.#rows = next;
+    for (const row of next ?? []) {
+      const key = `${row.casparHost} ${String(row.casparChannel)}`;
+      const words = JSON.stringify([row.playlist ?? null, row.cgLicensed ?? null]);
+      if (this.#knownLicenseWords.get(key) === words) continue;
+      this.#knownLicenseWords.set(key, words);
+      this.#log(channelLicenseLine(row, this.#now()));
+    }
     for (const handler of [...this.#handlers]) handler(next);
   }
 }

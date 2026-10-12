@@ -290,6 +290,7 @@ export class BackupEngine {
       ...(this.#opts.licenseOptions ?? {}),
       ...(this.#opts.readFetch !== undefined ? { fetchImpl: this.#opts.readFetch } : {}),
       playoutHost,
+      log,
     });
     session =
       this.#opts.sessionFile === undefined
@@ -315,6 +316,7 @@ export class BackupEngine {
       ...(this.#opts.catalogueOptions ?? {}),
       ...(this.#opts.readFetch !== undefined ? { fetchImpl: this.#opts.readFetch } : {}),
       playoutHost,
+      log,
     });
     channels = catalogue;
     const version = new PlayoutVersionReader(playoutVersionUrl(address), {

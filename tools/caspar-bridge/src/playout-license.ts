@@ -55,6 +55,41 @@ export interface PlayoutLicenseReaderOptions {
   readonly tickMs?: number;
   /** A loopback `casparHost` in `channels` names the Playout's own machine (D4's A4 rule). */
   readonly playoutHost?: string | undefined;
+  /** Where {@link licenseChangeLine} goes — the bridge's stderr by default. */
+  readonly log?: (line: string) => void;
+}
+
+/**
+ * 🔴 `DONGLE-RECOVER-01` A2 — **THE LICENSE LINE, ONCE PER CHANGE.** The bridge used to say nothing when
+ * the license it holds changed, so an outage left no record of WHEN the bridge began refusing takes and
+ * when it stopped: the owner's 2026-10-11 dongle test had to be read backwards from a count of refresh
+ * refusals. One line per change of the fields that decide a refusal, with the time this bridge saw it —
+ * never the Playout's message text (the console shows that) and never a token.
+ *
+ * `null` — not served (`404`), the one other value the reader holds.
+ */
+export function licenseChangeLine(license: PlayoutLicense | null, atMs: number): string {
+  const at = new Date(atMs).toISOString();
+  if (license === null) return `Playout license: not served (read ${at})`;
+  const word = (value: string | number | null | undefined): string =>
+    value === undefined || value === null ? '-' : String(value);
+  return (
+    `Playout license: licensed=${String(license.licensed)} reason=${word(license.reason)} ` +
+    `playoutState=${word(license.playoutState)} graceUntil=${word(license.graceUntil)} ` +
+    `maxChannels=${word(license.maxChannels)} (read ${at})`
+  );
+}
+
+/** The fields {@link licenseChangeLine} prints — a change of anything else is not a line. */
+function loggedFieldsOf(license: PlayoutLicense | null): string {
+  if (license === null) return 'null';
+  return JSON.stringify([
+    license.licensed,
+    license.reason ?? null,
+    license.playoutState ?? null,
+    license.graceUntil ?? null,
+    license.maxChannels ?? null,
+  ]);
 }
 
 /** What the reader holds: the license, and the station's CG channels resolved to hosts we compare. */
@@ -73,8 +108,11 @@ export class PlayoutLicenseReader {
   readonly #now: () => number;
   readonly #tickMs: number;
   readonly #playoutHost: string | undefined;
+  readonly #log: (line: string) => void;
 
   #held: HeldLicense | null = null;
+  /** `DONGLE-RECOVER-01` A2 — the printed fields of the last line, so a repeat prints nothing. */
+  #logged: string | null = null;
   #lastReadMs = Number.NEGATIVE_INFINITY;
   #inFlight: Promise<void> | null = null;
   #ticker: ReturnType<typeof setInterval> | null = null;
@@ -88,6 +126,7 @@ export class PlayoutLicenseReader {
     this.#now = options.now ?? ((): number => Date.now());
     this.#tickMs = options.tickMs ?? LICENSE_TICK_MS;
     this.#playoutHost = options.playoutHost;
+    this.#log = options.log ?? ((line) => process.stderr.write(`[caspar-bridge] ${line}\n`));
   }
 
   /** The license as last read, or `null` (never read, or not served). Synchronous. */
@@ -187,6 +226,11 @@ export class PlayoutLicenseReader {
   #set(next: HeldLicense | null): void {
     if (JSON.stringify(next) === JSON.stringify(this.#held)) return;
     this.#held = next;
+    const fields = loggedFieldsOf(next?.license ?? null);
+    if (fields !== this.#logged) {
+      this.#logged = fields;
+      this.#log(licenseChangeLine(next?.license ?? null, this.#now()));
+    }
     for (const handler of [...this.#handlers]) handler(next?.license ?? null);
   }
 }
