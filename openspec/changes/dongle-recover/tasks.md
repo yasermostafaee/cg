@@ -43,6 +43,9 @@ Lane: **FULL** — a take's wire (`B-328`), the cadence a refusal reads (`B-330`
 
 ## 4. Verification
 
-- [ ] 4.1 `pnpm gate` green before the push.
-- [ ] 4.2 CI on the pushed `dev` head: `ci` and `e2e` RAN and passed — run URL here.
+- [x] 4.1 `pnpm gate` green before the push (the pre-push gate: 99 successful, 0 cached, 99 total; `openspec
+  validate --all --strict` 84/84).
+- [x] 4.2 CI on `9514e011`: `ci` and `e2e` RAN and passed (E2E job log: Designer 303 passed, Runtime 341
+      passed) — <https://github.com/yasermostafaee/cg/actions/runs/38234211328>. Desktop skipped by design
+      (<https://github.com/yasermostafaee/cg/actions/runs/38234211089>).
 - [ ] 4.3 The owner's two checks on an installed bridge (H1 and H5 in the report).
