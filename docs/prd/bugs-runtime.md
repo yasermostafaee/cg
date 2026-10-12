@@ -13649,3 +13649,36 @@ the minute, so a removal is still seen within the minute; changing that is the o
 
 **Acceptance:** `license-return-cadence.test.ts` — return seen within 5 s; one read a minute while licensed; removal
 within the minute (unchanged); never more than one read per 5 s while unlicensed.
+
+## [~] B-331 — After a Clear the row's PLAY stays green until the next command ⟨priority: high — the console says ON AIR over an empty layer⟩ — FILED 2026-10-12 by `CLEAR-STALE-AND-PR-CI-01` · no OpenSpec change (restores `runtime-ui`'s "Clear-All … idle", which every Clear already owed)
+
+**Repro / Actual (the owner, installed apps, 2026-10-12):** Clear on a playing row takes the graphic off air, but the
+row's PLAY stays green. It un-greens only on the next command: Clear on the same row again, or Clear/Stop on any other
+row. Stop does not do this.
+
+**Cause:** a 2.5.0 core answers `202 CLEAR OK` before it erases the layer (`AMCPCommandsImpl.cpp` `clear_command` only
+queues `stage->clear(index)`, an `executor_.begin_invoke`), so a frame composed before the erase reports the page over
+OSC after the reply. Since `b7844d2f` (`RELEASE-091-01` B2, 2026-09-29) the bridge notes its own `202` as `empty`
+(`noteCleared`). That note made the late `html` a CHANGE to the OSC change tracker, so it reached the reconciler. An
+`out` keeps the item's play evidence, so the late page derived ON AIR and was pushed. The layer then fell silent and
+nothing re-published the row (state is derived at read time but pushed only on events), until another command's push
+re-read every row. Stop is immune because its intent retracts play evidence, so the same page derives `loaded`. Present
+in every release from `v0.9.1`/`v0.10.0` on, `v0.11.4` and `v0.11.5` included.
+
+**Fix:** when an item's own CLEAR is acknowledged by the PRIMARY, the bridge tells the reconciler
+(`noteProducerCleared`). It records `empty` and ignores a page reported for that item until its next take, or a
+failover. No AMCP is added. Play evidence and Stop are untouched, and a backup-only acknowledgement changes nothing.
+
+**Acceptance:** `clear-pushes-off-air.integration.test.ts` on the mock in the core's own order
+(`clearRepliesBeforeErase`). Without another command, a Clear PUSHES the row idle (red before the fix: `on-air`). A
+second Clear is harmless: accepted, idle, no error. Clear on A leaves B pushed ON AIR, then Clear on B. A re-take goes
+back on air. Stop is still pushed READY with its producer kept. Unit: `reconciler-cleared-producer.test.ts`.
+
+**Open (not fixed here):**
+
+- A re-take after a Clear rests at the take's ack `playing`, not OSC's `on-air`, with or without this fix (measured by
+  ablation). The late frame leaves the change tracker at `html`, so the re-ADD's page is suppressed as a repeat.
+- The bank-scoped clear of a bound row (`B-125`, `#reconcileClearedSlot`) has the same late-frame exposure. That path is
+  reachable only through a race and is not tested.
+- The mock's default CLEAR still erases synchronously. Making the core's order the default would re-run every
+  integration test against it, which is a separate item.

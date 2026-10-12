@@ -3357,3 +3357,14 @@ returned nothing, and the same with `--untracked`; control: the same sweep's sha
 and `R-098` on `dev`; no stash.
 
 ⇒ **Next free after this entry is `B-331`**, **`D-163`**, **`P-068`**, **`R-100`** and **`C-049`**.
+
+### 2026-10-12 — `CLEAR-STALE-AND-PR-CI-01` takes `B-331`
+
+- `B-331` — after a Clear the row's PLAY stays green until the next command — [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use:
+`git grep -n -E "^## \[.\] (B-331|P-068) " <ref> -- docs` on all 12 local and remote-tracking refs returned nothing,
+and the same with `--untracked`; control: the same sweep's shape found the 2 headings `B-330` and `P-067` on `dev`; no
+stash.
+
+⇒ **Next free after this entry is `B-332`**, **`D-163`**, **`P-068`**, **`R-100`** and **`C-049`**.

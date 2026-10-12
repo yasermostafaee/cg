@@ -2660,6 +2660,8 @@ export class CasparRuntime {
     // Real health + failover from the adapter — replaces the Phase-1/2 mock health.
     this.#adapter.on('health', () => this.healthChanged.emit(this.health()));
     this.#adapter.on('failover-complete', (event: FailoverEvent) => {
+      // `B-331` — the new primary's stage was never cleared by the old one's acknowledgements.
+      this.#reconciler.liftProducerCleared();
       this.#lastFailover = {
         at: new Date(event.at).toISOString(),
         reason: event.reason,
@@ -6101,6 +6103,9 @@ export class CasparRuntime {
     // — and provably resolves any B-056 owned-slot warning; a backup-only out
     // leaves the warning standing (the primary's orphan may still be live).
     if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    // `B-331` — and the row is off air NOW: the page a frame composed before the erase reports
+    // after the `202` is not this item's (see the method). Primary only, like the adoption above.
+    if (ok && onPrimary) this.#reconciler.noteProducerCleared(itemId);
     // `B-253` — and the mixer residue goes with the producer. See the method.
     await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
     // §8 — CLEAR is the escape hatch, so it is the verb where "the command never

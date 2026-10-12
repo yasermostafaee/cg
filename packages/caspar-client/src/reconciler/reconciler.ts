@@ -158,6 +158,13 @@ interface ItemRecord {
    * globally would misreport every other item.
    */
   unverifiable?: boolean;
+  /**
+   * 🔴 `B-331` — **THIS ITEM'S OWN CLEAR LANDED ON THE PRIMARY**, so its producer is destroyed and a
+   * report of one is a frame the core composed BEFORE the erase. Set by
+   * {@link Reconciler.noteProducerCleared}; lifted by the item's next `take` (the one thing that
+   * puts a producer back) and by a failover (the new primary's reports are about its own stage).
+   */
+  producerCleared?: true;
 }
 
 /**
@@ -475,6 +482,8 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       const itemId = this.slotIndex.get(key);
       if (itemId !== undefined) {
         const rec = this.items.get(itemId);
+        // `B-331` — a page reported after this item's own acknowledged CLEAR is the late frame.
+        if (rec?.producerCleared === true && event.producer !== 'empty') return [];
         if (rec !== undefined) {
           rec.lastOscAt = at;
           // B-053 — store the raw observation; the status is derived at read
@@ -629,6 +638,36 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     return changed;
   }
 
+  /**
+   * 🔴 `B-331` — **THE ITEM'S OWN `CLEAR` WAS ACKNOWLEDGED BY THE PRIMARY: its producer is gone, and
+   * stays gone until its next take.**
+   *
+   * A 2.5.0 core answers `202 CLEAR OK` BEFORE the erase runs (`clear_command` only queues
+   * `stage->clear(index)`), so a frame composed before the erase reports the page over OSC AFTER
+   * the reply. The bridge's own note of the `202` had just recorded `empty`, so that late report
+   * passed the change tracker as a change and — `played` still set — derived ON AIR; the layer then
+   * fell silent and nothing re-published the row until some other command did. The owner saw PLAY
+   * stay green after a Clear, "one step behind".
+   *
+   * So the late page is not evidence for THIS item: record `empty` and ignore a non-empty report
+   * until a take lifts it. Play evidence is untouched (the doctrine on `played` stands), and the
+   * caller vouches for the PRIMARY only — a CLEAR acknowledged by the backup alone proves nothing
+   * about the primary's producer, and reading that one away would hide a live graphic.
+   */
+  noteProducerCleared(itemId: string): StackItemState | null {
+    const rec = this.items.get(itemId);
+    if (rec === undefined) return null;
+    rec.producerCleared = true;
+    rec.lastProducer = 'empty';
+    rec.lastOscAt = this.now();
+    return this.emitChange(rec);
+  }
+
+  /** `B-331` — a failover: no clear on the old primary vouches for the new one's stage. */
+  liftProducerCleared(): void {
+    for (const rec of this.items.values()) delete rec.producerCleared;
+  }
+
   /** The one reset of a played item whose producer is gone: the honest `idle`. */
   private resetEmptied(rec: ItemRecord): StackItemState {
     rec.played = false;
@@ -680,6 +719,8 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
         // back exactly the claim it made (and not one made by an earlier, successful take).
         rec.playedBeforeIntent = rec.played;
         rec.played = true;
+        // `B-331` — a take is what puts a producer back, so its page is evidence again.
+        delete rec.producerCleared;
         rec.lastIntentSeq = seq;
         rec.pendingSince = this.now();
         // A new intent invalidates the PREVIOUS command's ack — without this
