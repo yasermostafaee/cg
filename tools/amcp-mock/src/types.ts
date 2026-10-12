@@ -251,6 +251,16 @@ export interface MockOptions {
   /** Disable the OSC emitter loop. Useful for command-only tests. */
   disableOsc?: boolean;
   /**
+   * 🔴 `B-331` — **`CLEAR <ch>-<layer>` IS ANSWERED BEFORE THE LAYER IS ERASED, as on a 2.5.0 core.**
+   * There `clear_command` QUEUES the erase (`stage->clear(index)` is an `executor_.begin_invoke`)
+   * and returns `202 CLEAR OK` without waiting for it, so a frame the channel composed before the
+   * erase still reports the page — over OSC, AFTER the reply. With this set, the mock answers at
+   * once and erases the layer only before the next command it handles (or a few ms later), sending
+   * one frame of the un-erased stage first. Absent, the erase is synchronous, as every mock before
+   * this one.
+   */
+  clearRepliesBeforeErase?: boolean;
+  /**
    * `DESKTOP-APPS-01-B` — **WHICH MACHINES MAY SPEAK AMCP**, as a Playout 2.8.54 firewall decides
    * it: called with a new connection's source address, and a `false` refuses that connection
    * before a byte is read (a reset, which the connection check reads as `refused`). Absent admits
@@ -513,6 +523,17 @@ export interface HandlerContext {
   peekLayer(slot: LayerSlot): LayerState | undefined;
   /** `RELEASE-091-01` B2 — the channel's layers on the core's stage, lowest first: what `INFO` lists. */
   stageLayers(channel: number): readonly LayerState[];
+  /** `B-331` — {@link MockOptions.clearRepliesBeforeErase}, as the mock was started. */
+  readonly clearRepliesBeforeErase: boolean;
+  /**
+   * `B-331` — queue a layer erase behind the reply, as the core's stage executor does. Queued erases
+   * run — after ONE OSC frame of the un-erased stage — before the next command is handled, or
+   * `CLEAR_ERASE_LAG_MS` later if none arrives: never after a later command, which the core's
+   * single executor also guarantees.
+   */
+  queueErase(erase: () => void): void;
+  /** `B-331` — run every queued erase now (the server calls it before each command). */
+  runQueuedErases(): void;
   /** Apply a partial update to a layer; emits OSC reflecting the new state. */
   setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void;
   /**

@@ -182,6 +182,8 @@ export class AmcpServer {
       return;
     }
 
+    // `B-331` — an erase a CLEAR queued lands before any later command, as on the core's executor.
+    this.ctx.runQueuedErases();
     const handler = this.handlers.get(req.verb);
     if (!handler) {
       this.write(sock, serializeAmcpResponse({ kind: 'err', code: 400, verb: req.verb }));

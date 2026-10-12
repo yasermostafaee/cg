@@ -20,6 +20,13 @@ import type {
 } from './types.js';
 
 /**
+ * `B-331` — how long after its `202` a queued erase lands when no further command arrives first
+ * (`MockOptions.clearRepliesBeforeErase`). Under one frame at 50 Hz, as on the core, and long
+ * enough that the reply is read before the late frame — the order the core sends them in.
+ */
+const CLEAR_ERASE_LAG_MS = 5;
+
+/**
  * Spin up an AMCP mock listening on TCP + UDP. The returned handle exposes
  * test hooks for injection (custom handlers, forced disconnect) and
  * observation (layer state, OSC emission count). The mock binds to
@@ -74,6 +81,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   let missingMedia = new Set<string>();
   // `DEV-LOCAL-CASPAR-01` — the media scanner's library (`CLS`); `null` = no scanner running.
   let mediaFiles: readonly MockMediaFile[] | null = opts.media ?? null;
+  // `B-331` — the erases queued behind a `CLEAR`'s reply (`clearRepliesBeforeErase`).
+  const queuedErases: (() => void)[] = [];
+  let eraseTimer: NodeJS.Timeout | null = null;
 
   const ctx: HandlerContext = {
     channelCount,
@@ -105,6 +115,21 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
         .onStage()
         .filter((l) => l.slot.channel === channel)
         .sort((a, b) => a.slot.layer - b.slot.layer);
+    },
+    clearRepliesBeforeErase: opts.clearRepliesBeforeErase === true,
+    queueErase(erase: () => void): void {
+      queuedErases.push(erase);
+      if (eraseTimer !== null) return;
+      eraseTimer = setTimeout(() => ctx.runQueuedErases(), CLEAR_ERASE_LAG_MS);
+      eraseTimer.unref();
+    },
+    runQueuedErases(): void {
+      if (eraseTimer !== null) clearTimeout(eraseTimer);
+      eraseTimer = null;
+      if (queuedErases.length === 0) return;
+      // The frame the channel composed before the erase: it still reports the page.
+      emitter.emitFrame();
+      for (const erase of queuedErases.splice(0)) erase();
     },
     setLayer(slot: LayerSlot, patch: Partial<Omit<LayerState, 'slot'>>): void {
       const next = registry.patch(slot, patch);

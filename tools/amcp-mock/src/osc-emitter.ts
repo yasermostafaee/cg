@@ -99,6 +99,15 @@ export class OscEmitter {
     }
   }
 
+  /**
+   * 🔴 `B-331` — one frame of the stage AS IT STANDS NOW, outside the tick: what the core's channel
+   * publishes for a frame it composed before a queued `CLEAR` erased the layer
+   * ({@link MockOptions.clearRepliesBeforeErase}).
+   */
+  emitFrame(): void {
+    this.emitTick();
+  }
+
   /** Send a single ad-hoc message (test hook). */
   sendMessage(address: string, args: readonly OscArgValue[]): void {
     this.sendBundle([{ address, args }]);

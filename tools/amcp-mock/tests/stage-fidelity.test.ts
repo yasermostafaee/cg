@@ -183,3 +183,54 @@ describe('RELEASE-091-01 B2 — a cleared layer, as the core has it', () => {
     expect(await send(mock.amcpPort, ['INFO 2-60'])).not.toContain('<stage>');
   });
 });
+
+/*
+  🔴 `B-331` — a 2.5.0 core's `clear_command` QUEUES the erase (`stage->clear(index)` is an
+  `executor_.begin_invoke`) and answers `202 CLEAR OK` without waiting, so one more frame reports the
+  page after the reply. `clearRepliesBeforeErase` gives the mock that order; it is off by default.
+*/
+describe('B-331 — CLEAR replies before the erase, as the core does', () => {
+  it('🔴 the reply, then ONE frame still reporting the layer, then silence — control: absent, nothing follows the reply', async () => {
+    const osc = await listen();
+    // No ticks, so every report heard is one the mock chose to send.
+    mock = await createMock({
+      amcpPort: 0,
+      oscPort: osc.port,
+      oscHost: '127.0.0.1',
+      oscHz: 0,
+      clearRepliesBeforeErase: true,
+    });
+    await send(mock.amcpPort, ['PLAY 1-60 "clip"']);
+    const from = osc.heard.length;
+    const reply = await send(mock.amcpPort, ['CLEAR 1-60']);
+    expect(reply.startsWith('202 ')).toBe(true);
+    const late = osc.heard.slice(from).filter((m) => m.address === LAYER_60);
+    expect(late).toEqual([{ address: LAYER_60, args: ['ffmpeg'] }]);
+    expect(mock.layerState({ channel: 1, layer: 60 })?.producer).toBe('empty');
+    expect(await send(mock.amcpPort, ['INFO 1'])).not.toContain('<stage>');
+
+    // CONTROL — without the option the erase is synchronous and no frame follows the reply.
+    await mock.stop();
+    const quiet = await listen();
+    mock = await createMock({ amcpPort: 0, oscPort: quiet.port, oscHost: '127.0.0.1', oscHz: 0 });
+    await send(mock.amcpPort, ['PLAY 1-60 "clip"']);
+    const at = quiet.heard.length;
+    await send(mock.amcpPort, ['CLEAR 1-60']);
+    expect(quiet.heard.slice(at).filter((m) => m.address === LAYER_60)).toEqual([]);
+  });
+
+  it('a queued erase lands BEFORE the next command, as on the core’s one executor — a PLAY right after the CLEAR survives it', async () => {
+    mock = await createMock({
+      amcpPort: 0,
+      oscPort: 0,
+      disableOsc: true,
+      clearRepliesBeforeErase: true,
+    });
+    await send(mock.amcpPort, ['PLAY 1-60 "old"', 'CLEAR 1-60', 'PLAY 1-60 "new"']);
+    expect(mock.layerState({ channel: 1, layer: 60 })).toMatchObject({
+      producer: 'ffmpeg',
+      filePath: 'new',
+    });
+    expect(await send(mock.amcpPort, ['INFO 1'])).toContain('<layer_60>');
+  });
+});

@@ -856,7 +856,9 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = target.includes('-') ? parseChannelLayer(target) : null;
   if (slot) {
     if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CLEAR' };
-    clearLayer(ctx, slot);
+    // `B-331` — on a 2.5.0 core the reply goes first and the erase is QUEUED behind it.
+    if (ctx.clearRepliesBeforeErase) ctx.queueErase(() => clearLayer(ctx, slot));
+    else clearLayer(ctx, slot);
     return { kind: 'ok', code: 202, verb: 'CLEAR' };
   }
   // `CLEAR <channel>` — clear all layers on the channel.
