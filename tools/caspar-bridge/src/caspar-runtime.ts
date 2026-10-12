@@ -12171,8 +12171,8 @@ export class CasparRuntime {
 
   /**
    * 🔴 **EVERY LAYER THIS BRIDGE HOLDS ON AIR**: each on-air item's page layer (the canonical
-   * `isOnAirStatus`, minus `exiting` — a CLEAR the operator asked for is in flight) and every seat in
-   * the live-layer ledger. Grouped by channel.
+   * `isOnAirStatus`, minus `exiting` — a CLEAR the operator asked for is in flight — and minus a take
+   * still in flight, `B-332`) and every seat in the live-layer ledger. Grouped by channel.
    */
   #heldOnAirLayers(): Map<number, Set<number>> {
     const out = new Map<number, Set<number>>();
@@ -12186,6 +12186,9 @@ export class CasparRuntime {
     };
     for (const item of this.#reconciler.snapshot()) {
       if (!isOnAirStatus(item) || item.status === 'exiting' || item.slot === undefined) continue;
+      // `B-332` — nor a TAKE still in flight: its layer is silent until its own ADD lands, and asked
+      // about meanwhile, the take was reset mid-flight and lost its re-ADD (`CG PLAY` onto nothing).
+      if (item.status === 'playing' && item.pending) continue;
       add(item.slot.channel, item.slot.layer);
     }
     for (const records of this.#liveLayers.values()) {

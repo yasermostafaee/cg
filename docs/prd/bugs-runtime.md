@@ -13682,3 +13682,26 @@ back on air. Stop is still pushed READY with its producer kept. Unit: `reconcile
   reachable only through a race and is not tested.
 - The mock's default CLEAR still erases synchronously. Making the core's order the default would re-run every
   integration test against it, which is a separate item.
+
+## [~] B-332 — A take onto a long-silent layer is questioned mid-flight: its re-ADD is lost, or the row is reset to idle ⟨priority: high — on air, a Play can put nothing on air while the row says playing⟩ — FILED 2026-10-12 by `CLEAR-STALE-AND-PR-CI-01` · no OpenSpec change (restores `B-328`'s ADD route and `B-292`'s scope)
+
+**Repro / Actual:** found as `dongle-recover.integration.test.ts` S1 failing under load: 3/12 copies at `aefc1773`,
+4/24 with `B-331` ablated, so it predates `B-331`. A stopped row whose page the Playout's `CLEAR <channel>` wiped is
+taken again. The take counts as "held on air" from its intent, and `B-292`'s silence question runs every 250 ms on
+any held layer silent for 1 s. If it fires before the take's `CG ADD` lands, `INFO` does not list the layer yet, so
+the row is reset as "cleared outside CG Control" and its resident page forgotten. Measured with the take's first reply
+held 700 ms: the `403` no longer re-routes to the ADD, and the take sends `CG UPDATE` (403), `INFO`, `CG PLAY` onto
+the EMPTY layer while the row reads `playing`. Under load the other outcome was seen: the page on air under a row
+reset to idle.
+
+**Expected:** a take still in flight is not a layer held on air. Its layer is silent until its own ADD lands. Once the
+take settles, the next question covers the layer as before.
+
+**Fix:** `#heldOnAirLayers` skips an item whose take is in flight (`status === 'playing' && pending`). No AMCP is added
+(it removes one `INFO`).
+
+**Acceptance:** `take-not-questioned-mid-flight.integration.test.ts` — with the take's first reply held 700 ms, the
+take re-ADDs, the page goes on air, the row reads on air, and no "cleared outside" banner names the layer (red before
+the fix: no `ADD`). Control: with no hold the same test was green before the fix. `dongle-recover` under the same load:
+0/24 after, against 7/36 before. Not shown: whether the owner's "READY with PLAY disabled" sighting
+(`DONGLE-RECOVER-01-v2`) was this race.
