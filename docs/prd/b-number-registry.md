@@ -3341,3 +3341,19 @@ returned nothing, and the same with `--untracked`; control: the same sweep's sha
 and `R-094` on `dev`; no stash.
 
 ⇒ **Next free after this entry is `B-328`**, **`D-163`**, **`P-068`**, **`R-099`** and **`C-049`**.
+
+### 2026-10-12 — `DONGLE-RECOVER-01` (v2) takes `B-328` to `B-330` and `R-099`
+
+- `B-328` — a stopped page wiped by the Playout's channel clear is taken by the resident route —
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-329` — the session-refresh refusal is logged once a minute for hours — [bugs-runtime.md](bugs-runtime.md).
+- `B-330` — the bridge's license lags the Playout's return by up to a minute — [bugs-runtime.md](bugs-runtime.md).
+- `R-099` — an outage documents itself: one log line per change of the license the bridge holds —
+  [runtime.md](runtime.md).
+
+Measured free before use:
+`git grep -n -E "^## \[.\] (B-32[89]|B-330|R-099) " <ref> -- docs` on all 12 local and remote-tracking refs
+returned nothing, and the same with `--untracked`; control: the same sweep's shape found the 2 headings `B-327`
+and `R-098` on `dev`; no stash.
+
+⇒ **Next free after this entry is `B-331`**, **`D-163`**, **`P-068`**, **`R-100`** and **`C-049`**.

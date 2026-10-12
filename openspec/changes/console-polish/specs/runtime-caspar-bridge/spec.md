@@ -164,7 +164,8 @@ condition and nothing sent to CasparCG (`B-309`).
 
 #### Scenario: A re-take whose look tell is refused
 
-- **WHEN** a stopped row is taken again and CasparCG refuses the command that tells the page its look **THEN**
+- **WHEN** a stopped row is taken again and CasparCG refuses the command that tells the page its look, other than
+  with the `403` that says the layer holds no page (`dongle-recover`: that take goes on by the ADD route) **THEN**
   the take is on air and its message names the look by its name, never its id
 
 #### Scenario: A duplicated assignment

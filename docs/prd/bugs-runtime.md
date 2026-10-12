@@ -13602,3 +13602,50 @@ two differ, so `After sign-in` carried no line of CG Bridge's own (his picture: 
 route answered CG Bridge's own lines only when NO CasparCG host was named, so a console that sent one lost them all.
 The console now always asks by the name CG Bridge advertises; the route asks two questions — is this the station's
 own Playout (its lines and the join), and may an unsigned caller ask this (the narrowing, byte for byte as before).
+
+## [~] B-328 — A stopped page wiped by the Playout's channel clear is taken by the resident route: the plates with no template behind them ⟨priority: high — on air, the owner's multi-frame showed its inputs over the Playout's playlist⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` · `openspec/changes/dongle-recover/`
+
+**Repro / Actual (the owner's `.32`, Playout `2.9.8`, CG Bridge `0.11.4`, 2026-10-11):** the Playout's license
+dongle was pulled, and its own license rule cleared the whole channel (`CLEAR <channel>`, LICENSE §4), stopped pages
+included. A STOPPED row keeps its page resident (C-012) and the bridge records that (`#loaded`). `B-292`'s silence
+question watches only layers held ON AIR, so the wiped page stayed "resident". The next Play took the resident route
+onto an empty layer. `amcp.log` 06:37:24Z: `CG 1-59 UPDATE … << 403 CG UPDATE FAILED`, the plates'
+`PLAY 1-60` / `PLAY 1-61` `202`, then `CG 1-59 PLAY 0 << 202`, with no `CG ADD`. A second outage at ~06:44–06:51Z
+did the same to the stopped `1-98` (06:52:03Z), and the stale row then failed `CG STOP << 403` until it was cleared
+at 07:22:23Z.
+
+**Expected:** a take of a page the core no longer holds puts the page back. Read from CasparCG `v2.5.0-stable`: a
+`CG UPDATE` is answered `403` exactly when the layer's foreground holds no CG producer (`get_expected_cg_proxy`), so
+the resident route's first line already asks the question. On that answer from the primary, the bridge forgets the
+page and the same take goes on by the ADD route. It is not refused, nothing is sent on the bridge's own initiative,
+and a resident page keeps the resident route.
+
+**Acceptance:** `dongle-recover.integration.test.ts` — the owner's timeline on the AMCP mock with a second client in
+the Playout's place. A stopped single graphic, a stopped multi-frame row and a stopped row refused during the outage
+each add their page before their `CG PLAY` after the clear. The 06:37:24Z capture replays as `UPDATE (403)` → `ADD`
+(with the look) → plates → `PLAY`. Finding the layers gone sends nothing but `INFO`. No banner names a layer that was
+not on air. A page that was not wiped keeps one `CG UPDATE` + one `CG PLAY`. Back inside the window (no clear),
+nothing changes.
+
+## [~] B-329 — The session-refresh refusal is logged once a minute for hours ⟨priority: low — log only, but it buried every line that mattered⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` A2b · `openspec/changes/dongle-recover/`
+
+**Repro / Actual:** the owner's stderr log of the 2026-10-10/11 process holds 408 identical lines `the Playout
+refused the session refresh before using the token (cg_not_licensed); the token is kept`, one per 60 s retry.
+
+**Expected:** the first refusal of a run is logged in full, the repeats are counted, and the run's end logs
+`… refused (code) N times, last at <ISO>`. The retry, its cadence and the kept token are unchanged.
+
+**Acceptance:** `bridge-session.test.ts` — six or more refusals produce one refusal line and, once the refresh takes,
+one count line. Control: every retry was presented with the same token.
+
+## [~] B-330 — The bridge's license lags the Playout's return by up to a minute ⟨priority: medium — CG refuses takes the Playout would allow⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` H3 · `openspec/changes/dongle-recover/`
+
+**Repro / Actual:** a take is refused on the license the bridge HOLDS, which the reader re-read every 60 s. The
+Playout reads a returned dongle within ~10 s (LICENSE §4). Measured on the reader: 60 000 ms from the Playout
+answering `licensed` to the bridge holding it. Every take in that minute is refused with the old sentence.
+
+**Expected:** while the held license reads `false`, the reader reads at the 5 s floor. While licensed, the cadence is
+the minute, so a removal is still seen within the minute; changing that is the owner's call.
+
+**Acceptance:** `license-return-cadence.test.ts` — return seen within 5 s; one read a minute while licensed; removal
+within the minute (unchanged); never more than one read per 5 s while unlicensed.

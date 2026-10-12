@@ -4627,3 +4627,17 @@ not build).
 Connection card reads `No Playout`, the CasparCG card is editable — `Host` (placeholder `127.0.0.1`), `AMCP port`
 (`5250`), `OSC port` (`6251`) — and CG Bridge has `Host` and `Port`. The persisted record (`cg.runtime.station.v1`)
 keeps every old record valid, and the persisted-key census is updated.
+
+## [~] R-099 — An outage documents itself: one log line per change of the license the bridge holds ⟨priority: medium⟩ — FILED 2026-10-12 by `DONGLE-RECOVER-01` A2 · `openspec/changes/dongle-recover/`
+
+**What:** CG Bridge writes one stderr line, with the time it saw it, each time the license fields a take reads
+change (`licensed`, `reason`, `playoutState`, `graceUntil`, `maxChannels`), and one each time D4's `playlist` or
+`cgLicensed` changes for a channel. Nothing is written while they do not change, and a failed read is not a change.
+No token and no Playout message text are logged. The backup engine's readers log through its own prefix.
+
+**Why:** the owner's 2026-10-11 dongle test left no record of when the bridge began and stopped refusing takes; it
+had to be read backwards from a count of refresh refusals. Whether the Playout's window reads `licensed:false` is the
+open question this line settles on the next outage (`DONGLE-RECOVER-01` H5).
+
+**Acceptance:** `license-change-lines.test.ts` — one line per change for both readers, none across many unchanged
+reads (control: every read happened), none for an unreachable Playout.
