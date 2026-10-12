@@ -10,7 +10,8 @@ import { definePublishChannel } from '../publish.js';
  * CG Control holds no license of its own. Two facts reach us:
  *
  * - `GET /api/cg/license` — the station's CG license ({@link PlayoutLicenseSchema}), read by CG Bridge with
- *   its own session beside D9, about every 60 s, the last value KEPT while the Playout cannot be reached;
+ *   its own session beside D9, about every 60 s (every 5 s while it reads unlicensed — `DONGLE-RECOVER-01`),
+ *   the last value KEPT while the Playout cannot be reached;
  * - D4's per-channel `cgLicensed` — whether CG may command THAT channel (the cap), on the station channel
  *   row (`StationChannel.cgLicensed`).
  *

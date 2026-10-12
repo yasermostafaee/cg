@@ -15,6 +15,8 @@ import { resolveCasparHost } from './playout-catalogue.js';
  *
  * - **At most one read per {@link LICENSE_POLL_MS}**, plus one when this bridge (or a console) gains a
  *   session, through a short floor ({@link LICENSE_SIGN_IN_FLOOR_MS}) so a burst of sign-ins is one read.
+ *   **While the held license reads `licensed:false`, the floor is the cadence** (`DONGLE-RECOVER-01` H3): a
+ *   license the Playout restores is held within 5 s instead of refusing takes for up to a minute.
  * - **Kept on failure:** unreachable, timed out, `401`, `5xx`, a body we cannot read — the value stays.
  * - **`404` is "not served"** — CG Control switched off in the Playout, or a Playout before `2.9.2` — and
  *   reads as `null`: no license to refuse by, exactly as before this endpoint existed.
