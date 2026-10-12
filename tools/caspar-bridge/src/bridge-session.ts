@@ -174,6 +174,14 @@ export class BridgeSession {
   #disposed = false;
   /** `RELEASE-0112-01` — the last sign-in's failure code (`cg_not_licensed`, `unreachable` …), or `null`. */
   #lastSignInFailure: SignInFailure | null = null;
+  /**
+   * 🔴 `DONGLE-RECOVER-01` A2b — the refusals of the session refresh since the first one was said: its
+   * code, how many, the last one's time. The owner's 2026-10-11 log held ~410 identical refusal lines, one
+   * a minute for hours, burying every line that mattered. The FIRST refusal of a run (and a change of
+   * code) is said; the repeats are counted; the run's end says how many there were and when the last was.
+   * The retry, its cadence and the kept token are unchanged — this is the log only.
+   */
+  #refusalRun: { readonly code: string; count: number; lastAtMs: number } | null = null;
   /** One operation at a time: a sign-in and a refresh never interleave, and never run twice at once. */
   #chain: Promise<unknown> = Promise.resolve();
   readonly #listeners = new Set<(state: BridgeSessionState) => void>();
@@ -347,6 +355,7 @@ export class BridgeSession {
     const cause = err instanceof PlayoutSignInError ? err.cause : err;
     if (neverReachedPlayout(cause)) {
       // Never sent: the token cannot have been used. The mark comes off; ask again.
+      this.#endRefusalRun();
       this.#unmark(unmarked);
       if (this.accessToken() === null) this.#set({ state: 'waiting' });
       this.#log(
@@ -362,12 +371,21 @@ export class BridgeSession {
       const message = err instanceof PlayoutSignInError ? err.playoutMessage : null;
       const code = err instanceof PlayoutSignInError ? err.code : 'unexpected';
       this.#set({ state: 'refused', message: message ?? REFUSED_WITHOUT_REASON, failure: code });
-      this.#log(
-        `the Playout refused the session refresh before using the token (${code}); the token is kept`,
-      );
+      const run = this.#refusalRun;
+      if (run !== null && run.code === code) {
+        run.count += 1;
+        run.lastAtMs = this.#now();
+      } else {
+        this.#endRefusalRun();
+        this.#refusalRun = { code, count: 1, lastAtMs: this.#now() };
+        this.#log(
+          `the Playout refused the session refresh before using the token (${code}); the token is kept`,
+        );
+      }
       this.#schedule(this.#opts.refusedRetryMs ?? DEFAULT_REFUSED_RETRY_MS);
       return;
     }
+    this.#endRefusalRun();
     if (fate === 'spent') {
       this.#lose(
         'the Playout refused the saved session (it was spent, revoked, or its password changed)',
@@ -438,6 +456,7 @@ export class BridgeSession {
       }
     }
     this.#access = { token: tokens.accessToken, expiresAtMs: tokens.expiresAtMs };
+    this.#endRefusalRun();
     this.#set({ state: 'signed-in', name: verified.name });
     if (refreshToken !== null) {
       this.#schedule(refreshDelayMs(tokens.expiresAtMs, this.#now()));
@@ -446,7 +465,22 @@ export class BridgeSession {
     return { ok: true };
   }
 
+  /**
+   * `DONGLE-RECOVER-01` A2b — a run of refresh refusals has ended (any other outcome, or another code):
+   * one line says how many there were and when the last was. A run of one was already said in full.
+   */
+  #endRefusalRun(): void {
+    const run = this.#refusalRun;
+    this.#refusalRun = null;
+    if (run === null || run.count < 2) return;
+    this.#log(
+      `the Playout refused the session refresh (${run.code}) ${String(run.count)} times, ` +
+        `last at ${new Date(run.lastAtMs).toISOString()}`,
+    );
+  }
+
   #lose(why: string): void {
+    this.#endRefusalRun();
     this.#access = null;
     this.#record = null;
     if (this.#timer !== null) clearTimeout(this.#timer);

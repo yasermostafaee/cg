@@ -404,6 +404,52 @@ describe('CENTRAL-BRIDGE-01-A A2 — a refused refresh keeps its token', () => {
     expect(p.theftTrips).toBe(0);
   });
 
+  /*
+    🔴 `DONGLE-RECOVER-01` A2b — the owner's 2026-10-11 log held ~410 identical refusal lines, one a
+    minute for hours. The first refusal is said, the repeats are counted, and the run's end says how many
+    and when the last was — while the retry, its cadence and the kept token stay exactly as above.
+  */
+  it('🔴 a run of `cg_not_licensed` refusals is ONE line, then one count when it ends — control: the retries all happened, with the same token', async () => {
+    const p = await playout();
+    const file = scratchFile();
+    const setup = session(p, file);
+    await setup.start();
+    await setup.signIn(FAKE_ADMIN.username, FAKE_PLAYOUT_PASSWORD);
+    setup.dispose();
+    const t0 = loadBridgeSession(file).record?.refreshToken;
+
+    p.setCgNotLicensed('دانگلِ لایسنسِ Playout خوانده نمی‌شود.');
+    const presented: string[] = [];
+    const lines: string[] = [];
+    const s = session(p, file, {
+      fetchImpl: recordingFetch(presented),
+      refusedRetryMs: 20,
+      log: (line) => lines.push(line),
+    });
+    await s.start();
+    await waitFor(() => presented.length >= 6, 5_000);
+    const refusals = (): string[] => lines.filter((l) => l.includes('refused the session refresh'));
+    // CONTROL — the retry ran its cadence, with the kept token every time.
+    expect(new Set(presented)).toEqual(new Set([t0]));
+    expect(refusals(), 'one line for the whole run so far').toEqual([
+      'the Playout refused the session refresh before using the token (cg_not_licensed); the token is kept',
+    ]);
+
+    p.setCgNotLicensed(null);
+    await waitFor(() => s.state().state === 'signed-in', 5_000);
+    const refusedCount = presented.length - 1; // the last presentation is the one that took
+    const [first, summary, ...rest] = refusals();
+    expect(first).toContain('the token is kept');
+    expect(rest).toEqual([]);
+    expect(summary).toMatch(
+      new RegExp(
+        `^the Playout refused the session refresh \\(cg_not_licensed\\) ${String(refusedCount)} times, ` +
+          `last at \\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\d\\.\\d{3}Z$`,
+      ),
+    );
+    expect(p.theftTrips).toBe(0);
+  });
+
   it('`no_cg_access` is refused before use too — the session is not lost', async () => {
     const p = await playout();
     const file = scratchFile();
