@@ -9,6 +9,7 @@ import {
   type AmcpRequest,
   type HandlerContext,
   type AmcpResponse,
+  type LayerSlot,
   type LayerState,
   type MixerRect,
   type ProducerKind,
@@ -850,39 +851,51 @@ function handleClear(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (!target) {
     return { kind: 'err', code: 402, verb: 'CLEAR' };
   }
-  const slot = parseChannelLayer(target);
+  // `parseChannelLayer` reads a bare `1` as `1-0`, which made the channel branch below unreachable:
+  // only a `<ch>-<layer>` target is one layer.
+  const slot = target.includes('-') ? parseChannelLayer(target) : null;
   if (slot) {
     if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'CLEAR' };
-    // B-039 — CLEAR DESTROYS the producer (and takes it off air). `ROUTE-PLATES-01` — and the
-    // background one with it, as on the core.
-    ctx.setLayer(slot, {
-      producer: 'empty',
-      filePath: '',
-      backgroundProducer: 'empty',
-      backgroundFilePath: '',
-      paused: false,
-      onAir: false,
-      pageResolution: 'resolved',
-      // `MEDIA-PLATES-01` — the clip is gone, and its clock with it.
-      loop: false,
-      clipLengthS: undefined,
-      clipElapsedS: 0,
-      clipRunningSince: null,
-      // `RELEASE-091-01` B2 — and the layer leaves the stage: its OSC stops and `INFO` no longer
-      // lists it, as on the core. Its mixer state stays (the core keeps its transforms).
-      onStage: false,
-    });
+    clearLayer(ctx, slot);
     return { kind: 'ok', code: 202, verb: 'CLEAR' };
   }
-  // `CLEAR <channel>` — clear all layers on the channel. Walk known slots.
+  // `CLEAR <channel>` — clear all layers on the channel.
   const channel = Number(target);
   if (!Number.isInteger(channel) || channel < 1 || channel > ctx.channelCount) {
     return { kind: 'err', code: 401, verb: 'CLEAR' };
   }
-  // Without enumerating layers we can't actually clear them — the registry
-  // is sparse. CLEAR <channel> is a no-op against an empty channel, which
-  // matches the real server semantics ("nothing on, nothing to clear").
+  /*
+    🔴 `DONGLE-RECOVER-01` — the core's `stage.cpp clear()` erases EVERY layer on the channel, the
+    resident and the stopped ones with the playing ones. This used to be a no-op, which hid the
+    Playout's own license rule (`CLEAR <channel>`, LICENSE §4) from every test: a stopped page the
+    Playout wiped stayed on the mock's stage. Each layer on the stage goes exactly as a `CLEAR
+    <ch>-<layer>` takes it — its OSC stops and `INFO` no longer lists it.
+  */
+  for (const layer of ctx.stageLayers(channel)) clearLayer(ctx, layer.slot);
   return { kind: 'ok', code: 202, verb: 'CLEAR' };
+}
+
+/** One layer, as a `CLEAR` leaves it on the core. */
+function clearLayer(ctx: HandlerContext, slot: LayerSlot): void {
+  // B-039 — CLEAR DESTROYS the producer (and takes it off air). `ROUTE-PLATES-01` — and the
+  // background one with it, as on the core.
+  ctx.setLayer(slot, {
+    producer: 'empty',
+    filePath: '',
+    backgroundProducer: 'empty',
+    backgroundFilePath: '',
+    paused: false,
+    onAir: false,
+    pageResolution: 'resolved',
+    // `MEDIA-PLATES-01` — the clip is gone, and its clock with it.
+    loop: false,
+    clipLengthS: undefined,
+    clipElapsedS: 0,
+    clipRunningSince: null,
+    // `RELEASE-091-01` B2 — and the layer leaves the stage: its OSC stops and `INFO` no longer
+    // lists it, as on the core. Its mixer state stays (the core keeps its transforms).
+    onStage: false,
+  });
 }
 
 /**
@@ -966,11 +979,26 @@ function handleCg(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
       }
       return { kind: 'ok', code: 202, verb: 'CG' };
     }
+    /*
+      🔴 `DONGLE-RECOVER-01` — `CG STOP` and `CG NEXT` find the layer's proxy through
+      `get_expected_cg_proxy` (CasparCG `v2.5.0-stable`, `AMCPCommandsImpl.cpp`), which throws
+      `expected_user_error` ("No CG proxy running on layer") when the layer's foreground holds no CG
+      producer — answered `403 <CMD> FAILED` (`AMCPCommandQueue.cpp`). The owner's `.32` answered
+      exactly that: `CG 1-98 STOP << 403 CG STOP FAILED` on a layer the Playout had cleared. Only
+      `CG PLAY` skips the check (`get_proxy(...)->play()`, an empty proxy's no-op: `202`).
+    */
     case 'STOP':
+      if (ctx.getLayer(slot).producer !== 'html') {
+        return { kind: 'err', code: 403, verb: 'CG', detail: 'CG STOP FAILED' };
+      }
       ctx.setLayer(slot, { onAir: false });
       return { kind: 'ok', code: 202, verb: 'CG' };
-    case 'INVOKE':
     case 'NEXT':
+      if (ctx.getLayer(slot).producer !== 'html') {
+        return { kind: 'err', code: 403, verb: 'CG', detail: 'CG NEXT FAILED' };
+      }
+      return { kind: 'ok', code: 202, verb: 'CG' };
+    case 'INVOKE':
       return { kind: 'ok', code: 202, verb: 'CG' };
     case 'REMOVE': {
       ctx.setLayer(slot, {

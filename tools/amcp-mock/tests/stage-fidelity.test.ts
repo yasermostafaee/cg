@@ -102,6 +102,76 @@ describe('RELEASE-091-01 B2 — a cleared layer, as the core has it', () => {
     );
   });
 
+  /*
+    🔴 `DONGLE-RECOVER-01` — the Playout's own license rule sends `CLEAR <channel>` (LICENSE §4), and the
+    core's `stage.cpp clear()` erases every layer on it: a STOPPED page goes with the playing ones. The mock
+    answered `202` and cleared nothing, so no test could see a resident page wiped from outside.
+  */
+  it('🔴 CLEAR <channel> erases every layer on it, a stopped CG page included — control: the other channel keeps its layer', async () => {
+    const osc = await listen();
+    mock = await createMock({
+      amcpPort: 0,
+      oscPort: osc.port,
+      oscHost: '127.0.0.1',
+      oscHz: 40,
+      channels: 2,
+    });
+    await send(mock.amcpPort, [
+      'CG 1-59 ADD 0 "http://127.0.0.1:1/page" 0 "{}"',
+      'CG 1-59 PLAY 0',
+      'CG 1-59 STOP 0',
+      'PLAY 1-60 "clip"',
+      'PLAY 2-60 "clip"',
+    ]);
+    await delay(100);
+    const before = await send(mock.amcpPort, ['INFO 1']);
+    expect(before, 'CONTROL — the stopped page is on the stage').toContain('<layer_59>');
+    expect(before).toContain('<layer_60>');
+
+    await send(mock.amcpPort, ['CLEAR 1']);
+    await delay(60);
+    const from = osc.heard.length;
+    await delay(250);
+    expect(
+      osc.heard.slice(from).filter((m) => /^\/channel\/1\/stage\/layer\/(59|60)\//.test(m.address)),
+    ).toEqual([]);
+    expect(await send(mock.amcpPort, ['INFO 1'])).not.toContain('<stage>');
+    expect(mock.layerState({ channel: 1, layer: 59 })?.producer).toBe('empty');
+    // CONTROL — `CLEAR 1` is channel 1's: channel 2's layer is still on the stage.
+    expect(await send(mock.amcpPort, ['INFO 2'])).toContain('<layer_60>');
+  });
+
+  /*
+    🔴 `DONGLE-RECOVER-01` — `CG STOP` / `CG NEXT` / `CG UPDATE` go through `get_expected_cg_proxy`, which
+    throws `expected_user_error` on a layer with no CG producer → `403 <CMD> FAILED`; `CG PLAY` does not
+    (`get_proxy(...)->play()` on the empty proxy is a no-op → `202`). CasparCG `v2.5.0-stable`,
+    `AMCPCommandsImpl.cpp` + `AMCPCommandQueue.cpp`; the owner's `.32` answered exactly these.
+  */
+  it('🔴 on a layer with no CG producer: CG UPDATE, STOP and NEXT answer 403, CG PLAY answers 202 — control: on a page all four answer 202', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true });
+    const empty = await send(mock.amcpPort, [
+      'CG 1-98 UPDATE 0 "{}"',
+      'CG 1-98 STOP 0',
+      'CG 1-98 NEXT 0',
+      'CG 1-98 PLAY 0',
+    ]);
+    const codes = (reply: string): string[] =>
+      reply
+        .split('\r\n')
+        .map((l) => /^(\d{3}) /.exec(l)?.[1])
+        .filter((c): c is string => c !== undefined);
+    expect(codes(empty)).toEqual(['403', '403', '403', '202']);
+
+    const page = await send(mock.amcpPort, [
+      'CG 1-97 ADD 0 "http://127.0.0.1:1/page" 0 "{}"',
+      'CG 1-97 UPDATE 0 "{}"',
+      'CG 1-97 PLAY 0',
+      'CG 1-97 NEXT 0',
+      'CG 1-97 STOP 0',
+    ]);
+    expect(codes(page)).toEqual(['202', '202', '202', '202', '202']);
+  });
+
   it('INFO <ch>-<layer> answers the whole channel, exactly as INFO <ch>', async () => {
     mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true, channels: 2 });
     await send(mock.amcpPort, ['PLAY 1-60 "a"', 'PLAY 1-61 "b"']);
