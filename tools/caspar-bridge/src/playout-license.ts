@@ -175,7 +175,18 @@ export class PlayoutLicenseReader {
     if (this.#inFlight !== null) return this.#inFlight;
     const bearer = this.#bearer();
     if (bearer === null) return Promise.resolve();
-    const floor = options.soon === true ? LICENSE_SIGN_IN_FLOOR_MS : LICENSE_POLL_MS;
+    /*
+      🔴 `DONGLE-RECOVER-01` H3 — WHILE THE LICENSE READS FALSE, LOOK AGAIN AT THE FLOOR. Every take is refused
+      on the value held here, and the Playout reads a returned dongle within ~10 s (LICENSE §4); at the minute
+      poll the bridge went on refusing for up to 60 s after the Playout had stopped — measured, 60 000 ms. The
+      Playout's "about every 60 s" (§3.3) is advice, not a contract, and this is the one state in which a
+      late read costs the operator a take. While licensed the cadence is unchanged, so a removal is still seen
+      within the minute.
+    */
+    const floor =
+      options.soon === true || this.#held?.license.licensed === false
+        ? LICENSE_SIGN_IN_FLOOR_MS
+        : LICENSE_POLL_MS;
     if (this.#now() - this.#lastReadMs < floor) return Promise.resolve();
     this.#lastReadMs = this.#now();
     this.#readCount += 1;
