@@ -1115,6 +1115,18 @@ const SWEEP_MS = 5000;
  * repetition (~50 Hz), far below the sweep cadence doubling.
  */
 const OCCUPANCY_STALE_MS = 2500;
+
+/**
+ * 🔴 `DONGLE-RECOVER-01` — **`403` ON A PAGE'S `CG UPDATE` MEANS "NO PAGE ON THIS LAYER".** `#send`'s code
+ * for CasparCG's `403 CG UPDATE FAILED`. Read from the core (`v2.5.0-stable`): `CG UPDATE` / `STOP` /
+ * `NEXT` find the layer's proxy through `get_expected_cg_proxy`, which throws `expected_user_error` ("No
+ * CG proxy running on layer") when the layer's foreground holds no CG producer, and `AMCPCommandQueue`
+ * answers that `403`. The only other `403`s are a parse failure (`bad_lexical_cast`, `user_error`), which
+ * a line the bridge built cannot provoke, and the HTML proxy's own `update` throws nothing. `CG PLAY`
+ * skips the check (`get_proxy(...)->play()`, a no-op on the empty proxy) and answers `202` regardless —
+ * which is why the take's TELL, not its PLAY, is the line that can say the page is gone.
+ */
+const PAGE_NOT_ON_LAYER_CODE = 'amcp-403';
 /**
  * `MEDIA-PLATES-01` §1.E — how often the media clock LOOKS for a change the console would show (a
  * whole second of remaining time, a pause, an end). A look, not a publish: nothing is pushed unless
@@ -2291,6 +2303,12 @@ export class CasparRuntime {
           options?: { readonly routeEpoch?: string },
         ) => Promise<{ ok: boolean; errorCode?: string }>,
       ) => void;
+      /**
+       * `DONGLE-RECOVER-01` — TEST-ONLY: hands the caller a read of `#loaded` ("a page of this row is
+       * resident on its layer"), so a test can say what the bridge BELIEVES beside what the core holds.
+       * No IPC channel reaches it: only whoever constructs the runtime holds the function.
+       */
+      loadedForTest?: (isLoaded: (itemId: string) => boolean) => void;
     } = {},
   ) {
     this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
@@ -2366,6 +2384,7 @@ export class CasparRuntime {
     options.seamForTest?.((line, sendOptions = {}) =>
       this.#send(line, this.#nextSeq(), 'urgent', sendOptions),
     );
+    options.loadedForTest?.((itemId) => this.#loaded.has(itemId));
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
@@ -5223,12 +5242,89 @@ export class CasparRuntime {
     */
     let addedPage = false;
     const oursBeforeTake = this.#liveLayerKeys();
+    /*
+      🔴 `DONGLE-RECOVER-01` — **`#loaded` IS A BELIEF, AND THE CORE IS ASKED BEFORE IT IS TRUSTED.**
+      A STOPPED row keeps its page resident (C-012), and the take below resumes it with no re-load. But
+      a layer can be emptied while nobody holds it on air — the Playout's own license rule clears the
+      whole channel (`CLEAR <ch>`, LICENSE §4), stopped pages included — and `B-292`'s silence question
+      watches only the layers held ON AIR. On `.32` (2026-10-11T06:37:24Z) the next Play of a stopped
+      multi-frame row sent `CG 1-59 UPDATE … << 403`, its plates' PLAYs, and `CG 1-59 PLAY 0` onto a layer
+      with no page: the pictures with no template behind them.
+
+      The resident route's FIRST line is the take tell (`#tellPageTake`), and CasparCG answers it `403`
+      exactly when the layer's foreground holds no CG producer (`get_expected_cg_proxy`, `v2.5.0-stable`;
+      `PAGE_NOT_ON_LAYER_CODE`). So that answer IS the check: on it the row's page is forgotten here and
+      THIS take goes on by the ADD route below — the lines a take sends for a row with no resident page,
+      nothing the operator did not ask for. When the page IS resident the tell lands and the route is
+      unchanged.
+
+      ⚠ `LOGO-LOOP-01`'s rule stands: a failed tell does not REFUSE the take. A `403` does not refuse it
+      either — it re-routes it. Any other failure is still reported, not acted on.
+    */
+    let resident = this.#loaded.has(itemId);
+    if (resident) {
+      /*
+        🔴 **`B-191` — THE OTHER HALF OF THE RE-ADD, AND THE ONLY PLACE BOTH ROUTES INTO AIR
+        MEET.** The branch below rebuilds a destroyed page, and `#sendAdd`'s payload carries
+        the recorded look into it by construction. This branch is the case that had nothing:
+        the producer is RESIDENT — a `stop` leaves it so, and so does a rehearsal — while the
+        look may have been changed since it was last told. `setActiveLook` records and stays
+        silent on an off-air row with nothing seated (`B-151`: a rehearse control must reach
+        no plant), so the page can be a whole look behind, and the take below seats the plates
+        from the RECORDED look. Measured on the wire before this existed: `MIXER FILL 0 0 1 1`
+        (the new look) under a `CG … PLAY` carrying no payload at all — pictures on one look,
+        holes on another, until a further switch or another stop-and-play.
+
+        Told HERE, before the seating and the play, for the same reason the re-ADD is here: it
+        is the last moment at which the page can be made to agree BEFORE anything is on air.
+        The fits are already this take's (`#plateFits` was written from the plan above), so the
+        page punches what the bridge is about to fill.
+
+        ⚠ **A failed tell does NOT refuse the take.** The graphic is mid-way to air with its
+        plates about to be seated, and a row that comes up looking wrong is a smaller failure
+        than a take the operator was told did not happen while the wire had already moved. It
+        is reported instead — the take says what is wrong with what it just did.
+      */
+      /*
+        🔴 `SELF-STOP-24` — AND THE TAKE TOKEN IS REFRESHED IN THE SAME BREATH, WHICH IS WHY
+        THIS TELL IS NO LONGER GATED ON HAVING A LOOK.
+
+        The look half is unchanged and is `B-191`'s, above. What is new is that this branch —
+        the resident producer, no `CG ADD` — is the ONE route into air whose `CG PLAY` carries no
+        payload, so it is the one place a page keeps the PREVIOUS run's token. A report from the run that
+        finished would then stop the run that had just started; `template-completion-stop`
+        measured exactly that before this line existed.
+
+        ⚠ **A look-less template needs the token as much as a look-bearing one does**, so the
+        tell is now unconditional. That is one extra `CG UPDATE` on the resident-take path for a
+        template with no looks — a configuration verb carrying no fields, seating nothing.
+      */
+      /*
+        🔴 `LOGO-LOOP-01` (`B-322`) — AND THE ROW'S RECORDED PASS TIMING RIDES THE SAME TELL.
+
+        An off-air timing set is only recorded (golden rule 10), on the promise that the next take
+        carries it. The other branch kept that promise (`#sendAdd`); this one did not, so a logo
+        stopped after an on-air count and set to `Until stop` came back with the old count. The
+        control is `#takeControl`'s, the one both branches build from. No command is added.
+      */
+      const told = await this.#tellPageTake(itemId, slot);
+      if (told.pageGone === true) {
+        resident = false;
+        this.#loaded.delete(itemId);
+        process.stderr.write(
+          `[caspar-bridge] ${itemId}: no page on ${String(slot.channel)}-${String(slot.layer)} ` +
+            `(CG UPDATE answered 403) — this take adds it\n`,
+        );
+      } else if (!told.ok && told.lookId !== undefined) {
+        lookTellFailed = told.lookId;
+      }
+    }
     // B-039 — PRESCRIPTIVE: `CG PLAY` only renders if a live producer exists on the
     // slot. If a prior out destroyed it, re-issue `CG ADD` (a fresh load) FIRST so
     // the take re-renders instead of playing an empty layer. The re-ADD recovers the
     // template id + current (merged) fields from the Reconciler, and rides a
     // non-intent seq so its ack doesn't perturb the take's status.
-    if (!this.#loaded.has(itemId)) {
+    if (!resident) {
       const item = this.#reconciler.get(itemId);
       const templateId = item?.templateId ?? itemId;
       // Reconnect-reconciliation — the re-ADD is a fresh load: the same
@@ -5274,53 +5370,6 @@ export class CasparRuntime {
         };
       }
       addedPage = true;
-    } else {
-      /*
-        🔴 **`B-191` — THE OTHER HALF OF THE RE-ADD, AND THE ONLY PLACE BOTH ROUTES INTO AIR
-        MEET.** The branch above rebuilds a destroyed page, and `#sendAdd`'s payload carries
-        the recorded look into it by construction. This branch is the case that had nothing:
-        the producer is RESIDENT — a `stop` leaves it so, and so does a rehearsal — while the
-        look may have been changed since it was last told. `setActiveLook` records and stays
-        silent on an off-air row with nothing seated (`B-151`: a rehearse control must reach
-        no plant), so the page can be a whole look behind, and the take below seats the plates
-        from the RECORDED look. Measured on the wire before this existed: `MIXER FILL 0 0 1 1`
-        (the new look) under a `CG … PLAY` carrying no payload at all — pictures on one look,
-        holes on another, until a further switch or another stop-and-play.
-
-        Told HERE, before the seating and the play, for the same reason the re-ADD is here: it
-        is the last moment at which the page can be made to agree BEFORE anything is on air.
-        The fits are already this take's (`#plateFits` was written from the plan above), so the
-        page punches what the bridge is about to fill.
-
-        ⚠ **A failed tell does NOT refuse the take.** The graphic is mid-way to air with its
-        plates about to be seated, and a row that comes up looking wrong is a smaller failure
-        than a take the operator was told did not happen while the wire had already moved. It
-        is reported instead — the take says what is wrong with what it just did.
-      */
-      /*
-        🔴 `SELF-STOP-24` — AND THE TAKE TOKEN IS REFRESHED IN THE SAME BREATH, WHICH IS WHY
-        THIS TELL IS NO LONGER GATED ON HAVING A LOOK.
-
-        The look half is unchanged and is `B-191`'s, above. What is new is that this branch —
-        the resident producer, no `CG ADD` — is the ONE route into air whose `CG PLAY` carries no
-        payload, so it is the one place a page keeps the PREVIOUS run's token. A report from the run that
-        finished would then stop the run that had just started; `template-completion-stop`
-        measured exactly that before this line existed.
-
-        ⚠ **A look-less template needs the token as much as a look-bearing one does**, so the
-        tell is now unconditional. That is one extra `CG UPDATE` on the resident-take path for a
-        template with no looks — a configuration verb carrying no fields, seating nothing.
-      */
-      /*
-        🔴 `LOGO-LOOP-01` (`B-322`) — AND THE ROW'S RECORDED PASS TIMING RIDES THE SAME TELL.
-
-        An off-air timing set is only recorded (golden rule 10), on the promise that the next take
-        carries it. The other branch kept that promise (`#sendAdd`); this one did not, so a logo
-        stopped after an on-air count and set to `Until stop` came back with the old count. The
-        control is `#takeControl`'s, the one both branches build from. No command is added.
-      */
-      const told = await this.#tellPageTake(itemId, slot);
-      if (!told.ok && told.lookId !== undefined) lookTellFailed = told.lookId;
     }
 
     // R-022 — RE-ASSERT THE INTENDED VOLUME, UNCONDITIONALLY, ON EVERY TAKE.
@@ -7909,7 +7958,7 @@ export class CasparRuntime {
   async #tellPageTake(
     itemId: string,
     slot: CommandSlot,
-  ): Promise<{ ok: boolean; lookId?: string; errorCode?: string }> {
+  ): Promise<{ ok: boolean; lookId?: string; errorCode?: string; pageGone?: true }> {
     const control = this.#takeControl(itemId, this.#reconciler.get(itemId)?.templateId);
     const lookId = control.look;
     const told = await this.#send(
@@ -7922,6 +7971,8 @@ export class CasparRuntime {
         ok: false,
         ...(lookId !== undefined && { lookId }),
         ...(told.errorCode !== undefined && { errorCode: told.errorCode }),
+        // `DONGLE-RECOVER-01` — see `PAGE_NOT_ON_LAYER_CODE`: the primary has no CG producer there.
+        ...(told.errorCode === PAGE_NOT_ON_LAYER_CODE && told.onPrimary && { pageGone: true }),
       };
     }
     // The look half's side effect, unchanged: `#activeLooks` names the look the page is

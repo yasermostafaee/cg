@@ -437,11 +437,14 @@ describe('🔴 `B-309` — a re-take whose look tell CasparCG refuses', () => {
     await onAirOnTwo(r);
     // STOP leaves the producer resident: the next take tells the page its look (`B-191`) with a
     // `CG … UPDATE` — and CasparCG refuses every one.
+    // ⚠ `DONGLE-RECOVER-01` — refused `501` (the core's catch-all), not `403`: a `403` on a page's
+    // `CG UPDATE` is the core saying the layer holds NO page (`get_expected_cg_proxy`), which re-routes
+    // the take to the ADD route instead of reporting a tell. This test is about every other refusal.
     expect((await r.stopItem('item-1')).accepted).toBe(true);
     mock?.setHandler('CG', (req: AmcpRequest): AmcpResponse => {
       const sub = (req.args[1] ?? '').toUpperCase();
       return sub === 'UPDATE'
-        ? { kind: 'err', code: 403, verb: 'CG' }
+        ? { kind: 'err', code: 501, verb: 'CG' }
         : { kind: 'ok', code: 202, verb: 'CG' };
     });
     const res = await r.take('item-1');
